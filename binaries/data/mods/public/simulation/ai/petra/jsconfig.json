@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "../../../"
+  },
+  "include": ["./**/*.js", "./engine-api.d.ts"]
+}
