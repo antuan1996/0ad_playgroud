@@ -2,13 +2,15 @@
 	"type": "module",
 	"devDependencies": {
 		"@stylistic/eslint-plugin": "^5.6.1",
-		"eslint": "^9.39.2"
+		"eslint": "^9.39.2",
+		"typescript": "^6.0.3"
 	},
 	"engines": {
 		"node": ">=20.0.0"
 	},
 	"scripts": {
 		"lint": "eslint",
-		"lint:fix": "eslint --fix"
+		"lint:fix": "eslint --fix",
+		"build:petra": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json"
 	}
 }

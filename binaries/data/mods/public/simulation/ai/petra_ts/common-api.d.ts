@@ -161,7 +161,7 @@ declare module "simulation/ai/common-api/technology.js"
 /** Initializes the object. */
 		constructor(templateName: string);
 		_templateName: string;
-		_template: Record<string, any>;
+		_template: Record<string, unknown>;
 /** Gets the technology name. */
 		name(civ?: string): string | undefined;
 /** Checks whether the technology is paired by definition. */
@@ -199,7 +199,7 @@ declare module "simulation/ai/common-api/shared.js"
 	export class SharedScript
 	{
 /** Initializes the object. */
-		constructor(settings?: Record<string, any>);
+		constructor(settings?: Record<string, unknown>);
 		_players: number[];
 		_templates: Record<string, Record<string, unknown> | null>;
 		_entities: Map<number, CommonEntity>;
@@ -212,7 +212,7 @@ declare module "simulation/ai/common-api/shared.js"
 		_templatesModifications: Record<string, Record<number, Map<string, unknown>>>;
 		_entityMetadata: Record<number, Record<number, Record<string, unknown>>>;
 		passabilityClasses: Record<string, number>;
-		playersData: Record<number, Record<string, any>>;
+		playersData: Record<number, Record<string, unknown>>;
 		timeElapsed: number;
 		circularMap: boolean;
 		mapSize: number;
@@ -235,7 +235,7 @@ declare module "simulation/ai/common-api/shared.js"
 /** Serializes the object state. */
 		Serialize(): Record<string, unknown>;
 /** Represents the Deserialize. */
-		Deserialize(data: Record<string, any>): void;
+		Deserialize(data: Record<string, unknown>): void;
 /** Gets a template by name. */
 		GetTemplate(name: string): Record<string, unknown> | null;
 /** Represents the init. */
@@ -302,7 +302,7 @@ declare module "simulation/ai/common-api/map-module.js"
 	export class InfoMap
 	{
 /** Initializes the object. */
-		constructor(sharedScript: CommonSharedScript | Record<string, any>, type: string, originalMap?: Uint8Array, actualCopy?: boolean);
+		constructor(sharedScript: CommonSharedScript | Record<string, unknown>, type: string, originalMap?: Uint8Array, actualCopy?: boolean);
 		width: number;
 		height: number;
 		cellSize: number;
@@ -350,14 +350,14 @@ declare module "simulation/ai/common-api/gamestate.js"
 		circularMap: boolean;
 		templates: Record<string, Record<string, unknown> | null>;
 		player: number;
-		playerData: Record<string, any>;
+		playerData: Record<string, unknown>;
 		victoryConditions: Set<string>;
 		alliedVictory: boolean;
 		ceasefireActive: boolean;
 		ceasefireTimeRemaining: number;
 		phases: Array<{ name: string; requirements: CommonRequirement[] }>;
 /** Initializes the script with the current engine state. */
-		init(sharedScript: CommonSharedScript, state: Record<string, any>, player: number): void;
+		init(sharedScript: CommonSharedScript, state: Record<string, unknown>, player: number): void;
 /** Updates the . */
 		update(sharedScript: CommonSharedScript): void;
 /** Represents the updating Collection. */
@@ -686,7 +686,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Initializes the object. */
 		constructor(sharedAI: CommonSharedScript, templateName: string, template: Record<string, unknown>);
 /** Gets the . */
-		get(path: string): any;
+		get(path: string): unknown;
 /** Represents the template Name. */
 		templateName(): string;
 /** Represents the generic Name. */
@@ -849,9 +849,9 @@ declare module "simulation/ai/common-api/entity.js"
 	export class Entity extends Template
 	{
 /** Initializes the object. */
-		constructor(sharedAI: CommonSharedScript, entity: Record<string, any>);
+		constructor(sharedAI: CommonSharedScript, entity: Record<string, unknown>);
 /** Represents the query Interface. */
-		queryInterface(iid: string | number): any;
+		queryInterface(iid: string | number): unknown;
 /** Represents the to String. */
 		toString(): string;
 /** Represents the id. */
@@ -993,7 +993,7 @@ declare module "simulation/ai/common-api/baseAI.js"
 	export class BaseAI
 	{
 /** Initializes the object. */
-		constructor(settings?: Record<string, any>);
+		constructor(settings?: Record<string, unknown>);
 		player: number;
 		territoryMap: CommonInfoMap;
 		accessibility: CommonInfoMap;
@@ -1008,7 +1008,7 @@ declare module "simulation/ai/common-api/baseAI.js"
 /** Represents the Custom Init. */
 		CustomInit(gameState: CommonGameState): void;
 /** Handles Message. */
-		HandleMessage(state: Record<string, any>, playerID: number, sharedAI: CommonSharedScript): void;
+		HandleMessage(state: Record<string, unknown>, playerID: number, sharedAI: CommonSharedScript): void;
 /** Represents the On Update. */
 		OnUpdate(sharedAI: CommonSharedScript): void;
 /** Represents the chat. */

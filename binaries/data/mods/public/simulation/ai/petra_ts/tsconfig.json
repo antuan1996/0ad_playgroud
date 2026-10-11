@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"baseUrl": "../../../",
+		"ignoreDeprecations": "6.0",
+		"rewriteRelativeImportExtensions": true,
+		"outDir": "../petra",
+		"rootDir": ".",
+		"noCheck": true
+	},
+	"include": ["./**/*.ts", "./*.d.ts"],
+	"exclude": ["./**/*.js"]
+}

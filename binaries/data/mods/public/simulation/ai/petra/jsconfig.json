@@ -5,5 +5,5 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": "../../../"
   },
-  "include": ["./**/*.js", "./*.d.ts"]
+  "include": ["./**/*.js", "../petra_ts/*.d.ts"]
 }
