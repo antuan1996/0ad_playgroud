@@ -1,5 +1,4 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import type { QueueManager } from "./queueManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.ts";
 import { Config } from "./config.ts";
@@ -61,7 +60,7 @@ export class TradeManager
 		this.traders.updateEnt(ent);
 	}
 
-	trainMoreTraders(gameState: CommonGameState, queues: QueueManager): void
+	trainMoreTraders(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (!this.hasTradeRoute() || queues.trader.hasQueuedUnits())
 			return;
@@ -89,7 +88,7 @@ export class TradeManager
 			return;
 
 		let template;
-		const metadata = { "role": Worker.ROLE_TRADER };
+		const metadata: Record<string, unknown> = { "role": Worker.ROLE_TRADER };
 		if (this.tradeRoute.sea)
 		{
 			// if we have some merchand ships assigned to transport, try first to reassign them
@@ -162,9 +161,12 @@ export class TradeManager
 
 		Engine.ProfileStart("Trade Manager");
 		const access = ent.hasClass("Ship") ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
+		if (access === undefined)
+		{
+			Engine.ProfileStop();
+			return;
+		}
 		const route = this.checkRoutes(gameState, access);
-		const routeSource = gameState.getEntityById(route.source);
-		const routeTarget = gameState.getEntityById(route.target);
 		if (!route)
 		{
 			// TODO try to garrison land trader inside merchant ship when only sea routes available
@@ -173,6 +175,8 @@ export class TradeManager
 			Engine.ProfileStop();
 			return;
 		}
+		const routeSource = gameState.getEntityById(route.source);
+		const routeTarget = gameState.getEntityById(route.target);
 
 		let nearerSource = true;
 		if (SquareVectorDistance(routeTarget.position(), ent.position()) <
@@ -459,6 +463,8 @@ export class TradeManager
 	 * fills the best trade route in this.tradeRoute and the best potential route in this.potentialTradeRoute
 	 * If an index is given, it returns the best route with this index or the best land route if index is a land index
 	 */
+	checkRoutes(gameState: CommonGameState, accessIndex: number): TradeRoute | false;
+	checkRoutes(gameState: CommonGameState, accessIndex?: undefined): boolean;
 	checkRoutes(gameState: CommonGameState, accessIndex?: number): boolean | TradeRoute
 	{
 		// If we cannot trade, do not bother checking routes.
@@ -482,10 +488,10 @@ export class TradeManager
 		const onlyOurs = !market2.hasEntities();
 		if (onlyOurs)
 			market2 = market1;
-		let candidate = { "gain": 0 };
-		let potential = { "gain": 0 };
-		let bestIndex = { "gain": 0 };
-		let bestLand = { "gain": 0 };
+		let candidate: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
+		let potential: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
+		let bestIndex: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
+		let bestLand: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
 
 		const mapSize = gameState.sharedScript.mapSize;
 		const traderTemplatesGains = gameState.getTraderTemplatesGains();
@@ -617,6 +623,11 @@ export class TradeManager
 		}
 
 		const access = ent.hasClass("Ship") ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
+		if (access === undefined)
+		{
+			ent.setMetadata(PlayerID, "route", undefined);
+			return;
+		}
 		const possibleRoute = this.checkRoutes(gameState, access);
 		// Warning:  presentRoute is from metadata, so contains entity ids
 		if (!possibleRoute ||
@@ -639,7 +650,7 @@ export class TradeManager
 		}
 	}
 
-	prospectForNewMarket(gameState: CommonGameState, queues: QueueManager): void
+	prospectForNewMarket(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.economicBuilding.hasQueuedUnitsWithClass("Trade") || queues.dock.hasQueuedUnitsWithClass("Trade"))
 			return;
@@ -703,7 +714,7 @@ export class TradeManager
 		return true;
 	}
 
-	update(gameState: CommonGameState, events: EngineAIEvents, queues: QueueManager): void
+	update(gameState: CommonGameState, events: EngineAIEvents, queues: PetraRuntime.QueueCollection): void
 	{
 		if (gameState.ai.HQ.canBarter && Resources.GetBarterableCodes().length)
 			this.performBarter(gameState);

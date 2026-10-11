@@ -65,7 +65,7 @@ export class TransportPlan
 			if (!ship)
 			{
 				this.failed = true;
-				return false;
+				return;
 			}
 			this.sea = ship.getMetadata(PlayerID, "sea");
 			ship.setMetadata(PlayerID, "transporter", this.ID);
@@ -84,7 +84,7 @@ export class TransportPlan
 					aiWarn("transport plan with bad path: startIndex " + startIndex + " endIndex " +
 						endIndex);
 				}
-				return false;
+				return;
 			}
 		}
 
@@ -104,7 +104,6 @@ export class TransportPlan
 		this.boardingPos = {};
 		this.needTransportShips = ship === undefined;
 		this.nTry = {};
-		return true;
 	}
 
 	/**
@@ -487,7 +486,7 @@ export class TransportPlan
 	}
 
 	/** when avoidEnnemy is true, we try to not board/unboard in ennemy territory */
-	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: number, seaIndex: number, destination?: CommonPosition, avoidEnnemy: boolean): CommonPosition | undefined
+	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: number, seaIndex: number, destination?: CommonPosition, avoidEnnemy: boolean = false): CommonPosition | undefined
 	{
 		if (!gameState.ai.HQ.navalManager.landingZones[landIndex])
 		{
@@ -509,7 +508,7 @@ export class TransportPlan
 			filters.byMetadata(PlayerID, "sea", seaIndex))).toEntityArray();
 		for (const i of gameState.ai.HQ.navalManager.landingZones[landIndex][seaIndex])
 		{
-			let pos = [i%width+0.5, Math.floor(i/width)+0.5];
+			let pos: CommonPosition = [i%width+0.5, Math.floor(i/width)+0.5];
 			pos = [cell*pos[0], cell*pos[1]];
 			let dist = VectorDistance(startPos, pos);
 			if (destination)

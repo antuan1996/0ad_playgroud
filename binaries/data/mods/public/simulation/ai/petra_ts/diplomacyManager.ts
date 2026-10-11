@@ -1,3 +1,4 @@
+import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import * as chat from "./chatHelper.ts";
 import type { Config } from "./config.ts";

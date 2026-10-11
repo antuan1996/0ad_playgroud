@@ -493,7 +493,7 @@ export class Worker
 		const findSupply = function(worker: Worker, supplies: ResourceSupply[]): CommonEntity | false
 		{
 			const ent = worker.ent;
-			let ret = false;
+			let ret: CommonEntity | false = false;
 			const gatherRates = ent.resourceGatherRates();
 			for (let i = 0; i < supplies.length; ++i)
 			{
@@ -1028,7 +1028,7 @@ export class Worker
 	{
 		if (!this.ent.isBuilder())
 			return false;
-		let bestFarmEnt = false;
+		let bestFarmEnt: CommonEntity | false = false;
 		let bestFarmDist = 10000000;
 		const pos = this.ent.position();
 		for (const found of gameState.getOwnFoundations().values())

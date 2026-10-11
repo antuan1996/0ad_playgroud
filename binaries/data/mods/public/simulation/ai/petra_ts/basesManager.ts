@@ -1,5 +1,4 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
-import type { QueueManager } from "./queueManager.ts";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
@@ -7,6 +6,13 @@ import { BaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
 import { getBestBase, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
+
+type BasesManagerTurnCache = {
+	currentRates?: Record<string, number>;
+	resourceGatherer?: Record<number, number>;
+	resourceGathererByType?: Record<string, number>;
+	base?: { active: number; potential: number };
+};
 
 /**
  * Bases Manager
@@ -22,7 +28,7 @@ export class BasesManager
 	currentBase = 0;
 
 	// Cache some quantities for performance.
-	turnCache = {};
+	turnCache: BasesManagerTurnCache = {};
 
 	// Deals with unit/structure without base.
 	noBase: BaseManager | undefined = undefined;
@@ -345,7 +351,7 @@ export class BasesManager
 						goal = dropsite.position();
 					}
 					if (goal)
-						ent.moveToRange(goal[0], goal[1]);
+						ent.move(goal[0], goal[1]);
 				}
 			}
 		}
@@ -468,11 +474,9 @@ export class BasesManager
 	/** The next two are to register that we assigned a gatherer to a resource this turn. */
 	AddTCResGatherer(resource: string): void
 	{
-		const check = "resourceGatherer-" + resource;
-		if (this.turnCache[check])
-			++this.turnCache[check];
-		else
-			this.turnCache[check] = 1;
+		if (!this.turnCache.resourceGathererByType)
+			this.turnCache.resourceGathererByType = {};
+		this.turnCache.resourceGathererByType[resource] = (this.turnCache.resourceGathererByType[resource] ?? 0) + 1;
 
 		if (this.turnCache.currentRates)
 			this.turnCache.currentRates[resource] += 0.5;
@@ -480,11 +484,7 @@ export class BasesManager
 
 	GetTCResGatherer(resource: string): number
 	{
-		const check = "resourceGatherer-" + resource;
-		if (this.turnCache[check])
-			return this.turnCache[check];
-
-		return 0;
+		return this.turnCache.resourceGathererByType?.[resource] ?? 0;
 	}
 
 	/**
@@ -688,7 +688,7 @@ export class BasesManager
 			return false;
 		let distmin = Math.min();
 		let baseID;
-		const pos = [gameState.ai.HQ.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.territoryMap.width + 0.5), gameState.ai.HQ.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.territoryMap.width) + 0.5)];
+		const pos: CommonPosition = [gameState.ai.HQ.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.territoryMap.width + 0.5), gameState.ai.HQ.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.territoryMap.width) + 0.5)];
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor || !base.anchor.position())
@@ -709,7 +709,7 @@ export class BasesManager
 	}
 
 	/** Reassign territories when a base is going to be deleted */
-	reassignTerritories(deletedBase: BaseManager, territoryMap: number[]): void
+	reassignTerritories(deletedBase: BaseManager, territoryMap: import("./headquarters.ts").Headquarters["territoryMap"]): void
 	{
 		const cellSize = territoryMap.cellSize;
 		const width = territoryMap.width;
@@ -726,7 +726,7 @@ export class BasesManager
 
 			let distmin = Math.min();
 			let baseID;
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			for (const base of this.baseManagers)
 			{
 				if (!base.anchor || !base.anchor.position())
@@ -752,7 +752,7 @@ export class BasesManager
 	/**
 	 * We will loop only on one active base per turn.
 	 */
-	update(gameState: CommonGameState, queues: QueueManager, events: EngineAIEvents): void
+	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		Engine.ProfileStart("BasesManager update");
 

@@ -24,7 +24,7 @@ type BuildingPosition = {
 
 export class ConstructionPlan extends QueuePlan
 {
-	declare goRequirement: TechnologyRequirements | undefined;
+	declare goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
 	declare position: CommonPosition | 0;
 	declare queueToReset: string | undefined;
 
@@ -140,7 +140,7 @@ export class ConstructionPlan extends QueuePlan
 			// recompute the best dropsite location in case some conditions have changed
 			const base = HQ.getBaseByID(this.metadata.base);
 			const type = this.metadata.type ? this.metadata.type : "wood";
-			const newpos = base.findBestDropsiteLocation(gameState, type, template._templateName);
+			const newpos = base.findBestDropsiteLocation(gameState, type, template.templateName());
 			if (newpos && newpos.quality > 0)
 			{
 				const pos = newpos.pos;
@@ -915,7 +915,7 @@ export class ConstructionPlan extends QueuePlan
 
 	isGo(gameState: CommonGameState): boolean
 	{
-		if (this.goRequirement && this.goRequirement == "houseNeeded")
+		if (this.goRequirement === "houseNeeded")
 		{
 			if (!gameState.ai.HQ.canBuild(gameState, "structures/{civ}/house") &&
 			    !gameState.ai.HQ.canBuild(gameState, "structures/{civ}/apartment"))

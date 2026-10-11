@@ -362,12 +362,12 @@ export class Config
 			"ResourceGatherer/BaseSpeed": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
 			"Trader/GainMultiplier": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
 			"Cost/BuildTime": [{ "affects": ["Unit", "Structure"], "multiply": time[AIDiff] }],
-		}, gameState.playerData.entity);
+		}, [gameState.player]);
 	}
 
 	Serialize(): Record<string, unknown>
 	{
-		var data = {};
+		const data: Record<string, unknown> = {};
 		for (const key in this)
 			if (Object.hasOwn(this, key) && key != "debug")
 				data[key] = this[key];
@@ -376,7 +376,6 @@ export class Config
 
 	Deserialize(data: Record<string, unknown>): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		Object.assign(this, data);
 	}
 }

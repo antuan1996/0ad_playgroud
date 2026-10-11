@@ -235,7 +235,7 @@ export class QueueManager
 	/**
 	 * set accounts of queue i from the unaccounted resources
 	 */
-	setAccounts(gameState: CommonGameState, cost: Record<string, number>, i: string): void
+	setAccounts(gameState: CommonGameState, cost: ResourcesManager | Record<string, number>, i: string): void
 	{
 		const available = this.getAvailableResources(gameState);
 		for (const res of Resources.GetCodes())
@@ -249,7 +249,7 @@ export class QueueManager
 	/**
 	 * transfer accounts from queue i to queue j
 	 */
-	transferAccounts(cost: Record<string, number>, i: string, j: string): void
+	transferAccounts(cost: ResourcesManager | Record<string, number>, i: string, j: string): void
 	{
 		for (const res of Resources.GetCodes())
 		{

@@ -2,6 +2,7 @@ import { BaseAI } from "simulation/ai/common-api/baseAI.js";
 import { Entity } from "simulation/ai/common-api/entity.js";
 import { Config } from "./config.ts";
 import { Headquarters } from "./headquarters.ts";
+import type { HeadquartersEvents, HeadquartersSerializedData } from "./headquarters.ts";
 import { Queue } from "./queue.ts";
 import { QueueManager } from "./queueManager.ts";
 import { gameAnalysis } from "./startingStrategy.ts";
@@ -17,11 +18,38 @@ type PetraBotSavedData = {
 	turn: number;
 	playedTurn: number;
 	elapsedTime: number;
-	savedEvents: Record<string, Record<string, unknown>[]>;
+	savedEvents: HeadquartersEvents;
 	config: Record<string, unknown>;
-	queueManager: Record<string, unknown>;
-	HQ: Record<string, unknown>;
+	queueManager: Parameters<QueueManager["Deserialize"]>[1];
+	HQ: HeadquartersSerializedData;
 };
+
+function createEmptyEvents(): HeadquartersEvents
+{
+	return {
+		Create: [],
+		Destroy: [],
+		Attacked: [],
+		ConstructionFinished: [],
+		DiplomacyChanged: [],
+		TrainingStarted: [],
+		TrainingFinished: [],
+		AIMetadata: [],
+		PlayerDefeated: [],
+		EntityRenamed: [],
+		ValueModification: [],
+		OwnershipChanged: [],
+		Garrison: [],
+		UnGarrison: [],
+		TerritoriesChanged: [],
+		TerritoryDecayChanged: [],
+		TributeExchanged: [],
+		AttackRequest: [],
+		CeasefireEnded: [],
+		DiplomacyRequest: [],
+		TributeRequest: []
+	};
+}
 
 export class PetraBot extends BaseAI
 {
@@ -33,10 +61,10 @@ export class PetraBot extends BaseAI
 	gameFinished: boolean;
 	isDeserialized: boolean;
 	playedTurn: number;
-	player: number;
+	declare player: number;
 	queueManager: QueueManager;
 	queues: Record<string, Queue>;
-	savedEvents: Record<string, Record<string, unknown>[]>;
+	savedEvents: HeadquartersEvents;
 	turn: number;
 	uniqueIDs: Record<string, number>;
 
@@ -58,7 +86,7 @@ export class PetraBot extends BaseAI
 
 		this.Config = new Config(settings.difficulty, settings.behavior);
 
-		this.savedEvents = {};
+		this.savedEvents = createEmptyEvents();
 	}
 
 	CustomInit(gameState: CommonGameState): void
@@ -172,7 +200,7 @@ export class PetraBot extends BaseAI
 		if (this.isDeserialized)
 			return this.data;
 
-		const savedEvents = {};
+		const savedEvents = createEmptyEvents();
 		for (const key in this.savedEvents)
 		{
 			savedEvents[key] = this.savedEvents[key].slice();

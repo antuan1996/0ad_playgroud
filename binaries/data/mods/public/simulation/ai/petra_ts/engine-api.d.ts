@@ -155,6 +155,7 @@ interface EngineAIEvent
 
 /** Represents the Engine AI Construction Finished Event. */
 interface EngineAIConstructionFinishedEvent
+	extends EngineAIEvent
 {
 	entity: EntityId;
 	newentity: EntityId;
@@ -162,6 +163,7 @@ interface EngineAIConstructionFinishedEvent
 
 /** Represents the Engine AI Training Finished Event. */
 interface EngineAITrainingFinishedEvent
+	extends EngineAIEvent
 {
 	entities: EntityId[];
 	owner: PlayerId;
@@ -170,18 +172,49 @@ interface EngineAITrainingFinishedEvent
 
 /** Represents the Engine AI Metadata Event. */
 interface EngineAIMetadataEvent
+	extends EngineAIEvent
 {
 	id: EntityId;
 	owner: PlayerId;
-	metadata: Record<string, unknown>;
+	metadata: PetraEntityMetadata;
+}
+
+interface EngineAIAttackRequestEvent extends EngineAIEvent
+{
+	source: PlayerId;
+	player: PlayerId;
+}
+
+interface EngineAIAttackedEvent extends EngineAIEvent
+{
+	target: EntityId;
+	attacker: EntityId;
+}
+
+interface EngineAIDiplomacyChangedEvent extends EngineAIEvent
+{
+	player: PlayerId;
+	otherPlayer: PlayerId;
+}
+
+interface EngineAITrainingStartedEvent extends EngineAIEvent
+{
+	entity: EntityId;
+}
+
+interface EngineAITerritoryDecayChangedEvent extends EngineAIEvent
+{
+	entity: EntityId;
+	to: boolean;
 }
 
 /** Represents the Engine AI Destroy Event. */
 interface EngineAIDestroyEvent
+	extends EngineAIEvent
 {
 	entity: EntityId;
 	SuccessfulFoundation?: boolean;
-	metadata?: Record<string, Record<string, unknown>>;
+	metadata?: Record<number, PetraEntityMetadata>;
 }
 
 /** Represents the Engine AI Events. */
@@ -189,10 +222,10 @@ interface EngineAIEvents
 {
 	Create: Array<{ entity: EntityId }>;
 	Destroy: EngineAIDestroyEvent[];
-	Attacked: EngineAIEvent[];
+	Attacked: EngineAIAttackedEvent[];
 	ConstructionFinished: EngineAIConstructionFinishedEvent[];
-	DiplomacyChanged: EngineAIEvent[];
-	TrainingStarted: EngineAIEvent[];
+	DiplomacyChanged: EngineAIDiplomacyChangedEvent[];
+	TrainingStarted: EngineAITrainingStartedEvent[];
 	TrainingFinished: EngineAITrainingFinishedEvent[];
 	AIMetadata: EngineAIMetadataEvent[];
 	PlayerDefeated: Array<{ playerId: PlayerId }>;
@@ -207,9 +240,9 @@ interface EngineAIEvents
 	Garrison: Array<{ entity: EntityId; holder: EntityId }>;
 	UnGarrison: Array<{ entity: EntityId; holder: EntityId }>;
 	TerritoriesChanged: EngineAIEvent[];
-	TerritoryDecayChanged: EngineAIEvent[];
+	TerritoryDecayChanged: EngineAITerritoryDecayChangedEvent[];
 	TributeExchanged: EngineAIEvent[];
-	AttackRequest: EngineAIEvent[];
+	AttackRequest: EngineAIAttackRequestEvent[];
 	CeasefireEnded: EngineAIEvent[];
 	DiplomacyRequest: EngineAIEvent[];
 	TributeRequest: EngineAIEvent[];

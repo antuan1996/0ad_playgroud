@@ -15,7 +15,7 @@ type AttackUnitStat = {
 	targetSize: number;
 	batchSize: number;
 	classes: string[];
-	interests?: unknown[][];
+	interests?: Array<[string, number, ...string[]]>;
 };
 
 type AttackBuildOrder = [
@@ -61,7 +61,7 @@ export class AttackPlan
 	declare siegeState: number;
 	declare startingAttack: boolean;
 	declare state: string;
-	declare target: CommonEntity | number | undefined;
+	declare target: CommonEntity | undefined;
 	declare targetPlayer: number | undefined;
 	declare targetPos: CommonPosition | undefined;
 	declare type: string;
@@ -126,7 +126,7 @@ export class AttackPlan
 			if (!rallyPoint)
 			{
 				this.failed = true;
-				return false;
+				return;
 			}
 		}
 		this.rallyPoint = rallyPoint;
@@ -156,7 +156,7 @@ export class AttackPlan
 							aiWarn("Petra: " + this.type + " " + this.name + " has an inaccessible target " +
 								    this.target.templateName() + " indices " + rallyAccess + " " + access);
 							this.failed = true;
-							return false;
+							return;
 						}
 						continue;
 					}
@@ -293,7 +293,6 @@ export class AttackPlan
 		this.position = [0, 0];
 		this.isBlocked = false;	     // true when this attack faces walls
 
-		return true;
 	}
 
 	static PREPARATION_FAILED = 0;
@@ -501,7 +500,7 @@ export class AttackPlan
 		if (!targetSize)
 			return true;
 		// no minsize as we don't want the plan to fail at the last minute though.
-		const stat = { "priority": 1, "minSize": 0, "targetSize": targetSize, "batchSize": Math.min(targetSize, 2),
+		const stat: AttackUnitStat = { "priority": 1, "minSize": 0, "targetSize": targetSize, "batchSize": Math.min(targetSize, 2),
 			"classes": classes[i], "interests": [ ["siegeStrength", 3] ] };
 		this.addBuildOrder(gameState, "Siege", stat, true);
 		return true;
@@ -756,7 +755,7 @@ export class AttackPlan
 						aiWarn("attack template " + template + " added for plan " + this.name);
 					const max = firstOrder[3].batchSize;
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
-					const data = { "plan": this.name, "special": specialData, "base": 0 };
+					const data: Record<string, unknown> = { "plan": this.name, "special": specialData, "base": 0 };
 					data.role = gameState.getTemplate(template).hasClass("CitizenSoldier") ?
 						Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
 					const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
@@ -980,7 +979,7 @@ export class AttackPlan
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
 	 */
-	getNearestTarget(gameState: CommonGameState, position: CommonPosition, sameLand: number | false): CommonEntity | undefined
+	getNearestTarget(gameState: CommonGameState, position: CommonPosition, sameLand?: number | false): CommonEntity | undefined
 	{
 		this.isBlocked = false;
 		// Temporary variables needed by isValidTarget
@@ -1108,11 +1107,11 @@ export class AttackPlan
 			return false;
 		if (this.sameLand && getLandAccess(this.gameState, ent) != this.sameLand)
 			return false;
-		return !ent.decaying() || ent.getDefaultArrow() || ent.isGarrisonHolder() && ent.garrisoned().length;
+		return !ent.decaying() || !!ent.getDefaultArrow() || ent.isGarrisonHolder() && ent.garrisoned().length > 0;
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
-	rushTargetFinder(gameState: CommonGameState, playerEnemy: number): CommonEntityCollection
+	rushTargetFinder(gameState: CommonGameState, playerEnemy?: number): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		let buildings;
@@ -1198,7 +1197,7 @@ export class AttackPlan
 		if (!path.length)
 			return undefined;
 
-		const pathPos = [path[0].x, path[0].y];
+		const pathPos: CommonPosition = [path[0].x, path[0].y];
 		const dist = VectorDistance(pathPos, targetPos);
 		const radius = target.obstructionRadius().max;
 		for (const struct of gameState.getEnemyStructures().values())
@@ -1998,7 +1997,7 @@ export class AttackPlan
 			if (!this.path[0][0] || !this.path[0][1])
 				aiWarn("Start: Problem with path " + uneval(this.path));
 			// We're stuck, presumably. Check if there are no walls just close to us.
-			for (const ent of gameState.getEnemyStructures().filter(filters.byClass(["Palisade", "Wall"]))
+			for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"]))
 				.values())
 			{
 				if (SquareVectorDistance(this.position, ent.position()) > 800)
@@ -2197,7 +2196,7 @@ export class AttackPlan
 		this.removeQueues(gameState);
 	}
 
-	removeUnit(ent: CommonEntity, update: boolean): void
+	removeUnit(ent: CommonEntity, update = false): void
 	{
 		if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
 		{
@@ -2348,13 +2347,22 @@ export class AttackPlan
 		return { "properties": properties };
 	}
 
-	Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void
+	Deserialize(gameState: CommonGameState, data: { properties: Record<string, unknown> }): void
 	{
 		for (const key in data.properties)
+		{
+			if (key === "target")
+				continue;
 			this[key] = data.properties[key];
+		}
 
-		if (this.target)
-			this.target = gameState.getEntityById(this.target);
+		const targetId = data.properties.target;
+		if (typeof targetId === "number")
+			this.target = gameState.getEntityById(targetId);
+		else if (targetId === undefined)
+			this.target = undefined;
+		else
+			throw new TypeError("Invalid serialized attack target");
 
 		this.failed = undefined;
 	}

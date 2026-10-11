@@ -209,17 +209,6 @@ export function newTradeRoute(gameState: CommonGameState, player: PlayerId): voi
 	});
 }
 
-function newPhase(gameState: CommonGameState, phase: string, status: keyof typeof newPhaseMessages): void
-{
-	Engine.PostCommand(PlayerID, {
-		"type": "aichat",
-		"message": "/allies " + pickRandom(newPhaseMessages[status]),
-		"translateMessage": true,
-		"translateParameters": ["phase"],
-		"parameters": { "phase": phase }
-	});
-}
-
 export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 	newDiplomaticStance: keyof typeof newDiplomacyMessages): void
 {
@@ -232,8 +221,8 @@ export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 	});
 }
 
-export function answerRequestDiplomacy(gameState: CommonGameState, player: PlayerId,
-	requestType: DiplomacyRequestType, response: DiplomacyResponse,
+export function answerRequestDiplomacy<T extends DiplomacyRequestType>(gameState: CommonGameState, player: PlayerId,
+	requestType: T, response: keyof typeof answerDiplomacyRequestMessages[T],
 	requiredTribute?: { wanted: number; type: string }): void
 {
 	Engine.PostCommand(PlayerID, {

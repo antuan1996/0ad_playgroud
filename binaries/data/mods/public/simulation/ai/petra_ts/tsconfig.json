@@ -8,7 +8,8 @@
 		"rewriteRelativeImportExtensions": true,
 		"outDir": "../petra",
 		"rootDir": ".",
-		"noCheck": true
+		"strict": false,
+		"noCheck": false
 	},
 	"include": ["./**/*.ts", "./*.d.ts"],
 	"exclude": ["./**/*.js"]

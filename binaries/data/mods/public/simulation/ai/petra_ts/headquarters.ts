@@ -12,9 +12,10 @@ import * as difficulty from "./difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
-	setSeaAccess } from "./entityExtend.ts";
+	getSeaAccess, setSeaAccess } from "./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "./mapMask.ts";
+import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { createBorderMap, createObstructionMap, createTerritoryMap } from
 	"simulation/ai/petra/mapModule.js";
 import { NavalManager } from "./navalManager.ts";
@@ -27,26 +28,18 @@ import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "./worker.ts";
 
 type HeadquartersTurnCache = {
+	buildingBuilt?: boolean;
+	allowDistantFood?: boolean;
 	wantedRates?: Record<string, number>;
 	firingStructures?: CommonEntityCollection;
 	numAround?: Record<number, number>;
 	accountedPopulation?: number;
 	accountedWorkers?: number;
 };
-type HeadquartersQueues = Record<string, PetraRuntime.QueueLike>;
+type HeadquartersQueues = PetraRuntime.QueueCollection;
 type HeadquartersTrainableRequirement = [string, number, ...string[]];
-type HeadquartersEvents = Omit<EngineAIEvents,
-	"Attacked" | "DiplomacyChanged" | "ConstructionFinished" | "OwnershipChanged" |
-	"TrainingStarted" | "TrainingFinished" | "TerritoryDecayChanged"> & {
-	Attacked: Array<{ target: number }>;
-	DiplomacyChanged: Array<{ player: number; otherPlayer: number }>;
-	ConstructionFinished: Array<{ entity: number; newentity: number }>;
-	OwnershipChanged: Array<{ entity: number; from: number; to: number }>;
-	TrainingStarted: Array<{ entity: number }>;
-	TrainingFinished: Array<{ entities: number[] }>;
-	TerritoryDecayChanged: Array<{ entity: number; to: boolean }>;
-};
-type HeadquartersSerializedData = {
+export type HeadquartersEvents = EngineAIEvents;
+export type HeadquartersSerializedData = {
 	properties: Record<string, unknown>;
 	basesManager: Record<string, unknown>;
 	attackManager: Record<string, unknown>;
@@ -79,7 +72,7 @@ export class Headquarters
 {
 	declare Config: Config;
 	declare attackManager: AttackManager;
-	declare bAdvanced: boolean;
+	declare bAdvanced: string[];
 	declare basesManager: BasesManager;
 	declare borderMap: InfoMap;
 	declare buildManager: BuildManager;
@@ -102,7 +95,7 @@ export class Headquarters
 	declare garrisonManager: GarrisonManager;
 	declare landRegions: Record<number, boolean>;
 	declare lastFailedGather: Record<string, number>;
-	declare maxFields: boolean;
+	declare maxFields: number | false;
 	declare navalManager: NavalManager;
 	declare navalMap: boolean;
 	declare navalRegions: Record<number, boolean>;
@@ -290,9 +283,10 @@ export class Headquarters
 			if (!ent || !ent.isOwn(PlayerID))
 				continue;
 
-			if (!ent._entity.trainingQueue || !ent._entity.trainingQueue.length)
+			const trainingQueue = ent.trainingQueue();
+			if (!trainingQueue || !trainingQueue.length)
 				continue;
-			const metadata = ent._entity.trainingQueue[0].metadata;
+			const metadata = trainingQueue[0].metadata;
 			if (metadata && metadata.garrisonType)
 				ent.setRallyPoint(ent, "garrison");  // trained units will autogarrison
 			else
@@ -486,7 +480,7 @@ export class Headquarters
 	trainMoreWorkers(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
 		// default template
-		const requirementsDef = [ ["costsResource", 1, "food"] ];
+		const requirementsDef: HeadquartersTrainableRequirement[] = [ ["costsResource", 1, "food"] ];
 		const classesDef = ["Support+Worker"];
 		const templateDef = this.findBestTrainableUnit(gameState, classesDef, requirementsDef);
 
@@ -778,12 +772,20 @@ export class Headquarters
 		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
 		const dpEnts = gameState.getOwnDropsites().filter(
 			filters.not(filters.byClasses(["CivCentre", "Unit"])));
-		const ccList = [];
+		const ccList: Array<{ ent: CommonEntity; pos: CommonPosition; ally: boolean }> = [];
 		for (const cc of ccEnts.values())
-			ccList.push({ "ent": cc, "pos": cc.position(), "ally": gameState.isPlayerAlly(cc.owner()) });
-		const dpList = [];
+		{
+			const pos = cc.position();
+			if (pos)
+				ccList.push({ "ent": cc, "pos": pos, "ally": gameState.isPlayerAlly(cc.owner()) });
+		}
+		const dpList: Array<{ ent: CommonEntity; pos: CommonPosition; territory: number }> = [];
 		for (const dp of dpEnts.values())
-			dpList.push({ "ent": dp, "pos": dp.position(), "territory": this.territoryMap.getOwner(dp.position()) });
+		{
+			const pos = dp.position();
+			if (pos)
+				dpList.push({ "ent": dp, "pos": pos, "territory": this.territoryMap.getOwner(pos) });
+		}
 
 		let bestIdx;
 		let bestVal;
@@ -836,7 +838,7 @@ export class Headquarters
 
 			let norm = 0.5;   // TODO adjust it, knowing that we will sum 5 maps
 			// Checking distance to other cc
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			// We will be more tolerant for cc around our oversea docks
 			let oversea = false;
 
@@ -968,12 +970,14 @@ export class Headquarters
 		// This needs at least 2 CC. Otherwise, go back to economic CC.
 
 		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
-		const ccList = [];
+		const ccList: Array<{ pos: CommonPosition; ally: boolean }> = [];
 		let numAllyCC = 0;
 		for (const cc of ccEnts.values())
 		{
 			const ally = gameState.isPlayerAlly(cc.owner());
-			ccList.push({ "pos": cc.position(), "ally": ally });
+			const pos = cc.position();
+			if (pos)
+				ccList.push({ "pos": pos, "ally": ally });
 			if (ally)
 				++numAllyCC;
 		}
@@ -1014,7 +1018,7 @@ export class Headquarters
 				continue;
 
 			// checking distances to other cc
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			let minDist = Math.min();
 			distcc0 = undefined;
 
@@ -1155,7 +1159,7 @@ export class Headquarters
 			const index = gameState.ai.accessibility.landPassMap[i];
 			if (!this.landRegions[index])
 				continue;
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			// checking distances to other markets
 			let maxVal = 0;
 			let maxDistSq;
@@ -1237,21 +1241,20 @@ export class Headquarters
 		const ownStructures = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"]))
 			.toEntityArray();
 		let enemyStructures = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(0)))
-			.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"]));
-		if (!enemyStructures.hasEntities())	// we may be in cease fire mode, build defense against neutrals
+			.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
+		if (!enemyStructures.length)	// we may be in cease fire mode, build defense against neutrals
 		{
 			enemyStructures = gameState.getNeutralStructures().filter(filters.not(filters.byOwner(0)))
-				.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"]));
-			if (!enemyStructures.hasEntities() && !gameState.getAlliedVictory())
+				.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
+			if (!enemyStructures.length && !gameState.getAlliedVictory())
 			{
 				enemyStructures = gameState.getAllyStructures().filter(
 					filters.not(filters.byOwner(PlayerID))).filter(
-					filters.byClasses(["CivCentre", "Fortress", "Tower"]));
+					filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
 			}
-			if (!enemyStructures.hasEntities())
+			if (!enemyStructures.length)
 				return undefined;
 		}
-		enemyStructures = enemyStructures.toEntityArray();
 
 		let wonderMode = gameState.getVictoryConditions().has("wonder");
 		let wonderDistmin;
@@ -1303,7 +1306,7 @@ export class Headquarters
 			if (i < 0)
 				continue;
 
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			// checking distances to other structures
 			let minDist = Math.min();
 
@@ -1650,7 +1653,7 @@ export class Headquarters
 		}
 	}
 
-	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource: string): boolean
+	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string): boolean
 	{
 		if (this.hasPotentialBase() && this.currentPhase == 1 && !gameState.isResearching(gameState.getPhaseName(2)))
 			return false;
@@ -1933,7 +1936,7 @@ export class Headquarters
 					continue;
 				if (!base.anchor.trainableEntities(civ))	// base still in construction
 					continue;
-				const queue = base.anchor._entity.trainingQueue;
+				const queue = base.anchor.trainingQueue();
 				if (queue)
 				{
 					let time = 0;
@@ -2009,7 +2012,12 @@ export class Headquarters
 					break;
 			}
 		}
-		const metadata = { "role": Worker.ROLE_WORKER, "base": nearestAnchor.getMetadata(PlayerID, "base"), "plan": -1, "trainer": nearestAnchor.id() };
+		const metadata: Record<string, unknown> = {
+			"role": Worker.ROLE_WORKER,
+			"base": nearestAnchor.getMetadata(PlayerID, "base"),
+			"plan": -1,
+			"trainer": nearestAnchor.id()
+		};
 		if (autogarrison)
 			metadata.garrisonType = GarrisonManager.TYPE_PROTECTION;
 		gameState.ai.queues.emergency.addPlan(new TrainingPlan(gameState, templateFound[0], metadata, 1, 1));
@@ -2283,7 +2291,7 @@ export class Headquarters
 					if (!item.unitTemplate)
 						continue;
 					const unitPop = gameState.getTemplate(item.unitTemplate).get("Cost/Population");
-					if (unitPop)
+					if (typeof unitPop === "number")
 						pop += item.count * unitPop;
 				}
 			}

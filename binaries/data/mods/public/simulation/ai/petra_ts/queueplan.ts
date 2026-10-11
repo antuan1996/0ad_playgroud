@@ -5,7 +5,7 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
  * Common functions and variables to all queue plans.
  */
 
-export class QueuePlan
+export abstract class QueuePlan
 {
 	declare ID: number;
 	declare category: string;
@@ -14,6 +14,9 @@ export class QueuePlan
 	declare number: number;
 	declare template: CommonTemplate;
 	declare type: string;
+	declare maxMerge?: number;
+	declare queueToReset?: string;
+	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 
 	constructor(gameState: CommonGameState, type: string, metadata: Record<string, unknown> | undefined)
 	{
@@ -28,6 +31,9 @@ export class QueuePlan
 		this.number = 1;
 		this.category = "";
 	}
+
+	abstract Serialize(): Record<string, unknown>;
+	abstract Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void;
 
 	/** Check the content of this queue */
 	isInvalid(gameState: CommonGameState): boolean

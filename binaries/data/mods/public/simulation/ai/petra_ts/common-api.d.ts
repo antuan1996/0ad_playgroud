@@ -2,7 +2,7 @@ type CommonPosition = [number, number];
 type CommonResourceAmounts = Record<string, number>;
 type CommonResourcesManager = import("simulation/ai/common-api/resources.js").ResourcesManager;
 type CommonEntityFilter = {
-	func: (entity: CommonEntity) => boolean;
+	func: (entity: CommonEntity | CommonTemplate) => boolean;
 	dynamicProperties: string[];
 };
 type CommonPassabilityMap = {
@@ -51,6 +51,75 @@ type CommonGameState = import("simulation/ai/common-api/gamestate.js").GameState
 type CommonSharedScript = import("simulation/ai/common-api/shared.js").SharedScript;
 type CommonTechnology = import("simulation/ai/common-api/technology.js").Technology;
 
+interface PetraEntityMetadata
+{
+	[key: string]: unknown;
+	assignedResource: boolean;
+	plan: number;
+	base: number;
+	transport: number;
+	transporter: number;
+	sea: number;
+	access: number;
+	PartOfArmy: number;
+	"target-foundation": number;
+	supply: number;
+	treasure: number;
+	garrisonHolder: number;
+	guardedEnt: number;
+	distance: number;
+	lastAttackPlanUpdateTime: number;
+	inaccessibleTime: number;
+	approachingTime: number;
+	timeGarrison: number;
+	holderTimeUpdate: number;
+	turnPreviousPosition: number;
+	nextMoveToGatherer: number;
+	lastHuntSearch: number;
+	role: string;
+	subrole: string;
+	"gather-type": string;
+	garrisonType: string;
+	onBoard: number | "onBoard";
+	endPos: CommonPosition;
+	posGarrison: CommonPosition;
+	previousPosition: CommonPosition;
+	previousIdlePosition: CommonPosition;
+	approachingPos: CommonPosition;
+	allied: boolean;
+	opensea: boolean;
+	baseAnchor: boolean;
+	garrisoning: boolean;
+	approachingTarget: boolean;
+	stationnary: boolean;
+	alreadyTried: boolean;
+	phaseUp: boolean;
+	route: { source: number; target: number; gain: number; land?: number; sea?: number };
+	lastGathered: number;
+	carriedBefore: number;
+}
+
+interface CommonTemplateData
+{
+	[key: string]: unknown;
+	affects?: string[];
+	Cost?: { Population?: number; [resource: string]: number | undefined };
+	cost?: CommonResourceAmounts;
+	modifications?: CommonTechnologyModification[];
+	requirements?: CommonRequirement[];
+}
+
+interface CommonTemplateData
+{
+	BuildDistance?: { MinDistance?: number; FromClass?: string };
+	UnitAI?: { DefaultStance?: string };
+	Attack?: Record<string, { Bonuses?: Array<{
+		Civ?: string;
+		Classes?: string[];
+		Multiplier: number;
+	}> }>;
+}
+
 /** Describes a technology modification. */
 interface CommonTechnologyModification
 {
@@ -63,6 +132,7 @@ interface CommonTechnologyModification
 }
 
 type CommonBaseAI = import("simulation/ai/common-api/baseAI.js").BaseAI;
+type PetraBaseManager = import("./baseManager.ts").BaseManager;
 
 declare module "simulation/ai/common-api/utils.js"
 {
@@ -75,7 +145,7 @@ declare module "simulation/ai/common-api/utils.js"
 /** Computes the squared distance between two positions. */
 	export function SquareVectorDistance(a: CommonPosition, b: CommonPosition): number;
 /** Maps a flat index to the corresponding source indices. */
-	export function getMapIndices(index: number, map1: CommonMap, map2: CommonMap): number[];
+	export function getMapIndices(index: number, map1: CommonMap | CommonPassabilityMap, map2: CommonMap | CommonPassabilityMap): number[];
 }
 
 declare module "simulation/ai/common-api/terrain-states.js"
@@ -139,7 +209,7 @@ declare module "simulation/ai/common-api/terrain-analysis.js"
 		regionLinks: number[][];
 		regionID: number;
 /** Gets the accessibility value at a position. */
-		getAccessValue(position: CommonPosition, onWater: boolean): number;
+		getAccessValue(position: CommonPosition, onWater?: boolean): number;
 /** Gets the Traject To. */
 		getTrajectTo(start: CommonPosition, end: CommonPosition): number[] | false | undefined;
 /** Gets a path between two regions. */
@@ -161,7 +231,9 @@ declare module "simulation/ai/common-api/technology.js"
 /** Initializes the object. */
 		constructor(templateName: string);
 		_templateName: string;
-		_template: Record<string, unknown>;
+		_template: CommonTemplateData;
+		get(path: "Cost/Population"): number | undefined;
+		get(path: "ResourceSupply/Type"): string | undefined;
 /** Gets the technology name. */
 		name(civ?: string): string | undefined;
 /** Checks whether the technology is paired by definition. */
@@ -200,6 +272,7 @@ declare module "simulation/ai/common-api/shared.js"
 	{
 /** Initializes the object. */
 		constructor(settings?: Record<string, unknown>);
+		events: EngineAIEvents;
 		_players: number[];
 		_templates: Record<string, Record<string, unknown> | null>;
 		_entities: Map<number, CommonEntity>;
@@ -212,7 +285,7 @@ declare module "simulation/ai/common-api/shared.js"
 		_templatesModifications: Record<string, Record<number, Map<string, unknown>>>;
 		_entityMetadata: Record<number, Record<number, Record<string, unknown>>>;
 		passabilityClasses: Record<string, number>;
-		playersData: Record<number, Record<string, unknown>>;
+		playersData: EnginePlayerState[];
 		timeElapsed: number;
 		circularMap: boolean;
 		mapSize: number;
@@ -255,6 +328,7 @@ declare module "simulation/ai/common-api/shared.js"
 /** Stores metadata for a player and entity. */
 		setMetadata(player: number, entity: CommonEntity, key: string, value: unknown): void;
 /** Gets the Metadata. */
+		getMetadata<K extends keyof PetraEntityMetadata>(player: number, entity: CommonEntity, key: K): PetraEntityMetadata[K] | undefined;
 		getMetadata(player: number, entity: CommonEntity, key: string): unknown;
 /** Deletes metadata for a player and entity. */
 		deleteMetadata(player: number, entity: CommonEntity, key: string): boolean;
@@ -278,8 +352,11 @@ declare module "simulation/ai/common-api/resources.js"
 	{
 /** Initializes the object. */
 		constructor(amounts?: CommonResourceAmounts, population?: number);
-		[key: string]: number;
 		population: number;
+		food: number;
+		wood: number;
+		stone: number;
+		metal: number;
 /** Represents the reset. */
 		reset(): void;
 /** Represents the can Afford. */
@@ -342,7 +419,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 	{
 /** Initializes the object. */
 		constructor();
-		ai: unknown;
+		ai: PetraRuntime.AIState;
 		sharedScript: CommonSharedScript;
 		entities: CommonEntityCollection;
 		EntCollecNames: Map<string, CommonEntityCollection>;
@@ -350,7 +427,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 		circularMap: boolean;
 		templates: Record<string, Record<string, unknown> | null>;
 		player: number;
-		playerData: Record<string, unknown>;
+		playerData: EnginePlayerState;
 		victoryConditions: Set<string>;
 		alliedVictory: boolean;
 		ceasefireActive: boolean;
@@ -373,7 +450,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Gets the Time Elapsed. */
 		getTimeElapsed(): number;
 /** Gets the Barter Prices. */
-		getBarterPrices(): number[];
+		getBarterPrices(): { buy: CommonResourceAmounts; sell: CommonResourceAmounts };
 /** Gets the Victory Conditions. */
 		getVictoryConditions(): Set<string>;
 /** Gets the Allied Victory. */
@@ -383,7 +460,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Gets the Template. */
 		getTemplate(type: string): CommonTemplate | null;
 /** Gets the Built Template. */
-		getBuiltTemplate(foundationName: string): CommonTemplate | null;
+		getBuiltTemplate(foundationName: string): CommonEntity | null;
 /** Represents the apply Civ. */
 		applyCiv(templateName: string): string;
 /** Gets the Player Civ. */
@@ -516,7 +593,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Gets the Fishable Supplies. */
 		getFishableSupplies(): CommonEntityCollection;
 /** Represents the find Trainable Units. */
-		findTrainableUnits(classes: string[], anticlasses?: string[]): Array<[string, CommonTemplate]>;
+		findTrainableUnits(classes: Array<string | string[]>, anticlasses?: string[]): Array<[string, CommonTemplate]>;
 /** Represents the find Available Tech. */
 		findAvailableTech(): Array<[string, CommonTemplate]>;
 /** Represents the has Trainer. */
@@ -640,7 +717,11 @@ declare module "simulation/ai/common-api/entitycollection.js"
 /** Represents the move To Range. */
 		moveToRange(x: number, z: number, min: number, max: number, queued?: boolean, pushFront?: boolean): this;
 /** Represents the attack Move. */
-		attackMove(x: number, z: number, targetClasses: string[], allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
+		attackMove(x: number, z: number, targetClasses: string[] | {
+			attack: string[];
+			avoid: string[];
+			vetoEntities: Record<string, boolean>;
+		}, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
 /** Represents the move Indiv. */
 		moveIndiv(x: number, z: number, queued?: boolean, pushFront?: boolean): this;
 /** Represents the garrison. */
@@ -685,7 +766,16 @@ declare module "simulation/ai/common-api/entity.js"
 	{
 /** Initializes the object. */
 		constructor(sharedAI: CommonSharedScript, templateName: string, template: Record<string, unknown>);
+		_template: Record<string, unknown>;
 /** Gets the . */
+		get(path: "Cost/Population"): number | undefined;
+		get(path: "UnitAI/DefaultStance"): string | undefined;
+		get(path: "ResourceSupply/Type"): string | undefined;
+		get(path: "Attack/Melee/Bonuses" | "Attack/Ranged/Bonuses"): Array<{
+			Civ?: string;
+			Classes?: string[];
+			Multiplier: number;
+		}> | undefined;
 		get(path: string): unknown;
 /** Represents the template Name. */
 		templateName(): string;
@@ -723,7 +813,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Gets the Population Bonus. */
 		getPopulationBonus(): number;
 /** Represents the resistance Strengths. */
-		resistanceStrengths(): Record<string, unknown> | undefined;
+		resistanceStrengths(): { Damage?: Record<string, number> } | undefined;
 /** Represents the attack Types. */
 		attackTypes(): string[] | undefined;
 		attackRange(type: string): { max: number; min: number } | undefined;
@@ -792,10 +882,11 @@ declare module "simulation/ai/common-api/entity.js"
 		trainingCategory(): string | undefined;
 /** Represents the build Time. */
 		buildTime(researcher?: CommonTemplate): number;
+		researchTime(): number;
 /** Represents the build Category. */
 		buildCategory(): string | undefined;
 /** Represents the build Distance. */
-		buildDistance(): Record<string, unknown> | undefined;
+		buildDistance(): { MinDistance?: number; FromClass?: string } | undefined;
 /** Represents the build Placement Type. */
 		buildPlacementType(): string | undefined;
 /** Represents the build Territories. */
@@ -857,6 +948,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the id. */
 		id(): number;
 /** Gets metadata for a player and entity. */
+		getMetadata<K extends keyof PetraEntityMetadata>(player: number, key: K): PetraEntityMetadata[K] | undefined;
 		getMetadata(player: number, key: string): unknown;
 /** Sets the Metadata. */
 		setMetadata(player: number, key: string, value: unknown): void;
@@ -875,7 +967,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the unit AI State. */
 		unitAIState(): string | undefined;
 /** Represents the unit AI Order Data. */
-		unitAIOrderData(): Array<Record<string, unknown>>;
+		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
 /** Represents the hitpoints. */
 		hitpoints(): number;
 /** Represents the is Hurt. */
@@ -934,7 +1026,11 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the move To Range. */
 		moveToRange(x: number, z: number, min: number, max: number, queued?: boolean, pushFront?: boolean): this;
 /** Represents the attack Move. */
-		attackMove(x: number, z: number, targetClasses: string[], allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
+		attackMove(x: number, z: number, targetClasses: string[] | {
+			attack: string[];
+			avoid: string[];
+			vetoEntities: Record<string, boolean>;
+		}, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
 /** Sets the Stance. */
 		setStance(stance: string): this | undefined;
 /** Represents the stop Moving. */
@@ -967,7 +1063,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the trade Route. */
 		tradeRoute(target: CommonEntity, source: CommonEntity): this;
 /** Sets the Rally Point. */
-		setRallyPoint(target: CommonEntity, command: Record<string, unknown>): this;
+		setRallyPoint(target: CommonEntity, command: string): this;
 /** Represents the unset Rally Point. */
 		unsetRallyPoint(): this;
 /** Represents the train. */
@@ -1014,4 +1110,29 @@ declare module "simulation/ai/common-api/baseAI.js"
 /** Represents the chat. */
 		chat(message: string): void;
 	}
+}
+
+declare module "simulation/ai/petra/entityExtend.js"
+{
+	export function isSiegeUnit(ent: CommonEntity): boolean;
+	export function isFastMoving(ent: CommonEntity): boolean;
+	export function getMaxStrength(ent: CommonEntity, debugLevel: number,
+		damageTypeImportance: Record<string, number>, againstClass?: string): number;
+	export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined;
+	export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined;
+	export function setSeaAccess(gameState: CommonGameState, ent: CommonEntity): void;
+	export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean;
+	export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: string): number;
+	export function returnResources(gameState: CommonGameState, ent: CommonEntity): boolean;
+	export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean;
+	export function getBestBase(gameState: CommonGameState, ent: CommonEntity,
+		onlyConstructedBase?: boolean, exclude?: number | false): PetraBaseManager | undefined;
+	export function getHolder(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined;
+	export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonEntity;
+	export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonEntity): boolean;
+	export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: CommonPosition,
+		pos2: CommonPosition, step?: number): boolean;
+	export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | undefined,
+		water?: boolean): boolean;
+	export function dumpEntity(ent: CommonEntity | undefined): void;
 }

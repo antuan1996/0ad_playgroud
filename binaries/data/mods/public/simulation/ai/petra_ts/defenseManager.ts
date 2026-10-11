@@ -807,7 +807,7 @@ export class DefenseManager
 			// Should be kept in sync with garrisonManager to avoid garrisoning-ungarrisoning some units.
 			if (data.attacker)
 			{
-				allowMelee = data.attacker.hasClass("Structure") ? data.attacker.attackRange("Ranged") :
+				allowMelee = data.attacker.hasClass("Structure") ? !!data.attacker.attackRange("Ranged") :
 					!isSiegeUnit(data.attacker);
 			}
 			else

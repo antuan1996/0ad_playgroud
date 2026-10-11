@@ -1,5 +1,5 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import type { QueueManager } from "./queueManager.ts";
+import type { BasesManager } from "./basesManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
@@ -148,7 +148,7 @@ export class BaseManager
 	{
 		if (!anchorEntity.hasClass("CivCentre"))
 		{
-			aiWarn("Error: Petra base " + this.ID + " has been assigned " + ent.templateName() +
+			aiWarn("Error: Petra base " + this.ID + " has been assigned " + anchorEntity.templateName() +
 				" as anchor.");
 		}
 		else
@@ -335,9 +335,10 @@ export class BaseManager
 	 * @return {Object} - The position of the best place to build a new dropsite for the specified resource,
 	 *			its quality and its template name.
 	 */
-	findBestDropsiteAndLocation(gameState: CommonGameState, resource: string): { quality: number; pos: CommonPosition }
+	findBestDropsiteAndLocation(gameState: CommonGameState, resource: string):
+		{ quality: number; pos: CommonPosition; templateName?: string }
 	{
-		let bestResult = {
+		let bestResult: { quality: number; pos: CommonPosition; templateName?: string } = {
 			"quality": 0,
 			"pos": [0, 0]
 		};
@@ -410,7 +411,7 @@ export class BaseManager
 			if (total <= bestVal)
 				continue;
 
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 
 			for (const dp of dpEnts)
 			{
@@ -464,7 +465,7 @@ export class BaseManager
 	}
 
 	/** check our resource levels and react accordingly */
-	checkResourceLevels(gameState: CommonGameState, queues: QueueManager): void
+	checkResourceLevels(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		for (const type of Resources.GetCodes())
 		{
@@ -623,7 +624,7 @@ export class BaseManager
 		}
 	}
 
-	assignRolelessUnits(gameState: CommonGameState, roleless: CommonEntityCollection): void
+	assignRolelessUnits(gameState: CommonGameState, roleless?: Iterable<CommonEntity>): void
 	{
 		if (!roleless)
 			roleless = this.units.filter(filters.not(filters.byHasMetadata(PlayerID, "role"))).values();
@@ -724,7 +725,7 @@ export class BaseManager
 		return num;
 	}
 
-	reassignIdleWorkers(gameState: CommonGameState, idleWorkers: CommonEntityCollection): void
+	reassignIdleWorkers(gameState: CommonGameState, idleWorkers?: Iterable<CommonEntity>): void
 	{
 		// Search for idle workers, and tell them to gather resources based on demand
 		if (!idleWorkers)
@@ -839,7 +840,7 @@ export class BaseManager
 	 * try reassigning some other workers who are nearby
 	 * AI tries to use builders sensibly, not completely stopping its econ.
 	 */
-	assignToFoundations(gameState: CommonGameState, noRepair: boolean): void
+	assignToFoundations(gameState: CommonGameState, noRepair = false): void
 	{
 		let foundations = this.buildings.filter(filters.and(filters.isFoundation(),
 			filters.not(filters.byClass("Field"))));
@@ -1082,7 +1083,7 @@ export class BaseManager
 	}
 
 	/** Return false when the base is not active (no workers on it) */
-	update(gameState: CommonGameState, queues: QueueManager, events: EngineAIEvents): boolean
+	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): boolean
 	{
 		if (this.ID == this.basesManager.baselessBase().ID)
 		{

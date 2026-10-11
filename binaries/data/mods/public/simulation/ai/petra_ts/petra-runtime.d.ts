@@ -5,20 +5,19 @@ declare namespace PetraRuntime {
 	type EntityLike = CommonEntity;
 	type GameStateLike = CommonGameState;
 
-	interface PlanLike {
-		category?: string;
-		type?: string;
-		number: number;
-		maxMerge?: number;
-		template?: CommonTemplate;
-		queueToReset?: string;
-		addItem?: (count: number) => void;
-		isInvalid?: (gameState: GameStateLike) => boolean;
-		isGo?: (gameState: GameStateLike) => boolean;
-		getCost?: () => ResourceMap;
-		start?: (gameState: GameStateLike) => void;
-		hasClass?: (className: string) => boolean;
+	interface AIState {
+		Config: import("./config.ts").Config;
+		HQ: import("./headquarters.ts").Headquarters;
+		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
+		elapsedTime: number;
+		playedTurn: number;
+		queueManager: import("./queueManager.ts").QueueManager;
+		queues: Record<string, import("./queue.ts").Queue>;
+		territoryMap: import("./headquarters.ts").Headquarters["territoryMap"];
+		uniqueIDs: Record<string, number>;
 	}
+
+	type PlanLike = import("./queueplan.ts").QueuePlan;
 
 	interface QueueLike {
 		plans: PlanLike[];
@@ -29,14 +28,16 @@ declare namespace PetraRuntime {
 		check: (gameState: GameStateLike) => void;
 		getNext: () => PlanLike | null;
 		startNext: (gameState: GameStateLike) => boolean;
-		maxAccountWanted: (gameState: GameStateLike, fraction: number) => CommonResourcesManager;
-		queueCost: () => CommonResourcesManager;
+		maxAccountWanted: (gameState: GameStateLike, fraction: number) => import("simulation/ai/common-api/resources.js").ResourcesManager;
+		queueCost: () => import("simulation/ai/common-api/resources.js").ResourcesManager;
 		length: () => number;
 		hasQueuedUnits: () => boolean;
 		countQueuedUnits: () => number;
 		hasQueuedUnitsWithClass: (className: string) => boolean;
 		countQueuedUnitsWithClass: (className: string) => number;
 	}
+
+	type QueueCollection = Record<string, import("./queue.ts").Queue>;
 
 	interface Personality {
 		aggressive: number;

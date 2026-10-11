@@ -52,7 +52,7 @@ export class NavalManager
 	}
 
 	/** More initialisation for stuff that needs the gameState */
-	init(gameState: CommonGameState, deserializing: boolean): void
+	init(gameState: CommonGameState, deserializing = false): void
 	{
 		// docks
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));

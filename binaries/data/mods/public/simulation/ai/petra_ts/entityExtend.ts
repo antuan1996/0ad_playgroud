@@ -15,7 +15,7 @@ export function isFastMoving(ent: CommonEntity): boolean
 }
 
 /** returns some sort of DPS * health factor. If you specify a class, it'll use the modifiers against that class too. */
-export function getMaxStrength(ent: CommonEntity, debugLevel: number,
+export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 	DamageTypeImportance: Record<string, number>, againstClass?: string): number
 {
 	let strength = 0;
@@ -32,7 +32,7 @@ export function getMaxStrength(ent: CommonEntity, debugLevel: number,
 		const attackStrength = ent.attackStrengths(type);
 		for (const str in attackStrength)
 		{
-			let val = parseFloat(attackStrength[str]);
+			let val = attackStrength[str];
 			if (againstClass)
 				val *= ent.getMultiplierAgainst(type, againstClass);
 			if (DamageTypeImportance[str])
@@ -120,7 +120,7 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): nu
 			const sina = Math.sin(ent.angle());
 			for (let d = 3; d < halfDepth; d += 3)
 			{
-				const pos = [ entPos[0] - d * sina,
+				const pos: CommonPosition = [ entPos[0] - d * sina,
 					entPos[1] - d * cosa];
 				access = gameState.ai.accessibility.getAccessValue(pos);
 				if (access > 1)
@@ -147,7 +147,7 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): num
 			const sina = Math.sin(ent.angle());
 			for (let d = 3; d < 15; d += 3)
 			{
-				const pos = [ entPos[0] + d * sina,
+				const pos: CommonPosition = [ entPos[0] + d * sina,
 					entPos[1] + d * cosa];
 				sea = gameState.ai.accessibility.getAccessValue(pos, true);
 				if (sea > 1)
@@ -382,7 +382,7 @@ export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: Com
 	const stepy = (pos2[1] - pos1[1]) / n;
 	for (let i = 1; i < n; ++i)
 	{
-		const pos = [pos1[0]+i*stepx, pos1[1]+i*stepy];
+		const pos: CommonPosition = [pos1[0]+i*stepx, pos1[1]+i*stepy];
 		const owner = gameState.ai.HQ.territoryMap.getOwner(pos);
 		if (owner && gameState.isPlayerEnemy(owner))
 			return true;

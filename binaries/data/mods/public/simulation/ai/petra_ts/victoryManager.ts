@@ -1,5 +1,4 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import type { QueueManager } from "./queueManager.ts";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
 import { getAttackBonus, getBestBase, getLandAccess, returnResources } from
@@ -348,7 +347,7 @@ export class VictoryManager
 	/**
 	 * Train more healers to be later affected to critical entities if needed
 	 */
-	manageCriticalEntHealers(gameState: CommonGameState, queues: QueueManager): void
+	manageCriticalEntHealers(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (gameState.ai.HQ.saveResources || queues.healer.hasQueuedUnits() ||
 		    !gameState.getOwnEntitiesByClass("Temple", true).hasEntities() ||
@@ -606,7 +605,7 @@ export class VictoryManager
 		this.tryCaptureGaiaRelic = false;
 	}
 
-	update(gameState: CommonGameState, events: EngineAIEvents, queues: QueueManager): void
+	update(gameState: CommonGameState, events: EngineAIEvents, queues: PetraRuntime.QueueCollection): void
 	{
 		// Wait a turn for trigger scripts to spawn any critical ents (i.e. in regicide)
 		if (gameState.ai.playedTurn == 1)

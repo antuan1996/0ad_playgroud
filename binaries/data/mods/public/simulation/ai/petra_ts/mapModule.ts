@@ -47,10 +47,10 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 		obstructionMask = gameState.getPassabilityClassMask("building-land");
 	}
 
-	for (let k = 0; k < territoryMap.data.length; ++k)
+	for (let k = 0; k < territoryMap.map.length; ++k)
 	{
-		const tilePlayer = territoryMap.data[k] & TERRITORY_PLAYER_MASK;
-		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) == 0;
+		const tilePlayer = territoryMap.map[k] & TERRITORY_PLAYER_MASK;
+		const isConnected = (territoryMap.map[k] & TERRITORY_BLINKING_MASK) == 0;
 		if (tilePlayer === PlayerID)
 		{
 			if (!buildOwn || !buildNeutral && !isConnected)
@@ -119,11 +119,19 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 }
 
 
-export function createTerritoryMap(gameState: CommonGameState): InfoMap
+export function createTerritoryMap(gameState: CommonGameState): InfoMap & {
+	getOwner: (position: CommonPosition) => number;
+	getOwnerIndex: (index: number) => number;
+	isBlinking: (position: CommonPosition) => boolean;
+}
 {
 	const map = gameState.ai.territoryMap;
 
-	const ret = new InfoMap(gameState.sharedScript, "territory", map.data);
+	const ret = new InfoMap(gameState.sharedScript, "territory", map.map) as InfoMap & {
+		getOwner: (position: CommonPosition) => number;
+		getOwnerIndex: (index: number) => number;
+		isBlinking: (position: CommonPosition) => boolean;
+	};
 	ret.getOwner = function(this: InfoMap, p: CommonPosition): number
 	{
 		return this.point(p) & TERRITORY_PLAYER_MASK;

@@ -1,5 +1,4 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import type { QueueManager } from "./queueManager.ts";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
 import * as chat from "./chatHelper.ts";
@@ -73,7 +72,7 @@ export class AttackManager
 		for (const evt of events.PlayerDefeated)
 			this.defeated[evt.playerId] = true;
 
-		let answer = "decline";
+		let answer: "join" | "other" | "decline" = "decline";
 		let other;
 		let targetPlayer;
 		for (const evt of events.AttackRequest)
@@ -260,7 +259,7 @@ export class AttackManager
 	 * Some functions are run every turn
 	 * Others once in a while
 	 */
-	update(gameState: CommonGameState, queues: QueueManager, events: EngineAIEvents): void
+	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		if (this.Config.debug > 2 && gameState.ai.elapsedTime > this.debugTime + 60)
 		{
@@ -839,7 +838,11 @@ export class AttackManager
 		return { "properties": properties, "upcomingAttacks": upcomingAttacks, "startedAttacks": startedAttacks };
 	}
 
-	Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void
+	Deserialize(gameState: CommonGameState, data: {
+		properties: Record<string, unknown>;
+		upcomingAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
+		startedAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
+	}): void
 	{
 		for (const key in data.properties)
 			this[key] = data.properties[key];

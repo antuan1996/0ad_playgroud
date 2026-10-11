@@ -1,5 +1,4 @@
 import { ResearchPlan } from "./queueplanResearch.ts";
-import type { QueueManager } from "./queueManager.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";
 
@@ -18,7 +17,7 @@ export class ResearchManager
 	/**
 	 * Check if we can go to the next phase
 	 */
-	checkPhase(gameState: CommonGameState, queues: QueueManager): void
+	checkPhase(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.majorTech.hasQueuedUnits())
 			return;
@@ -44,7 +43,7 @@ export class ResearchManager
 		}
 	}
 
-	researchPopulationBonus(gameState: CommonGameState, queues: QueueManager): void
+	researchPopulationBonus(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.minorTech.hasQueuedUnits())
 			return;
@@ -62,7 +61,7 @@ export class ResearchManager
 		}
 	}
 
-	researchTradeBonus(gameState: CommonGameState, queues: QueueManager): void
+	researchTradeBonus(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.minorTech.hasQueuedUnits())
 			return;
@@ -164,7 +163,7 @@ export class ResearchManager
 		return null;
 	}
 
-	update(gameState: CommonGameState, queues: QueueManager): void
+	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.minorTech.hasQueuedUnits() || queues.majorTech.hasQueuedUnits())
 			return;

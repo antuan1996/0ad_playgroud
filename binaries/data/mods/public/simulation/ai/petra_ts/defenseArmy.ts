@@ -223,7 +223,7 @@ export class DefenseArmy
 		let nOwn = 0;
 		const posAlly = [0, 0];
 		let nAlly = 0;
-		const posOther = [0, 0];
+		const posOther: CommonPosition = [0, 0];
 		let nOther = 0;
 		for (const entId of this.ownEntities)
 		{

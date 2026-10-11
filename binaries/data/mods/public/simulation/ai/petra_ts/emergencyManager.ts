@@ -73,7 +73,9 @@ export class EmergencyManager
 		let roots = 0;
 		gameState.getOwnStructures().toEntityArray().forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
 		{
-			if (ent?.get("TerritoryInfluence")?.Root === "true")
+			const influence = ent?.get("TerritoryInfluence");
+			if (typeof influence === "object" && influence !== null &&
+				"Root" in influence && influence.Root === "true")
 				roots++;
 		});
 		return roots;
