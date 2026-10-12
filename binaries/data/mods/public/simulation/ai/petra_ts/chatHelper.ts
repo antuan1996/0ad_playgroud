@@ -1,8 +1,5 @@
 import { AttackPlan } from "./attackPlan.ts";
 
-type DiplomacyRequestType = keyof typeof answerDiplomacyRequestMessages;
-type DiplomacyResponse = keyof typeof answerDiplomacyRequestMessages[DiplomacyRequestType];
-
 const launchAttackMessages = {
 	"hugeAttack": [
 		markForTranslation("I am starting a massive military campaign against %(_player_)s, come and join me."),
@@ -59,7 +56,7 @@ const newDiplomacyMessages = {
 	]
 };
 
-const answerDiplomacyRequestMessages = {
+const answerDiplomacyRequestMessages: Record<string, Record<string, string[]>> = {
 	"ally": {
 		"decline": [
 			markForTranslation("I cannot accept your offer to become allies, %(_player_)s."),
@@ -221,8 +218,8 @@ export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 	});
 }
 
-export function answerRequestDiplomacy<T extends DiplomacyRequestType>(gameState: CommonGameState, player: PlayerId,
-	requestType: T, response: keyof typeof answerDiplomacyRequestMessages[T],
+export function answerRequestDiplomacy(gameState: CommonGameState, player: PlayerId,
+	requestType: string, response: string,
 	requiredTribute?: { wanted: number; type: string }): void
 {
 	Engine.PostCommand(PlayerID, {

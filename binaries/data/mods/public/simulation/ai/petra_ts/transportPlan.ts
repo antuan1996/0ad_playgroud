@@ -25,6 +25,22 @@ import { Worker } from "./worker.ts";
  *   transporter = this.ID
  */
 
+export interface SerializedTransportPlan {
+	ID: number;
+	flotilla: boolean;
+	endPos: CommonPosition;
+	endIndex: number;
+	startIndex: number;
+	sea: number;
+	state: string;
+	boardingPos: Record<string, CommonPosition>;
+	needTransportShips: boolean;
+	nTry: Record<string, number>;
+	canceled: boolean | undefined;
+	unloaded: number[];
+	recovered: Array<{ entId: number; entPos: CommonPosition; shipId: number }>;
+}
+
 export class TransportPlan
 {
 	declare ID: number;
@@ -344,7 +360,7 @@ export class TransportPlan
 				this.assignUnitToShip(gameState, ent);
 				if (ent.getMetadata(PlayerID, "onBoard"))
 				{
-					const shipId = ent.getMetadata(PlayerID, "onBoard");
+					const shipId = ent.getMetadata(PlayerID, "onBoard") as number;
 					const ship = gameState.getEntityById(shipId);
 					if (!this.boardingPos[shipId])
 					{
@@ -360,7 +376,7 @@ export class TransportPlan
 			else if (ent.getMetadata(PlayerID, "onBoard") != "onBoard" && !this.isOnBoard(ent))
 			{
 				ready = false;
-				const shipId = ent.getMetadata(PlayerID, "onBoard");
+				const shipId = ent.getMetadata(PlayerID, "onBoard") as number;
 				const ship = gameState.getEntityById(shipId);
 				if (!ship)    // the ship must have been destroyed
 				{
@@ -600,7 +616,7 @@ export class TransportPlan
 				continue;
 			else if (!ent.position())  // unloading failed
 			{
-				const ship = gameState.getEntityById(ent.getMetadata(PlayerID, "onBoard"));
+				const ship = gameState.getEntityById(ent.getMetadata(PlayerID, "onBoard") as number);
 				if (ship)
 				{
 					if (ship.garrisoned().indexOf(entId) != -1)
@@ -624,7 +640,7 @@ export class TransportPlan
 				// unit unloaded on a wrong region - try to regarrison it and move a bit the ship
 				if (this.debug > 1)
 					aiWarn(">>> unit unloaded on a wrong region ! try to garrison it again <<<");
-				const ship = gameState.getEntityById(ent.getMetadata(PlayerID, "onBoard"));
+				const ship = gameState.getEntityById(ent.getMetadata(PlayerID, "onBoard") as number);
 				if (ship && !this.canceled)
 				{
 					shipsToMove[ship.id()] = ship;
@@ -743,7 +759,7 @@ export class TransportPlan
 		}
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedTransportPlan
 	{
 		return {
 			"ID": this.ID,
@@ -762,10 +778,10 @@ export class TransportPlan
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedTransportPlan): void
 	{
 		for (const key in data)
-			this[key] = data[key];
+			(this as unknown as Record<string, unknown>)[key] = (data as unknown as Record<string, unknown>)[key];
 
 		this.failed = false;
 	}

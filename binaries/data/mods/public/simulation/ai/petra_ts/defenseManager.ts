@@ -1,3 +1,8 @@
+export type SerializedDefenseManager = {
+	properties: Record<string, unknown>;
+	armies: Array<Record<string, unknown>>;
+};
+
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
@@ -978,7 +983,7 @@ export class DefenseManager
 		}
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedDefenseManager
 	{
 		const properties = {
 			"targetList": this.targetList,
@@ -995,8 +1000,7 @@ export class DefenseManager
 		return { "properties": properties, "armies": armies };
 	}
 
-	Deserialize(gameState: CommonGameState,
-		data: { properties: Record<string, unknown>; armies: Array<Record<string, unknown>> }): void
+	Deserialize(gameState: CommonGameState, data: SerializedDefenseManager): void
 	{
 		for (const key in data.properties)
 			this[key as keyof this] = data.properties[key] as this[keyof this];

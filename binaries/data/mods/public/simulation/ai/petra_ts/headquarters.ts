@@ -41,17 +41,17 @@ type HeadquartersTrainableRequirement = [string, number, ...string[]];
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {
 	properties: Record<string, unknown>;
-	basesManager: Record<string, unknown>;
-	attackManager: Record<string, unknown>;
-	buildManager: Record<string, unknown>;
-	defenseManager: Record<string, unknown>;
-	tradeManager: Record<string, unknown>;
-	navalManager: Record<string, unknown>;
-	researchManager: Record<string, unknown>;
-	diplomacyManager: Record<string, unknown>;
-	garrisonManager: Record<string, unknown>;
-	victoryManager: Record<string, unknown>;
-	emergencyManager: Record<string, unknown>;
+	basesManager: ReturnType<BasesManager["Serialize"]>;
+	attackManager: ReturnType<AttackManager["Serialize"]>;
+	buildManager: ReturnType<BuildManager["Serialize"]>;
+	defenseManager: ReturnType<DefenseManager["Serialize"]>;
+	tradeManager: ReturnType<TradeManager["Serialize"]>;
+	navalManager: ReturnType<NavalManager["Serialize"]>;
+	researchManager: ReturnType<ResearchManager["Serialize"]>;
+	diplomacyManager: ReturnType<DiplomacyManager["Serialize"]>;
+	garrisonManager: ReturnType<GarrisonManager["Serialize"]>;
+	victoryManager: ReturnType<VictoryManager["Serialize"]>;
+	emergencyManager: ReturnType<EmergencyManager["Serialize"]>;
 };
 
 /**

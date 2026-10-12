@@ -7,6 +7,15 @@ import type { Config } from "./config.ts";
 import { getBestBase, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
 
+export interface SerializedBasesManager {
+	properties: {
+		currentBase: number;
+		[key: string]: unknown;
+	};
+	noBase: Record<string, unknown> | undefined;
+	baseManagers: Record<string, unknown>[];
+}
+
 type BasesManagerTurnCache = {
 	currentRates?: Record<string, number>;
 	resourceGatherer?: Record<number, number>;
@@ -771,7 +780,7 @@ export class BasesManager
 		Engine.ProfileStop();
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedBasesManager
 	{
 		const properties = {
 			"currentBase": this.currentBase
@@ -789,10 +798,10 @@ export class BasesManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void
+	Deserialize(gameState: CommonGameState, data: SerializedBasesManager): void
 	{
 		for (const key in data.properties)
-			this[key] = data.properties[key];
+			(this as unknown as Record<string, unknown>)[key] = data.properties[key];
 
 		if (data.noBase)
 		{

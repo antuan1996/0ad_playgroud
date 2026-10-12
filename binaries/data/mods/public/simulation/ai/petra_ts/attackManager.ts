@@ -7,6 +7,12 @@ import * as difficulty from "./difficultyLevel.ts";
 import { allowCapture, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
 
+export type SerializedAttackManager = {
+    properties: Record<string, unknown>;
+    upcomingAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
+    startedAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
+};
+
 export class AttackManager
 {
 	declare Config: Config;
@@ -805,7 +811,7 @@ export class AttackManager
 		return true;
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedAttackManager
 	{
 		const properties = {
 			"totalNumber": this.totalNumber,
@@ -819,7 +825,7 @@ export class AttackManager
 			"defeated": this.defeated
 		};
 
-		const upcomingAttacks = {};
+		const upcomingAttacks: Record<string, any[]> = {};
 		for (const key in this.upcomingAttacks)
 		{
 			upcomingAttacks[key] = [];
@@ -827,7 +833,7 @@ export class AttackManager
 				upcomingAttacks[key].push(attack.Serialize());
 		}
 
-		const startedAttacks = {};
+		const startedAttacks: Record<string, any[]> = {};
 		for (const key in this.startedAttacks)
 		{
 			startedAttacks[key] = [];
@@ -835,14 +841,10 @@ export class AttackManager
 				startedAttacks[key].push(attack.Serialize());
 		}
 
-		return { "properties": properties, "upcomingAttacks": upcomingAttacks, "startedAttacks": startedAttacks };
+		return { "properties": properties, "upcomingAttacks": upcomingAttacks as SerializedAttackManager["upcomingAttacks"], "startedAttacks": startedAttacks as SerializedAttackManager["startedAttacks"] };
 	}
 
-	Deserialize(gameState: CommonGameState, data: {
-		properties: Record<string, unknown>;
-		upcomingAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
-		startedAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
-	}): void
+	Deserialize(gameState: CommonGameState, data: SerializedAttackManager): void
 	{
 		for (const key in data.properties)
 			this[key] = data.properties[key];

@@ -17,13 +17,33 @@ type SentDiplomacyRequest = {
 	requestType: DiplomacyRequestType;
 	timeSent: number;
 };
-type DiplomacyManagerEvents = Omit<EngineAIEvents,
-	"Attacked" | "TributeExchanged" | "DiplomacyChanged" | "DiplomacyRequest" | "TributeRequest"> & {
-	Attacked: Array<{ target: number; attacker: number }>;
-	TributeExchanged: Array<{ to: number; from: number; amounts: Record<string, number> }>;
-	DiplomacyChanged: Array<{ otherPlayer: number; player: number }>;
-	DiplomacyRequest: Array<{ player: number; source: number; to: DiplomacyRequestType }>;
-	TributeRequest: Array<{ player: number; source: number; resourceWanted: number; resourceType: string }>;
+type TributeExchangedEvent = {
+	to: number;
+	from: number;
+	amounts: Record<string, number>;
+};
+
+type AttackedEvent = {
+	target: number;
+	attacker: number;
+};
+
+type DiplomacyChangedEvent = {
+	player: number;
+	otherPlayer: number;
+};
+
+type DiplomacyRequestEvent = {
+	player: number;
+	source: number;
+	to: DiplomacyRequestType;
+};
+
+type TributeRequestEvent = {
+	player: number;
+	source: number;
+	resourceWanted: number;
+	resourceType: string;
 };
 
 /**
@@ -163,11 +183,11 @@ export class DiplomacyManager
 		}
 	}
 
-	checkEvents(gameState: CommonGameState, events: DiplomacyManagerEvents): void
+	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		// Increase slowly the cooperative personality trait either when we receive tribute from our allies
 		// or if our allies attack enemies inside our territory
-		for (const evt of events.TributeExchanged)
+		for (const evt of events.TributeExchanged as TributeExchangedEvent[])
 		{
 			if (evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from))
 			{
@@ -209,7 +229,7 @@ export class DiplomacyManager
 			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.0001 * tributes);
 		}
 
-		for (const evt of events.Attacked)
+		for (const evt of events.Attacked as AttackedEvent[])
 		{
 			const target = gameState.getEntityById(evt.target);
 			if (!target || !target.position() ||
@@ -231,7 +251,7 @@ export class DiplomacyManager
 			this.sentDiplomacyRequests.delete(evt.playerId);
 		}
 
-		for (const evt of events.DiplomacyChanged)
+		for (const evt of events.DiplomacyChanged as DiplomacyChangedEvent[])
 		{
 			if (evt.otherPlayer !== PlayerID)
 				continue;
@@ -273,7 +293,7 @@ export class DiplomacyManager
 		}
 
 		// These events will only be sent by other AI players
-		for (const evt of events.DiplomacyRequest)
+		for (const evt of events.DiplomacyRequest as DiplomacyRequestEvent[])
 		{
 			if (evt.player !== PlayerID)
 				continue;
@@ -300,7 +320,7 @@ export class DiplomacyManager
 		}
 
 		// An AI player we sent a diplomacy request to demanded we send them a tribute
-		for (const evt of events.TributeRequest)
+		for (const evt of events.TributeRequest as TributeRequestEvent[])
 		{
 			if (evt.player !== PlayerID)
 				continue;
@@ -574,7 +594,7 @@ export class DiplomacyManager
 			}
 	}
 
-	update(gameState: CommonGameState, events: DiplomacyManagerEvents): void
+	update(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		this.checkEvents(gameState, events);
 

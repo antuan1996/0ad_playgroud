@@ -5,7 +5,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { getBuiltEntity, getLandAccess, getSeaAccess } from "./entityExtend.ts";
 import * as mapMask from "./mapMask.ts";
 import { createObstructionMap } from "./mapModule.ts";
-import { QueuePlan } from "./queueplan.ts";
+import { PlanMetadata, QueuePlan } from "./queueplan.ts";
 
 type BuildingPosition = {
 	x: number;
@@ -28,7 +28,7 @@ export class ConstructionPlan extends QueuePlan
 	declare position: CommonPosition | 0;
 	declare queueToReset: string | undefined;
 
-	constructor(gameState: CommonGameState, type: string, metadata?: Record<string, unknown>,
+	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		position?: CommonPosition | 0)
 	{
 		super(gameState, type, metadata);
@@ -182,7 +182,7 @@ export class ConstructionPlan extends QueuePlan
 				if (pos)
 					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": pos[2] };
 				// if this fortress is our first one, just try the standard placement
-				if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities())
+				if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities() || false)
 					return false;
 			}
 			else if (template.hasClass("Market")) // Docks are done before.
@@ -233,7 +233,7 @@ export class ConstructionPlan extends QueuePlan
 
 			if (!HQ.requireHouses || !template.hasClass("House"))
 			{
-				gameState.getOwnStructures().forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
+				gameState.getOwnStructures().forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void
 				{
 					const pos = ent.position();
 					const x = Math.round(pos[0] / cellSize);
@@ -461,7 +461,7 @@ export class ConstructionPlan extends QueuePlan
 				continue;
 
 			const res = dropsiteTypes ? Math.min(maxRes, this.getResourcesAround(gameState, dropsiteTypes, j, 80)) : maxRes;
-			const pos = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 
 			// If proximity is given, we look for the nearest point
 			if (proxyAccess)
@@ -685,7 +685,7 @@ export class ConstructionPlan extends QueuePlan
 			{
 				if (consec[c] > count)
 				{
-					start = c;
+					start = +c;
 					count = consec[c];
 				}
 			}
@@ -951,11 +951,11 @@ export class ConstructionPlan extends QueuePlan
 		category: string;
 		type: string;
 		ID: number;
-		metadata: Record<string, unknown> | undefined;
+		metadata: PlanMetadata | undefined;
 		cost: { amounts: Record<string, number>; population: number };
 		number: number;
 		position: CommonPosition | 0;
-		goRequirement: TechnologyRequirements | undefined;
+		goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
 		queueToReset: string | undefined;
 	}
 	{

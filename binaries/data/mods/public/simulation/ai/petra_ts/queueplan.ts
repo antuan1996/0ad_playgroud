@@ -1,6 +1,31 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 
+/** Land access index -> whether a dock may be built on that landmass. */
+export interface PlanLandSet {
+	[landAccess: number]: boolean;
+}
+
+export interface PlanMetadata {
+	base?: number;
+	access?: number;
+	expectedGain?: number;
+	favoredBase?: number;
+	index?: number;
+	land?: PlanLandSet;
+	militaryBase?: boolean;
+	oversea?: boolean;
+	phaseUp?: boolean;
+	proximity?: CommonPosition;
+	resource?: string;
+	role?: string;
+	sea?: number;
+	support?: boolean;
+	trainer?: number;
+	type?: string;
+	[key: string]: unknown;
+}
+
 /**
  * Common functions and variables to all queue plans.
  */
@@ -10,7 +35,7 @@ export abstract class QueuePlan
 	declare ID: number;
 	declare category: string;
 	declare cost: ResourcesManager;
-	declare metadata: Record<string, unknown>;
+	declare metadata: PlanMetadata | undefined;
 	declare number: number;
 	declare template: CommonTemplate;
 	declare type: string;
@@ -18,7 +43,7 @@ export abstract class QueuePlan
 	declare queueToReset?: string;
 	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 
-	constructor(gameState: CommonGameState, type: string, metadata: Record<string, unknown> | undefined)
+	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata)
 	{
 		this.type = gameState.applyCiv(type);
 		this.metadata = metadata;
