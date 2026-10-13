@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.js";
-import { getAttackBonus, getBestBase, getLandAccess, returnResources } from "./entityExtend.js";
+import { getAttackBonus, getBestBase, getLandAccess, returnResources } from "simulation/ai/petra/entityExtend.js";
 import { TrainingPlan } from "./queueplanTraining.js";
 import { Worker } from "./worker.js";
 /**
@@ -477,7 +477,7 @@ export class VictoryManager {
             // And look for some new gaia relics visible by any of our units
             // or that may be on our territory
             const allGaiaRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"))
-                .filter((relic) => relic.owner() == 0);
+                .filter(relic => relic.owner() == 0);
             for (const relic of allGaiaRelics.values()) {
                 const relicPosition = relic.position();
                 if (!relicPosition || this.targetedGaiaRelics.has(relic.id()))
@@ -521,7 +521,7 @@ export class VictoryManager {
             return;
         const relicPosition = relic.position();
         const access = getLandAccess(gameState, relic);
-        const units = gameState.getOwnUnits().filter((ent) => {
+        const units = gameState.getOwnUnits().filter(ent => {
             if (!ent.position() || !ent.canCapture(relic))
                 return false;
             if (ent.getMetadata(PlayerID, "transport") !== undefined)

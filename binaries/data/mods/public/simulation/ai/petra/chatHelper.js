@@ -185,6 +185,15 @@ export function newTradeRoute(gameState, player) {
         "parameters": { "_player_": player }
     });
 }
+function newPhase(gameState, phase, status) {
+    Engine.PostCommand(PlayerID, {
+        "type": "aichat",
+        "message": "/allies " + pickRandom(newPhaseMessages[status]),
+        "translateMessage": true,
+        "translateParameters": ["phase"],
+        "parameters": { "phase": phase }
+    });
+}
 export function newDiplomacy(gameState, player, newDiplomaticStance) {
     Engine.PostCommand(PlayerID, {
         "type": "aichat",

@@ -535,7 +535,7 @@ export class AttackManager {
             if (!gameState.isPlayerEnemy(i) || this.defeated[i] ||
                 i == 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
                 continue;
-            const relicsCount = allRelics.filter((relic) => relic.owner() == i).length;
+            const relicsCount = allRelics.filter(relic => relic.owner() == i).length;
             if (relicsCount <= maxRelicsOwned)
                 continue;
             maxRelicsOwned = relicsCount;

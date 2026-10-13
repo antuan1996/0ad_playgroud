@@ -2,6 +2,27 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { getLandAccess } from "./entityExtend.js";
 import { Worker } from "./worker.js";
+/**
+ * Describes a transport plan
+ * Constructor assign units (units is an ID array), a destination (position).
+ * The naval manager will try to deal with it accordingly.
+ *
+ * By this I mean that the naval manager will find how to go from access point 1 to access point 2
+ * and then carry units from there.
+ *
+ * Note: only assign it units currently over land, or it won't work.
+ * Also: destination should probably be land, otherwise the units will be lost at sea.
+ *
+ * metadata for units:
+ *   transport = this.ID
+ *   onBoard = ship.id() when affected to a ship but not yet garrisoned
+ *           = "onBoard" when garrisoned in a ship
+ *           = undefined otherwise
+ *   endPos  = position of destination
+ *
+ *   metadata for ships
+ *   transporter = this.ID
+ */
 export class TransportPlan {
     constructor(gameState, units, startIndex, endIndex, endPos, ship) {
         this.ID = gameState.ai.uniqueIDs.transports++;
@@ -16,7 +37,7 @@ export class TransportPlan {
             // special transport from already garrisoned ship
             if (!ship) {
                 this.failed = true;
-                return;
+                return false;
             }
             this.sea = ship.getMetadata(PlayerID, "sea");
             ship.setMetadata(PlayerID, "transporter", this.ID);
@@ -32,7 +53,7 @@ export class TransportPlan {
                     aiWarn("transport plan with bad path: startIndex " + startIndex + " endIndex " +
                         endIndex);
                 }
-                return;
+                return false;
             }
         }
         for (const ent of units) {
@@ -47,6 +68,7 @@ export class TransportPlan {
         this.boardingPos = {};
         this.needTransportShips = ship === undefined;
         this.nTry = {};
+        return true;
     }
     /**
      * We're trying to board units onto our ships.
@@ -115,7 +137,7 @@ export class TransportPlan {
         // and choose the nearest available ship from this unit
         let distmin = Math.min();
         let nearest;
-        gameState.ai.HQ.navalManager.seaTransportShips[this.sea].forEach((ship) => {
+        gameState.ai.HQ.navalManager.seaTransportShips[this.sea].forEach(ship => {
             if (ship.getMetadata(PlayerID, "transporter"))
                 return;
             if (pos) {
@@ -206,7 +228,7 @@ export class TransportPlan {
             }
             if (!base.anchor || !base.anchor.position())
                 return false;
-            this.units.forEach((unit) => { unit.setMetadata(PlayerID, "base", base.ID); });
+            this.units.forEach(unit => { unit.setMetadata(PlayerID, "base", base.ID); });
         }
         this.endIndex = this.startIndex;
         this.endPos = base.anchor.position();
@@ -351,7 +373,7 @@ export class TransportPlan {
         return false;
     }
     /** when avoidEnnemy is true, we try to not board/unboard in ennemy territory */
-    getBoardingPos(gameState, ship, landIndex, seaIndex, destination, avoidEnnemy = false) {
+    getBoardingPos(gameState, ship, landIndex, seaIndex, destination, avoidEnnemy) {
         if (!gameState.ai.HQ.navalManager.landingZones[landIndex]) {
             aiWarn(" >>> no landing zone for land " + landIndex);
             return destination;

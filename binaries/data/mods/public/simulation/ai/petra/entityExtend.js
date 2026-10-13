@@ -20,7 +20,7 @@ export function getMaxStrength(ent, debugLevel, DamageTypeImportance, againstCla
             continue;
         const attackStrength = ent.attackStrengths(type);
         for (const str in attackStrength) {
-            let val = attackStrength[str];
+            let val = parseFloat(attackStrength[str]);
             if (againstClass)
                 val *= ent.getMultiplierAgainst(type, againstClass);
             if (DamageTypeImportance[str])

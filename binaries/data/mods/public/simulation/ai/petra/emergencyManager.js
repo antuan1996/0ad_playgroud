@@ -52,10 +52,8 @@ export class EmergencyManager {
     }
     rootCount(gameState) {
         let roots = 0;
-        gameState.getOwnStructures().toEntityArray().forEach((ent) => {
-            const influence = ent?.get("TerritoryInfluence");
-            if (typeof influence === "object" && influence !== null &&
-                "Root" in influence && influence.Root === "true")
+        gameState.getOwnStructures().toEntityArray().forEach(ent => {
+            if (ent?.get("TerritoryInfluence")?.Root === "true")
                 roots++;
         });
         return roots;

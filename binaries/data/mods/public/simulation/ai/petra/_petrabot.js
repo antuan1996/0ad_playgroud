@@ -4,45 +4,21 @@ import { Headquarters } from "./headquarters.js";
 import { Queue } from "./queue.js";
 import { QueueManager } from "./queueManager.js";
 import { gameAnalysis } from "./startingStrategy.js";
-function createEmptyEvents() {
-    return {
-        Create: [],
-        Destroy: [],
-        Attacked: [],
-        ConstructionFinished: [],
-        DiplomacyChanged: [],
-        TrainingStarted: [],
-        TrainingFinished: [],
-        AIMetadata: [],
-        PlayerDefeated: [],
-        EntityRenamed: [],
-        ValueModification: [],
-        OwnershipChanged: [],
-        Garrison: [],
-        UnGarrison: [],
-        TerritoriesChanged: [],
-        TerritoryDecayChanged: [],
-        TributeExchanged: [],
-        AttackRequest: [],
-        CeasefireEnded: [],
-        DiplomacyRequest: [],
-        TributeRequest: []
-    };
-}
 export class PetraBot extends BaseAI {
     Config;
-    HQ = undefined;
-    canPlay = false;
-    data = undefined;
-    elapsedTime = 0;
-    gameFinished = false;
-    isDeserialized = false;
-    playedTurn = 0;
-    queueManager = undefined;
-    queues = {};
+    HQ;
+    canPlay;
+    data;
+    elapsedTime;
+    gameFinished;
+    isDeserialized;
+    playedTurn;
+    player;
+    queueManager;
+    queues;
     savedEvents;
-    turn = 0;
-    uniqueIDs = {};
+    turn;
+    uniqueIDs;
     constructor(settings) {
         super(settings);
         // played turn, because Petra doesn't play every turn.
@@ -56,13 +32,11 @@ export class PetraBot extends BaseAI {
             "transports": 1 // transport plans start at 1 because 0 might be used as none
         };
         this.Config = new Config(settings.difficulty, settings.behavior);
-        this.savedEvents = createEmptyEvents();
+        this.savedEvents = {};
     }
     CustomInit(gameState) {
         if (this.isDeserialized) {
             // WARNING: the deserializations should not modify the metadatas infos inside their init functions
-            if (!this.data)
-                return;
             this.canPlay = this.data.canPlay;
             this.turn = this.data.turn;
             this.playedTurn = this.data.playedTurn;
@@ -126,10 +100,8 @@ export class PetraBot extends BaseAI {
                 Engine.ProfileStop();
                 return;
             }
-            if (this.HQ)
-                this.HQ.update(this.gameState, this.queues, this.savedEvents);
-            if (this.queueManager)
-                this.queueManager.update(this.gameState);
+            this.HQ.update(this.gameState, this.queues, this.savedEvents);
+            this.queueManager.update(this.gameState);
             for (const i in this.savedEvents)
                 this.savedEvents[i] = [];
             Engine.ProfileStop();
@@ -137,12 +109,9 @@ export class PetraBot extends BaseAI {
         this.turn++;
     }
     Serialize() {
-        if (this.isDeserialized) {
-            if (!this.data)
-                throw new Error("Cannot serialize: data is undefined during deserialization");
+        if (this.isDeserialized)
             return this.data;
-        }
-        const savedEvents = createEmptyEvents();
+        const savedEvents = {};
         for (const key in this.savedEvents) {
             savedEvents[key] = this.savedEvents[key].slice();
             for (const i in savedEvents[key]) {
@@ -155,8 +124,6 @@ export class PetraBot extends BaseAI {
                 savedEvents[key][i] = evtmod;
             }
         }
-        if (!this.queueManager || !this.HQ)
-            throw new Error("Cannot serialize: queueManager or HQ is undefined");
         return {
             "canPlay": this.canPlay,
             "uniqueIDs": this.uniqueIDs,
