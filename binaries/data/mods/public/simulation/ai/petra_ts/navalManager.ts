@@ -28,10 +28,10 @@ export class NavalManager
 	declare warShips: CommonEntityCollection;
 
 	// ship subCollections. Also exist for land zones, idem, not caring.
-	seaShips = [];
-	seaTransportShips = [];
-	seaWarShips = [];
-	seaFishShips = [];
+	seaShips: Array<CommonEntityCollection | undefined> = [];
+	seaTransportShips: Array<CommonEntityCollection | undefined> = [];
+	seaWarShips: Array<CommonEntityCollection | undefined> = [];
+	seaFishShips: Array<CommonEntityCollection | undefined> = [];
 
 	// wanted NB per zone.
 	wantedTransportShips = [];
@@ -41,7 +41,7 @@ export class NavalManager
 	neededTransportShips = [];
 	neededWarShips = [];
 
-	transportPlans = [];
+	transportPlans: TransportPlan[] = [];
 
 	// shore-line regions where we can load and unload units
 	landingZones = {};
@@ -504,11 +504,13 @@ export class NavalManager
 			if (!plan.needTransportShips || plan.units.length < 2)
 				continue;
 			const sea = plan.sea;
+			if (sea === undefined)
+				continue;
 			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 ||
-				this.seaTransportShips[sea].length < this.wantedTransportShips[sea])
+				(this.seaTransportShips[sea]?.length ?? 0) < this.wantedTransportShips[sea])
 				continue;
 			++this.neededTransportShips[sea];
-			if (this.wantedTransportShips[sea] === 0 || this.seaTransportShips[sea].length < plan.transportShips.length + 2)
+			if (this.wantedTransportShips[sea] === 0 || (this.seaTransportShips[sea]?.length ?? 0) < plan.transportShips.length + 2)
 			{
 				++this.wantedTransportShips[sea];
 				return;
@@ -534,7 +536,7 @@ export class NavalManager
 			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0)
 				continue;
 
-			if (this.seaTransportShips[sea].length < this.wantedTransportShips[sea])
+			if ((this.seaTransportShips[sea]?.length ?? 0) < this.wantedTransportShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "transport");
 				if (template)
@@ -545,7 +547,7 @@ export class NavalManager
 			}
 
 
-			if (this.seaFishShips[sea].length < this.wantedFishShips[sea])
+			if ((this.seaFishShips[sea]?.length ?? 0) < this.wantedFishShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "fishing");
 				if (template)

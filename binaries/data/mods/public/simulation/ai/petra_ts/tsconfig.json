@@ -9,7 +9,8 @@
 		"outDir": "../petra",
 		"rootDir": ".",
 		"strict": true,
-		"noCheck": false
+		"noCheck": false,
+		"noEmit": true,
 	},
 	"include": ["./**/*.ts", "./*.d.ts"],
 	"exclude": ["./**/*.js"]

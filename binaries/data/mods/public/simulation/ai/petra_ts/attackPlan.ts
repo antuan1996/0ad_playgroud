@@ -535,7 +535,7 @@ export class AttackPlan
 			this.debugAttack();
 
 		// if we need a transport, wait for some transport ships
-		if (this.overseas && !gameState.ai.HQ.navalManager.seaTransportShips[this.overseas].length)
+		if (this.overseas && !gameState.ai.HQ.navalManager.seaTransportShips[this.overseas]?.length)
 			return AttackPlan.PREPARATION_KEEP_GOING;
 
 		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)    // Forced Raids have special purposes (as relic capture)

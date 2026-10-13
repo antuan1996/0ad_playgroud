@@ -957,6 +957,8 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the Entity. */
 	export class Entity extends Template
 	{
+/** The raw engine entity state (private `_entity` in entity.js). */
+		_entity: EngineAIEntityState;
 /** Initializes the object. */
 		constructor(sharedAI: CommonSharedScript, entity: Record<string, unknown>);
 /** Represents the query Interface. */

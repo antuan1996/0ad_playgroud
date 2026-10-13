@@ -23,13 +23,13 @@ export class AttackManager
 	attackNumber = 0;
 	rushNumber = 0;
 	raidNumber = 0;
-	upcomingAttacks = {
+	upcomingAttacks: Record<string, AttackPlan[]> = {
 		[AttackPlan.TYPE_RUSH]: [],
 		[AttackPlan.TYPE_RAID]: [],
 		[AttackPlan.TYPE_DEFAULT]: [],
 		[AttackPlan.TYPE_HUGE_ATTACK]: []
 	};
-	startedAttacks = {
+	startedAttacks: Record<string, AttackPlan[]> = {
 		[AttackPlan.TYPE_RUSH]: [],
 		[AttackPlan.TYPE_RAID]: [],
 		[AttackPlan.TYPE_DEFAULT]: [],

@@ -1925,7 +1925,7 @@ export class Headquarters
 		const civ = gameState.getPlayerCiv();
 		// find nearest base anchor
 		const distcut = 20000;
-		let nearestAnchor;
+		let nearestAnchor: CommonEntity | undefined;
 		let distmin;
 		for (const pos of positions)
 		{
@@ -1977,7 +1977,7 @@ export class Headquarters
 		const rangedWanted = randBool() && autogarrison;
 
 		const total = gameState.getResources();
-		let templateFound;
+		let templateFound: [string, CommonTemplate] | undefined;
 		const trainables = nearestAnchor.trainableEntities(civ);
 		const garrisonArrowClasses = nearestAnchor.getGarrisonArrowClasses();
 		for (const trainable of trainables)

@@ -787,7 +787,7 @@ export class Worker
 			return false;
 
 		let nearestSupplyDist = Math.min();
-		let nearestSupply;
+		let nearestSupply: CommonEntity | undefined;
 
 		const entIsFastMoving = isFastMoving(this.ent);
 		const isRanged = this.ent.hasClass("Ranged");
@@ -898,7 +898,7 @@ export class Worker
 		}
 
 		let nearestSupplyDist = Math.min();
-		let nearestSupply;
+		let nearestSupply: CommonEntity | undefined;
 
 		const fisherSea = getSeaAccess(gameState, this.ent);
 		const fishDropsites = (gameState.playerData.hasSharedDropsites ? gameState.getAnyDropsites("food") :
