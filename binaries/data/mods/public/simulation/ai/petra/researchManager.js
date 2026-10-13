@@ -78,7 +78,7 @@ export class ResearchManager {
                 const cost = template.cost;
                 let costMax = 0;
                 for (const res in cost)
-                    costMax = Math.max(costMax, Math.max(cost[res] - available[res], 0));
+                    costMax = Math.max(costMax, Math.max(cost[res] - (available ? available[res] : 0), 0));
                 if (10 * numWorkers < costMax)
                     continue;
             }
@@ -112,7 +112,7 @@ export class ResearchManager {
                 const cost = template.cost;
                 let costMax = 0;
                 for (const res in cost)
-                    costMax = Math.max(costMax, Math.max(cost[res] - available[res], 0));
+                    costMax = Math.max(costMax, Math.max(cost[res] - (available ? available[res] : 0), 0));
                 if (10 * numWorkers < costMax)
                     continue;
             }

@@ -35,7 +35,7 @@ export class BuildManager {
         this.elapsedTime = gameState.ai.elapsedTime;
         const civ = gameState.getPlayerCiv();
         for (const evt of events.Create) {
-            if (events.Destroy.some(e => e.entity == evt.entity))
+            if (events.Destroy.some((e) => e.entity == evt.entity))
                 continue;
             const ent = gameState.getEntityById(evt.entity);
             if (ent && ent.isOwn(PlayerID) && ent.hasClass("Unit"))
@@ -57,7 +57,7 @@ export class BuildManager {
         }
         for (const evt of events.ValueModification) {
             if (evt.component != "Builder" ||
-                !evt.valueNames.some(val => val.startsWith("Builder/Entities/")))
+                !evt.valueNames.some((val) => val.startsWith("Builder/Entities/")))
                 continue;
             // Unfortunately there really is not an easy way to determine the changes
             // at this stage, so we simply have to dump the cache.

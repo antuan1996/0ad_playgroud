@@ -84,7 +84,7 @@ export class GarrisonManager {
                     list.splice(j--, 1);
                 }
                 else {
-                    if (ent.unitAIOrderData().some(order => order.target && order.target == id))
+                    if (ent.unitAIOrderData().some((order) => order.target && order.target == id))
                         continue;
                     if (ent.getMetadata(PlayerID, "garrisonHolder") == id) {
                         // The garrison order must have failed

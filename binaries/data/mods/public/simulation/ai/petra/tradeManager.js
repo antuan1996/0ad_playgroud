@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.js";
 import * as difficulty from "./difficultyLevel.js";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory } from "simulation/ai/petra/entityExtend.js";
+import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory } from "./entityExtend.js";
 import { ConstructionPlan } from "./queueplanBuilding.js";
 import { TrainingPlan } from "./queueplanTraining.js";
 import { Worker } from "./worker.js";
@@ -110,9 +110,11 @@ export class TradeManager {
         // TODO if the trader is idle and has workOrders, restore them to avoid losing the current gain
         Engine.ProfileStart("Trade Manager");
         const access = ent.hasClass("Ship") ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
+        if (access === undefined) {
+            Engine.ProfileStop();
+            return;
+        }
         const route = this.checkRoutes(gameState, access);
-        const routeSource = gameState.getEntityById(route.source);
-        const routeTarget = gameState.getEntityById(route.target);
         if (!route) {
             // TODO try to garrison land trader inside merchant ship when only sea routes available
             if (this.Config.debug > 0)
@@ -120,6 +122,8 @@ export class TradeManager {
             Engine.ProfileStop();
             return;
         }
+        const routeSource = gameState.getEntityById(route.source);
+        const routeTarget = gameState.getEntityById(route.target);
         let nearerSource = true;
         if (SquareVectorDistance(routeTarget.position(), ent.position()) <
             SquareVectorDistance(routeSource.position(), ent.position())) {
@@ -347,10 +351,6 @@ export class TradeManager {
         gameState.ai.HQ.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/market"));
         gameState.ai.HQ.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/dock"));
     }
-    /**
-     * fills the best trade route in this.tradeRoute and the best potential route in this.potentialTradeRoute
-     * If an index is given, it returns the best route with this index or the best land route if index is a land index
-     */
     checkRoutes(gameState, accessIndex) {
         // If we cannot trade, do not bother checking routes.
         if (!Resources.GetTradableCodes().length) {
@@ -369,10 +369,10 @@ export class TradeManager {
         const onlyOurs = !market2.hasEntities();
         if (onlyOurs)
             market2 = market1;
-        let candidate = { "gain": 0 };
-        let potential = { "gain": 0 };
-        let bestIndex = { "gain": 0 };
-        let bestLand = { "gain": 0 };
+        let candidate = { "source": 0, "target": 0, "gain": 0 };
+        let potential = { "source": 0, "target": 0, "gain": 0 };
+        let bestIndex = { "source": 0, "target": 0, "gain": 0 };
+        let bestLand = { "source": 0, "target": 0, "gain": 0 };
         const mapSize = gameState.sharedScript.mapSize;
         const traderTemplatesGains = gameState.getTraderTemplatesGains();
         for (const m1 of market1.values()) {
@@ -479,6 +479,10 @@ export class TradeManager {
             return;
         }
         const access = ent.hasClass("Ship") ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
+        if (access === undefined) {
+            ent.setMetadata(PlayerID, "route", undefined);
+            return;
+        }
         const possibleRoute = this.checkRoutes(gameState, access);
         // Warning:  presentRoute is from metadata, so contains entity ids
         if (!possibleRoute ||
@@ -556,11 +560,11 @@ export class TradeManager {
             return;
         if (this.checkEvents(gameState, events)) // true if one market was built or destroyed
          {
-            this.traders.forEach(ent => { this.checkTrader(gameState, ent); });
+            this.traders.forEach((ent) => { this.checkTrader(gameState, ent); });
             this.checkRoutes(gameState);
         }
         if (this.tradeRoute) {
-            this.traders.forEach(ent => { this.updateTrader(gameState, ent); });
+            this.traders.forEach((ent) => { this.updateTrader(gameState, ent); });
             if (gameState.ai.playedTurn % 5 == 0)
                 this.trainMoreTraders(gameState, queues);
             if (gameState.ai.playedTurn % 20 == 0 && this.traders.length >= 2)

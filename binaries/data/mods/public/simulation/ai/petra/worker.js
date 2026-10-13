@@ -208,7 +208,7 @@ export class Worker {
                         else {
                             const gatherType = ent.getMetadata(PlayerID, "gather-type");
                             const nearby = this.base.dropsiteSupplies[gatherType].nearby;
-                            if (nearby.some(sup => sup.id == supplyId))
+                            if (nearby.some((sup) => sup.id == supplyId))
                                 ent.setMetadata(PlayerID, "supply", supplyId);
                             else if (nearby.length) {
                                 this.base.RemoveTCGatherer(supplyId);
@@ -216,7 +216,7 @@ export class Worker {
                             }
                             else {
                                 const medium = this.base.dropsiteSupplies[gatherType].medium;
-                                if (medium.length && !medium.some(sup => sup.id == supplyId)) {
+                                if (medium.length && !medium.some((sup) => sup.id == supplyId)) {
                                     this.base.RemoveTCGatherer(supplyId);
                                     this.startGathering(gameState);
                                 }
@@ -244,12 +244,12 @@ export class Worker {
                         const supplyId = ent.getMetadata(PlayerID, "supply");
                         if (supplyId) {
                             const nearby = this.base.dropsiteSupplies[gatherType].nearby;
-                            if (!nearby.some(sup => sup.id == supplyId)) {
+                            if (!nearby.some((sup) => sup.id == supplyId)) {
                                 if (nearby.length)
                                     ent.setMetadata(PlayerID, "supply", undefined);
                                 else {
                                     const medium = this.base.dropsiteSupplies[gatherType].medium;
-                                    if (!medium.some(sup => sup.id == supplyId) && medium.length)
+                                    if (!medium.some((sup) => sup.id == supplyId) && medium.length)
                                         ent.setMetadata(PlayerID, "supply", undefined);
                                 }
                             }
@@ -509,7 +509,7 @@ export class Worker {
         // Okay may-be we haven't found any appropriate dropsite anywhere.
         // Try to help building one if any accessible foundation available
         const foundations = gameState.getOwnFoundations().toEntityArray();
-        let shouldBuild = this.ent.isBuilder() && foundations.some(function (foundation) {
+        let shouldBuild = this.ent.isBuilder() && foundations.some((foundation) => {
             if (!foundation || getLandAccess(gameState, foundation) != this.entAccess)
                 return false;
             const structure = gameState.getBuiltTemplate(foundation.templateName());
@@ -522,7 +522,7 @@ export class Worker {
                 return true;
             }
             return false;
-        }, this);
+        });
         if (shouldBuild)
             return true;
         // Still nothing ... try bases which need a transport
@@ -567,7 +567,7 @@ export class Worker {
         }
         // Okay so we haven't found any appropriate dropsite anywhere.
         // Try to help building one if any non-accessible foundation available
-        shouldBuild = this.ent.isBuilder() && foundations.some(function (foundation) {
+        shouldBuild = this.ent.isBuilder() && foundations.some((foundation) => {
             if (!foundation || getLandAccess(gameState, foundation) == this.entAccess)
                 return false;
             const structure = gameState.getBuiltTemplate(foundation.templateName());
@@ -582,7 +582,7 @@ export class Worker {
                 }
             }
             return false;
-        }, this);
+        });
         if (shouldBuild)
             return true;
         // Still nothing, we look now for faraway resources, first in the accessible ones, then in the others
@@ -844,8 +844,8 @@ export class Worker {
             if (found.getMetadata(PlayerID, "base") != baseID || !found.hasClass("Field"))
                 continue;
             const current = found.getBuildersNb();
-            if (current === undefined ||
-                current >= gameState.getBuiltTemplate(found.templateName()).maxGatherers())
+            const template = gameState.getBuiltTemplate(found.templateName());
+            if (current === undefined || !template || current >= template.maxGatherers())
                 continue;
             const dist = SquareVectorDistance(found.position(), pos);
             if (dist > bestFarmDist)

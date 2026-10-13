@@ -3,8 +3,8 @@ import * as difficultyLevel from "./difficultyLevel.js";
 export class Config {
     behavior;
     difficulty;
-    emergencyValues;
-    personalityCut;
+    emergencyValues = {};
+    personalityCut = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
     // debug level: 0=none, 1=sanity checks, 2=debug, 3=detailed debug, -100=serializatio debug
     debug = 0;
     chat = true; // false to prevent AI's chats
@@ -293,17 +293,16 @@ export class Config {
             "ResourceGatherer/BaseSpeed": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
             "Trader/GainMultiplier": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
             "Cost/BuildTime": [{ "affects": ["Unit", "Structure"], "multiply": time[AIDiff] }],
-        }, gameState.playerData.entity);
+        }, [gameState.player]);
     }
     Serialize() {
-        var data = {};
+        const data = {};
         for (const key in this)
             if (Object.hasOwn(this, key) && key != "debug")
                 data[key] = this[key];
         return data;
     }
     Deserialize(data) {
-        for (const key in data)
-            this[key] = data[key];
+        Object.assign(this, data);
     }
 }

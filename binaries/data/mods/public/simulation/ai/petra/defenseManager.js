@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.js";
 import { DefenseArmy } from "./defenseArmy.js";
-import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit } from "simulation/ai/petra/entityExtend.js";
+import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit } from "./entityExtend.js";
 import { GarrisonManager } from "./garrisonManager.js";
 import { Worker } from "./worker.js";
 export class DefenseManager {
@@ -68,7 +68,7 @@ export class DefenseManager {
         this.armies.push(new DefenseArmy(gameState, [entityID], type));
     }
     getArmy(partOfArmy) {
-        return this.armies.find(army => army.ID == partOfArmy);
+        return this.armies.find((army) => army.ID == partOfArmy);
     }
     isDangerous(gameState, entity) {
         if (!entity.position())
@@ -384,7 +384,7 @@ export class DefenseManager {
                     if (access && armiesNeeding[a].access != access)
                         continue;
                     // Do not assign defender if it cannot attack at least part of the attacking army.
-                    if (!armiesNeeding[a].army.foeEntities.some(eEnt => {
+                    if (!armiesNeeding[a].army.foeEntities.some((eEnt) => {
                         const eEntID = gameState.getEntityById(eEnt);
                         return ent.canAttackTarget(eEntID, allowCapture(gameState, ent, eEntID));
                     }))
@@ -491,7 +491,7 @@ export class DefenseManager {
             if (target.hasClass("Structure")) {
                 const base = gameState.ai.HQ.getBaseByID(target.getMetadata(PlayerID, "base"));
                 if (this.territoryMap.isBlinking(target.position()) && !gameState.ai.HQ.isDefendable(target) ||
-                    !base || gameState.ai.HQ.baseManagers().every(b => !b.anchor || b.accessIndex != base.accessIndex)) {
+                    !base || gameState.ai.HQ.baseManagers().every((b) => !b.anchor || b.accessIndex != base.accessIndex)) {
                     const capture = target.capturePoints();
                     if (!capture)
                         continue;
@@ -635,13 +635,13 @@ export class DefenseManager {
         if (allowMelee === undefined) {
             // Should be kept in sync with garrisonManager to avoid garrisoning-ungarrisoning some units.
             if (data.attacker) {
-                allowMelee = data.attacker.hasClass("Structure") ? data.attacker.attackRange("Ranged") :
+                allowMelee = data.attacker.hasClass("Structure") ? !!data.attacker.attackRange("Ranged") :
                     !isSiegeUnit(data.attacker);
             }
             else
                 allowMelee = true;
         }
-        const units = gameState.getOwnUnits().filter(ent => {
+        const units = gameState.getOwnUnits().filter((ent) => {
             if (!ent.position())
                 return false;
             if (!ent.hasClasses(garrisonArrowClasses))

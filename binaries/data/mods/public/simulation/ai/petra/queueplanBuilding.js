@@ -93,7 +93,7 @@ export class ConstructionPlan extends QueuePlan {
             // recompute the best dropsite location in case some conditions have changed
             const base = HQ.getBaseByID(this.metadata.base);
             const type = this.metadata.type ? this.metadata.type : "wood";
-            const newpos = base.findBestDropsiteLocation(gameState, type, template._templateName);
+            const newpos = base.findBestDropsiteLocation(gameState, type, template.templateName());
             if (newpos && newpos.quality > 0) {
                 const pos = newpos.pos;
                 return { "x": pos[0], "z": pos[1], "angle": 3 * Math.PI / 4, "base": this.metadata.base };
@@ -125,7 +125,7 @@ export class ConstructionPlan extends QueuePlan {
                 if (pos)
                     return { "x": pos[0], "z": pos[1], "angle": 3 * Math.PI / 4, "base": pos[2] };
                 // if this fortress is our first one, just try the standard placement
-                if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities())
+                if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities() || false)
                     return false;
             }
             else if (template.hasClass("Market")) // Docks are done before.
@@ -543,7 +543,7 @@ export class ConstructionPlan extends QueuePlan {
             let count = 0;
             for (const c in consec) {
                 if (consec[c] > count) {
-                    start = c;
+                    start = +c;
                     count = consec[c];
                 }
             }
@@ -743,7 +743,7 @@ export class ConstructionPlan extends QueuePlan {
         return nbcell ? total / nbcell : 0;
     }
     isGo(gameState) {
-        if (this.goRequirement && this.goRequirement == "houseNeeded") {
+        if (this.goRequirement === "houseNeeded") {
             if (!gameState.ai.HQ.canBuild(gameState, "structures/{civ}/house") &&
                 !gameState.ai.HQ.canBuild(gameState, "structures/{civ}/apartment"))
                 return false;

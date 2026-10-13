@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import * as difficulty from "./difficultyLevel.js";
-import { gatherTreasure, getHolder, getLandAccess, isFastMoving } from "simulation/ai/petra/entityExtend.js";
+import { gatherTreasure, getHolder, getLandAccess, isFastMoving } from "./entityExtend.js";
 import { ConstructionPlan } from "./queueplanBuilding.js";
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -30,7 +30,8 @@ export function gameAnalysis(HQ, gameState) {
     HQ.canBuildUnits = true;
     if (!gameState.getOwnStructures().filter(filters.byClass("CivCentre")).hasEntities()) {
         const template = gameState.applyCiv("structures/{civ}/civil_centre");
-        if (!gameState.isTemplateAvailable(template) || !gameState.getTemplate(template).available(gameState)) {
+        const templateObj = gameState.getTemplate(template);
+        if (!gameState.isTemplateAvailable(template) || !templateObj || !templateObj.available(gameState)) {
             if (HQ.Config.debug > 1)
                 aiWarn(" this AI is unable to produce any units");
             HQ.canBuildUnits = false;
@@ -289,7 +290,7 @@ function dispatchUnits(HQ, gameState) {
         let num1 = Math.floor(num / 2);
         let num2 = num1;
         // first pass to affect ranged infantry
-        units.filter(filters.byClasses(["Infantry+Ranged"])).forEach(ent => {
+        units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent) => {
             if (!num || !num1)
                 return;
             if (ent.getMetadata(PlayerID, "allied"))
@@ -307,7 +308,7 @@ function dispatchUnits(HQ, gameState) {
             }
         });
         // second pass to affect melee infantry
-        units.filter(filters.byClasses(["Infantry+Melee"])).forEach(ent => {
+        units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent) => {
             if (!num || !num2)
                 return;
             if (ent.getMetadata(PlayerID, "allied"))
@@ -325,7 +326,7 @@ function dispatchUnits(HQ, gameState) {
             }
         });
         // and now complete the affectation, including all support units
-        units.forEach(ent => {
+        units.forEach((ent) => {
             if (!num && !ent.hasClass("Support"))
                 return;
             if (ent.getMetadata(PlayerID, "allied"))
@@ -430,8 +431,11 @@ export function configFirstBase(HQ, gameState) {
             const numWorkers = gameState.getOwnUnits().filter(filters.byClass("Worker")).length;
             if (numWorkers > 12 && newDP.quality > 60 ||
                 gameState.getPopulation() > gameState.getPopulationLimit() + 20) {
-                const cost = new ResourcesManager(gameState.getTemplate(newDP.templateName).cost());
-                gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
+                const templateObj = gameState.getTemplate(newDP.templateName);
+                if (templateObj) {
+                    const cost = new ResourcesManager(templateObj.cost());
+                    gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
+                }
             }
             gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName, { "base": HQ.baseManagers()[0].ID }, newDP.pos));
         }

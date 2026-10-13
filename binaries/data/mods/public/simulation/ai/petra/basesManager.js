@@ -84,9 +84,9 @@ export class BasesManager {
         if (this.Config.debug > 0) {
             aiWarn(" ----------------------------------------------------------");
             aiWarn(" BasesManager createBase entrance avec access " + access + " and type " + type);
-            aiWarn(" with access " + uneval(this.baseManagers.map(base => base.accessIndex)) +
-                " and base nbr " + uneval(this.baseManagers.map(base => base.ID)) +
-                " and anchor " + uneval(this.baseManagers.map(base => !!base.anchor)));
+            aiWarn(" with access " + uneval(this.baseManagers.map((base) => base.accessIndex)) +
+                " and base nbr " + uneval(this.baseManagers.map((base) => base.ID)) +
+                " and anchor " + uneval(this.baseManagers.map((base) => !!base.anchor)));
         }
         if (!newbase) {
             newbase = new BaseManager(gameState, this);
@@ -94,7 +94,7 @@ export class BasesManager {
             this.baseManagers.push(newbase);
         }
         else
-            newbase.reset(type);
+            newbase.reset(gameState, type);
         if (type !== BaseManager.STATE_ANCHORLESS)
             newbase.setAnchor(gameState, ent, deserialize);
         else
@@ -158,7 +158,7 @@ export class BasesManager {
                 // Let's get a few units from other bases there to build this.
                 const builders = this.bulkPickWorkers(gameState, newbase, 10);
                 if (builders !== false) {
-                    builders.forEach(worker => {
+                    builders.forEach((worker) => {
                         worker.setMetadata(PlayerID, "base", newbase.ID);
                         worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
                         worker.setMetadata(PlayerID, "target-foundation", ent.id());
@@ -171,7 +171,7 @@ export class BasesManager {
                 // Let's get a few units from other bases there to build this.
                 const builders = this.bulkPickWorkers(gameState, newbase, 4);
                 if (builders != false) {
-                    builders.forEach(worker => {
+                    builders.forEach((worker) => {
                         worker.setMetadata(PlayerID, "base", newbase.ID);
                         worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
                         worker.setMetadata(PlayerID, "target-foundation", ent.id());
@@ -274,7 +274,7 @@ export class BasesManager {
                         goal = dropsite.position();
                     }
                     if (goal)
-                        ent.moveToRange(goal[0], goal[1]);
+                        ent.move(goal[0], goal[1]);
                 }
             }
         }
@@ -369,19 +369,14 @@ export class BasesManager {
     }
     /** The next two are to register that we assigned a gatherer to a resource this turn. */
     AddTCResGatherer(resource) {
-        const check = "resourceGatherer-" + resource;
-        if (this.turnCache[check])
-            ++this.turnCache[check];
-        else
-            this.turnCache[check] = 1;
+        if (!this.turnCache.resourceGathererByType)
+            this.turnCache.resourceGathererByType = {};
+        this.turnCache.resourceGathererByType[resource] = (this.turnCache.resourceGathererByType[resource] ?? 0) + 1;
         if (this.turnCache.currentRates)
             this.turnCache.currentRates[resource] += 0.5;
     }
     GetTCResGatherer(resource) {
-        const check = "resourceGatherer-" + resource;
-        if (this.turnCache[check])
-            return this.turnCache[check];
-        return 0;
+        return this.turnCache.resourceGathererByType?.[resource] ?? 0;
     }
     /**
      * returns the number of bases with a cc
@@ -432,13 +427,13 @@ export class BasesManager {
     getBaseByID(baseID) {
         if (this.noBase.ID === baseID)
             return this.noBase;
-        return this.baseManagers.find(base => base.ID === baseID);
+        return this.baseManagers.find((base) => base.ID === baseID);
     }
     /**
      * flag a resource as exhausted
      */
     isResourceExhausted(resource) {
-        return this.baseManagers.every(base => !base.dropsiteSupplies[resource].nearby.length &&
+        return this.baseManagers.every((base) => !base.dropsiteSupplies[resource].nearby.length &&
             !base.dropsiteSupplies[resource].medium.length &&
             !base.dropsiteSupplies[resource].faraway.length);
     }

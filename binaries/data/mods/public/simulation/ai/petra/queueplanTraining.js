@@ -35,7 +35,7 @@ export class TrainingPlan extends QueuePlan {
             return undefined;
         // Keep only trainers with smallest cost
         let costMin = Math.min();
-        let trainers;
+        let trainers = [];
         for (const ent of allTrainers.values()) {
             const cost = this.template.costSum(ent);
             if (cost === costMin)

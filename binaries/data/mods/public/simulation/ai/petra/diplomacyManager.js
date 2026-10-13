@@ -1,3 +1,4 @@
+import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import * as chat from "./chatHelper.js";
 /**
@@ -279,7 +280,7 @@ export class DiplomacyManager {
                 }
             }
             if (gameState.getVictoryConditions().has("capture_the_relic")) {
-                const relicsCount = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter(relic => relic.owner() === i).length;
+                const relicsCount = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter((relic) => relic.owner() === i).length;
                 turnFactor += relicsCount * this.betrayWeighting;
             }
             if (turnFactor < max)

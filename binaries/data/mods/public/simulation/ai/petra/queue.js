@@ -17,7 +17,8 @@ export class Queue {
         if (!newPlan)
             return;
         for (const plan of this.plans) {
-            if (newPlan.category === "unit" && plan.type == newPlan.type && plan.number + newPlan.number <= plan.maxMerge) {
+            if (newPlan.category === "unit" && plan.type == newPlan.type && plan.number + newPlan.number <= plan.maxMerge &&
+                "addItem" in plan && typeof plan.addItem === "function") {
                 plan.addItem(newPlan.number);
                 return;
             }
@@ -81,7 +82,7 @@ export class Queue {
         return count;
     }
     hasQueuedUnitsWithClass(classe) {
-        return this.plans.some(plan => plan.template && plan.template.hasClass(classe));
+        return this.plans.some((plan) => plan.template && plan.template.hasClass(classe));
     }
     countQueuedUnitsWithClass(classe) {
         let count = 0;

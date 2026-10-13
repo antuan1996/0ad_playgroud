@@ -25,7 +25,7 @@ export class ResearchPlan extends QueuePlan {
             return undefined;
         // Keep only researchers with smallest cost
         let costMin = Math.min();
-        let researchers;
+        let researchers = [];
         for (const ent of allResearchers.values()) {
             const cost = this.template.costSum(ent);
             if (cost === costMin)

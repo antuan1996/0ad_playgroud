@@ -387,6 +387,7 @@ declare module "simulation/ai/common-api/resources.js"
 		Serialize(): { amounts: CommonResourceAmounts; population: number };
 /** Deserializes a saved object state. */
 		Deserialize(data: { amounts: CommonResourceAmounts; population: number }): void;
+		[key: string]: any;
 	}
 }
 

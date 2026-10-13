@@ -1,21 +1,10 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import * as difficulty from "./difficultyLevel.js";
-import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding } from "simulation/ai/petra/entityExtend.js";
+import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding } from "./entityExtend.js";
 import { createObstructionMap } from "./mapModule.js";
 import { ConstructionPlan } from "./queueplanBuilding.js";
 import { Worker } from "./worker.js";
-/**
- * Base Manager
- * Handles lower level economic stuffs.
- * Some tasks:
- *  -tasking workers: gathering/hunting/building/repairing?/scouting/plans.
- *  -giving feedback/estimates on GR
- *  -achieving building stuff plans (scouting/getting ressource/building) or other long-staying plans.
- *  -getting good spots for dropsites
- *  -managing dropsite use in the base
- *  -updating whatever needs updating, keeping track of stuffs (rebuilding needs…)
- */
 export class BaseManager {
     constructor(gameState, basesManager) {
         this.Config = basesManager.Config;
@@ -92,7 +81,7 @@ export class BaseManager {
     }
     setAnchor(gameState, anchorEntity, deserialize = false) {
         if (!anchorEntity.hasClass("CivCentre")) {
-            aiWarn("Error: Petra base " + this.ID + " has been assigned " + ent.templateName() +
+            aiWarn("Error: Petra base " + this.ID + " has been assigned " + anchorEntity.templateName() +
                 " as anchor.");
         }
         else {
@@ -441,7 +430,7 @@ export class BaseManager {
             // Given that the faster you gather, the more travel time matters,
             // I use some logarithms.
             // TODO: this should take into account for unit speed and/or distance to target
-            this.gatherersByType(gameState, res).forEach(ent => {
+            this.gatherersByType(gameState, res).forEach((ent) => {
                 if (ent.isIdle() || !ent.position())
                     return;
                 const gRate = ent.currentGatherRate();
@@ -449,14 +438,14 @@ export class BaseManager {
                     currentRates[res] += Math.log(1 + gRate) / 1.1;
             });
             if (res == "food") {
-                this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach(ent => {
+                this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent) => {
                     if (ent.isIdle() || !ent.position())
                         return;
                     const gRate = ent.currentGatherRate();
                     if (gRate)
                         currentRates[res] += Math.log(1 + gRate) / 1.1;
                 });
-                this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach(ent => {
+                this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent) => {
                     if (ent.isIdle() || !ent.position())
                         return;
                     const gRate = ent.currentGatherRate();
@@ -604,7 +593,7 @@ export class BaseManager {
      * They are idled immediatly and their subrole set to idle.
      */
     pickBuilders(gameState, workers, number) {
-        const availableWorkers = this.workers.filter(ent => {
+        const availableWorkers = this.workers.filter((ent) => {
             if (!ent.position() || !ent.isBuilder())
                 return false;
             if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
@@ -643,13 +632,13 @@ export class BaseManager {
      * try reassigning some other workers who are nearby
      * AI tries to use builders sensibly, not completely stopping its econ.
      */
-    assignToFoundations(gameState, noRepair) {
+    assignToFoundations(gameState, noRepair = false) {
         let foundations = this.buildings.filter(filters.and(filters.isFoundation(), filters.not(filters.byClass("Field"))));
-        const damagedBuildings = this.buildings.filter(ent => ent.foundationProgress() === undefined && ent.needsRepair());
+        const damagedBuildings = this.buildings.filter((ent) => ent.foundationProgress() === undefined && ent.needsRepair());
         // Check if nothing to build
         if (!foundations.length && !damagedBuildings.length)
             return;
-        const workers = this.workers.filter(ent => ent.isBuilder());
+        const workers = this.workers.filter((ent) => ent.isBuilder());
         const builderWorkers = this.workersBySubrole(gameState, Worker.SUBROLE_BUILDER);
         const idleBuilderWorkers = builderWorkers.filter(filters.isIdle());
         // if we're constructing and we have the foundations to our base anchor, only try building that.
@@ -657,7 +646,7 @@ export class BaseManager {
             .hasEntities()) {
             foundations = foundations.filter(filters.byMetadata(PlayerID, "baseAnchor", true));
             const tID = foundations.toEntityArray()[0].id();
-            workers.forEach(ent => {
+            workers.forEach((ent) => {
                 const target = ent.getMetadata(PlayerID, "target-foundation");
                 if (target && target != tID) {
                     ent.stopMoving();
@@ -669,7 +658,7 @@ export class BaseManager {
             const fromOtherBase = this.basesManager.bulkPickWorkers(gameState, this, 2);
             if (fromOtherBase) {
                 const baseID = this.ID;
-                fromOtherBase.forEach(worker => {
+                fromOtherBase.forEach((worker) => {
                     worker.setMetadata(PlayerID, "base", baseID);
                     worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
                     workers.updateEnt(worker);

@@ -36,9 +36,9 @@ export function createObstructionMap(gameState, accessIndex, template) {
         passMap = gameState.ai.accessibility.landPassMap;
         obstructionMask = gameState.getPassabilityClassMask("building-land");
     }
-    for (let k = 0; k < territoryMap.data.length; ++k) {
-        const tilePlayer = territoryMap.data[k] & TERRITORY_PLAYER_MASK;
-        const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) == 0;
+    for (let k = 0; k < territoryMap.map.length; ++k) {
+        const tilePlayer = territoryMap.map[k] & TERRITORY_PLAYER_MASK;
+        const isConnected = (territoryMap.map[k] & TERRITORY_BLINKING_MASK) == 0;
         if (tilePlayer === PlayerID) {
             if (!buildOwn || !buildNeutral && !isConnected)
                 continue;
@@ -94,7 +94,7 @@ export function createObstructionMap(gameState, accessIndex, template) {
 }
 export function createTerritoryMap(gameState) {
     const map = gameState.ai.territoryMap;
-    const ret = new InfoMap(gameState.sharedScript, "territory", map.data);
+    const ret = new InfoMap(gameState.sharedScript, "territory", map.map);
     ret.getOwner = function (p) {
         return this.point(p) & TERRITORY_PLAYER_MASK;
     };
@@ -163,7 +163,7 @@ export function createBorderMap(gameState) {
 function debugMap(gameState, map) {
     const width = map.width;
     const cell = map.cellSize;
-    gameState.getEntities().forEach(ent => {
+    gameState.getEntities().forEach((ent) => {
         const pos = ent.position();
         if (!pos)
             return;

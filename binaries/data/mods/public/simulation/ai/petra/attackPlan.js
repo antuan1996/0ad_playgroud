@@ -2,7 +2,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import * as difficulty from "./difficultyLevel.js";
-import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources } from "simulation/ai/petra/entityExtend.js";
+import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources } from "./entityExtend.js";
 import { TrainingPlan } from "./queueplanTraining.js";
 import { Worker } from "./worker.js";
 /**
@@ -59,7 +59,7 @@ export class AttackPlan {
             }
             if (!rallyPoint) {
                 this.failed = true;
-                return false;
+                return;
             }
         }
         this.rallyPoint = rallyPoint;
@@ -83,7 +83,7 @@ export class AttackPlan {
                             aiWarn("Petra: " + this.type + " " + this.name + " has an inaccessible target " +
                                 this.target.templateName() + " indices " + rallyAccess + " " + access);
                             this.failed = true;
-                            return false;
+                            return;
                         }
                         continue;
                     }
@@ -198,7 +198,6 @@ export class AttackPlan {
         this.lastPosition = [0, 0];
         this.position = [0, 0];
         this.isBlocked = false; // true when this attack faces walls
-        return true;
     }
     static PREPARATION_FAILED = 0;
     static PREPARATION_KEEP_GOING = 1;
@@ -335,7 +334,7 @@ export class AttackPlan {
                         hasTrainer[i] = true;
             }
         }
-        if (hasTrainer.every(e => !e)) {
+        if (hasTrainer.every((e) => !e)) {
             this.siegeState = AttackPlan.SIEGE_NO_TRAINER;
             return false;
         }
@@ -566,7 +565,8 @@ export class AttackPlan {
                     const max = firstOrder[3].batchSize;
                     const specialData = "Plan_" + this.name + "_" + firstOrder[4];
                     const data = { "plan": this.name, "special": specialData, "base": 0 };
-                    data.role = gameState.getTemplate(template).hasClass("CitizenSoldier") ?
+                    const templateObj = gameState.getTemplate(template);
+                    data.role = templateObj && templateObj.hasClass("CitizenSoldier") ?
                         Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
                     const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
                     if (trainingPlan.template)
@@ -828,7 +828,7 @@ export class AttackPlan {
             }
         }
         if (gameState.getVictoryConditions().has("capture_the_relic")) {
-            for (const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter(relic => relic.owner() == playerEnemy).values()) {
+            for (const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter((relic) => relic.owner() == playerEnemy).values()) {
                 targets.addEnt(ent);
             }
         }
@@ -857,7 +857,7 @@ export class AttackPlan {
             return false;
         if (this.sameLand && getLandAccess(this.gameState, ent) != this.sameLand)
             return false;
-        return !ent.decaying() || ent.getDefaultArrow() || ent.isGarrisonHolder() && ent.garrisoned().length;
+        return !ent.decaying() || !!ent.getDefaultArrow() || ent.isGarrisonHolder() && ent.garrisoned().length > 0;
     }
     /** Rush target finder aims at isolated non-defended buildings */
     rushTargetFinder(gameState, playerEnemy) {
@@ -1114,7 +1114,7 @@ export class AttackPlan {
             // let's proceed on with whatever happens now.
             this.state = "";
             this.startingAttack = true;
-            this.unitCollection.forEach(ent => {
+            this.unitCollection.forEach((ent) => {
                 ent.stopMoving();
                 ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_ATTACKING);
             });
@@ -1346,7 +1346,7 @@ export class AttackPlan {
                 const entAccess = getLandAccess(gameState, ent);
                 // Checking for gates if we're a siege unit.
                 if (siegeUnit) {
-                    const mStruct = enemyStructures.filter(enemy => {
+                    const mStruct = enemyStructures.filter((enemy) => {
                         if (!enemy.position() || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
                             return false;
                         if (SquareVectorDistance(enemy.position(), ent.position()) > range)
@@ -1393,7 +1393,7 @@ export class AttackPlan {
                 }
                 else {
                     const nearby = !ent.hasClasses(["FastMoving", "Ranged"]);
-                    const mUnit = enemyUnits.filter(enemy => {
+                    const mUnit = enemyUnits.filter((enemy) => {
                         if (!enemy.position() || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
                             return false;
                         if (enemy.hasClass("Animal"))
@@ -1447,14 +1447,14 @@ export class AttackPlan {
                             if (!ent.hasClasses(["Ranged", "Ship"]))
                                 targetClasses = { "attack": ["Unit", "Structure"], "avoid": ["Ship"], "vetoEntities": veto };
                             else
-                                targetClasses = { "attack": ["Unit", "Structure"], "vetoEntities": veto };
+                                targetClasses = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
                         }
                         else if (!ent.hasClasses(["Ranged", "Ship"]))
                             targetClasses = { "attack": targetClassesUnit.attack, "avoid": targetClassesUnit.avoid.concat("Ship"), "vetoEntities": veto };
                         ent.attackMove(this.targetPos[0], this.targetPos[1], targetClasses);
                     }
                     else {
-                        const mStruct = enemyStructures.filter(enemy => {
+                        const mStruct = enemyStructures.filter((enemy) => {
                             if (this.isBlocked && enemy.id() != this.target.id())
                                 return false;
                             if (!enemy.position() || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
@@ -1490,7 +1490,7 @@ export class AttackPlan {
                          {
                             let distmin = Math.min();
                             let attacker;
-                            this.unitCollection.forEach(unit => {
+                            this.unitCollection.forEach((unit) => {
                                 if (!unit.position())
                                     return;
                                 if (unit.unitAIState().split(".")[1] != "COMBAT" || !unit.unitAIOrderData().length ||
@@ -1604,7 +1604,7 @@ export class AttackPlan {
             if (!this.path[0][0] || !this.path[0][1])
                 aiWarn("Start: Problem with path " + uneval(this.path));
             // We're stuck, presumably. Check if there are no walls just close to us.
-            for (const ent of gameState.getEnemyStructures().filter(filters.byClass(["Palisade", "Wall"]))
+            for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"]))
                 .values()) {
                 if (SquareVectorDistance(this.position, ent.position()) > 800)
                     continue;
@@ -1763,7 +1763,7 @@ export class AttackPlan {
             this.unit[unitCat].unregister();
         this.removeQueues(gameState);
     }
-    removeUnit(ent, update) {
+    removeUnit(ent, update = false) {
         if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK) {
             if (ent.hasClass("CitizenSoldier"))
                 ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
@@ -1831,7 +1831,7 @@ export class AttackPlan {
     }
     hasForceOrder(data, value) {
         for (const ent of this.unitCollection.values()) {
-            if (data && +ent.getMetadata(PlayerID, data) !== value)
+            if (data && Number(ent.getMetadata(PlayerID, data)) !== Number(value))
                 continue;
             const orders = ent.unitAIOrderData();
             for (const order of orders)
@@ -1885,10 +1885,18 @@ export class AttackPlan {
         return { "properties": properties };
     }
     Deserialize(gameState, data) {
-        for (const key in data.properties)
+        for (const key in data.properties) {
+            if (key === "target")
+                continue;
             this[key] = data.properties[key];
-        if (this.target)
-            this.target = gameState.getEntityById(this.target);
+        }
+        const targetId = data.properties.target;
+        if (typeof targetId === "number")
+            this.target = gameState.getEntityById(targetId);
+        else if (targetId === undefined)
+            this.target = undefined;
+        else
+            throw new TypeError("Invalid serialized attack target");
         this.failed = undefined;
     }
 }

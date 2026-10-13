@@ -9,10 +9,10 @@ import { DefenseManager } from "./defenseManager.js";
 import * as difficulty from "./difficultyLevel.js";
 import { DiplomacyManager } from "./diplomacyManager.js";
 import { EmergencyManager } from "./emergencyManager.js";
-import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory, setSeaAccess } from "./entityExtend.js";
+import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory, getSeaAccess, setSeaAccess } from "./entityExtend.js";
 import { GarrisonManager } from "./garrisonManager.js";
 import * as mapMask from "./mapMask.js";
-import { createBorderMap, createObstructionMap, createTerritoryMap } from "simulation/ai/petra/mapModule.js";
+import { createBorderMap, createObstructionMap, createTerritoryMap } from "./mapModule.js";
 import { NavalManager } from "./navalManager.js";
 import { ConstructionPlan } from "./queueplanBuilding.js";
 import { TrainingPlan } from "./queueplanTraining.js";
@@ -77,7 +77,7 @@ export class Headquarters {
         // try to determine if we have a water map
         this.navalMap = false;
         this.navalRegions = {};
-        this.treasures = gameState.getEntities().filter(ent => ent.isTreasure());
+        this.treasures = gameState.getEntities().filter((ent) => ent.isTreasure());
         this.treasures.registerUpdates();
         this.currentPhase = gameState.currentPhase();
         this.decayingStructures = new Set();
@@ -164,9 +164,10 @@ export class Headquarters {
             const ent = gameState.getEntityById(evt.entity);
             if (!ent || !ent.isOwn(PlayerID))
                 continue;
-            if (!ent._entity.trainingQueue || !ent._entity.trainingQueue.length)
+            const trainingQueue = ent.trainingQueue();
+            if (!trainingQueue || !trainingQueue.length)
                 continue;
-            const metadata = ent._entity.trainingQueue[0].metadata;
+            const metadata = trainingQueue[0].metadata;
             if (metadata && metadata.garrisonType)
                 ent.setRallyPoint(ent, "garrison"); // trained units will autogarrison
             else
@@ -329,7 +330,7 @@ export class Headquarters {
         // counting the workers that aren't part of a plan
         let numberOfWorkers = 0; // all workers
         let numberOfSupports = 0; // only support workers (i.e. non fighting)
-        gameState.getOwnUnits().forEach(ent => {
+        gameState.getOwnUnits().forEach((ent) => {
             if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER && ent.getMetadata(PlayerID, "plan") === undefined) {
                 ++numberOfWorkers;
                 if (ent.hasClass("Support"))
@@ -557,11 +558,17 @@ export class Headquarters {
         const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
         const dpEnts = gameState.getOwnDropsites().filter(filters.not(filters.byClasses(["CivCentre", "Unit"])));
         const ccList = [];
-        for (const cc of ccEnts.values())
-            ccList.push({ "ent": cc, "pos": cc.position(), "ally": gameState.isPlayerAlly(cc.owner()) });
+        for (const cc of ccEnts.values()) {
+            const pos = cc.position();
+            if (pos)
+                ccList.push({ "ent": cc, "pos": pos, "ally": gameState.isPlayerAlly(cc.owner()) });
+        }
         const dpList = [];
-        for (const dp of dpEnts.values())
-            dpList.push({ "ent": dp, "pos": dp.position(), "territory": this.territoryMap.getOwner(dp.position()) });
+        for (const dp of dpEnts.values()) {
+            const pos = dp.position();
+            if (pos)
+                dpList.push({ "ent": dp, "pos": pos, "territory": this.territoryMap.getOwner(pos) });
+        }
         let bestIdx;
         let bestVal;
         let radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
@@ -649,7 +656,7 @@ export class Headquarters {
                         norm *= 0.5;
                 }
                 // Not near any of our dropsite, except for oversea docks
-                oversea = !accessible && dpList.some(dp => getLandAccess(gameState, dp.ent) == index);
+                oversea = !accessible && dpList.some((dp) => getLandAccess(gameState, dp.ent) == index);
                 if (!oversea) {
                     for (const dp of dpList) {
                         const dist = SquareVectorDistance(dp.pos, pos);
@@ -716,7 +723,9 @@ export class Headquarters {
         let numAllyCC = 0;
         for (const cc of ccEnts.values()) {
             const ally = gameState.isPlayerAlly(cc.owner());
-            ccList.push({ "pos": cc.position(), "ally": ally });
+            const pos = cc.position();
+            if (pos)
+                ccList.push({ "pos": pos, "ally": ally });
             if (ally)
                 ++numAllyCC;
         }
@@ -936,18 +945,17 @@ export class Headquarters {
         const ownStructures = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"]))
             .toEntityArray();
         let enemyStructures = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(0)))
-            .filter(filters.byClasses(["CivCentre", "Fortress", "Tower"]));
-        if (!enemyStructures.hasEntities()) // we may be in cease fire mode, build defense against neutrals
+            .filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
+        if (!enemyStructures.length) // we may be in cease fire mode, build defense against neutrals
          {
             enemyStructures = gameState.getNeutralStructures().filter(filters.not(filters.byOwner(0)))
-                .filter(filters.byClasses(["CivCentre", "Fortress", "Tower"]));
-            if (!enemyStructures.hasEntities() && !gameState.getAlliedVictory()) {
-                enemyStructures = gameState.getAllyStructures().filter(filters.not(filters.byOwner(PlayerID))).filter(filters.byClasses(["CivCentre", "Fortress", "Tower"]));
+                .filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
+            if (!enemyStructures.length && !gameState.getAlliedVictory()) {
+                enemyStructures = gameState.getAllyStructures().filter(filters.not(filters.byOwner(PlayerID))).filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
             }
-            if (!enemyStructures.hasEntities())
+            if (!enemyStructures.length)
                 return undefined;
         }
-        enemyStructures = enemyStructures.toEntityArray();
         let wonderMode = gameState.getVictoryConditions().has("wonder");
         let wonderDistmin;
         let wonders;
@@ -1214,7 +1222,7 @@ export class Headquarters {
         }
         if (this.requireHouses) {
             const houseTemplate = gameState.getTemplate(gameState.applyCiv(houseTemplateString));
-            if (!this.phasing || gameState.getPhaseEntityRequirements(this.phasing).every(req => !houseTemplate.hasClass(req.class) ||
+            if (!this.phasing || gameState.getPhaseEntityRequirements(this.phasing).every((req) => !houseTemplate.hasClass(req.class) ||
                 gameState.getOwnStructures().filter(filters.byClass(req.class)).length >= req.count)) {
                 this.requireHouses = undefined;
             }
@@ -1224,7 +1232,10 @@ export class Headquarters {
         //    - otherwise increase temporarily the priority of houses
         const house = gameState.applyCiv(houseTemplateString);
         const HouseNb = gameState.getOwnFoundations().filter(filters.byClass("House")).length;
-        const popBonus = gameState.getTemplate(house).getPopulationBonus();
+        const houseTemplate = gameState.getTemplate(house);
+        if (!houseTemplate)
+            return;
+        const popBonus = houseTemplate.getPopulationBonus();
         const freeSlots = gameState.getPopulationLimit() + HouseNb * popBonus - this.getAccountedPopulation(gameState);
         let priority;
         if (freeSlots < 5) {
@@ -1498,7 +1509,7 @@ export class Headquarters {
                     continue;
                 if (!base.anchor.trainableEntities(civ)) // base still in construction
                     continue;
-                const queue = base.anchor._entity.trainingQueue;
+                const queue = base.anchor.trainingQueue();
                 if (queue) {
                     let time = 0;
                     for (const item of queue)
@@ -1565,7 +1576,12 @@ export class Headquarters {
                     break;
             }
         }
-        const metadata = { "role": Worker.ROLE_WORKER, "base": nearestAnchor.getMetadata(PlayerID, "base"), "plan": -1, "trainer": nearestAnchor.id() };
+        const metadata = {
+            "role": Worker.ROLE_WORKER,
+            "base": nearestAnchor.getMetadata(PlayerID, "base"),
+            "plan": -1,
+            "trainer": nearestAnchor.id()
+        };
         if (autogarrison)
             metadata.garrisonType = GarrisonManager.TYPE_PROTECTION;
         gameState.ai.queues.emergency.addPlan(new TrainingPlan(gameState, templateFound[0], metadata, 1, 1));
@@ -1778,8 +1794,11 @@ export class Headquarters {
                 for (const item of ent.trainingQueue()) {
                     if (!item.unitTemplate)
                         continue;
-                    const unitPop = gameState.getTemplate(item.unitTemplate).get("Cost/Population");
-                    if (unitPop)
+                    const unitTemplate = gameState.getTemplate(item.unitTemplate);
+                    if (!unitTemplate)
+                        continue;
+                    const unitPop = unitTemplate.get("Cost/Population");
+                    if (typeof unitPop === "number")
                         pop += item.count * unitPop;
                 }
             }

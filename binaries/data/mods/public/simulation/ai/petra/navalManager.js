@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, setSeaAccess } from "simulation/ai/petra/entityExtend.js";
+import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, setSeaAccess } from "./entityExtend.js";
 import { ConstructionPlan } from "./queueplanBuilding.js";
 import { TrainingPlan } from "./queueplanTraining.js";
 import { TransportPlan } from "./transportPlan.js";
@@ -34,7 +34,7 @@ export class NavalManager {
         this.Config = Config;
     }
     /** More initialisation for stuff that needs the gameState */
-    init(gameState, deserializing) {
+    init(gameState, deserializing = false) {
         // docks
         this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
         this.docks.registerUpdates();
@@ -164,7 +164,7 @@ export class NavalManager {
         sea = gameState.ai.accessibility.navalPassMap[k];
         fish.setMetadata(PlayerID, "sea", sea);
         const radius = 120 / gameState.ai.accessibility.cellSize / ntry;
-        if (around.every(a => {
+        if (around.every((a) => {
             for (let t = 0; t < ntry; ++t) {
                 const i = pos[0] + Math.round(a[0] * radius * (ntry - t));
                 const j = pos[1] + Math.round(a[1] * radius * (ntry - t));
@@ -194,7 +194,7 @@ export class NavalManager {
         const width = territoryMap.width;
         const radius = 120 / territoryMap.cellSize / ntry;
         const pos = territoryMap.gamePosToMapPos(fish.position());
-        return around.every(a => {
+        return around.every((a) => {
             for (let t = 0; t < ntry; ++t) {
                 const i = pos[0] + Math.round(a[0] * radius * (ntry - t));
                 const j = pos[1] + Math.round(a[1] * radius * (ntry - t));
@@ -210,7 +210,7 @@ export class NavalManager {
     /** get the list of seas (or lands) around this region not connected by a dock */
     getUnconnectedSeas(gameState, region) {
         const seas = gameState.ai.accessibility.regionLinks[region].slice();
-        this.docks.forEach(dock => {
+        this.docks.forEach((dock) => {
             if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) != region)
                 return;
             const i = seas.indexOf(getSeaAccess(gameState, dock));
@@ -251,7 +251,7 @@ export class NavalManager {
             }
             if (plan.state === TransportPlan.BOARDING) {
                 // just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
-                plan.units.forEach(ent => {
+                plan.units.forEach((ent) => {
                     if (ent.getMetadata(PlayerID, "onBoard") == "onBoard" && ent.position() ||
                         ent.getMetadata(PlayerID, "onBoard") == shipId)
                         ent.setMetadata(PlayerID, "onBoard", undefined);
@@ -317,12 +317,12 @@ export class NavalManager {
                 continue;
             }
             // Limit the number of siege units per transport to avoid problems when ungarrisoning
-            if (isSiegeUnit(ent) && plan.units.filter(unit => isSiegeUnit(unit)).length > 3)
+            if (isSiegeUnit(ent) && plan.units.filter((unit) => isSiegeUnit(unit)).length > 3)
                 continue;
             plans.push(plan);
         }
         if (plans.length) {
-            plans.sort(plan => plan.units.length);
+            plans.sort((plan) => plan.units.length);
             plans[0].addUnit(ent, endPos);
             return true;
         }
