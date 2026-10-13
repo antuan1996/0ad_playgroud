@@ -309,7 +309,8 @@ export class QueueManager
 					tempPrio[j] = this.priorities[j];
 					maxNeed[j] = queueCost[res] - this.accounts[j][res];
 					// if we have enough of that resource for our first item in the queue, diminish our priority.
-					if (this.accounts[j][res] >= this.queues[j].getNext().getCost()[res])
+					const nextPlan = this.queues[j].getNext();
+					if (nextPlan && this.accounts[j][res] >= nextPlan.getCost()[res])
 						tempPrio[j] /= 2;
 
 					if (tempPrio[j])

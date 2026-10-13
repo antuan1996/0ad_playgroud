@@ -756,7 +756,8 @@ export class AttackPlan
 					const max = firstOrder[3].batchSize;
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
 					const data: Record<string, unknown> = { "plan": this.name, "special": specialData, "base": 0 };
-					data.role = gameState.getTemplate(template).hasClass("CitizenSoldier") ?
+					const templateObj = gameState.getTemplate(template);
+					data.role = templateObj && templateObj.hasClass("CitizenSoldier") ?
 						Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
 					const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 					if (trainingPlan.template)

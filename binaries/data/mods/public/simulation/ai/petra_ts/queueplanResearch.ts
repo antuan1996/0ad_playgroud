@@ -40,7 +40,7 @@ export class ResearchPlan extends QueuePlan
 
 		// Keep only researchers with smallest cost
 		let costMin = Math.min();
-		let researchers;
+		let researchers: CommonEntity[] = [];
 		for (const ent of allResearchers.values())
 		{
 			const cost = this.template.costSum(ent);

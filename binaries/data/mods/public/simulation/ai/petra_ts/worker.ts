@@ -624,7 +624,7 @@ export class Worker
 		// Okay may-be we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any accessible foundation available
 		const foundations = gameState.getOwnFoundations().toEntityArray();
-		let shouldBuild = this.ent.isBuilder() && foundations.some(function(foundation: import("simulation/ai/common-api/entity.js").Entity): boolean 
+		let shouldBuild = this.ent.isBuilder() && foundations.some((foundation: import("simulation/ai/common-api/entity.js").Entity): boolean =>
 		{
 			if (!foundation || getLandAccess(gameState, foundation) != this.entAccess)
 				return false;
@@ -639,7 +639,7 @@ export class Worker
 				return true;
 			}
 			return false;
-		}, this);
+		});
 		if (shouldBuild)
 			return true;
 
@@ -692,7 +692,7 @@ export class Worker
 		}
 		// Okay so we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any non-accessible foundation available
-		shouldBuild = this.ent.isBuilder() && foundations.some(function(foundation: import("simulation/ai/common-api/entity.js").Entity): boolean 
+		shouldBuild = this.ent.isBuilder() && foundations.some((foundation: import("simulation/ai/common-api/entity.js").Entity): boolean =>
 		{
 			if (!foundation || getLandAccess(gameState, foundation) == this.entAccess)
 				return false;
@@ -710,7 +710,7 @@ export class Worker
 				}
 			}
 			return false;
-		}, this);
+		});
 		if (shouldBuild)
 			return true;
 
@@ -1036,8 +1036,8 @@ export class Worker
 			if (found.getMetadata(PlayerID, "base") != baseID || !found.hasClass("Field"))
 				continue;
 			const current = found.getBuildersNb();
-			if (current === undefined ||
-			    current >= gameState.getBuiltTemplate(found.templateName()).maxGatherers())
+			const template = gameState.getBuiltTemplate(found.templateName());
+			if (current === undefined || !template || current >= template.maxGatherers())
 				continue;
 			const dist = SquareVectorDistance(found.position(), pos);
 			if (dist > bestFarmDist)

@@ -5,8 +5,8 @@ export class Config
 {
 	behavior: string;
 	difficulty: number;
-	emergencyValues: Record<string, number>;
-	personalityCut: Record<string, number>;
+	emergencyValues: Record<string, number> = {};
+	personalityCut: Record<string, number> = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
 
 	// debug level: 0=none, 1=sanity checks, 2=debug, 3=detailed debug, -100=serializatio debug
 	debug = 0;

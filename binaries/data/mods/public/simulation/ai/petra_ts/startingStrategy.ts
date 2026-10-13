@@ -43,7 +43,8 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 	if (!gameState.getOwnStructures().filter(filters.byClass("CivCentre")).hasEntities())
 	{
 		const template = gameState.applyCiv("structures/{civ}/civil_centre");
-		if (!gameState.isTemplateAvailable(template) || !gameState.getTemplate(template).available(gameState))
+		const templateObj = gameState.getTemplate(template);
+		if (!gameState.isTemplateAvailable(template) || !templateObj || !templateObj.available(gameState))
 		{
 			if (HQ.Config.debug > 1)
 				aiWarn(" this AI is unable to produce any units");
@@ -279,7 +280,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		return;
 
 	// We first choose as startingPoint the point where we have the more units
-	const startingPoint = [];
+	const startingPoint: Array<{ pos: CommonPosition, land: number, sea: number, weight: number }> = [];
 	for (const ent of gameState.getOwnUnits().values())
 	{
 		if (!ent.hasClass("Worker"))
@@ -526,8 +527,12 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 			if (numWorkers > 12 && newDP.quality > 60 ||
 				gameState.getPopulation() > gameState.getPopulationLimit() + 20)
 			{
-				const cost = new ResourcesManager(gameState.getTemplate(newDP.templateName).cost());
-				gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
+				const templateObj = gameState.getTemplate(newDP.templateName);
+				if (templateObj)
+				{
+					const cost = new ResourcesManager(templateObj.cost());
+					gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
+				}
 			}
 			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
 				{ "base": HQ.baseManagers()[0].ID }, newDP.pos));

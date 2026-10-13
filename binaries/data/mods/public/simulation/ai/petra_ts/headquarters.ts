@@ -1595,7 +1595,10 @@ export class Headquarters
 		//    - otherwise increase temporarily the priority of houses
 		const house = gameState.applyCiv(houseTemplateString);
 		const HouseNb = gameState.getOwnFoundations().filter(filters.byClass("House")).length;
-		const popBonus = gameState.getTemplate(house).getPopulationBonus();
+		const houseTemplate = gameState.getTemplate(house);
+		if (!houseTemplate)
+			return;
+		const popBonus = houseTemplate.getPopulationBonus();
 		const freeSlots = gameState.getPopulationLimit() + HouseNb*popBonus - this.getAccountedPopulation(gameState);
 		let priority;
 		if (freeSlots < 5)
@@ -2290,7 +2293,10 @@ export class Headquarters
 				{
 					if (!item.unitTemplate)
 						continue;
-					const unitPop = gameState.getTemplate(item.unitTemplate).get("Cost/Population");
+					const unitTemplate = gameState.getTemplate(item.unitTemplate);
+					if (!unitTemplate)
+						continue;
+					const unitPop = unitTemplate.get("Cost/Population");
 					if (typeof unitPop === "number")
 						pop += item.count * unitPop;
 				}

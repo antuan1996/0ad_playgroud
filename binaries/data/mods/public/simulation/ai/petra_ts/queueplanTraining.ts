@@ -52,7 +52,7 @@ export class TrainingPlan extends QueuePlan
 
 		// Keep only trainers with smallest cost
 		let costMin = Math.min();
-		let trainers;
+		let trainers: CommonEntity[] = [];
 		for (const ent of allTrainers.values())
 		{
 			const cost = this.template.costSum(ent);
@@ -80,7 +80,7 @@ export class TrainingPlan extends QueuePlan
 
 		if (this.trainers.length > 1)
 		{
-			let wantedIndex;
+			let wantedIndex: number | undefined;
 			if (this.metadata && this.metadata.index)
 				wantedIndex = this.metadata.index;
 			const workerUnit = this.metadata && this.metadata.role &&

@@ -812,7 +812,7 @@ export class NavalManager
 	getBestShip(gameState: CommonGameState, sea: number, goal: "attack" | "transport" | "fishing"): string | undefined
 	{
 		const civ = gameState.getPlayerCiv();
-		const trainableShips = [];
+		const trainableShips: string[] = [];
 		gameState.getOwnTrainingFacilities().filter(filters.byMetadata(PlayerID, "sea", sea)).forEach(
 			function(ent: CommonEntity): void
 			{

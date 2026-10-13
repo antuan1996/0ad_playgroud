@@ -198,7 +198,7 @@ export class TransportPlan
 
 	assignShip(gameState: CommonGameState): boolean
 	{
-		let pos;
+		let pos: CommonPosition | undefined;
 		// choose a unit of this plan not yet assigned to a ship
 		for (const ent of this.units.values())
 		{
@@ -209,7 +209,7 @@ export class TransportPlan
 		}
 		// and choose the nearest available ship from this unit
 		let distmin = Math.min();
-		let nearest;
+		let nearest: CommonEntity | undefined;
 		gameState.ai.HQ.navalManager.seaTransportShips[this.sea].forEach((ship: CommonEntity): void =>
 		{
 			if (ship.getMetadata(PlayerID, "transporter"))

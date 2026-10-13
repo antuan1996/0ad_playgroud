@@ -54,19 +54,19 @@ function createEmptyEvents(): HeadquartersEvents
 export class PetraBot extends BaseAI
 {
 	Config: Config;
-	HQ: Headquarters;
-	canPlay: boolean;
-	data: PetraBotSavedData;
-	elapsedTime: number;
-	gameFinished: boolean;
-	isDeserialized: boolean;
-	playedTurn: number;
+	HQ: Headquarters | undefined = undefined;
+	canPlay: boolean = false;
+	data: PetraBotSavedData | undefined = undefined;
+	elapsedTime: number = 0;
+	gameFinished: boolean = false;
+	isDeserialized: boolean = false;
+	playedTurn: number = 0;
 	declare player: number;
-	queueManager: QueueManager;
-	queues: Record<string, Queue>;
+	queueManager: QueueManager | undefined = undefined;
+	queues: Record<string, Queue> = {};
 	savedEvents: HeadquartersEvents;
-	turn: number;
-	uniqueIDs: Record<string, number>;
+	turn: number = 0;
+	uniqueIDs: Record<string, number> = {};
 
 	constructor(settings: PetraBotSettings)
 	{
@@ -94,6 +94,8 @@ export class PetraBot extends BaseAI
 		if (this.isDeserialized)
 		{
 			// WARNING: the deserializations should not modify the metadatas infos inside their init functions
+			if (!this.data)
+				return;
 			this.canPlay = this.data.canPlay;
 			this.turn = this.data.turn;
 			this.playedTurn = this.data.playedTurn;
@@ -182,9 +184,11 @@ export class PetraBot extends BaseAI
 				return;
 			}
 
-			this.HQ.update(this.gameState, this.queues, this.savedEvents);
+			if (this.HQ)
+				this.HQ.update(this.gameState, this.queues, this.savedEvents);
 
-			this.queueManager.update(this.gameState);
+			if (this.queueManager)
+				this.queueManager.update(this.gameState);
 
 			for (const i in this.savedEvents)
 				this.savedEvents[i] = [];
@@ -198,7 +202,11 @@ export class PetraBot extends BaseAI
 	Serialize(): PetraBotSavedData
 	{
 		if (this.isDeserialized)
+		{
+			if (!this.data)
+				throw new Error("Cannot serialize: data is undefined during deserialization");
 			return this.data;
+		}
 
 		const savedEvents = createEmptyEvents();
 		for (const key in this.savedEvents)
@@ -215,6 +223,9 @@ export class PetraBot extends BaseAI
 				savedEvents[key][i] = evtmod;
 			}
 		}
+
+		if (!this.queueManager || !this.HQ)
+			throw new Error("Cannot serialize: queueManager or HQ is undefined");
 
 		return {
 			"canPlay": this.canPlay,

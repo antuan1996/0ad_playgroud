@@ -139,7 +139,7 @@ export class BasesManager
 			this.baseManagers.push(newbase);
 		}
 		else
-			newbase.reset(type);
+			newbase.reset(gameState, type);
 
 		if (type !== BaseManager.STATE_ANCHORLESS)
 			newbase.setAnchor(gameState, ent, deserialize);
