@@ -4,7 +4,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { createObstructionMap } from "./mapModule.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { Worker } from "./worker.ts";

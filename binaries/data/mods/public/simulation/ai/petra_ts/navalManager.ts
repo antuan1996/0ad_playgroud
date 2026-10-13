@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, setSeaAccess } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import type { Queue } from "./queue.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";

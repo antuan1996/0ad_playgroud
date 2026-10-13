@@ -1,6 +1,6 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, returnResources } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";

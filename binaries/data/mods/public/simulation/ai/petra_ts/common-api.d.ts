@@ -1128,28 +1128,3 @@ declare module "simulation/ai/common-api/baseAI.js"
 		chat(message: string): void;
 	}
 }
-
-declare module "simulation/ai/petra/entityExtend.js"
-{
-	export function isSiegeUnit(ent: CommonEntity): boolean;
-	export function isFastMoving(ent: CommonEntity): boolean;
-	export function getMaxStrength(ent: CommonEntity | CommonTemplate, debugLevel: number,
-		damageTypeImportance: Record<string, number>, againstClass?: string): number;
-	export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined;
-	export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined;
-	export function setSeaAccess(gameState: CommonGameState, ent: CommonEntity): void;
-	export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean;
-	export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: string): number;
-	export function returnResources(gameState: CommonGameState, ent: CommonEntity): boolean;
-	export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean;
-	export function getBestBase(gameState: CommonGameState, ent: CommonEntity,
-		onlyConstructedBase?: boolean, exclude?: number | false): PetraBaseManager | undefined;
-	export function getHolder(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined;
-	export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonEntity;
-	export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonEntity): boolean;
-	export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: CommonPosition,
-		pos2: CommonPosition, step?: number): boolean;
-	export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | undefined,
-		water?: boolean): boolean;
-	export function dumpEntity(ent: CommonEntity | undefined): void;
-}

@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
 import { getAttackBonus, getBestBase, getLandAccess, returnResources } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";

@@ -8,7 +8,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { AttackPlan } from "./attackPlan.ts";
 import { DefenseArmy } from "./defenseArmy.ts";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { Worker } from "./worker.ts";
 import type { BaseManager } from "./baseManager.ts";

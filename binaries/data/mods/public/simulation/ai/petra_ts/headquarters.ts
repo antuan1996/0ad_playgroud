@@ -17,7 +17,7 @@ import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "./mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { createBorderMap, createObstructionMap, createTerritoryMap } from
-	"simulation/ai/petra/mapModule.js";
+	"./mapModule.ts";
 import { NavalManager } from "./navalManager.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";

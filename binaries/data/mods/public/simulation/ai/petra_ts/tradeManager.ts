@@ -4,7 +4,7 @@ import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";

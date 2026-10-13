@@ -4,7 +4,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources } from
-	"simulation/ai/petra/entityExtend.js";
+	"./entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Queue } from "./queue.ts";
@@ -1813,7 +1813,7 @@ export class AttackPlan
 							if (!ent.hasClasses(["Ranged", "Ship"]))
 								targetClasses = { "attack": ["Unit", "Structure"], "avoid": ["Ship"], "vetoEntities": veto };
 							else
-								targetClasses = { "attack": ["Unit", "Structure"], "vetoEntities": veto };
+								targetClasses = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
 						}
 						else if (!ent.hasClasses(["Ranged", "Ship"]))
 							targetClasses = { "attack": targetClassesUnit.attack, "avoid": targetClassesUnit.avoid.concat("Ship"), "vetoEntities": veto };
@@ -2285,7 +2285,7 @@ export class AttackPlan
 	{
 		for (const ent of this.unitCollection.values())
 		{
-			if (data && +ent.getMetadata(PlayerID, data) !== value)
+			if (data && Number(ent.getMetadata(PlayerID, data)) !== Number(value))
 				continue;
 			const orders = ent.unitAIOrderData();
 			for (const order of orders)
