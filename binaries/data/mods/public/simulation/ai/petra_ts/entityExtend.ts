@@ -51,7 +51,7 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 		const attackTimes = ent.attackTimes(type);
 		for (const str in attackTimes)
 		{
-			const val = parseFloat(attackTimes[str]);
+			const val = parseFloat(String(attackTimes[str]));
 			switch (str)
 			{
 			case "repeat":

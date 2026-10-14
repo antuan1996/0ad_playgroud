@@ -836,7 +836,7 @@ export class AttackPlan
 			return added;
 
 		let num = 0;
-		const numbase = {};
+		const numbase: Record<number, number> = {};
 		let keep = this.type !== AttackPlan.TYPE_RUSH ?
 			6 + 4 * gameState.getNumPlayerEnemies() + 8 * this.Config.personality.defensive : 8;
 		keep = Math.round(this.Config.popScaling * keep);
@@ -1450,7 +1450,7 @@ export class AttackPlan
 			}
 
 			const time = gameState.ai.elapsedTime;
-			const attackedByStructure = {};
+			const attackedByStructure: Record<number, boolean> = {};
 			for (const evt of events.Attacked)
 			{
 				if (!this.unitCollection.hasEntId(evt.target))
@@ -1558,7 +1558,7 @@ export class AttackPlan
 			const enemyStructures = gameState.getEnemyStructures(this.targetPlayer);
 
 			// Count the number of times an enemy is targeted, to prevent all units to follow the same target
-			const unitTargets = {};
+			const unitTargets: Record<number, number> = {};
 			for (const ent of this.unitCollection.values())
 			{
 				if (ent.hasClass("Ship"))	// TODO What to do with ships
@@ -1581,7 +1581,7 @@ export class AttackPlan
 				}
 				++unitTargets[targetId];
 			}
-			const veto = {};
+			const veto: Record<string, boolean> = {};
 			for (const target in unitTargets)
 				if (unitTargets[target] > 0)
 					veto[target] = true;
@@ -2354,7 +2354,7 @@ export class AttackPlan
 		{
 			if (key === "target")
 				continue;
-			this[key] = data.properties[key];
+			(this as Record<string, unknown>)[key] = data.properties[key];
 		}
 
 		const targetId = data.properties.target;

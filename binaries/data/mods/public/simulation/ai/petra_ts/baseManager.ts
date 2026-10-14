@@ -28,6 +28,19 @@ export type ResourceSupply = {
 	id: number;
 };
 
+export type SerializedBaseManager = {
+	ID: number;
+	anchorId: number | undefined;
+	accessIndex: number | undefined;
+	maxDistResourceSquare: number;
+	constructing: boolean;
+	gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
+	neededDefenders: number;
+	territoryIndices: number[];
+	timeNextIdleCheck: number;
+	dropsiteSupplies: Record<string, Record<string, ResourceSupply[]>>;
+};
+
 export class BaseManager
 {
 	declare Config: Config;
@@ -38,7 +51,7 @@ export class BaseManager
 	declare basesManager: BasesManager;
 	declare buildings: CommonEntityCollection;
 	declare constructing: boolean;
-	declare dropsiteSupplies: Record<string, { nearby: ResourceSupply[]; medium: ResourceSupply[]; faraway: ResourceSupply[] }>;
+	declare dropsiteSupplies: Record<string, Record<string, ResourceSupply[]>>;
 	declare dropsites: Record<number, boolean | undefined>;
 	declare gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
 	declare maxDistResourceSquare: number;
@@ -450,7 +463,7 @@ export class BaseManager
 	getResourceLevel(gameState: CommonGameState, type: string, distances: string[] = ["nearby", "medium", "faraway"]): number
 	{
 		let count = 0;
-		const check = {};
+		const check: Record<number, boolean> = {};
 		for (const proxim of distances)
 			for (const supply of this.dropsiteSupplies[type][proxim])
 			{
@@ -1237,7 +1250,7 @@ export class BaseManager
 		return this.basesManager.GetTCGatherer(supplyID);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedBaseManager
 	{
 		return {
 			"ID": this.ID,
@@ -1253,10 +1266,22 @@ export class BaseManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void
+	Deserialize(gameState: CommonGameState, data: SerializedBaseManager): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		// Fallbacks for fields absent in savegames written by an older version:
+		// either the constructor default, or the value already held by this manager
+		// when it depends on the game state (basesManager calls init() between the
+		// two calls to this method)
+		this.ID = data.ID ?? this.ID;
+		this.anchorId = data.anchorId;
+		this.accessIndex = data.accessIndex;
+		this.maxDistResourceSquare = data.maxDistResourceSquare ?? 360 * 360;
+		this.constructing = data.constructing ?? false;
+		this.gatherers = data.gatherers ?? this.gatherers;
+		this.neededDefenders = data.neededDefenders ?? this.neededDefenders;
+		this.territoryIndices = data.territoryIndices ?? [];
+		this.timeNextIdleCheck = data.timeNextIdleCheck ?? 0;
+		this.dropsiteSupplies = data.dropsiteSupplies ?? this.dropsiteSupplies;
 
 		this.anchor = this.anchorId !== undefined ? gameState.getEntityById(this.anchorId) : undefined;
 	}

@@ -235,7 +235,7 @@ export class Config
 			// The parameter used to define the personality is basically the aggressivity or (1-defensiveness)
 			// as they are anticorrelated, although some small smearing to decorelate them will be added.
 			// And for each user choice, this parameter can vary between min and max
-			const personalityList = {
+			const personalityList: Record<string, { min: number; max: number }> = {
 				"random": { "min": 0, "max": 1 },
 				"defensive": { "min": 0, "max": 0.27 },
 				"balanced": { "min": 0.37, "max": 0.63 },

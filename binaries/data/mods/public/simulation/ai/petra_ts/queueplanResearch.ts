@@ -112,8 +112,9 @@ export class ResearchPlan extends QueuePlan
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<ResearchPlan["Serialize"]>): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		const properties: Record<string, unknown> = data;
+		for (const key in properties)
+			(this as Record<string, unknown>)[key] = properties[key];
 
 		this.cost = new ResourcesManager();
 		this.cost.Deserialize(data.cost);

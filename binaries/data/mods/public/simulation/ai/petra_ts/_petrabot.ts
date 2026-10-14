@@ -24,6 +24,48 @@ type PetraBotSavedData = {
 	HQ: HeadquartersSerializedData;
 };
 
+/** Engine events come as a fixed set of named buckets, and EngineAIEvents has no index
+	 *  signature: the bot walks its buckets explicitly instead of iterating over keys.
+	 *  The helpers below are generic over a bucket's element type, which keeps every
+	 *  bucket's concrete event type, so no cast is needed anywhere.
+	 *
+	 *  VESTIGIAL - kept only to stay 1:1 with the current JS reference. It used to convert
+	 *  the "entityObj" property of each event between its saved form (raw entity data) and
+	 *  its live form (an API3.Entity proxy), which the engine cannot rebuild on load; a fresh
+	 *  object was needed to swap that property in. entityObj was removed from events upstream
+	 *  in 2025 ("Remove usage of entityObj from Destroy event", "Remove remanents of entityObj"),
+	 *  which deleted the conversion and left this loop behind. It now has no observable effect:
+	 *  the engine deserializer already rebuilds plain objects (JS_NewPlainObject in
+	 *  StdDeserializer.cpp), and nothing in the bot mutates an event or keeps a reference to
+	 *  one across turns. */
+function detachEvents<T>(events: Array<T>): void
+{
+	for (let i = 0; i < events.length; ++i)
+	{
+		const evt = events[i];
+		// A plain copy of the event - vestigial, see the note on detachEvents.
+		// Spreading a falsy slot yields an empty object, as the copy loop used to.
+		events[i] = { ...evt };
+	}
+}
+
+/** Returns a fresh bucket whose event objects are plain copies of the given ones. */
+function detachEventsCopy<T>(events: Array<T>): Array<T>
+{
+	const copy: Array<T> = [];
+	for (let i = 0; i < events.length; ++i)
+	{
+		const evt = events[i];
+		// Empty slots are kept as they were serialized.
+		if (evt)
+			// A plain copy of the event itself.
+			copy[i] = { ...evt };
+		else
+			copy[i] = evt;
+	}
+	return copy;
+}
+
 function createEmptyEvents(): HeadquartersEvents
 {
 	return {
@@ -48,6 +90,86 @@ function createEmptyEvents(): HeadquartersEvents
 		CeasefireEnded: [],
 		DiplomacyRequest: [],
 		TributeRequest: []
+	};
+}
+
+/** Replaces every event of every bucket by a plain copy of itself, in place. */
+function detachSavedEvents(events: HeadquartersEvents): void
+{
+	detachEvents(events.Create);
+	detachEvents(events.Destroy);
+	detachEvents(events.Attacked);
+	detachEvents(events.ConstructionFinished);
+	detachEvents(events.DiplomacyChanged);
+	detachEvents(events.TrainingStarted);
+	detachEvents(events.TrainingFinished);
+	detachEvents(events.AIMetadata);
+	detachEvents(events.PlayerDefeated);
+	detachEvents(events.EntityRenamed);
+	detachEvents(events.ValueModification);
+	detachEvents(events.OwnershipChanged);
+	detachEvents(events.Garrison);
+	detachEvents(events.UnGarrison);
+	detachEvents(events.TerritoriesChanged);
+	detachEvents(events.TerritoryDecayChanged);
+	detachEvents(events.TributeExchanged);
+	detachEvents(events.AttackRequest);
+	detachEvents(events.CeasefireEnded);
+	detachEvents(events.DiplomacyRequest);
+	detachEvents(events.TributeRequest);
+}
+
+/** Appends the events of the shared script to the saved ones.
+	 *  AIMetadata is not used inside petra, so it is not merged. */
+function mergeSharedEvents(saved: HeadquartersEvents, shared: HeadquartersEvents): void
+{
+	saved.Create = saved.Create.concat(shared.Create);
+	saved.Destroy = saved.Destroy.concat(shared.Destroy);
+	saved.Attacked = saved.Attacked.concat(shared.Attacked);
+	saved.ConstructionFinished = saved.ConstructionFinished.concat(shared.ConstructionFinished);
+	saved.DiplomacyChanged = saved.DiplomacyChanged.concat(shared.DiplomacyChanged);
+	saved.TrainingStarted = saved.TrainingStarted.concat(shared.TrainingStarted);
+	saved.TrainingFinished = saved.TrainingFinished.concat(shared.TrainingFinished);
+	saved.PlayerDefeated = saved.PlayerDefeated.concat(shared.PlayerDefeated);
+	saved.EntityRenamed = saved.EntityRenamed.concat(shared.EntityRenamed);
+	saved.ValueModification = saved.ValueModification.concat(shared.ValueModification);
+	saved.OwnershipChanged = saved.OwnershipChanged.concat(shared.OwnershipChanged);
+	saved.Garrison = saved.Garrison.concat(shared.Garrison);
+	saved.UnGarrison = saved.UnGarrison.concat(shared.UnGarrison);
+	saved.TerritoriesChanged = saved.TerritoriesChanged.concat(shared.TerritoriesChanged);
+	saved.TerritoryDecayChanged = saved.TerritoryDecayChanged.concat(shared.TerritoryDecayChanged);
+	saved.TributeExchanged = saved.TributeExchanged.concat(shared.TributeExchanged);
+	saved.AttackRequest = saved.AttackRequest.concat(shared.AttackRequest);
+	saved.CeasefireEnded = saved.CeasefireEnded.concat(shared.CeasefireEnded);
+	saved.DiplomacyRequest = saved.DiplomacyRequest.concat(shared.DiplomacyRequest);
+	saved.TributeRequest = saved.TributeRequest.concat(shared.TributeRequest);
+}
+
+/** A fresh events object: new buckets, each holding plain copies of the events. */
+function copySavedEvents(events: HeadquartersEvents): HeadquartersEvents
+{
+	return {
+		"Create": detachEventsCopy(events.Create),
+		"Destroy": detachEventsCopy(events.Destroy),
+		"Attacked": detachEventsCopy(events.Attacked),
+		"ConstructionFinished": detachEventsCopy(events.ConstructionFinished),
+		"DiplomacyChanged": detachEventsCopy(events.DiplomacyChanged),
+		"TrainingStarted": detachEventsCopy(events.TrainingStarted),
+		"TrainingFinished": detachEventsCopy(events.TrainingFinished),
+		"AIMetadata": detachEventsCopy(events.AIMetadata),
+		"PlayerDefeated": detachEventsCopy(events.PlayerDefeated),
+		"EntityRenamed": detachEventsCopy(events.EntityRenamed),
+		"ValueModification": detachEventsCopy(events.ValueModification),
+		"OwnershipChanged": detachEventsCopy(events.OwnershipChanged),
+		"Garrison": detachEventsCopy(events.Garrison),
+		"UnGarrison": detachEventsCopy(events.UnGarrison),
+		"TerritoriesChanged": detachEventsCopy(events.TerritoriesChanged),
+		"TerritoryDecayChanged": detachEventsCopy(events.TerritoryDecayChanged),
+		"TributeExchanged": detachEventsCopy(events.TributeExchanged),
+		"AttackRequest": detachEventsCopy(events.AttackRequest),
+		"CeasefireEnded": detachEventsCopy(events.CeasefireEnded),
+		"DiplomacyRequest": detachEventsCopy(events.DiplomacyRequest),
+		"TributeRequest": detachEventsCopy(events.TributeRequest)
 	};
 }
 
@@ -101,19 +223,10 @@ export class PetraBot extends BaseAI
 			this.playedTurn = this.data.playedTurn;
 			this.elapsedTime = this.data.elapsedTime;
 			this.savedEvents = this.data.savedEvents;
-			for (const key in this.savedEvents)
-			{
-				for (const i in this.savedEvents[key])
-				{
-					const evt = this.savedEvents[key][i];
-					const evtmod = {};
-					for (const keyevt in evt)
-					{
-						evtmod[keyevt] = evt[keyevt];
-						this.savedEvents[key][i] = evtmod;
-					}
-				}
-			}
+			// Kept for 1:1 with the JS reference; it is a no-op today - see detachEvents.
+			// The JS reference rebuilt every event as a plain object here.
+			// detachSavedEvents walks the 21 buckets of EngineAIEvents explicitly.
+			detachSavedEvents(this.savedEvents);
 
 			this.Config.Deserialize(this.data.config);
 
@@ -160,15 +273,7 @@ export class PetraBot extends BaseAI
 		if (this.gameFinished || this.gameState.playerData.state == "defeated")
 			return;
 
-		for (const i in sharedScript.events)
-		{
-			if (i == "AIMetadata")   // not used inside petra
-				continue;
-			if (this.savedEvents[i] !== undefined)
-				this.savedEvents[i] = this.savedEvents[i].concat(sharedScript.events[i]);
-			else
-				this.savedEvents[i] = sharedScript.events[i];
-		}
+		mergeSharedEvents(this.savedEvents, sharedScript.events);
 
 		// Run the update every n turns, offset depending on player ID to balance the load
 		this.elapsedTime = this.gameState.getTimeElapsed() / 1000;
@@ -190,8 +295,8 @@ export class PetraBot extends BaseAI
 			if (this.queueManager)
 				this.queueManager.update(this.gameState);
 
-			for (const i in this.savedEvents)
-				this.savedEvents[i] = [];
+			// Every event of this turn has been processed: start with empty buckets.
+			this.savedEvents = createEmptyEvents();
 
 			Engine.ProfileStop();
 		}
@@ -208,22 +313,6 @@ export class PetraBot extends BaseAI
 			return this.data;
 		}
 
-		const savedEvents = createEmptyEvents();
-		for (const key in this.savedEvents)
-		{
-			savedEvents[key] = this.savedEvents[key].slice();
-			for (const i in savedEvents[key])
-			{
-				if (!savedEvents[key][i])
-					continue;
-				const evt = savedEvents[key][i];
-				const evtmod = {};
-				for (const keyevt in evt)
-					evtmod[keyevt] = evt[keyevt];
-				savedEvents[key][i] = evtmod;
-			}
-		}
-
 		if (!this.queueManager || !this.HQ)
 			throw new Error("Cannot serialize: queueManager or HQ is undefined");
 
@@ -233,7 +322,7 @@ export class PetraBot extends BaseAI
 			"turn": this.turn,
 			"playedTurn": this.playedTurn,
 			"elapsedTime": this.elapsedTime,
-			"savedEvents": savedEvents,
+			"savedEvents": copySavedEvents(this.savedEvents),
 			"config": this.Config.Serialize(),
 			"queueManager": this.queueManager.Serialize(),
 			"HQ": this.HQ.Serialize()

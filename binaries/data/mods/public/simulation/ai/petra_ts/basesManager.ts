@@ -2,7 +2,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
-import { BaseManager } from "./baseManager.ts";
+import { BaseManager, SerializedBaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
 import { getBestBase, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
@@ -12,8 +12,8 @@ export interface SerializedBasesManager {
 		currentBase: number;
 		[key: string]: unknown;
 	};
-	noBase: Record<string, unknown> | undefined;
-	baseManagers: Record<string, unknown>[];
+	noBase: SerializedBaseManager | undefined;
+	baseManagers: SerializedBaseManager[];
 }
 
 type BasesManagerTurnCache = {
@@ -411,7 +411,7 @@ export class BasesManager
 	 */
 	getTotalResourceLevel(gameState: CommonGameState, resources: string[] = Resources.GetCodes(), proximity: string[] = ["nearby", "medium"]): Record<string, number>
 	{
-		const total = {};
+		const total: Record<string, number> = {};
 		for (const res of resources)
 			total[res] = 0;
 		for (const base of this.baseManagers)
@@ -429,7 +429,7 @@ export class BasesManager
 	{
 		if (!this.turnCache.currentRates)
 		{
-			const currentRates = {};
+			const currentRates: Record<string, number> = {};
 			for (const res of Resources.GetCodes())
 				currentRates[res] = 0.5 * this.GetTCResGatherer(res);
 

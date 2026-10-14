@@ -27,6 +27,11 @@ function removeBuilder(builders: Map<string, number[]>, entityId: number): void
  * It also takes care of the structures we can't currently build and should not try to build endlessly.
  */
 
+export type SerializedBuildManager = {
+	builders: Map<string, number[]>;
+	unbuildables: Map<string, { reason: string; time: number }>;
+};
+
 export class BuildManager
 {
 	declare elapsedTime: number;
@@ -177,7 +182,7 @@ export class BuildManager
 				this.unbuildables.delete(key);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedBuildManager
 	{
 		return {
 			"builders": this.builders,
@@ -185,9 +190,11 @@ export class BuildManager
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedBuildManager): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		// The fallbacks keep the value set by the field initializers for fields
+		// absent in savegames written by an older version
+		this.builders = data.builders ?? new Map();
+		this.unbuildables = data.unbuildables ?? new Map();
 	}
 }

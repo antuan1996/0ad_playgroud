@@ -14,15 +14,26 @@ import type { Config } from "./config.ts";
  *   in wonder, train military guards.
  */
 
+type CriticalEntState = {
+	guardsAssigned: Set<number>;
+	healersAssigned?: Set<number>;
+	guards: Map<number, string>;
+	garrisonEmergency?: boolean;
+};
+
+export type SerializedVictoryManager = {
+	criticalEnts: Map<number, CriticalEntState>;
+	guardEnts: Map<number, boolean>;
+	healersPerCriticalEnt: number;
+	tryCaptureGaiaRelic: boolean;
+	tryCaptureGaiaRelicLapseTime: number;
+	targetedGaiaRelics: Map<number, number[]>;
+};
+
 export class VictoryManager
 {
 	declare Config: Config;
-	declare criticalEnts: Map<number, {
-		guardsAssigned: Set<number>;
-		healersAssigned?: Set<number>;
-		guards: Map<number, string>;
-		garrisonEmergency?: boolean;
-	}>;
+	declare criticalEnts: Map<number, CriticalEntState>;
 	declare guardEnts: Map<number, boolean>;
 	declare healersPerCriticalEnt: number;
 	declare targetedGaiaRelics: Map<number, number[]>;
@@ -765,7 +776,7 @@ export class VictoryManager
 		this.targetedGaiaRelics.delete(relicId);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedVictoryManager
 	{
 		return {
 			"criticalEnts": this.criticalEnts,
@@ -777,9 +788,16 @@ export class VictoryManager
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedVictoryManager): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		// The fallbacks keep the value set by the constructor for fields absent in
+		// savegames written by an older version
+		this.criticalEnts = data.criticalEnts ?? new Map();
+		this.guardEnts = data.guardEnts ?? new Map();
+		this.healersPerCriticalEnt = data.healersPerCriticalEnt ??
+			2 + Math.round(this.Config.personality.defensive * 2);
+		this.tryCaptureGaiaRelic = data.tryCaptureGaiaRelic ?? false;
+		this.tryCaptureGaiaRelicLapseTime = data.tryCaptureGaiaRelicLapseTime ?? -1;
+		this.targetedGaiaRelics = data.targetedGaiaRelics ?? new Map();
 	}
 }

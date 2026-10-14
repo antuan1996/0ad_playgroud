@@ -839,7 +839,7 @@ declare module "simulation/ai/common-api/entity.js"
 		attackStrengths(type: string): Record<string, number> | undefined;
 /** Represents the capture Strength. */
 		captureStrength(): number | undefined;
-		attackTimes(type: string): { prepare: number; repeat: number } | undefined;
+		attackTimes(type: string): Record<string, number> | undefined;
 /** Gets the Countered Classes. */
 		getCounteredClasses(): Array<[string[], number]> | undefined;
 /** Represents the counters. */

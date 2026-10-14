@@ -20,6 +20,14 @@ type TradeRoute = {
 /**
  * Manage the trade
  */
+export type SerializedTradeManager = {
+	tradeRoute: TradeRoute | undefined;
+	potentialTradeRoute: TradeRoute | undefined;
+	routeProspection: boolean;
+	targetNumTraders: number;
+	warnedAllies: Record<number, boolean>;
+};
+
 export class TradeManager
 {
 	declare Config: Config;
@@ -208,7 +216,7 @@ export class TradeManager
 		const resTradeCodes = Resources.GetTradableCodes();
 		if (!resTradeCodes.length)
 			return;
-		const tradingGoods = {};
+		const tradingGoods: Record<string, number> = {};
 		for (const res of resTradeCodes)
 			tradingGoods[res] = 0;
 		// first, try to anticipate future needs
@@ -743,7 +751,7 @@ export class TradeManager
 			this.prospectForNewMarket(gameState, queues);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedTradeManager
 	{
 		return {
 			"tradeRoute": this.tradeRoute,
@@ -754,9 +762,14 @@ export class TradeManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void
+	Deserialize(gameState: CommonGameState, data: SerializedTradeManager): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		// The fallbacks keep the value set by the constructor for fields absent in
+		// savegames written by an older version
+		this.tradeRoute = data.tradeRoute;
+		this.potentialTradeRoute = data.potentialTradeRoute;
+		this.routeProspection = data.routeProspection ?? false;
+		this.targetNumTraders = data.targetNumTraders ?? this.Config.Economy.targetNumTraders;
+		this.warnedAllies = data.warnedAllies ?? {};
 	}
 }

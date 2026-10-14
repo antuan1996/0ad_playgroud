@@ -71,7 +71,7 @@ export class TrainingPlan extends QueuePlan
 	{
 		if (this.metadata && this.metadata.trainer)
 		{
-			const metadata = {};
+			const metadata: Record<string, unknown> = {};
 			for (const key in this.metadata)
 				if (key !== "trainer")
 					metadata[key] = this.metadata[key];
@@ -163,8 +163,9 @@ export class TrainingPlan extends QueuePlan
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<TrainingPlan["Serialize"]>): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		const properties: Record<string, unknown> = data;
+		for (const key in properties)
+			(this as Record<string, unknown>)[key] = properties[key];
 
 		this.cost = new ResourcesManager();
 		this.cost.Deserialize(data.cost);

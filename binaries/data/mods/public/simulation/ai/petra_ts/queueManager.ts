@@ -112,7 +112,7 @@ export class QueueManager
 		// default values for first turn when we have not yet set our queues.
 		if (gameState.ai.playedTurn === 0)
 		{
-			const ret = {};
+			const ret: Record<string, number> = {};
 			for (const res of Resources.GetCodes())
 				ret[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
 			return ret;
@@ -123,9 +123,9 @@ export class QueueManager
 		// short queue is the first item of a queue, assumed to be ready in 30s
 		// medium queue is the second item of a queue, assumed to be ready in 60s
 		// long queue contains the isGo=false items, assumed to be ready in 300s
-		const totalShort = {};
-		const totalMedium = {};
-		const totalLong = {};
+		const totalShort: Record<string, number> = {};
+		const totalMedium: Record<string, number> = {};
+		const totalLong: Record<string, number> = {};
 		for (const res of Resources.GetCodes())
 		{
 			totalShort[res] = this.Config.queues.short[res] || this.Config.queues.short.default;
@@ -160,7 +160,7 @@ export class QueueManager
 			}
 		}
 		// global rates
-		const rates = {};
+		const rates: Record<string, number> = {};
 		let diff;
 		for (const res of Resources.GetCodes())
 		{
@@ -288,8 +288,8 @@ export class QueueManager
 			}
 
 			let totalPriority = 0;
-			const tempPrio = {};
-			const maxNeed = {};
+			const tempPrio: Record<string, number> = {};
+			const maxNeed: Record<string, number> = {};
 			// Okay so this is where it gets complicated.
 			// If a queue requires "res" for the next elements (in the queue)
 			// And the account is not high enough for it.
@@ -611,8 +611,8 @@ export class QueueManager
 		accounts: Record<string, ReturnType<ResourcesManager["Serialize"]>>;
 	}
 	{
-		const accounts = {};
-		const queues = {};
+		const accounts: Record<string, ReturnType<ResourcesManager["Serialize"]>> = {};
+		const queues: Record<string, ReturnType<Queue["Serialize"]>> = {};
 		for (const q in this.queues)
 		{
 			queues[q] = this.queues[q].Serialize();

@@ -40,7 +40,7 @@ export class AttackManager
 	maxRushes = 0;
 	rushSize = [];
 	currentEnemyPlayer = undefined; // enemy player we are currently targeting
-	defeated = {};
+	defeated: Record<number, boolean> = {};
 
 	constructor(config: Config)
 	{
@@ -533,7 +533,7 @@ export class AttackManager
 		if (enemyPlayer)
 			return enemyPlayer;
 
-		const veto = {};
+		const veto: Record<number, boolean> = {};
 		for (const i in this.defeated)
 			veto[i] = true;
 		// No rush if enemy too well defended (i.e. iberians)
@@ -847,7 +847,7 @@ export class AttackManager
 	Deserialize(gameState: CommonGameState, data: SerializedAttackManager): void
 	{
 		for (const key in data.properties)
-			this[key] = data.properties[key];
+			(this as Record<string, unknown>)[key] = data.properties[key];
 
 		this.upcomingAttacks = {};
 		for (const key in data.upcomingAttacks)

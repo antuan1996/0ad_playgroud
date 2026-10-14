@@ -137,7 +137,7 @@ export class DiplomacyManager
 			const donor = gameState.getAlliedVictory() || gameState.getEntities(i).length < gameState.getOwnEntities().length;
 			const allyResources = gameState.sharedScript.playersData[i].resourceCounts;
 			const allyPop = gameState.sharedScript.playersData[i].popCount;
-			const tribute = {};
+			const tribute: Record<string, number> = {};
 			let toSend = false;
 			for (const res of resTribCodes)
 			{
@@ -329,7 +329,7 @@ export class DiplomacyManager
 			// TODO: Save this event and wait until we get more resources if we don't have enough
 			if (evt.resourceWanted < availableResources[evt.resourceType])
 			{
-				const responseTribute = {};
+				const responseTribute: Record<string, number> = {};
 				responseTribute[evt.resourceType] = evt.resourceWanted;
 				if (this.Config.debug > 0)
 				{
@@ -392,7 +392,7 @@ export class DiplomacyManager
 
 			if (gameState.getVictoryConditions().has("wonder"))
 			{
-				const wonder = gameState.getEnemyStructures(i).filter(filters.byClass("Wonder"))[0];
+				const wonder = gameState.getEnemyStructures(i).filter(filters.byClass("Wonder")).toEntityArray()[0];
 				if (wonder)
 				{
 					const wonderProgess = wonder.foundationProgress();

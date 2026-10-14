@@ -33,7 +33,7 @@ export interface SerializedTransportPlan {
 	startIndex: number;
 	sea: number;
 	state: string;
-	boardingPos: Record<string, CommonPosition>;
+	boardingPos: Record<string, CommonPosition | undefined>;
 	needTransportShips: boolean;
 	nTry: Record<string, number>;
 	canceled: boolean | undefined;
@@ -44,7 +44,7 @@ export interface SerializedTransportPlan {
 export class TransportPlan
 {
 	declare ID: number;
-	declare boardingPos: Record<number, CommonPosition | undefined>;
+	declare boardingPos: Record<string, CommonPosition | undefined>;
 	declare boardingRange: number;
 	declare canceled: boolean | undefined;
 	declare debug: number;
@@ -350,7 +350,7 @@ export class TransportPlan
 	{
 		let ready = true;
 		const time = gameState.ai.elapsedTime;
-		const shipTested = {};
+		const shipTested: Record<number, boolean> = {};
 
 		for (const ent of this.units.values())
 		{
@@ -608,7 +608,7 @@ export class TransportPlan
 		this.recovered = [];
 
 		// Check that the units unloaded on the previous turn have been really unloaded and in the right position
-		const shipsToMove = {};
+		const shipsToMove: Record<number, CommonEntity> = {};
 		for (const entId of this.unloaded)
 		{
 			const ent = gameState.getEntityById(entId);
@@ -673,8 +673,11 @@ export class TransportPlan
 		}
 		for (const shipId in shipsToMove)
 		{
-			this.boardingPos[shipId] = this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
-			shipsToMove[shipId].move(this.boardingPos[shipId][0], this.boardingPos[shipId][1]);
+			const boardingPos = this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
+			this.boardingPos[shipId] = boardingPos;
+			if (!boardingPos)
+				continue;
+			shipsToMove[shipId].move(boardingPos[0], boardingPos[1]);
 		}
 		this.unloaded = [];
 
@@ -683,8 +686,11 @@ export class TransportPlan
 			for (const ship of this.ships.values())
 			{
 				this.boardingPos[ship.id()] = undefined;
-				this.boardingPos[ship.id()] = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
-				ship.move(this.boardingPos[ship.id()][0], this.boardingPos[ship.id()][1]);
+				const boardingPos = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
+				this.boardingPos[ship.id()] = boardingPos;
+				if (!boardingPos)
+					continue;
+				ship.move(boardingPos[0], boardingPos[1]);
 			}
 			this.canceled = undefined;
 		}

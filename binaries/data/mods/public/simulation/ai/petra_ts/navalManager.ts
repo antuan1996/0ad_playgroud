@@ -44,7 +44,7 @@ export class NavalManager
 	transportPlans: TransportPlan[] = [];
 
 	// shore-line regions where we can load and unload units
-	landingZones = {};
+	landingZones: Record<number, Record<number, Set<number>>> = {};
 
 	constructor(Config: Config)
 	{
@@ -71,14 +71,15 @@ export class NavalManager
 		this.warShips.registerUpdates();
 		this.fishShips.registerUpdates();
 
-		const availableFishes = {};
+		const availableFishes: Record<number, number> = {};
 		for (const fish of gameState.getFishableSupplies().values())
 		{
 			const sea = this.getFishSea(gameState, fish);
+			const amount = fish.resourceSupplyAmount() ?? 0;
 			if (sea && availableFishes[sea])
-				availableFishes[sea] += fish.resourceSupplyAmount();
+				availableFishes[sea] += amount;
 			else if (sea)
-				availableFishes[sea] = fish.resourceSupplyAmount();
+				availableFishes[sea] = amount;
 		}
 
 		for (let i = 0; i < gameState.ai.accessibility.regionSize.length; ++i)
@@ -147,7 +148,7 @@ export class NavalManager
 			for (const sea in this.landingZones[land])
 			{
 				const landing = this.landingZones[land][sea];
-				const nbaround = {};
+				const nbaround: Record<number, number> = {};
 				let nbcut = 0;
 				for (const i of landing)
 				{
@@ -922,7 +923,7 @@ export class NavalManager
 			"landingZones": this.landingZones
 		};
 
-		const transports = {};
+		const transports: Record<string, ReturnType<TransportPlan["Serialize"]>> = {};
 		for (const plan in this.transportPlans)
 			transports[plan] = this.transportPlans[plan].Serialize();
 
@@ -931,8 +932,9 @@ export class NavalManager
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<NavalManager["Serialize"]>): void
 	{
-		for (const key in data.properties)
-			this[key] = data.properties[key];
+		const properties: Record<string, unknown> = data.properties;
+		for (const key in properties)
+			(this as Record<string, unknown>)[key] = properties[key];
 
 		this.transportPlans = [];
 		for (const i in data.transports)

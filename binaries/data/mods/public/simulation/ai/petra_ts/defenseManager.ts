@@ -584,7 +584,7 @@ export class DefenseManager
 			}
 		}
 
-		const allAttacked = {};
+		const allAttacked: Record<number, number> = {};
 		for (const evt of events.Attacked)
 			allAttacked[evt.target] = evt.attacker;
 

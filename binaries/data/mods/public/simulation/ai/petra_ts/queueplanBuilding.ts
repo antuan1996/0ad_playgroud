@@ -570,7 +570,7 @@ export class ConstructionPlan extends QueuePlan
 		const cellArea = passabilityMap.cellSize * passabilityMap.cellSize;
 		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
 
-		const land = {};
+		const land: Record<number, boolean> = {};
 		let found;
 		for (let i = 0; i < gameState.ai.accessibility.regionSize.length; ++i)
 		{
@@ -974,8 +974,9 @@ export class ConstructionPlan extends QueuePlan
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<ConstructionPlan["Serialize"]>): void
 	{
-		for (const key in data)
-			this[key] = data[key];
+		const properties: Record<string, unknown> = data;
+		for (const key in properties)
+			(this as Record<string, unknown>)[key] = properties[key];
 
 		this.cost = new ResourcesManager();
 		this.cost.Deserialize(data.cost);
