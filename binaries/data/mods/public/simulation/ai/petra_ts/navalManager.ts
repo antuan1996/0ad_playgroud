@@ -34,12 +34,12 @@ export class NavalManager
 	seaFishShips: Array<CommonEntityCollection | undefined> = [];
 
 	// wanted NB per zone.
-	wantedTransportShips = [];
-	wantedWarShips = [];
-	wantedFishShips = [];
+	wantedTransportShips: number[] = [];
+	wantedWarShips: number[] = [];
+	wantedFishShips: number[] = [];
 	// needed NB per zone.
-	neededTransportShips = [];
-	neededWarShips = [];
+	neededTransportShips: number[] = [];
+	neededWarShips: number[] = [];
 
 	transportPlans: TransportPlan[] = [];
 
@@ -932,9 +932,12 @@ export class NavalManager
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<NavalManager["Serialize"]>): void
 	{
-		const properties: Record<string, unknown> = data.properties;
-		for (const key in properties)
-			(this as Record<string, unknown>)[key] = properties[key];
+		this.wantedTransportShips = data.properties.wantedTransportShips;
+		this.wantedWarShips = data.properties.wantedWarShips;
+		this.wantedFishShips = data.properties.wantedFishShips;
+		this.neededTransportShips = data.properties.neededTransportShips;
+		this.neededWarShips = data.properties.neededWarShips;
+		this.landingZones = data.properties.landingZones;
 
 		this.transportPlans = [];
 		for (const i in data.transports)

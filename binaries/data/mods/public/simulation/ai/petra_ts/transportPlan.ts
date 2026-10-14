@@ -786,8 +786,19 @@ export class TransportPlan
 
 	Deserialize(data: SerializedTransportPlan): void
 	{
-		for (const key in data)
-			(this as unknown as Record<string, unknown>)[key] = (data as unknown as Record<string, unknown>)[key];
+		this.ID = data.ID;
+		this.flotilla = data.flotilla;
+		this.endPos = data.endPos;
+		this.endIndex = data.endIndex;
+		this.startIndex = data.startIndex;
+		this.sea = data.sea;
+		this.state = data.state;
+		this.boardingPos = data.boardingPos;
+		this.needTransportShips = data.needTransportShips;
+		this.nTry = data.nTry;
+		this.canceled = data.canceled;
+		this.unloaded = data.unloaded;
+		this.recovered = data.recovered;
 
 		this.failed = false;
 	}

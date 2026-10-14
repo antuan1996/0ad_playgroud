@@ -10,7 +10,6 @@ import { Worker } from "./worker.ts";
 export interface SerializedBasesManager {
 	properties: {
 		currentBase: number;
-		[key: string]: unknown;
 	};
 	noBase: SerializedBaseManager | undefined;
 	baseManagers: SerializedBaseManager[];
@@ -800,8 +799,7 @@ export class BasesManager
 
 	Deserialize(gameState: CommonGameState, data: SerializedBasesManager): void
 	{
-		for (const key in data.properties)
-			(this as unknown as Record<string, unknown>)[key] = data.properties[key];
+		this.currentBase = data.properties.currentBase;
 
 		if (data.noBase)
 		{

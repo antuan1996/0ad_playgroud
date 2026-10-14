@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { AttackPlan } from "./attackPlan.ts";
+import { AttackPlan, SerializedAttackPlan } from "./attackPlan.ts";
 import * as chat from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
@@ -8,9 +8,19 @@ import { allowCapture, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
 
 export type SerializedAttackManager = {
-    properties: Record<string, unknown>;
-    upcomingAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
-    startedAttacks: Record<string, Array<{ properties: Record<string, unknown> & { name: number } } & Record<string, unknown>>>;
+    properties: {
+        totalNumber: number;
+        attackNumber: number;
+        rushNumber: number;
+        raidNumber: number;
+        debugTime: number;
+        maxRushes: number;
+        rushSize: number[];
+        currentEnemyPlayer: number | undefined;
+        defeated: Record<number, boolean>;
+    };
+    upcomingAttacks: Record<string, SerializedAttackPlan[]>;
+    startedAttacks: Record<string, SerializedAttackPlan[]>;
 };
 
 export class AttackManager
@@ -38,8 +48,8 @@ export class AttackManager
 	bombingAttacks = new Map();// Temporary attacks for siege units while waiting their current attack to start
 	debugTime = 0;
 	maxRushes = 0;
-	rushSize = [];
-	currentEnemyPlayer = undefined; // enemy player we are currently targeting
+	rushSize: number[] = [];
+	currentEnemyPlayer: number | undefined = undefined; // enemy player we are currently targeting
 	defeated: Record<number, boolean> = {};
 
 	constructor(config: Config)
@@ -846,8 +856,15 @@ export class AttackManager
 
 	Deserialize(gameState: CommonGameState, data: SerializedAttackManager): void
 	{
-		for (const key in data.properties)
-			(this as Record<string, unknown>)[key] = data.properties[key];
+		this.totalNumber = data.properties.totalNumber;
+		this.attackNumber = data.properties.attackNumber;
+		this.rushNumber = data.properties.rushNumber;
+		this.raidNumber = data.properties.raidNumber;
+		this.debugTime = data.properties.debugTime;
+		this.maxRushes = data.properties.maxRushes;
+		this.rushSize = data.properties.rushSize;
+		this.currentEnemyPlayer = data.properties.currentEnemyPlayer;
+		this.defeated = data.properties.defeated;
 
 		this.upcomingAttacks = {};
 		for (const key in data.upcomingAttacks)

@@ -163,9 +163,12 @@ export class TrainingPlan extends QueuePlan
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<TrainingPlan["Serialize"]>): void
 	{
-		const properties: Record<string, unknown> = data;
-		for (const key in properties)
-			(this as Record<string, unknown>)[key] = properties[key];
+		this.category = data.category;
+		this.type = data.type;
+		this.ID = data.ID;
+		this.metadata = data.metadata;
+		this.number = data.number;
+		this.maxMerge = data.maxMerge;
 
 		this.cost = new ResourcesManager();
 		this.cost.Deserialize(data.cost);

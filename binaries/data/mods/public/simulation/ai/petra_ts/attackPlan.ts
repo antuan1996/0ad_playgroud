@@ -26,6 +26,33 @@ type AttackBuildOrder = [
 	string
 ];
 
+/** What an attack plan looks like once serialized: `Serialize` builds it, `Deserialize` reads it. */
+export type SerializedAttackPlan = {
+	properties: {
+		name: number;
+		type: string;
+		state: string;
+		forced: boolean;
+		rallyPoint: CommonPosition;
+		overseas: number;
+		paused: boolean;
+		maxCompletingTime: number;
+		neededShips: number;
+		unitStat: Record<string, AttackUnitStat>;
+		siegeState: number;
+		position5TurnsAgo: CommonPosition;
+		lastPosition: CommonPosition;
+		position: CommonPosition | undefined;
+		isBlocked: boolean;
+		targetPlayer: number | undefined;
+		target: number | undefined;
+		targetPos: CommonPosition | undefined;
+		uniqueTargetId: number | undefined;
+		path: CommonPosition[];
+		unitCollUpdateArray: number[] | undefined;
+	};
+};
+
 /**
  * This is an attack plan:
  * It deals with everything in an attack, from picking a target to picking a path to it
@@ -2319,7 +2346,7 @@ export class AttackPlan
 		aiWarn("------------------------------");
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedAttackPlan
 	{
 		const properties = {
 			"name": this.name,
@@ -2348,14 +2375,28 @@ export class AttackPlan
 		return { "properties": properties };
 	}
 
-	Deserialize(gameState: CommonGameState, data: { properties: Record<string, unknown> }): void
+	Deserialize(gameState: CommonGameState, data: SerializedAttackPlan): void
 	{
-		for (const key in data.properties)
-		{
-			if (key === "target")
-				continue;
-			(this as Record<string, unknown>)[key] = data.properties[key];
-		}
+		this.name = data.properties.name;
+		this.type = data.properties.type;
+		this.state = data.properties.state;
+		this.forced = data.properties.forced;
+		this.rallyPoint = data.properties.rallyPoint;
+		this.overseas = data.properties.overseas;
+		this.paused = data.properties.paused;
+		this.maxCompletingTime = data.properties.maxCompletingTime;
+		this.neededShips = data.properties.neededShips;
+		this.unitStat = data.properties.unitStat;
+		this.siegeState = data.properties.siegeState;
+		this.position5TurnsAgo = data.properties.position5TurnsAgo;
+		this.lastPosition = data.properties.lastPosition;
+		this.position = data.properties.position;
+		this.isBlocked = data.properties.isBlocked;
+		this.targetPlayer = data.properties.targetPlayer;
+		this.targetPos = data.properties.targetPos;
+		this.uniqueTargetId = data.properties.uniqueTargetId;
+		this.path = data.properties.path;
+		this.unitCollUpdateArray = data.properties.unitCollUpdateArray;
 
 		const targetId = data.properties.target;
 		if (typeof targetId === "number")
