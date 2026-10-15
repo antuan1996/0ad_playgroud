@@ -575,7 +575,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Gets the Own Entities By Metadata. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
 /** Gets the Own Entities By Role. */
-		getOwnEntitiesByRole(role: string, maintain?: boolean): CommonEntityCollection;
+		getOwnEntitiesByRole(role: string | undefined, maintain?: boolean): CommonEntityCollection;
 /** Gets the Own Entities By Type. */
 		getOwnEntitiesByType(type: string, maintain?: boolean): CommonEntityCollection;
 /** Gets the Own Entities By Class. */
