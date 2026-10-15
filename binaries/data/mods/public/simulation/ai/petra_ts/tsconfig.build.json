@@ -1,13 +1,13 @@
 {
-	// Emit config for the petra port comparison. Type checking lives in
-	// tsconfig.json (strict + noEmit); this only transpiles, so a stray type
-	// error never blocks getting JS out for the comparator.
+	// Emit config for the petra port: this is the JS the game loads. Type
+	// checking lives in tsconfig.json (strict + noEmit); this only transpiles,
+	// so a stray type error never blocks getting JS out.
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"noEmit": false,
 		"noCheck": true,
 		"outDir": "../petra_out"
 	},
-	// Tests run against the emitted JS; they are not part of the mod.
+	// Tests are not part of the mod.
 	"exclude": ["./**/*.js", "./tests/**"]
 }

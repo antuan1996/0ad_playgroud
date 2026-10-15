@@ -2,24 +2,29 @@
  * Locations the test harness needs, and which implementation under test is
  * selected.
  *
- * Three targets can be tested, chosen with the PETRA_TARGET environment
+ * Two implementations of the same AI sit side by side in the mod, and the
+ * suite runs against either one, chosen with the PETRA_TARGET environment
  * variable (see the npm scripts):
  *
- *   src  petra_ts/*.ts        the TypeScript sources, run by Node directly
- *   out  petra_out/*.js       the same code transpiled, what the game loads
- *   ref  build/petra_check/ref/*.js
- *                            the hand-written JS the port was derived from
+ *   src  simulation/ai/petra_ts/*.ts  the port, run by Node directly
+ *   ref  simulation/ai/petra/*.js     the original hand-written AI the port
+ *                                     was derived from, and what the game
+ *                                     loads today
  *
- * `ref` is extracted from git and is gitignored; see the note in
- * build/petra_check/NOTES.md. It exists only while the port is being verified.
+ * `petra_ts` also transpiles to `simulation/ai/petra_out/*.js` (npm run
+ * build:petra:out), but that is just tsc's output for the port rather than a
+ * separate implementation, so it is not a target of its own.
+ *
+ * `ref` is the game's own copy. The harness only ever imports it, so running
+ * the suite cannot change it — but nothing here should either.
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type PetraTarget = "src" | "out" | "ref";
+export type PetraTarget = "src" | "ref";
 
-const VALID: PetraTarget[] = ["src", "out", "ref"];
+const VALID: PetraTarget[] = ["src", "ref"];
 
 function findRepoRoot(): string
 {
@@ -71,9 +76,7 @@ export function petraModuleDir(target = petraTarget()): { dir: string; ext: stri
 	{
 	case "src":
 		return { dir: path.join(aiRoot, "petra_ts"), ext: ".ts" };
-	case "out":
-		return { dir: path.join(aiRoot, "petra_out"), ext: ".js" };
 	case "ref":
-		return { dir: path.join(repoRoot, "build/petra_check/ref"), ext: ".js" };
+		return { dir: path.join(aiRoot, "petra"), ext: ".js" };
 	}
 }

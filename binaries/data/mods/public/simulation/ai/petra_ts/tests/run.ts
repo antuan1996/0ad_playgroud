@@ -1,18 +1,18 @@
 /**
  * Runs the Petra unit tests against one implementation.
  *
- *   node tests/run.ts          # the TypeScript sources
- *   node tests/run.ts out      # the JS transpiled from them (what the game loads)
- *   node tests/run.ts ref      # the hand-written JS the port came from
+ *   node tests/run.ts          # the port: simulation/ai/petra_ts/*.ts
+ *   node tests/run.ts ref      # the original: simulation/ai/petra/*.js
  *
- * `ref` only exists while the port is being verified against it; see
- * build/petra_check/NOTES.md.
+ * The two are expected to agree except where the port deliberately behaves
+ * differently; a `ref` run then exits non-zero, and that failure is the record
+ * of the difference rather than of a regression.
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const targets = ["src", "out", "ref"];
+const targets = ["src", "ref"];
 const target = process.argv[2] ?? "src";
 
 if (!targets.includes(target) || process.argv[3] !== undefined)

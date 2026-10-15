@@ -6,7 +6,7 @@
  * JS also names its own siblings that way (`simulation/ai/petra/queue.js`).
  * Node has no idea what those mean, so they are mapped to real paths:
  *
- *   simulation/ai/petra/<x>      -> the target under test (petra_ts, petra_out or ref)
+ *   simulation/ai/petra/<x>      -> the target under test (petra_ts or petra)
  *   simulation/ai/petra_ts/<x>   -> the same
  *   simulation/<x>               -> binaries/data/mods/public/simulation/<x>
  *

@@ -7,14 +7,20 @@ can be pointed at different builds of it.
 ## Running
 
 ```sh
-npm run test:petra            # the TypeScript sources in this directory's parent
-npm run test:petra -- out     # the JS transpiled from them (npm run build:petra)
-npm run test:petra -- ref     # the hand-written JS the port came from
+npm run test:petra            # the port: simulation/ai/petra_ts/*.ts
+npm run test:petra -- ref     # the original: simulation/ai/petra/*.js
 ```
 
-`out` is what the game actually loads, so a change that breaks the build step
-rather than the source still fails here. `ref` only exists while the port is
-being checked against its origin; see `build/petra_check/NOTES.md`.
+`ref` is the game's own copy of Petra, the `petra` folder that sits next to the
+port's `petra_ts` folder in the mod, so the suite reads whatever the game would
+load today. `npm run build:petra:out` transpiles the port to
+`simulation/ai/petra_out/*.js` — that is just tsc's output for the port, not a
+third implementation to test.
+
+Running against `ref` is expected to fail wherever the port deliberately
+behaves differently from the original — that failure is the record of the
+difference, not a regression. `queue.test.ts` says so above the test that only
+the port passes.
 
 Type checking:
 
@@ -25,7 +31,16 @@ npm run typecheck:petra:tests
 Note that this also re-checks the port itself: `common-api.d.ts` reaches into
 the sources with `import("./baseManager.ts")`, so the sources join the program.
 The port currently has pre-existing strict-mode errors, so this is not yet a
-clean gate — filter for `petra_ts/tests/` to see whether a change here added any.
+clean gate — filter for `petra_ts/tests/` to see whether a change here added any:
+
+```sh
+npm run --silent typecheck:petra:tests 2>&1 | grep 'petra_ts/tests/'
+```
+
+An empty result means the tests and harness are clean. The suite needs
+`@types/node` (declared in `package.json`, and what `tests/tsconfig.json` asks
+for with `"types": ["node"]`); without it `tsc` reports one fatal
+`TS2688: Cannot find type definition file for 'node'` and checks nothing.
 
 ## How it works
 

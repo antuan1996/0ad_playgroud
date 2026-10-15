@@ -11,6 +11,13 @@
 	"scripts": {
 		"lint": "eslint",
 		"lint:fix": "eslint --fix",
-		"build:petra": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json"
+		"build:petra": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json",
+		"build:petra:out": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.build.json",
+		"test:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts",
+		"test:petra:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref",
+		"typecheck:petra:tests": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tests/tsconfig.json"
+	},
+	"dependencies": {
+		"@types/node": "^26.6.5"
 	}
 }
