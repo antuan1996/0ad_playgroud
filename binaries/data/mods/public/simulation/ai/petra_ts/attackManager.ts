@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { AttackPlan, SerializedAttackPlan } from "./attackPlan.ts";
+import { AttackPlan, type SerializedAttackPlan } from "./attackPlan.ts";
 import * as chat from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";

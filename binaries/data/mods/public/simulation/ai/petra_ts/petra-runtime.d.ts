@@ -13,7 +13,11 @@ declare namespace PetraRuntime {
 		playedTurn: number;
 		queueManager: import("./queueManager.ts").QueueManager;
 		queues: Record<string, import("./queue.ts").Queue>;
-		territoryMap: import("./headquarters.ts").Headquarters["territoryMap"];
+		/**
+		 * The engine's territory grid, copied onto the AI by baseAI. Not the
+		 * territory map the headquarters builds — that one is `HQ.territoryMap`.
+		 */
+		territoryMap: CommonPassabilityMap;
 		uniqueIDs: Record<string, number>;
 	}
 
