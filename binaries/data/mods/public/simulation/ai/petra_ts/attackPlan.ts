@@ -1614,7 +1614,7 @@ export class AttackPlan
 					veto[target] = true;
 
 			let targetClassesUnit;
-			let targetClassesSiege;
+			let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
 			if (this.type === AttackPlan.TYPE_RUSH)
 				targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Palisade", "Wall", "Tower", "Fortress"], "vetoEntities": veto };
 			else

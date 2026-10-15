@@ -412,7 +412,7 @@ export class DefenseArmy
 			if (this.assignedAgainst[i] === undefined)
 				this.assignedAgainst[i] = otherArmy.assignedAgainst[i];
 			else
-				this.assignedAgainst[i] = this.assignedAgainst[i].concat(otherArmy.assignedAgainst[i]);
+				this.assignedAgainst[i] = this.assignedAgainst[i].concat(otherArmy.assignedAgainst[i] ?? []);
 		}
 		for (const i in otherArmy.assignedTo)
 			this.assignedTo[i] = otherArmy.assignedTo[i];

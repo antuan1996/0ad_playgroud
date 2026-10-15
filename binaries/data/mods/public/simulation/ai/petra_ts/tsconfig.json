@@ -6,7 +6,7 @@
 		"baseUrl": "../../../",
 		"ignoreDeprecations": "6.0",
 		"rewriteRelativeImportExtensions": true,
-		"outDir": "../petra",
+		"outDir": "../petra_generated",
 		"rootDir": ".",
 		"strict": true,
 		"noCheck": false,
