@@ -47,10 +47,11 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 		obstructionMask = gameState.getPassabilityClassMask("building-land");
 	}
 
-	for (let k = 0; k < territoryMap.map.length; ++k)
+	// See createTerritoryMap: the engine grid's array is `data`, not `map`.
+	for (let k = 0; k < territoryMap.data.length; ++k)
 	{
-		const tilePlayer = territoryMap.map[k] & TERRITORY_PLAYER_MASK;
-		const isConnected = (territoryMap.map[k] & TERRITORY_BLINKING_MASK) == 0;
+		const tilePlayer = territoryMap.data[k] & TERRITORY_PLAYER_MASK;
+		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) == 0;
 		if (tilePlayer === PlayerID)
 		{
 			if (!buildOwn || !buildNeutral && !isConnected)
@@ -127,7 +128,11 @@ export function createTerritoryMap(gameState: CommonGameState): InfoMap & {
 {
 	const map = gameState.ai.territoryMap;
 
-	const ret = new InfoMap(gameState.sharedScript, "territory", map.map) as InfoMap & {
+	// BUG: this read `.map` for a while. `gameState.ai.territoryMap` is the
+	// engine's grid, whose array is `data` (CCmpAIManager reads the same name
+	// back), so `.map` was undefined and InfoMap fell back to an all-zero map:
+	// every territory came out unowned, with nothing thrown to say so.
+	const ret = new InfoMap(gameState.sharedScript, "territory", map.data) as InfoMap & {
 		getOwner: (position: CommonPosition) => number;
 		getOwnerIndex: (index: number) => number;
 		isBlinking: (position: CommonPosition) => boolean;

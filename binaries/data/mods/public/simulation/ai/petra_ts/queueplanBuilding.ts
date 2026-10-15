@@ -5,7 +5,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { getBuiltEntity, getLandAccess, getSeaAccess } from "./entityExtend.ts";
 import * as mapMask from "./mapMask.ts";
 import { createObstructionMap } from "./mapModule.ts";
-import { PlanMetadata, QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 
 type BuildingPosition = {
 	x: number;

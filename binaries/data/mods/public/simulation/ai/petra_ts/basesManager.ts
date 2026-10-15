@@ -2,7 +2,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
-import { BaseManager, SerializedBaseManager } from "./baseManager.ts";
+import { BaseManager, type SerializedBaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
 import { getBestBase, getLandAccess } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";

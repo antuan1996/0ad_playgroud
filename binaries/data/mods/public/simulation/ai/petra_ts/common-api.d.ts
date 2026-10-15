@@ -5,11 +5,17 @@ type CommonEntityFilter = {
 	func: (entity: CommonEntity | CommonTemplate) => boolean;
 	dynamicProperties: string[];
 };
+/**
+ * A grid as the engine hands it to the AI: `Script::ToJSVal<Grid<uint8_t>>`
+ * builds exactly `{width, height, data}`, and the AI side adds `cellSize`.
+ * `data` is always there — treating it as optional lets a wrong field name
+ * quietly read `undefined` instead of failing.
+ */
 type CommonPassabilityMap = {
 	width: number;
 	height: number;
 	cellSize: number;
-	data?: Uint8Array;
+	data: Uint8Array;
 };
 type CommonMap = {
 	width: number;
@@ -1111,7 +1117,12 @@ declare module "simulation/ai/common-api/baseAI.js"
 /** Initializes the object. */
 		constructor(settings?: Record<string, unknown>);
 		player: number;
-		territoryMap: CommonInfoMap;
+		/**
+		 * The engine's territory grid, handed to the AI as `{width, height, data}`
+		 * (CCmpAIManager, EngineScriptConversions). Not an InfoMap: baseAI assigns
+		 * `sharedAI.territoryMap` here without wrapping it.
+		 */
+		territoryMap: CommonPassabilityMap;
 		accessibility: CommonInfoMap;
 		gameState: CommonGameState;
 		timeElapsed: number;
