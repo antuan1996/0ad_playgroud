@@ -304,7 +304,8 @@ export class Headquarters
 				if (!ent.position())
 				{
 					// we are autogarrisoned, check that the holder is registered in the garrisonManager
-					const holder = gameState.getEntityById(ent.garrisonHolderID());
+					const holderID = ent.garrisonHolderID();
+					const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
 					if (holder)
 						this.garrisonManager.registerHolder(gameState, holder);
 				}
@@ -455,6 +456,8 @@ export class Headquarters
 
 			if (plan)
 			{
+				if (queue === undefined)
+					return;
 				if (queue == "wonder")
 				{
 					gameState.ai.queueManager.changePriority("majorTech", 400, { "phaseUp": true });
@@ -499,7 +502,10 @@ export class Headquarters
 		let numberInTraining = 0;
 		gameState.getOwnTrainingFacilities().forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
 		{
-			for (const item of ent.trainingQueue())
+			const trainingQueue = ent.trainingQueue();
+			if (!trainingQueue)
+				return;
+			for (const item of trainingQueue)
 			{
 				numberInTraining += item.count;
 				if (item.metadata && item.metadata.role && item.metadata.role === Worker.ROLE_WORKER &&
@@ -537,8 +543,10 @@ export class Headquarters
 
 		if (this.saveResources && numberTotal > this.Config.Economy.popPhase2 + 10)
 			return;
+		// getPhaseName(2) is optional: preserve original semantics (isResearching(undefined) === false)
+		const phaseName2 = gameState.getPhaseName(2);
 		if (numberTotal > this.targetNumWorkers || (numberTotal >= this.Config.Economy.popPhase2 &&
-			this.currentPhase == 1 && !gameState.isResearching(gameState.getPhaseName(2))))
+			this.currentPhase == 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2))))
 			return;
 		if (numberQueued > 50 || (numberOfQueuedSupports > 20 && numberOfQueuedSoldiers > 20) || numberInTraining > 15)
 			return;
@@ -566,7 +574,7 @@ export class Headquarters
 		let template;
 		if (!templateDef || numberOfSupports + numberOfQueuedSupports > supportNum)
 		{
-			let requirements;
+			let requirements: HeadquartersTrainableRequirement[];
 			if (numberTotal < 45)
 				requirements = [ ["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"] ];
 			else
@@ -574,7 +582,9 @@ export class Headquarters
 
 			const classes = [["CitizenSoldier", "Infantry"]];
 			// We want at least 33% ranged and 33% melee.
-			classes[0].push(pickRandom(["Ranged", "Melee", "Infantry"]));
+			const pickedClass = pickRandom(["Ranged", "Melee", "Infantry"]);
+			if (pickedClass !== undefined)
+				classes[0].push(pickedClass);
 
 			template = this.findBestTrainableUnit(gameState, classes, requirements);
 		}
@@ -658,9 +668,12 @@ export class Headquarters
 				else if (param[0] == "canGather")
 				{
 					// checking against wood, could be anything else really.
-					if (a[1].resourceGatherRates() && a[1].resourceGatherRates()["wood.tree"])
+					const aRates = a[1].resourceGatherRates();
+					if (aRates && aRates["wood.tree"])
 						aValue *= param[1];
-					if (b[1].resourceGatherRates() && b[1].resourceGatherRates()["wood.tree"])
+					const bRates = b[1].resourceGatherRates();
+					if (bRates && bRates["wood.tree"])
+						bValue *= param[1];
 						bValue *= param[1];
 				}
 				else
@@ -789,14 +802,17 @@ export class Headquarters
 
 		let bestIdx;
 		let bestVal;
-		let radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
+		const obstructionRadius = template.obstructionRadius();
+		if (!obstructionRadius)
+			return false;
+		let radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		let scale = 250 * 250;
 		let proxyAccess;
 		const nbShips = this.navalManager.transportShips.length;
 		if (proximity)	// this is our first base
 		{
 			// if our first base, ensure room around
-			radius = Math.ceil((template.obstructionRadius().max + 8) / obstructions.cellSize);
+			radius = Math.ceil((obstructionRadius.max + 8) / obstructions.cellSize);
 			// scale is the typical scale at which we want to find a location for our first base
 			// look for bigger scale if we start from a ship (access < 2) or from a small island
 			const cellArea = gameState.getPassabilityMap().cellSize * gameState.getPassabilityMap().cellSize;
@@ -940,6 +956,8 @@ export class Headquarters
 		// not good enough.
 		if (bestVal < cut)
 			return false;
+		if (bestIdx === undefined)
+			return false;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
@@ -948,7 +966,7 @@ export class Headquarters
 		const indexIdx = gameState.ai.accessibility.landPassMap[bestIdx];
 		for (const base of this.baseManagers())
 		{
-			if (!base.anchor || base.accessIndex == indexIdx)
+			if (!base.anchor || base.accessIndex === undefined || base.accessIndex == indexIdx)
 				continue;
 			const sea = this.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
 			if (sea !== undefined)
@@ -996,7 +1014,10 @@ export class Headquarters
 
 		let bestIdx;
 		let bestVal;
-		const radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
+		const obstructionRadius = template.obstructionRadius();
+		if (!obstructionRadius)
+			return false;
+		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const width = this.territoryMap.width;
 		const cellSize = this.territoryMap.cellSize;
@@ -1057,9 +1078,9 @@ export class Headquarters
 			if (minDist < 1 || minDist > 170000 && !this.navalMap)
 				continue;
 
-			delta = Math.sqrt(distcc0) - favoredDistance;
+			delta = Math.sqrt(distcc0 ?? NaN) - favoredDistance;
 			currentVal = delta*delta;
-			delta = Math.sqrt(distcc1) - favoredDistance;
+			delta = Math.sqrt(distcc1 ?? NaN) - favoredDistance;
 			currentVal += delta*delta;
 			if (distcc2)
 			{
@@ -1084,7 +1105,9 @@ export class Headquarters
 		Engine.ProfileStop();
 
 		if (bestVal === undefined)
-			return undefined;
+			return false;
+		if (bestIdx === undefined)
+			return false;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
@@ -1093,7 +1116,7 @@ export class Headquarters
 		const indexIdx = gameState.ai.accessibility.landPassMap[bestIdx];
 		for (const base of this.baseManagers())
 		{
-			if (!base.anchor || base.accessIndex == indexIdx)
+			if (!base.anchor || base.accessIndex === undefined || base.accessIndex == indexIdx)
 				continue;
 			const sea = this.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
 			if (sea !== undefined)
@@ -1137,7 +1160,10 @@ export class Headquarters
 		let bestVal;
 		let bestDistSq;
 		let bestGainMult;
-		const radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
+		const obstructionRadius = template.obstructionRadius();
+		if (!obstructionRadius)
+			return false;
+		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		const isNavalMarket = template.hasClasses(["Naval+Trade"]);
 
 		const width = this.territoryMap.width;
@@ -1206,6 +1232,8 @@ export class Headquarters
 
 		if (bestVal === undefined)  // no constraints. For the time being, place it arbitrarily by the ConstructionPlan
 			return [-1, -1, -1, 0];
+		if (bestIdx === undefined || bestGainMult === undefined || bestDistSq === undefined || bestJdx === undefined)
+			return false;
 		const expectedGain = Math.round(bestGainMult * TradeGain(bestDistSq, gameState.sharedScript.mapSize));
 		if (this.Config.debug > 1)
 			aiWarn("this would give a trading gain of " + expectedGain);
@@ -1264,7 +1292,11 @@ export class Headquarters
 			wonders = gameState.getOwnStructures().filter(filters.byClass("Wonder")).toEntityArray();
 			wonderMode = wonders.length != 0;
 			if (wonderMode)
-				wonderDistmin = (50 + wonders[0].footprintRadius()) * (50 + wonders[0].footprintRadius());
+			{
+				const wonderRadius = wonders[0].footprintRadius();
+				if (wonderRadius !== undefined)
+					wonderDistmin = (50 + wonderRadius) * (50 + wonderRadius);
+			}
 		}
 
 		// obstruction map
@@ -1283,11 +1315,14 @@ export class Headquarters
 
 		const isTower = template.hasClass("Tower");
 		const isFortress = template.hasClass("Fortress");
+		const obstructionRadius = template.obstructionRadius();
+		if (!obstructionRadius)
+			return undefined;
 		let radius;
 		if (isFortress)
-			radius = Math.floor((template.obstructionRadius().max + 8) / obstructions.cellSize);
+			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
 		else
-			radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
+			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		for (let j = 0; j < this.territoryMap.length; ++j)
 		{
@@ -1311,10 +1346,12 @@ export class Headquarters
 			let minDist = Math.min();
 
 			let dista = 0;
-			if (wonderMode)
+			if (wonderMode && wonders)
 			{
-				dista = SquareVectorDistance(wonders[0].position(), pos);
-				if (dista < wonderDistmin)
+				const wonderPos = wonders[0].position();
+				if (wonderPos)
+					dista = SquareVectorDistance(wonderPos, pos);
+				if (wonderDistmin !== undefined && dista < wonderDistmin)
 					continue;
 				dista *= 200;   // empirical factor (TODO should depend on map size) to stay near the wonder
 			}
@@ -1362,6 +1399,8 @@ export class Headquarters
 		}
 
 		if (bestVal === undefined)
+			return undefined;
+		if (bestIdx === undefined || bestJdx === undefined)
 			return undefined;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
@@ -1456,6 +1495,8 @@ export class Headquarters
 		if (!force)
 		{
 			const template = gameState.getTemplate(gameState.applyCiv("structures/{civ}/wonder"));
+			if (!template)
+				return;
 			// Check that we have enough resources to start thinking to build a wonder
 			const cost = template.cost();
 			const resources = gameState.getResources();
@@ -1501,7 +1542,7 @@ export class Headquarters
 			if (corral.foundationProgress() !== undefined)
 				continue;
 			const trainables = corral.trainableEntities(civ);
-			for (const trainable of trainables)
+			for (const trainable of (trainables ?? []))
 			{
 				if (gameState.isTemplateDisabled(trainable))
 					continue;
@@ -1509,8 +1550,10 @@ export class Headquarters
 				if (!template || !template.isHuntable())
 					continue;
 				let count = gameState.countEntitiesByType(trainable, true);
-				for (const item of corral.trainingQueue())
-					count += item.count;
+				const corralTrainingQueue = corral.trainingQueue();
+				if (corralTrainingQueue)
+					for (const item of corralTrainingQueue)
+						count += item.count;
 				if (count > nCorral)
 					continue;
 				queues.corral.addPlan(new TrainingPlan(gameState, trainable, { "trainer": corral.id() }));
@@ -1553,7 +1596,7 @@ export class Headquarters
 			let needed = 0;
 			for (const entityReq of gameState.getPhaseEntityRequirements(this.phasing))
 			{
-				if (!houseTemplate.hasClass(entityReq.class))
+				if (!houseTemplate || !houseTemplate.hasClass(entityReq.class))
 					continue;
 
 				const count = gameState.getOwnStructures().filter(filters.byClass(entityReq.class))
@@ -1583,7 +1626,7 @@ export class Headquarters
 		{
 			const houseTemplate = gameState.getTemplate(gameState.applyCiv(houseTemplateString));
 			if (!this.phasing || gameState.getPhaseEntityRequirements(this.phasing).every((req: { class: string; count: number; }): boolean =>
-				!houseTemplate.hasClass(req.class) ||
+				!houseTemplate || !houseTemplate.hasClass(req.class) ||
 				gameState.getOwnStructures().filter(filters.byClass(req.class)).length >= req.count))
 			{
 				this.requireHouses = undefined;
@@ -1658,7 +1701,8 @@ export class Headquarters
 
 	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string): boolean
 	{
-		if (this.hasPotentialBase() && this.currentPhase == 1 && !gameState.isResearching(gameState.getPhaseName(2)))
+		const phaseName2 = gameState.getPhaseName(2);
+		if (this.hasPotentialBase() && this.currentPhase == 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)))
 			return false;
 		if (gameState.getOwnFoundations().filter(filters.byClass("CivCentre")).hasEntities() || queues.civilCentre.hasQueuedUnits())
 			return false;
@@ -1695,7 +1739,8 @@ export class Headquarters
 		if (this.saveResources && !this.canBarter || queues.defenseBuilding.hasQueuedUnits())
 			return;
 
-		if (!this.saveResources && (this.currentPhase > 2 || gameState.isResearching(gameState.getPhaseName(3))))
+		const phaseName3 = gameState.getPhaseName(3);
+		if (!this.saveResources && (this.currentPhase > 2 || (phaseName3 !== undefined && gameState.isResearching(phaseName3))))
 		{
 			// Try to build fortresses.
 			if (this.canBuild(gameState, "structures/{civ}/fortress"))
@@ -1950,13 +1995,13 @@ export class Headquarters
 						continue;
 				}
 				const dist = SquareVectorDistance(base.anchor.position(), pos);
-				if (nearestAnchor && dist > distmin)
+				if (nearestAnchor && distmin !== undefined && dist > distmin)
 					continue;
 				distmin = dist;
 				nearestAnchor = base.anchor;
 			}
 		}
-		if (!nearestAnchor || distmin > distcut)
+		if (!nearestAnchor || distmin === undefined || distmin > distcut)
 			return false;
 
 		// We will choose randomly ranged and melee units, except when garrisonHolder is full
@@ -1980,7 +2025,7 @@ export class Headquarters
 		let templateFound: [string, CommonTemplate] | undefined;
 		const trainables = nearestAnchor.trainableEntities(civ);
 		const garrisonArrowClasses = nearestAnchor.getGarrisonArrowClasses();
-		for (const trainable of trainables)
+		for (const trainable of (trainables ?? []))
 		{
 			if (gameState.isTemplateDisabled(trainable))
 				continue;
@@ -2209,7 +2254,10 @@ export class Headquarters
 		}
 		for (const ent of this.turnCache.firingStructures.values())
 		{
-			const range = radius + ent.attackRange("Ranged").max;
+			const ranged = ent.attackRange("Ranged");
+			if (!ranged)
+				continue;
+			const range = radius + ranged.max;
 			if (SquareVectorDistance(ent.position(), pos) < range*range)
 				return true;
 		}
@@ -2234,15 +2282,20 @@ export class Headquarters
 			const target = gameState.getEntityById(targetId);
 			if (!target || !target.isCapturable() || !ent.canCapture(target))
 				continue;
+			const captureStrength = ent.captureStrength();
+			if (captureStrength === undefined)
+				continue;
 			if (!this.capturableTargets.has(targetId))
 				this.capturableTargets.set(targetId, {
-					"strength": ent.captureStrength() * getAttackBonus(ent, target, "Capture"),
+					"strength": captureStrength * getAttackBonus(ent, target, "Capture"),
 					"ents": new Set([ent.id()])
 				});
 			else
 			{
 				const capturableTarget = this.capturableTargets.get(target.id());
-				capturableTarget.strength += ent.captureStrength() * getAttackBonus(ent, target, "Capture");
+				if (!capturableTarget)
+					continue;
+				capturableTarget.strength += captureStrength * getAttackBonus(ent, target, "Capture");
 				capturableTarget.ents.add(ent.id());
 			}
 		}
@@ -2250,10 +2303,14 @@ export class Headquarters
 		for (const [targetId, capturableTarget] of this.capturableTargets)
 		{
 			const target = gameState.getEntityById(targetId);
+			if (!target)
+				continue;
 			let shouldCapture;
 			for (const entId of capturableTarget.ents)
 			{
 				const ent = gameState.getEntityById(entId);
+				if (!ent)
+					continue;
 				if (shouldCapture === undefined)
 					shouldCapture = allowCapture(gameState, ent, target);
 				const orderData = ent.unitAIOrderData();
@@ -2289,7 +2346,7 @@ export class Headquarters
 			let pop = gameState.getPopulation();
 			for (const ent of gameState.getOwnTrainingFacilities().values())
 			{
-				for (const item of ent.trainingQueue())
+				for (const item of (ent.trainingQueue() ?? []))
 				{
 					if (!item.unitTemplate)
 						continue;
@@ -2316,7 +2373,7 @@ export class Headquarters
 			let workers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).length;
 			for (const ent of gameState.getOwnTrainingFacilities().values())
 			{
-				for (const item of ent.trainingQueue())
+				for (const item of (ent.trainingQueue() ?? []))
 				{
 					if (!item.metadata || !item.metadata.role || item.metadata.role !== Worker.ROLE_WORKER)
 						continue;
