@@ -995,7 +995,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the unit AI Order Data. */
 		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
 /** Represents the hitpoints. */
-		hitpoints(): number | undefined;
+		hitpoints(): number;
 /** Represents the is Hurt. */
 		isHurt(): boolean;
 /** Represents the health Level. */
@@ -1023,7 +1023,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Gets the Builders Nb. */
 		getBuildersNb(): number | undefined;
 /** Represents the owner. */
-		owner(): number | undefined;
+		owner(): number;
 /** Represents the is Own. */
 		isOwn(player: number): boolean;
 /** Represents the resource Supply Amount. */
@@ -1038,7 +1038,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the garrison Holder ID. */
 		garrisonHolderID(): number | undefined;
 /** Represents the garrisoned. */
-		garrisoned(): number[] | undefined;
+		garrisoned(): number[];
 /** Represents the garrisoned Slots. */
 		garrisonedSlots(): number;
 /** Represents the can Garrison Inside. */
