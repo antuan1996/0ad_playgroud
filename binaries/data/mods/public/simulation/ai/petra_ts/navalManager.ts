@@ -376,7 +376,7 @@ export class NavalManager
 	 * TODO  check garrison classes
 	 */
 	requireTransport(gameState: CommonGameState, ent: CommonEntity, startIndex: number, endIndex: number,
-		endPos: CommonPosition | undefined): boolean
+		endPos: CommonPosition): boolean
 	{
 		if (!ent.canGarrison())
 			return false;
@@ -442,7 +442,10 @@ export class NavalManager
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
-			newplan.addUnit(ent, ent.getMetadata(PlayerID, "endPos"));
+			const endPosMeta = ent.getMetadata(PlayerID, "endPos");
+			if (!endPosMeta)
+				continue;
+			newplan.addUnit(ent, endPosMeta);
 			plan.units.updateEnt(ent);
 		}
 
@@ -577,7 +580,10 @@ export class NavalManager
 		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
 		if (!plan || !plan.boardingPos[ship.id()])
 			return false;
-		return SquareVectorDistance(plan.boardingPos[ship.id()], ship.position()) < plan.boardingRange;
+		const bp = plan.boardingPos[ship.id()];
+		if (!bp)
+			return false;
+		return SquareVectorDistance(bp, ship.position()) < plan.boardingRange;
 	}
 
 	/** let blocking ships move apart from active ships (waiting for a better pathfinder)

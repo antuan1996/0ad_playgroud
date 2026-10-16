@@ -464,7 +464,7 @@ export class ConstructionPlan extends QueuePlan
 			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 
 			// If proximity is given, we look for the nearest point
-			if (proxyAccess)
+			if (proxyAccess && this.metadata.proximity)
 				score = VectorDistance(this.metadata.proximity, pos);
 
 			// Bonus for resources

@@ -3,7 +3,7 @@
 > Auto-generated snapshot of the current TypeScript compile errors for the
 > `petra_ts` AI module. Intended as a reference for future work (triage / fixes).
 
-- **Generated:** 2026-10-15 20:52 (local)
+- **Generated:** 2026-10-16 01:50 (local, MSK)
 - **Reproduce with:** `npx tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json`
   (i.e. the `build:petra` script in the root `package.json`)
 - **tsconfig:** `strict: true`, `noEmit: true`, `noCheck: false`, target `ES2022`, module `ESNext`
@@ -11,8 +11,8 @@
 
 ## Headline numbers
 
-- **Total errors:** **919**
-- **Files with errors:** **26** of **31** source `.ts` files (5 source files clean; `.d.ts` files excluded)
+- **Total errors:** **706**
+- **Files with errors:** **24** of **31** source `.ts` files (7 source files clean; `.d.ts` files excluded)
 - **Dominant theme:** almost every error is a **strict `undefined` / `null` safety**
   complaint — values that TypeScript now treats as optional (Map/array/object access,
   optional chaining, possibly-uninitialized locals) are used where a concrete type is required.
@@ -21,34 +21,37 @@
 
 | Code | Count | Meaning |
 |------|------:|---------|
-| `TS2345` | 310 | Argument of possibly-`undefined` type not assignable to a required parameter type |
-| `TS18048` | 265 | Identifier is possibly `undefined` (used directly) |
-| `TS2532` | 224 | Object is possibly `undefined` (property access on it) |
-| `TS2538` | 48 | `undefined` used as an index type |
-| `TS2322` | 42 | Assignment of possibly-`undefined` type to a concrete type |
-| `TS18047` | 27 | Identifier is possibly `null` |
-| `TS2769` | 3 | No overload matches this call (bad `.concat` arg type) |
+| `TS18048` | 229 | Identifier is possibly `undefined` (used directly) |
+| `TS2345` | 218 | Argument of possibly-`undefined` type not assignable to a required parameter type |
+| `TS2532` | 178 | Object is possibly `undefined` (property access on it) |
+| `TS2322` | 33 | Assignment of possibly-`undefined` type to a concrete type |
+| `TS2538` | 25 | `undefined` used as an index type |
+| `TS18047` | 23 | Identifier is possibly `null` |
 
 ### Most frequent individual messages
 
 | Message | Count |
 |---------|------:|
-| `Object is possibly 'undefined'.` | 224 |
-| `Argument of type 'CommonPosition \| undefined' is not assignable to parameter of type 'CommonPosition'.` | 136 |
-| `Argument of type 'number \| undefined' is not assignable to parameter of type 'number'.` | 119 |
-| `Type 'undefined' cannot be used as an index type.` | 48 |
-| `Argument of type 'string \| undefined' is not assignable to parameter of type 'string'.` | 19 |
-| `Argument of type 'Entity \| undefined' is not assignable to parameter of type 'Entity'.` | 16 |
-| `Type 'number \| undefined' is not assignable to type 'number'.` | 10 |
-| `Argument of type 'CommonResourceAmounts \| undefined' ...` | 6 |
-| `Type 'boolean \| undefined' is not assignable to type 'boolean'.` | 7 |
+| `Object is possibly 'undefined'.` | 178 |
+| `Argument of type 'CommonPosition \| undefined' is not assignable to parameter of type 'CommonPosition'.` | 96 |
+| `Argument of type 'number \| undefined' is not assignable to parameter of type 'number'.` | 75 |
+| `'base' is possibly 'undefined'.` | 27 |
+| `Type 'undefined' cannot be used as an index type.` | 25 |
+| `Argument of type 'string \| undefined' is not assignable to parameter of type 'string'.` | 16 |
+| `'template' is possibly 'null'.` | 15 |
+| `'pos' is possibly 'undefined'.` | 14 |
+| `'bestIdx' is possibly 'undefined'.` | 14 |
+| `'request' is possibly 'undefined'.` | 13 |
+| `Argument of type 'Entity \| undefined' is not assignable to parameter of type 'Entity'.` | 13 |
+| `'hero' is possibly 'undefined'.` | 9 |
+| `'structPos' is possibly 'undefined'.` | 8 |
+| `'shipPosition' is possibly 'undefined'.` | 8 |
+| `'entPos' is possibly 'undefined'.` | 8 |
 
 ## Breakdown by file (error count)
 
 | File | Errors |
 |------|------:|
-| worker.ts | 104 |
-| attackPlan.ts | 104 |
 | defenseManager.ts | 83 |
 | headquarters.ts | 71 |
 | transportPlan.ts | 69 |
@@ -62,10 +65,10 @@
 | diplomacyManager.ts | 32 |
 | attackManager.ts | 30 |
 | garrisonManager.ts | 28 |
-| defenseArmy.ts | 28 |
+| defenseArmy.ts | 27 |
 | queueplanTraining.ts | 24 |
 | startingStrategy.ts | 23 |
-| mapModule.ts | 15 |
+| mapModule.ts | 11 |
 | queue.ts | 9 |
 | researchManager.ts | 8 |
 | queueplanResearch.ts | 5 |
@@ -82,18 +85,25 @@ These are the variables/fields most often flagged as possibly `undefined`
 | Identifier | Times flagged |
 |------------|------:|
 | `base` | 27 |
-| `structPos` | 18 |
+| `template` (possibly `null`) | 15 |
 | `pos` | 14 |
 | `bestIdx` | 14 |
 | `request` | 13 |
 | `hero` | 9 |
+| `structPos` | 8 |
 | `shipPosition` | 8 |
-| `plan` | 8 |
 | `entPos` | 8 |
 | `ent` | 7 |
 | `newPos` | 6 |
-| `bestbase` / `bestBase` | 11 |
-| `template` (possibly `null`) | 15 |
+| `bestbase` | 6 |
+| `bestBase` | 5 |
+| `bb` | 5 |
+| `aa` | 5 |
+| `capturableTarget` | 5 |
+| `plan` | 4 |
+| `oldPos` | 4 |
+| `item` | 4 |
+| `capturable` | 4 |
 
 ## Representative examples
 
@@ -102,13 +112,28 @@ attackManager.ts(170,44): error TS2345: Argument of type 'number | undefined' is
 attackManager.ts(218,18): error TS2532: Object is possibly 'undefined'.
 attackManager.ts(239,10): error TS18048: 'structPos' is possibly 'undefined'.
 attackManager.ts(588,15): error TS2538: Type 'undefined' cannot be used as an index type.
-attackPlan.ts(1773,110): error TS2769: No overload matches this call.  (bad .concat arg)
-worker.ts(1144,35): error TS18048: 'approachingTime' is possibly 'undefined'.
+defenseManager.ts(64,66): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+entityExtend.ts(7,2): error TS2322: Type 'boolean | undefined' is not assignable to type 'boolean'.
+mapModule.ts(29,3): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+navalManager.ts(205,58): error TS2345: Argument of type 'CommonPosition | undefined' is not assignable to parameter of type 'CommonPosition'.
+transportPlan.ts(160,7): error TS2532: Object is possibly 'undefined'.
+victoryManager.ts(765,3): error TS2532: Object is possibly 'undefined'.
 ```
+
+## Changes since previous snapshot (2026-10-15 20:52)
+
+- **Total errors: 919 → 706** (−213).
+- **Files with errors: 26 → 24.** Two files became fully clean:
+  - `worker.ts` (was 104 errors → 0)
+  - `attackPlan.ts` (was 104 errors → 0)
+- Minor reductions: `defenseArmy.ts` 28 → 27, `mapModule.ts` 15 → 11.
+- The 3 `TS2769` (`.concat` overload) errors are gone (they lived in `attackPlan.ts`).
+- Error-code mix shifted: `TS18048` is now the single largest category (229),
+  edging past `TS2345` (218).
 
 ## Root-cause notes / suggested fix strategy
 
-Nearly all 919 errors stem from `strict` null/undefined checking. Typical sources:
+Nearly all 706 errors stem from `strict` null/undefined checking. Typical sources:
 
 1. **`Map.get(...)` / object bracket access / array indexing** returning `T | undefined`
    and being passed on without a guard.
@@ -120,8 +145,6 @@ Common remedies (pick per-site):
 - Add an explicit guard / early `continue`/`return` when the value is `undefined`.
 - Provide a default (`map.get(k) ?? fallback`).
 - Narrow with `if (x !== undefined)` / `if (x)` before use.
-- For `TS2769` (`.concat`): the receiver array is inferred as `never[]`; annotate its
-  element type.
 
 ## How to regenerate
 

@@ -55,7 +55,7 @@ export class TransportPlan
 	declare nTry: Record<number, number>;
 	declare needSplit: CommonEntity[] | undefined;
 	declare needTransportShips: boolean;
-	declare recovered: Array<{ entId: number; entPos: CommonPosition | undefined; shipId: number }>;
+	declare recovered: Array<{ entId: number; entPos: CommonPosition; shipId: number }>;
 	declare sea: number | undefined;
 	declare ships: CommonEntityCollection;
 	declare startIndex: number;
@@ -383,7 +383,10 @@ export class TransportPlan
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 					continue;
 				}
-				const distShip = SquareVectorDistance(this.boardingPos[shipId], ship.position());
+				const bp = this.boardingPos[shipId];
+				if (!bp)
+					continue;
+				const distShip = SquareVectorDistance(bp, ship.position());
 				if (!shipTested[shipId] && distShip > this.boardingRange)
 				{
 					shipTested[shipId] = true;
@@ -456,7 +459,7 @@ export class TransportPlan
 								ent.moveToRange(newPos[0], newPos[1], 30, 35);
 							ent.garrison(ship, true);
 						}
-						else if (SquareVectorDistance(this.boardingPos[shipId], newPos) > 225)
+						else if (this.boardingPos[shipId] && SquareVectorDistance(this.boardingPos[shipId], newPos) > 225)
 							ent.moveToRange(this.boardingPos[shipId][0], this.boardingPos[shipId][1], 0, 15);
 					}
 					else
@@ -700,7 +703,10 @@ export class TransportPlan
 			if (ship.unitAIState() == "INDIVIDUAL.WALKING")
 				continue;
 			const shipId = ship.id();
-			const dist = SquareVectorDistance(ship.position(), this.boardingPos[shipId]);
+			const bp = this.boardingPos[shipId];
+			if (!bp)
+				continue;
+			const dist = SquareVectorDistance(ship.position(), bp);
 			let remaining = 0;
 			for (const entId of ship.garrisoned())
 			{
@@ -723,7 +729,7 @@ export class TransportPlan
 
 			if (!remaining && !recovering)   // when empty, release the ship and move apart to leave room for other ships. TODO fight
 			{
-				ship.moveApart(this.boardingPos[shipId], 30);
+				ship.moveApart(bp, 30);
 				this.releaseShip(ship);
 				continue;
 			}

@@ -983,7 +983,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the delete Metadata. */
 		deleteMetadata(player: number, key: string): void;
 /** Represents the position. */
-		position(): CommonPosition | undefined;
+		position(): CommonPosition;
 /** Represents the angle. */
 		angle(): number | undefined;
 /** Represents the is Idle. */
