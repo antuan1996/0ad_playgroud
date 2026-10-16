@@ -161,13 +161,16 @@ export class BasesManager
 			{
 				if (evt?.metadata?.[PlayerID]?.assignedResource)
 				{
-					this.getBaseByID(evt.metadata[PlayerID].base)
-						.removeFromAssignedDropsite(evt.entity);
+					const assignedBase = this.getBaseByID(evt.metadata[PlayerID].base);
+					if (assignedBase)
+						assignedBase.removeFromAssignedDropsite(evt.entity);
 				}
 				// A new base foundation was created and destroyed on the same (AI) turn
 				if (evt.metadata[PlayerID].base == -1 || evt.metadata[PlayerID].base == -2)
 					continue;
 				const base = this.getBaseByID(evt.metadata[PlayerID].base);
+				if (!base)
+					continue;
 				base.removeDropsite(gameState, evt.entity);
 				if (evt.metadata[PlayerID].baseAnchor && evt.metadata[PlayerID].baseAnchor === true)
 					base.anchorLost(gameState);
@@ -182,6 +185,8 @@ export class BasesManager
 				continue;
 
 			const base = this.getBaseByID(baseID);
+			if (!base)
+				continue;
 
 			// Promoted workers should be reset - their new gathering rates/capabilities might differ meaningfully.
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
@@ -253,9 +258,12 @@ export class BasesManager
 			const ent = gameState.getEntityById(evt.newentity);
 			if (!ent || ent.owner() != PlayerID)
 				continue;
-			if (ent.getMetadata(PlayerID, "base") === undefined)
+			const baseID = ent.getMetadata(PlayerID, "base");
+			if (baseID === undefined)
 				continue;
-			const base = this.getBaseByID(ent.getMetadata(PlayerID, "base"));
+			const base = this.getBaseByID(baseID);
+			if (!base)
+				continue;
 			base.buildings.updateEnt(ent);
 			if (ent.resourceDropsiteTypes())
 				base.assignResourceToDropsite(gameState, ent, false);
@@ -273,9 +281,14 @@ export class BasesManager
 			if (evt.from == PlayerID)
 			{
 				const ent = gameState.getEntityById(evt.entity);
-				if (!ent || ent.getMetadata(PlayerID, "base") === undefined)
+				if (!ent)
 					continue;
-				const base = this.getBaseByID(ent.getMetadata(PlayerID, "base"));
+				const baseID = ent.getMetadata(PlayerID, "base");
+				if (baseID === undefined)
+					continue;
+				const base = this.getBaseByID(baseID);
+				if (!base)
+					continue;
 				if (ent.resourceDropsiteTypes() && ent.hasClass("Structure"))
 					base.removeDropsite(gameState, ent.id());
 				if (ent.getMetadata(PlayerID, "baseAnchor") === true)
@@ -289,7 +302,9 @@ export class BasesManager
 				continue;
 			if (ent.hasClass("Unit"))
 			{
-				getBestBase(gameState, ent).assignEntity(gameState, ent);
+				const bestBase = getBestBase(gameState, ent);
+				if (bestBase)
+					bestBase.assignEntity(gameState, ent);
 				continue;
 			}
 			if (ent.hasClass("CivCentre"))   // build a new base around it
@@ -312,7 +327,8 @@ export class BasesManager
 					base = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 				else
 					base = getBestBase(gameState, ent) || this.noBase;
-				base.assignEntity(gameState, ent);
+				if (base)
+					base.assignEntity(gameState, ent);
 			}
 		}
 
@@ -331,17 +347,23 @@ export class BasesManager
 					if (ent.getMetadata(PlayerID, "base") === undefined)
 					{
 						base = getBestBase(gameState, ent);
-						base.assignEntity(gameState, ent);
+						if (base)
+							base.assignEntity(gameState, ent);
 					}
 					else
-						base = this.getBaseByID(ent.getMetadata(PlayerID, "base"));
+					{
+						const baseID = ent.getMetadata(PlayerID, "base");
+						base = baseID === undefined ? undefined : this.getBaseByID(baseID);
+					}
+					if (!base)
+						continue;
 					base.reassignIdleWorkers(gameState, [ent]);
 					base.workerObject.update(gameState, ent);
 				}
 				else if (ent.resourceSupplyType() && ent.position())
 				{
 					const type = ent.resourceSupplyType();
-					if (!type.generic)
+					if (!type || !type.generic)
 						continue;
 					const dropsites = gameState.getOwnDropsites(type.generic);
 					const pos = ent.position();
@@ -379,7 +401,8 @@ export class BasesManager
 			return false;
 		const baseBest = this.baseManagers.slice();
 		// We can also use workers without a base.
-		baseBest.push(this.noBase);
+		if (this.noBase)
+			baseBest.push(this.noBase);
 		baseBest.sort((a: BaseManager, b: BaseManager): 0 | 1 | -1 =>
 		{
 			if (a.accessIndex == accessIndex && b.accessIndex != accessIndex)
@@ -504,7 +527,7 @@ export class BasesManager
 	{
 		if (!this.turnCache.base)
 			this.updateBaseCache();
-		return this.turnCache.base.active;
+		return this.turnCache.base?.active ?? 0;
 	}
 
 	hasActiveBase(): boolean
@@ -516,7 +539,7 @@ export class BasesManager
 	{
 		if (!this.turnCache.base)
 			this.updateBaseCache();
-		return this.turnCache.base.potential;
+		return this.turnCache.base?.potential ?? 0;
 	}
 
 	hasPotentialBase(): boolean
@@ -558,7 +581,7 @@ export class BasesManager
 	 */
 	getBaseByID(baseID: number): BaseManager | undefined
 	{
-		if (this.noBase.ID === baseID)
+		if (this.noBase && this.noBase.ID === baseID)
 			return this.noBase;
 		return this.baseManagers.find((base: BaseManager): boolean => base.ID === baseID);
 	}
@@ -583,7 +606,8 @@ export class BasesManager
 		for (const base of this.baseManagers)
 			for (const worker of base.workers.values())
 			{
-				if (worker.unitAIState().split(".").indexOf("RETURNRESOURCE") === -1)
+				const aiState = worker.unitAIState();
+				if (!aiState || aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
 				const orders = worker.unitAIOrderData();
 				if (orders.length < 2 || !orders[1].target || orders[1].target != worker.getMetadata(PlayerID, "supply"))
@@ -614,14 +638,19 @@ export class BasesManager
 				bestbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 			else
 				bestbase = getBestBase(gameState, ent) || this.noBase;
-			bestbase.assignEntity(gameState, ent);
+			if (bestbase)
+				bestbase.assignEntity(gameState, ent);
 		}
 		// now assign entities garrisoned inside this entity
 		if (ent.isGarrisonHolder() && ent.garrisoned().length)
 			for (const id of ent.garrisoned())
-				bestbase.assignEntity(gameState, gameState.getEntityById(id));
+			{
+				const garrisoned = gameState.getEntityById(id);
+				if (bestbase && garrisoned)
+					bestbase.assignEntity(gameState, garrisoned);
+			}
 		// and find something useful to do if we already have a base
-		if (ent.position() && bestbase.ID !== this.noBase.ID)
+		if (ent.position() && bestbase && this.noBase && bestbase.ID !== this.noBase.ID)
 		{
 			bestbase.assignRolelessUnits(gameState, [ent]);
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
@@ -711,7 +740,9 @@ export class BasesManager
 		}
 		if (!baseID)
 			return false;
-		this.getBaseByID(baseID).territoryIndices.push(territoryIndex);
+		const territoryBase = this.getBaseByID(baseID);
+		if (territoryBase)
+			territoryBase.territoryIndices.push(territoryIndex);
 		this.basesMap.map[territoryIndex] = baseID;
 		return true;
 	}
@@ -749,7 +780,9 @@ export class BasesManager
 			}
 			if (baseID)
 			{
-				this.getBaseByID(baseID).territoryIndices.push(j);
+				const territoryBase = this.getBaseByID(baseID);
+				if (territoryBase)
+					territoryBase.territoryIndices.push(j);
 				this.basesMap.map[j] = baseID;
 			}
 			else
@@ -767,7 +800,8 @@ export class BasesManager
 		this.assignGatherers();
 		let nbBases = this.baseManagers.length;
 		let activeBase = false;
-		this.noBase.update(gameState, queues, events);
+		if (this.noBase)
+			this.noBase.update(gameState, queues, events);
 		while (!activeBase && nbBases != 0)
 		{
 			this.currentBase %= this.baseManagers.length;

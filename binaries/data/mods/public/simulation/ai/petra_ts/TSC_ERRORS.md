@@ -1,9 +1,9 @@
-# petra_ts — TSC Error Snapshot
+# petra_ts - TSC Error Snapshot
 
 > Auto-generated snapshot of the current TypeScript compile errors for the
 > `petra_ts` AI module. Intended as a reference for future work (triage / fixes).
 
-- **Generated:** 2026-10-16 01:50 (local, MSK)
+- **Generated:** 2026-10-17 (local, MSK) - refreshed after fixing `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`
 - **Reproduce with:** `npx tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json`
   (i.e. the `build:petra` script in the root `package.json`)
 - **tsconfig:** `strict: true`, `noEmit: true`, `noCheck: false`, target `ES2022`, module `ESNext`
@@ -11,149 +11,77 @@
 
 ## Headline numbers
 
-- **Total errors:** **706**
-- **Files with errors:** **24** of **31** source `.ts` files (7 source files clean; `.d.ts` files excluded)
+- **Total errors:** **262** (was 385; -123 after fixing the 3 files below)
+- **Files with errors:** **19** of **31** source `.ts` files (12 source files clean; `.d.ts` files excluded)
+- **Now clean (0 errors):** `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`
 - **Dominant theme:** almost every error is a **strict `undefined` / `null` safety**
-  complaint — values that TypeScript now treats as optional (Map/array/object access,
+  complaint - values that TypeScript now treats as optional (Map/array/object access,
   optional chaining, possibly-uninitialized locals) are used where a concrete type is required.
 
 ## Breakdown by error code
 
 | Code | Count | Meaning |
 |------|------:|---------|
-| `TS18048` | 229 | Identifier is possibly `undefined` (used directly) |
-| `TS2345` | 218 | Argument of possibly-`undefined` type not assignable to a required parameter type |
-| `TS2532` | 178 | Object is possibly `undefined` (property access on it) |
-| `TS2322` | 33 | Assignment of possibly-`undefined` type to a concrete type |
-| `TS2538` | 25 | `undefined` used as an index type |
-| `TS18047` | 23 | Identifier is possibly `null` |
+| `TS18048` | 88 | Identifier is possibly `undefined` (used directly) |
+| `TS2532` | 79 | Object is possibly `undefined` (property access on it) |
+| `TS2345` | 44 | Argument of possibly-`undefined` type not assignable to a required parameter type |
+| `TS2322` | 24 | Assignment of possibly-`undefined` type to a concrete type |
+| `TS18047` | 20 | Identifier is possibly `null` |
+| `TS2538` | 7 | `undefined` used as an index type |
 
 ### Most frequent individual messages
 
 | Message | Count |
 |---------|------:|
-| `Object is possibly 'undefined'.` | 178 |
-| `Argument of type 'CommonPosition \| undefined' is not assignable to parameter of type 'CommonPosition'.` | 96 |
-| `Argument of type 'number \| undefined' is not assignable to parameter of type 'number'.` | 75 |
-| `'base' is possibly 'undefined'.` | 27 |
-| `Type 'undefined' cannot be used as an index type.` | 25 |
-| `Argument of type 'string \| undefined' is not assignable to parameter of type 'string'.` | 16 |
-| `'template' is possibly 'null'.` | 15 |
-| `'pos' is possibly 'undefined'.` | 14 |
-| `'bestIdx' is possibly 'undefined'.` | 14 |
+| `Object is possibly 'undefined'.` | 79 |
+| `Argument of type 'number | undefined' is not assignable to parameter of type 'number'.` | 17 |
+| `'template' is possibly 'null'.` | 14 |
 | `'request' is possibly 'undefined'.` | 13 |
-| `Argument of type 'Entity \| undefined' is not assignable to parameter of type 'Entity'.` | 13 |
-| `'hero' is possibly 'undefined'.` | 9 |
-| `'structPos' is possibly 'undefined'.` | 8 |
-| `'shipPosition' is possibly 'undefined'.` | 8 |
-| `'entPos' is possibly 'undefined'.` | 8 |
+| `Argument of type 'string | undefined' is not assignable to parameter of type 'string'.` | 10 |
+| `Type 'boolean | undefined' is not assignable to type 'boolean'.` | 7 |
+| `Type 'undefined' cannot be used as an index type.` | 7 |
+| `Argument of type 'Entity | undefined' is not assignable to parameter of type 'Entity'.` | 7 |
 
-## Breakdown by file (error count)
+## Per-file error counts (descending)
 
 | File | Errors |
 |------|------:|
-| defenseManager.ts | 83 |
-| headquarters.ts | 71 |
-| transportPlan.ts | 69 |
-| victoryManager.ts | 46 |
-| basesManager.ts | 45 |
-| navalManager.ts | 43 |
-| entityExtend.ts | 42 |
-| baseManager.ts | 36 |
-| tradeManager.ts | 34 |
-| queueplanBuilding.ts | 32 |
-| diplomacyManager.ts | 32 |
-| attackManager.ts | 30 |
-| garrisonManager.ts | 28 |
-| defenseArmy.ts | 27 |
-| queueplanTraining.ts | 24 |
-| startingStrategy.ts | 23 |
-| mapModule.ts | 11 |
-| queue.ts | 9 |
-| researchManager.ts | 8 |
-| queueplanResearch.ts | 5 |
-| queueManager.ts | 4 |
-| chatHelper.ts | 2 |
-| queueplan.ts | 1 |
-| buildManager.ts | 1 |
+| `diplomacyManager.ts` | 29 |
+| `entityExtend.ts` | 26 |
+| `queueplanBuilding.ts` | 25 |
+| `baseManager.ts` | 25 |
+| `tradeManager.ts` | 24 |
+| `queueplanTraining.ts` | 22 |
+| `garrisonManager.ts` | 22 |
+| `navalManager.ts` | 19 |
+| `defenseArmy.ts` | 13 |
+| `attackManager.ts` | 10 |
+| `queue.ts` | 9 |
+| `mapModule.ts` | 9 |
+| `startingStrategy.ts` | 8 |
+| `researchManager.ts` | 8 |
+| `queueplanResearch.ts` | 5 |
+| `queueManager.ts` | 4 |
+| `chatHelper.ts` | 2 |
+| `queueplan.ts` | 1 |
+| `buildManager.ts` | 1 |
+| `transportPlan.ts` | 0 (fixed) |
+| `victoryManager.ts` | 0 (fixed) |
+| `basesManager.ts` | 0 (fixed) |
 
-## Most common offending identifiers (undefined-safety)
+## Fix approach applied to the 3 fixed files
 
-These are the variables/fields most often flagged as possibly `undefined`
-(`TS18048` / `TS18047`):
+All fixes preserve runtime behaviour (no `!`/`??` shortcuts that change semantics):
 
-| Identifier | Times flagged |
-|------------|------:|
-| `base` | 27 |
-| `template` (possibly `null`) | 15 |
-| `pos` | 14 |
-| `bestIdx` | 14 |
-| `request` | 13 |
-| `hero` | 9 |
-| `structPos` | 8 |
-| `shipPosition` | 8 |
-| `entPos` | 8 |
-| `ent` | 7 |
-| `newPos` | 6 |
-| `bestbase` | 6 |
-| `bestBase` | 5 |
-| `bb` | 5 |
-| `aa` | 5 |
-| `capturableTarget` | 5 |
-| `plan` | 4 |
-| `oldPos` | 4 |
-| `item` | 4 |
-| `capturable` | 4 |
-
-## Representative examples
-
-```
-attackManager.ts(170,44): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-attackManager.ts(218,18): error TS2532: Object is possibly 'undefined'.
-attackManager.ts(239,10): error TS18048: 'structPos' is possibly 'undefined'.
-attackManager.ts(588,15): error TS2538: Type 'undefined' cannot be used as an index type.
-defenseManager.ts(64,66): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-entityExtend.ts(7,2): error TS2322: Type 'boolean | undefined' is not assignable to type 'boolean'.
-mapModule.ts(29,3): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
-navalManager.ts(205,58): error TS2345: Argument of type 'CommonPosition | undefined' is not assignable to parameter of type 'CommonPosition'.
-transportPlan.ts(160,7): error TS2532: Object is possibly 'undefined'.
-victoryManager.ts(765,3): error TS2532: Object is possibly 'undefined'.
-```
-
-## Changes since previous snapshot (2026-10-15 20:52)
-
-- **Total errors: 919 → 706** (−213).
-- **Files with errors: 26 → 24.** Two files became fully clean:
-  - `worker.ts` (was 104 errors → 0)
-  - `attackPlan.ts` (was 104 errors → 0)
-- Minor reductions: `defenseArmy.ts` 28 → 27, `mapModule.ts` 15 → 11.
-- The 3 `TS2769` (`.concat` overload) errors are gone (they lived in `attackPlan.ts`).
-- Error-code mix shifted: `TS18048` is now the single largest category (229),
-  edging past `TS2345` (218).
-
-## Root-cause notes / suggested fix strategy
-
-Nearly all 706 errors stem from `strict` null/undefined checking. Typical sources:
-
-1. **`Map.get(...)` / object bracket access / array indexing** returning `T | undefined`
-   and being passed on without a guard.
-2. **Locals assigned inside a conditional** (e.g. `let pos: CommonPosition;` then used
-   later) that TS cannot prove are initialized.
-3. **Optional chaining results** (`a?.b`) used where a non-optional type is expected.
-
-Common remedies (pick per-site):
-- Add an explicit guard / early `continue`/`return` when the value is `undefined`.
-- Provide a default (`map.get(k) ?? fallback`).
-- Narrow with `if (x !== undefined)` / `if (x)` before use.
-
-## How to regenerate
-
-```bash
-cd "$(git rev-parse --show-root 2>/dev/null || echo .)"   # repo root
-npx tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json
-```
-
-Counts can be re-derived with:
-```bash
-npx tsc -p .../petra_ts/tsconfig.json 2>&1 | grep -oE 'error TS[0-9]+' | sort | uniq -c | sort -rn
-```
+1. **Possibly-undefined identifier/object** (`TS18048`/`TS2532`): add an explicit
+   guard (`if (!x) continue/return;`) or hoist the value into a `const` and guard it
+   before use. For `else`/`for` single-statement bodies, wrap in `{ }` when introducing
+   a `const`.
+2. **Argument / assignment of optional type** (`TS2345`/`TS2322`): guard the value
+   first, or capture it in a `const` after a narrowing check.
+3. **Index type** (`TS2538`): guard the index (`if (idx !== undefined && arr[idx])`).
+4. **Arithmetic on optional metadata** (`getMetadata(...)` returns optional): use
+   `?? NaN` so comparisons stay `false` exactly like the original JS `NaN` semantics
+   (never `?? 0`, which would flip a comparison).
+5. **Optional class field** (`this.sea` declared `number | undefined`): guard before
+   passing to `getBoardingPos`/array index, or capture into a local and guard.
