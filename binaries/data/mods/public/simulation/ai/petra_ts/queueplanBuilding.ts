@@ -966,7 +966,7 @@ export class ConstructionPlan extends QueuePlan
 	}
 
 	Serialize(): {
-		category: string;
+		category: "building";
 		type: string;
 		ID: number;
 		metadata: PlanMetadata | undefined;
@@ -978,7 +978,7 @@ export class ConstructionPlan extends QueuePlan
 	}
 	{
 		return {
-			"category": this.category,
+			"category": "building",
 			"type": this.type,
 			"ID": this.ID,
 			"metadata": this.metadata,

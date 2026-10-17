@@ -5,14 +5,13 @@ import { ResearchPlan } from "./queueplanResearch.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 
 type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> | ReturnType<TrainingPlan["Serialize"]>;
-type PlanDeserialize = ReturnType<ConstructionPlan["Serialize"]> & ReturnType<ResearchPlan["Serialize"]> & ReturnType<TrainingPlan["Serialize"]>;
 
 /**
  * Holds a list of wanted plans to train or construct
  */
 export class Queue implements PetraRuntime.QueueLike
 {
-	plans: PetraRuntime.PlanLike[] = [];
+	plans: PetraRuntime.ConcretePlan[] = [];
 	paused = false;
 	switched = 0;
 
@@ -21,7 +20,7 @@ export class Queue implements PetraRuntime.QueueLike
 		this.plans = [];
 	}
 
-	addPlan(newPlan: PetraRuntime.PlanLike | null | undefined): void
+	addPlan(newPlan: PetraRuntime.ConcretePlan | null | undefined): void
 	{
 		if (!newPlan)
 			return;
@@ -150,7 +149,7 @@ export class Queue implements PetraRuntime.QueueLike
 	{
 		const plans: PlanSerialize[] = [];
 		for (const plan of this.plans)
-			plans.push(plan.Serialize() as PlanSerialize);
+			plans.push(plan.Serialize());
 
 		return { "plans": plans, "paused": this.paused, "switched": this.switched };
 	}
@@ -166,20 +165,26 @@ export class Queue implements PetraRuntime.QueueLike
 		this.plans = [];
 		for (const dataPlan of data.plans)
 		{
-			let plan;
 			if (dataPlan.category == "unit")
-				plan = new TrainingPlan(gameState, dataPlan.type);
-			else if (dataPlan.category == "building")
-				plan = new ConstructionPlan(gameState, dataPlan.type);
-			else if (dataPlan.category == "technology")
-				plan = new ResearchPlan(gameState, dataPlan.type);
-			else
 			{
-				aiWarn("Petra deserialization error: plan unknown " + uneval(dataPlan));
-				continue;
+				const plan = new TrainingPlan(gameState, dataPlan.type);
+				plan.Deserialize(gameState, dataPlan);
+				this.plans.push(plan);
 			}
-			plan.Deserialize(gameState, dataPlan as PlanDeserialize);
-			this.plans.push(plan);
+			else if (dataPlan.category == "building")
+			{
+				const plan = new ConstructionPlan(gameState, dataPlan.type);
+				plan.Deserialize(gameState, dataPlan);
+				this.plans.push(plan);
+			}
+			else if (dataPlan.category == "technology")
+			{
+				const plan = new ResearchPlan(gameState, dataPlan.type);
+				plan.Deserialize(gameState, dataPlan);
+				this.plans.push(plan);
+			}
+			else
+				aiWarn("Petra deserialization error: plan unknown " + uneval(dataPlan));
 		}
 	}
 }

@@ -164,7 +164,7 @@ export class TrainingPlan extends QueuePlan
 	}
 
 	Serialize(): {
-		category: string;
+		category: "unit";
 		type: string;
 		ID: number;
 		metadata: Record<string, unknown> | undefined;
@@ -174,7 +174,7 @@ export class TrainingPlan extends QueuePlan
 	}
 	{
 		return {
-			"category": this.category,
+			"category": "unit",
 			"type": this.type,
 			"ID": this.ID,
 			"metadata": this.metadata,

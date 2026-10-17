@@ -91,7 +91,7 @@ export class ResearchPlan extends QueuePlan
 	}
 
 	Serialize(): {
-		category: string;
+		category: "technology";
 		type: string;
 		ID: number;
 		metadata: Record<string, unknown> | undefined;
@@ -102,7 +102,7 @@ export class ResearchPlan extends QueuePlan
 	}
 	{
 		return {
-			"category": this.category,
+			"category": "technology",
 			"type": this.type,
 			"ID": this.ID,
 			"metadata": this.metadata,

@@ -23,12 +23,15 @@ declare namespace PetraRuntime {
 
 	type PlanLike = import("./queueplan.ts").QueuePlan;
 
+	/** The three concrete plan kinds a Queue can hold (all extend PlanLike). */
+	type ConcretePlan = import("./queueplanTraining.ts").TrainingPlan | import("./queueplanBuilding.ts").ConstructionPlan | import("./queueplanResearch.ts").ResearchPlan;
+
 	interface QueueLike {
 		plans: PlanLike[];
 		paused: boolean;
 		switched: number;
 		empty: () => void;
-		addPlan: (plan: PlanLike | null | undefined) => void;
+		addPlan: (plan: ConcretePlan | null | undefined) => void;
 		check: (gameState: GameStateLike) => void;
 		getNext: () => PlanLike | null;
 		startNext: (gameState: GameStateLike) => boolean;

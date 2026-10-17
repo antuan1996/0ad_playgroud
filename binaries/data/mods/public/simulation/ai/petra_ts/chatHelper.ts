@@ -164,13 +164,18 @@ export function launchAttack(gameState: CommonGameState, player: PlayerId, type:
 export function answerRequestAttack(gameState: CommonGameState, player: PlayerId,
 	answer: "join" | "decline" | "other", other?: PlayerId): void
 {
+	// The "other" response also names a second player (_player_2) when one is supplied.
+	const translateParameters = answer != "other" ? ["_player_"] : ["_player_", "_player_2"];
+	const parameters: Record<string, string | number> = { "_player_": player };
+	if (answer == "other" && other !== undefined)
+		parameters["_player_2"] = other;
+
 	Engine.PostCommand(PlayerID, {
 		"type": "aichat",
 		"message": "/allies " + pickRandom(answerRequestAttackMessages[answer]),
 		"translateMessage": true,
-		"translateParameters": answer != "other" ? ["_player_"] : ["_player_", "_player_2"],
-		"parameters": answer != "other" ? { "_player_": player } :
-		other !== undefined ? { "_player_": player, "_player_2": other } : { "_player_": player }
+		"translateParameters": translateParameters,
+		"parameters": parameters
 	});
 }
 
