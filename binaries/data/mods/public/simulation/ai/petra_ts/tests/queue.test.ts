@@ -332,9 +332,11 @@ describe("Queue", () =>
 		assert.equal(queue.getNext(), keeper);
 	});
 
-	// The reference reads queueToReset off whatever shift returned, so an
-	// emptied queue throws there; the port's guard against that is deliberate,
-	// and this is the only way to reach it.
+	// The reference takes its plan by shifting and then reads queueToReset off
+	// the shift result, so a queue emptied during isInvalid makes check throw
+	// on an undefined plan; the port captures the head before removing it, so
+	// the plan it just judged is also the one whose queueToReset hands the
+	// priority back.
 	it("keeps walking when the queue emptied itself mid-check", () =>
 	{
 		const { gameState } = makeFakeGameState();

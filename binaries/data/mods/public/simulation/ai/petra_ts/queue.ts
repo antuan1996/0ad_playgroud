@@ -43,11 +43,10 @@ export class Queue implements PetraRuntime.QueueLike
 	{
 		while (this.plans.length > 0)
 		{
-			if (!this.plans[0].isInvalid(gameState))
+			const plan = this.plans[0];
+			if (!plan.isInvalid(gameState))
 				return;
-			const plan = this.plans.shift();
-			if (!plan)
-				continue;
+			this.plans.shift();
 			if (plan.queueToReset)
 				gameState.ai.queueManager.changePriority(plan.queueToReset, gameState.ai.Config.priorities[plan.queueToReset]);
 		}
