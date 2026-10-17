@@ -153,9 +153,11 @@ export class DiplomacyManager
 				}
 				else if (this.Config.chat && availableResources[res] === 0 && allyResources[res] > totalResources[res] + 600)
 				{
-					if (gameState.ai.elapsedTime < this.nextTributeRequest.get("all"))
+					const nextAll = this.nextTributeRequest.get("all");
+					if (nextAll !== undefined && gameState.ai.elapsedTime < nextAll)
 						continue;
-					if (this.nextTributeRequest.has(res) && gameState.ai.elapsedTime < this.nextTributeRequest.get(res))
+					const nextRes = this.nextTributeRequest.get(res);
+					if (nextRes !== undefined && gameState.ai.elapsedTime < nextRes)
 						continue;
 					if (!mostNeeded)
 						mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes);
@@ -192,9 +194,11 @@ export class DiplomacyManager
 			if (evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from))
 			{
 				const request = this.receivedDiplomacyRequests.get(evt.from);
-				if (request.status === "waitingForTribute" && request.type in evt.amounts)
+				if (!request)
+					continue;
+				if (request.status === "waitingForTribute" && request.type !== undefined && request.type in evt.amounts)
 				{
-					request.wanted -= evt.amounts[request.type];
+					request.wanted = (request.wanted ?? 0) - evt.amounts[request.type];
 
 					if (request.wanted <= 0)
 					{
@@ -259,6 +263,8 @@ export class DiplomacyManager
 			if (this.sentDiplomacyRequests.has(evt.player)) // If another player has accepted a diplomacy request we sent
 			{
 				const sentRequest = this.sentDiplomacyRequests.get(evt.player);
+				if (!sentRequest)
+					continue;
 				if (gameState.sharedScript.playersData[evt.player].isAlly[PlayerID] && sentRequest.requestType === "ally" ||
 				    gameState.sharedScript.playersData[evt.player].isNeutral[PlayerID] && sentRequest.requestType === "neutral")
 					this.changePlayerDiplomacy(gameState, evt.player, sentRequest.requestType);
@@ -300,6 +306,8 @@ export class DiplomacyManager
 
 			this.handleDiplomacyRequest(gameState, evt.source, evt.to);
 			const request = this.receivedDiplomacyRequests.get(evt.source);
+			if (!request)
+				continue;
 			if (this.Config.debug > 0)
 			{
 				aiWarn("Responding to diplomacy request from AI player " + evt.source + " with " +
@@ -307,7 +315,7 @@ export class DiplomacyManager
 			}
 
 			// Our diplomacy will have changed already if the response was "accept"
-			if (request.status === "waitingForTribute")
+			if (request.status === "waitingForTribute" && request.wanted !== undefined && request.type !== undefined)
 			{
 				Engine.PostCommand(PlayerID, {
 					"type": "tribute-request",
@@ -444,7 +452,7 @@ export class DiplomacyManager
 	{
 		if (gameState.sharedScript.playersData[PlayerID].teamLocked)
 			return;
-		let response;
+		let response = "";
 		let requiredTribute;
 		const request = this.receivedDiplomacyRequests.get(player);
 		const moreEnemiesThanAllies = gameState.getEnemies().length > gameState.getMutualAllies().length;
@@ -501,7 +509,8 @@ export class DiplomacyManager
 				response = "decline";
 			}
 		}
-		chat.answerRequestDiplomacy(gameState, player, requestType, response, requiredTribute);
+		chat.answerRequestDiplomacy(gameState, player, requestType, response,
+			requiredTribute === undefined ? undefined : { "wanted": requiredTribute.wanted ?? 0, "type": requiredTribute.type ?? "" });
 	}
 
 	changePlayerDiplomacy(gameState: CommonGameState, player: number, newDiplomaticStance: DiplomacyRequestType | "enemy"): void
@@ -518,7 +527,7 @@ export class DiplomacyManager
 	checkRequestedTributes(gameState: CommonGameState): void
 	{
 		for (const [player, data] of this.receivedDiplomacyRequests)
-			if (data.status === "waitingForTribute" && gameState.ai.elapsedTime > data.warnTime)
+			if (data.status === "waitingForTribute" && data.wanted !== undefined && data.type !== undefined && data.warnTime !== undefined && gameState.ai.elapsedTime > data.warnTime)
 			{
 				if (data.sentWarning)
 				{

@@ -3,7 +3,7 @@
 > Auto-generated snapshot of the current TypeScript compile errors for the
 > `petra_ts` AI module. Intended as a reference for future work (triage / fixes).
 
-- **Generated:** 2026-10-17 (local, MSK) - refreshed after fixing `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`
+- **Generated:** 2026-10-17 (local, MSK) - refreshed after fixing `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`, `diplomacyManager.ts`, `entityExtend.ts`, `queueplanBuilding.ts`, `baseManager.ts`
 - **Reproduce with:** `npx tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json`
   (i.e. the `build:petra` script in the root `package.json`)
 - **tsconfig:** `strict: true`, `noEmit: true`, `noCheck: false`, target `ES2022`, module `ESNext`
@@ -11,9 +11,9 @@
 
 ## Headline numbers
 
-- **Total errors:** **262** (was 385; -123 after fixing the 3 files below)
-- **Files with errors:** **19** of **31** source `.ts` files (12 source files clean; `.d.ts` files excluded)
-- **Now clean (0 errors):** `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`
+- **Total errors:** **157** (was 385; -123 after the first 3 files, then -105 after fixing `diplomacyManager.ts`, `entityExtend.ts`, `queueplanBuilding.ts`, `baseManager.ts`)
+- **Files with errors:** **15** of **31** source `.ts` files (16 source files clean; `.d.ts` files excluded)
+- **Now clean (0 errors):** `transportPlan.ts`, `victoryManager.ts`, `basesManager.ts`, `diplomacyManager.ts`, `entityExtend.ts`, `queueplanBuilding.ts`, `baseManager.ts`
 - **Dominant theme:** almost every error is a **strict `undefined` / `null` safety**
   complaint - values that TypeScript now treats as optional (Map/array/object access,
   optional chaining, possibly-uninitialized locals) are used where a concrete type is required.
@@ -22,34 +22,30 @@
 
 | Code | Count | Meaning |
 |------|------:|---------|
-| `TS18048` | 88 | Identifier is possibly `undefined` (used directly) |
-| `TS2532` | 79 | Object is possibly `undefined` (property access on it) |
-| `TS2345` | 44 | Argument of possibly-`undefined` type not assignable to a required parameter type |
-| `TS2322` | 24 | Assignment of possibly-`undefined` type to a concrete type |
-| `TS18047` | 20 | Identifier is possibly `null` |
-| `TS2538` | 7 | `undefined` used as an index type |
+| `TS18048` | 42 | Identifier is possibly `undefined` (used directly) |
+| `TS2532` | 55 | Object is possibly `undefined` (property access on it) |
+| `TS2345` | 32 | Argument of possibly-`undefined` type not assignable to a required parameter type |
+| `TS2322` | 13 | Assignment of possibly-`undefined` type to a concrete type |
+| `TS18047` | 10 | Identifier is possibly `null` |
+| `TS2538` | 5 | `undefined` used as an index type |
 
 ### Most frequent individual messages
 
 | Message | Count |
 |---------|------:|
-| `Object is possibly 'undefined'.` | 79 |
-| `Argument of type 'number | undefined' is not assignable to parameter of type 'number'.` | 17 |
-| `'template' is possibly 'null'.` | 14 |
-| `'request' is possibly 'undefined'.` | 13 |
-| `Argument of type 'string | undefined' is not assignable to parameter of type 'string'.` | 10 |
-| `Type 'boolean | undefined' is not assignable to type 'boolean'.` | 7 |
-| `Type 'undefined' cannot be used as an index type.` | 7 |
+| `Object is possibly 'undefined'.` | 55 |
+| `Argument of type 'number | undefined' is not assignable to parameter of type 'number'.` | 11 |
 | `Argument of type 'Entity | undefined' is not assignable to parameter of type 'Entity'.` | 7 |
+| `'template' is possibly 'null'.` | 6 |
+| `Argument of type 'CommonResourceAmounts | undefined' is not assignable to parameter of type 'CommonResourceAmounts'.` | 6 |
+| `Type 'undefined' cannot be used as an index type.` | 5 |
+| `Argument of type 'string | undefined' is not assignable to parameter of type 'string'.` | 5 |
+| `Type 'boolean | undefined' is not assignable to type 'boolean'.` | 4 |
 
 ## Per-file error counts (descending)
 
 | File | Errors |
 |------|------:|
-| `diplomacyManager.ts` | 29 |
-| `entityExtend.ts` | 26 |
-| `queueplanBuilding.ts` | 25 |
-| `baseManager.ts` | 25 |
 | `tradeManager.ts` | 24 |
 | `queueplanTraining.ts` | 22 |
 | `garrisonManager.ts` | 22 |
@@ -68,8 +64,12 @@
 | `transportPlan.ts` | 0 (fixed) |
 | `victoryManager.ts` | 0 (fixed) |
 | `basesManager.ts` | 0 (fixed) |
+| `diplomacyManager.ts` | 0 (fixed) |
+| `entityExtend.ts` | 0 (fixed) |
+| `queueplanBuilding.ts` | 0 (fixed) |
+| `baseManager.ts` | 0 (fixed) |
 
-## Fix approach applied to the 3 fixed files
+## Fix approach applied to the 7 fixed files
 
 All fixes preserve runtime behaviour (no `!`/`??` shortcuts that change semantics):
 

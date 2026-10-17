@@ -4,14 +4,14 @@ import type { BaseManager } from "./baseManager.ts";
 /** returns true if this unit should be considered as a siege unit */
 export function isSiegeUnit(ent: CommonEntity): boolean
 {
-	return ent.hasClasses(["Siege", "Elephant+Melee"]);
+	return ent.hasClasses(["Siege", "Elephant+Melee"]) === true;
 }
 
 /** returns true if this unit should be considered as "fast". */
 export function isFastMoving(ent: CommonEntity): boolean
 {
 	// TODO: use clever logic based on walkspeed comparisons.
-	return ent.hasClass("FastMoving");
+	return ent.hasClass("FastMoving") === true;
 }
 
 /** returns some sort of DPS * health factor. If you specify a class, it'll use the modifiers against that class too. */
@@ -34,7 +34,7 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 		{
 			let val = attackStrength[str];
 			if (againstClass)
-				val *= ent.getMultiplierAgainst(type, againstClass);
+				val *= ent.getMultiplierAgainst(type, againstClass) ?? NaN;
 			if (DamageTypeImportance[str])
 				strength += DamageTypeImportance[str] * val / damageTypes.length;
 			else if (debugLevel > 0)
@@ -68,7 +68,7 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 
 	const resistanceStrength = ent.resistanceStrengths();
 
-	if (resistanceStrength.Damage)
+	if (resistanceStrength && resistanceStrength.Damage)
 		for (const str in resistanceStrength.Damage)
 		{
 			const val = +resistanceStrength.Damage[str];
@@ -116,8 +116,9 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): nu
 			else if (ent.get("Footprint/Circle"))
 				halfDepth = +ent.get("Footprint/Circle/@radius");
 			const entPos = ent.position();
-			const cosa = Math.cos(ent.angle());
-			const sina = Math.sin(ent.angle());
+			const entAngle = ent.angle();
+			const cosa = Math.cos(entAngle ?? NaN);
+			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < halfDepth; d += 3)
 			{
 				const pos: CommonPosition = [ entPos[0] - d * sina,
@@ -143,8 +144,9 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): num
 		if (sea < 2 && ent.buildPlacementType() == "shore")
 		{
 			const entPos = ent.position();
-			const cosa = Math.cos(ent.angle());
-			const sina = Math.sin(ent.angle());
+			const entAngle = ent.angle();
+			const cosa = Math.cos(entAngle ?? NaN);
+			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < 15; d += 3)
 			{
 				const pos: CommonPosition = [ entPos[0] + d * sina,
@@ -190,21 +192,24 @@ export function allowCapture(gameState: CommonGameState, ent: CommonEntity, targ
 	const capturableTargets = gameState.ai.HQ.capturableTargets;
 	if (!capturableTargets.has(target.id()))
 	{
-		capture = ent.captureStrength() * getAttackBonus(ent, target, "Capture");
+		capture = (ent.captureStrength() ?? NaN) * getAttackBonus(ent, target, "Capture");
 		capturableTargets.set(target.id(), { "strength": capture, "ents": new Set([ent.id()]) });
 	}
 	else
 	{
 		const capturable = capturableTargets.get(target.id());
+		if (!capturable)
+			return false;
 		if (!capturable.ents.has(ent.id()))
 		{
-			capturable.strength += ent.captureStrength() * getAttackBonus(ent, target, "Capture");
+			capturable.strength += (ent.captureStrength() ?? NaN) * getAttackBonus(ent, target, "Capture");
 			capturable.ents.add(ent.id());
 		}
 		capture = capturable.strength;
 	}
 	capture *= 1 / (0.1 + 0.9*target.healthLevel());
-	const sumCapturePoints = target.capturePoints().reduce((a: number, b: number): number => a + b);
+	const capturePoints = target.capturePoints();
+	const sumCapturePoints = capturePoints ? capturePoints.reduce((a: number, b: number): number => a + b) : 0;
 	if (target.hasDefensiveFire() && target.isGarrisonHolder() && target.garrisoned())
 		return capture > antiCapture + sumCapturePoints/50;
 	return capture > antiCapture + sumCapturePoints/80;
@@ -230,10 +235,11 @@ export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: st
 /** Makes the worker deposit the currently carried resources at the closest accessible dropsite */
 export function returnResources(gameState: CommonGameState, ent: CommonEntity): boolean
 {
-	if (!ent.resourceCarrying() || !ent.resourceCarrying().length || !ent.position())
+	const carrying = ent.resourceCarrying();
+	if (!carrying || !carrying.length || !ent.position())
 		return false;
 
-	const resource = ent.resourceCarrying()[0].type;
+	const resource = carrying[0].type;
 
 	let closestDropsite;
 	let distmin = Math.min();
@@ -267,7 +273,7 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean
 {
 	return ent.isFull() === true ||
-		ent.resourceSupplyNumGatherers() + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		(ent.resourceSupplyNumGatherers() ?? NaN) + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
 }
 
 /**
@@ -297,11 +303,12 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 		accessIndex = getLandAccess(gameState, ent);
 
 	let distmin = Math.min();
-	let dist;
+	let dist = 0;
 	let bestbase;
 	for (const base of gameState.ai.HQ.baseManagers())
 	{
-		if (base.ID == gameState.ai.HQ.basesManager.baselessBase().ID || exclude && base.ID == exclude)
+		const baseless = gameState.ai.HQ.basesManager.baselessBase();
+		if ((baseless !== undefined && base.ID == baseless.ID) || exclude && base.ID == exclude)
 			continue;
 		if (onlyConstructedBase && (!base.anchor || base.anchor.foundationProgress() !== undefined))
 			continue;
@@ -351,7 +358,11 @@ export function getHolder(gameState: CommonGameState, ent: CommonEntity): Common
 export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonEntity
 {
 	if (ent.foundationProgress() !== undefined)
-		return gameState.getBuiltTemplate(ent.templateName());
+	{
+		const built = gameState.getBuiltTemplate(ent.templateName());
+		if (built)
+			return built;
+	}
 
 	return ent;
 }

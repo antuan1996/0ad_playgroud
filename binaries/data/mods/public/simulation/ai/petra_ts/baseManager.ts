@@ -231,63 +231,66 @@ export class BaseManager
 		const dropsiteId = dropsite.id();
 		this.dropsites[dropsiteId] = true;
 
-		if (this.ID == this.basesManager.baselessBase().ID)
+		const baseless = this.basesManager.baselessBase();
+		if (baseless !== undefined && this.ID == baseless.ID)
 			accessIndex = getLandAccess(gameState, dropsite);
 
 		const maxDistResourceSquare = this.maxDistResourceSquare;
-		for (const type of dropsite.resourceDropsiteTypes())
-		{
-			const resources = gameState.getResourceSupplies(type);
-			if (!resources.length)
-				continue;
-
-			const nearby = this.dropsiteSupplies[type].nearby;
-			const medium = this.dropsiteSupplies[type].medium;
-			const faraway = this.dropsiteSupplies[type].faraway;
-
-			resources.forEach(function(supply: import("simulation/ai/common-api/entity.js").Entity): void 
+		const dropsiteTypes = dropsite.resourceDropsiteTypes();
+		if (dropsiteTypes)
+			for (const type of dropsiteTypes)
 			{
-				if (!supply.position())
-					return;
-				// Moving resources and fields are treated differently.
-				if (supply.hasClasses(["Animal", "Field"]))
-					return;
-				// quick accessibility check
-				if (getLandAccess(gameState, supply) != accessIndex)
-					return;
+				const resources = gameState.getResourceSupplies(type);
+				if (!resources.length)
+					continue;
 
-				const dist = SquareVectorDistance(supply.position(), dropsitePos);
-				if (dist < maxDistResourceSquare)
+				const nearby = this.dropsiteSupplies[type].nearby;
+				const medium = this.dropsiteSupplies[type].medium;
+				const faraway = this.dropsiteSupplies[type].faraway;
+
+				resources.forEach(function(supply: import("simulation/ai/common-api/entity.js").Entity): void 
 				{
-					if (dist < maxDistResourceSquare/16)        // distmax/4
-						nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-					else if (dist < maxDistResourceSquare/4)    // distmax/2
-						medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-					else
-						faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+					if (!supply.position())
+						return;
+					// Moving resources and fields are treated differently.
+					if (supply.hasClasses(["Animal", "Field"]))
+						return;
+					// quick accessibility check
+					if (getLandAccess(gameState, supply) != accessIndex)
+						return;
+
+					const dist = SquareVectorDistance(supply.position(), dropsitePos);
+					if (dist < maxDistResourceSquare)
+					{
+						if (dist < maxDistResourceSquare/16)        // distmax/4
+							nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+						else if (dist < maxDistResourceSquare/4)    // distmax/2
+							medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+						else
+							faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+					}
+				});
+
+				nearby.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
+				medium.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
+				faraway.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
+
+				/*
+				let debug = false;
+				if (debug)
+				{
+					faraway.forEach(function(res){
+						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [2,0,0]});
+					});
+					medium.forEach(function(res){
+						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,2,0]});
+					});
+					nearby.forEach(function(res){
+						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,0,2]});
+					});
 				}
-			});
-
-			nearby.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-			medium.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-			faraway.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-
-			/*
-			let debug = false;
-			if (debug)
-			{
-				faraway.forEach(function(res){
-					Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [2,0,0]});
-				});
-				medium.forEach(function(res){
-					Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,2,0]});
-				});
-				nearby.forEach(function(res){
-					Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,0,2]});
-				});
+				*/
 			}
-			*/
-		}
 
 		if (deserialized)
 			return;
@@ -373,6 +376,8 @@ export class BaseManager
 	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: string): { quality: number; pos: CommonPosition }
 	{
 		const template = gameState.getTemplate(gameState.applyCiv(templateName));
+		if (!template)
+			return { "quality": 0, "pos": [0, 0] };
 
 		// CCs and Docks are handled elsewhere.
 		if (template.hasClasses(["CivCentre", "Dock"]))
@@ -400,13 +405,16 @@ export class BaseManager
 
 		let bestIdx;
 		let bestVal = 0;
-		const radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
+		const obstructionRadius = template.obstructionRadius();
+		if (!obstructionRadius)
+			return { "quality": 0, "pos": [0, 0] };
+		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const territoryMap = gameState.ai.HQ.territoryMap;
 		const width = territoryMap.width;
 		const cellSize = territoryMap.cellSize;
 
-		const droppableResources = template.resourceDropsiteTypes();
+		const droppableResources = template.resourceDropsiteTypes() ?? [];
 
 		for (const j of this.territoryIndices)
 		{
@@ -454,6 +462,8 @@ export class BaseManager
 
 		if (bestVal <= 0)
 			return { "quality": bestVal, "pos": [0, 0] };
+		if (bestIdx === undefined)
+			return { "quality": bestVal, "pos": [0, 0] };
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
@@ -472,7 +482,7 @@ export class BaseManager
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);
 				if (supplyEntity)
-					count += supplyEntity.resourceSupplyAmount();
+					count += supplyEntity.resourceSupplyAmount() ?? NaN;
 			}
 		return count;
 	}
@@ -566,9 +576,10 @@ export class BaseManager
 				if (ratio > 0.15)
 				{
 					const newDP = this.findBestDropsiteAndLocation(gameState, type);
-					if (newDP.quality > 50 && gameState.ai.HQ.canBuild(gameState, newDP.templateName))
+					const dpTemplateName = newDP.templateName;
+					if (dpTemplateName !== undefined && newDP.quality > 50 && gameState.ai.HQ.canBuild(gameState, dpTemplateName))
 					{
-						queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
+						queues.dropsites.addPlan(new ConstructionPlan(gameState, dpTemplateName,
 							{ "base": this.ID, "type": type }, newDP.pos));
 					}
 					else if (!gameState.getOwnFoundations().filter(filters.byClass("CivCentre"))
@@ -577,12 +588,12 @@ export class BaseManager
 					{
 						// No good dropsite, try to build a new base if no base already planned,
 						// and if not possible, be less strict on dropsite quality.
-						if ((!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
+						if (dpTemplateName !== undefined && (!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
 							newDP.quality > Math.min(25, 50*0.15/ratio) &&
-							gameState.ai.HQ.canBuild(gameState, newDP.templateName))
+							gameState.ai.HQ.canBuild(gameState, dpTemplateName))
 						{
 							queues.dropsites.addPlan(new ConstructionPlan(gameState,
-								newDP.templateName, { "base": this.ID, "type": type },
+								dpTemplateName, { "base": this.ID, "type": type },
 								newDP.pos));
 						}
 					}
@@ -1098,7 +1109,8 @@ export class BaseManager
 	/** Return false when the base is not active (no workers on it) */
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): boolean
 	{
-		if (this.ID == this.basesManager.baselessBase().ID)
+		const baseless = this.basesManager.baselessBase();
+		if (baseless !== undefined && this.ID == baseless.ID)
 		{
 			// if some active base, reassigns the workers/buildings
 			// otherwise look for anything useful to do, i.e. treasures to gather
@@ -1107,6 +1119,8 @@ export class BaseManager
 				for (const ent of this.units.values())
 				{
 					const bestBase = getBestBase(gameState, ent);
+					if (!bestBase)
+						continue;
 					if (bestBase.ID != this.ID)
 						bestBase.assignEntity(gameState, ent);
 				}
@@ -1150,6 +1164,8 @@ export class BaseManager
 				for (const ent of this.units.values())
 				{
 					const base = getBestBase(gameState, ent, false, this.ID);
+					if (!base)
+						continue;
 					base.assignEntity(gameState, ent);
 				}
 				return false;
@@ -1161,6 +1177,8 @@ export class BaseManager
 				if (!ent.position())
 					continue;
 				const base = getBestBase(gameState, ent);
+				if (!base)
+					continue;
 				if (base.anchor)
 					reassignedBase = base;
 				break;
