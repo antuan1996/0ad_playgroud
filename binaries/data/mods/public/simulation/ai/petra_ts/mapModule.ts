@@ -26,11 +26,11 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 	// If there is a template then replace the defaults
 	if (template)
 	{
-		placementType = template.buildPlacementType();
-		buildOwn = template.hasBuildTerritory("own");
-		buildAlly = template.hasBuildTerritory("ally");
-		buildNeutral = template.hasBuildTerritory("neutral");
-		buildEnemy = template.hasBuildTerritory("enemy");
+		placementType = template.buildPlacementType() ?? placementType;
+		buildOwn = template.hasBuildTerritory("own") ?? buildOwn;
+		buildAlly = template.hasBuildTerritory("ally") ?? buildAlly;
+		buildNeutral = template.hasBuildTerritory("neutral") ?? buildNeutral;
+		buildEnemy = template.hasBuildTerritory("enemy") ?? buildEnemy;
 	}
 	const obstructionTiles = new Uint8Array(passabilityMap.data.length);
 
@@ -91,19 +91,21 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 	const map = new InfoMap(gameState.sharedScript, "passability", obstructionTiles);
 	map.setMaxVal(255);
 
-	if (template && template.buildDistance())
+	const distance = template ? template.buildDistance() : undefined;
+	if (distance)
 	{
-		const distance = template.buildDistance();
 		let minDist = distance.MinDistance ? +distance.MinDistance : 0;
 		if (minDist)
 		{
-			const obstructionRadius = template.obstructionRadius();
+			const obstructionRadius = template ? template.obstructionRadius() : undefined;
 			if (obstructionRadius)
 				minDist -= obstructionRadius.min;
 			const fromClass = distance.FromClass;
 			const cellSize = passabilityMap.cellSize;
 			const cellDist = 1 + minDist / cellSize;
-			const structures = gameState.getOwnStructures().filter(filters.byClass(fromClass));
+			const structures = fromClass !== undefined ?
+				gameState.getOwnStructures().filter(filters.byClass(fromClass)) :
+				[];
 			for (const ent of structures.values())
 			{
 				if (!ent.position())

@@ -215,7 +215,10 @@ export class AttackManager
 			if (alreadyBombing)
 				break;
 
-			const range = ent.attackRange("Ranged").max;
+			const ranged = ent.attackRange("Ranged");
+			if (!ranged)
+				continue;
+			const range = ranged.max;
 			const entPos = ent.position();
 			const access = getLandAccess(gameState, ent);
 			for (const struct of gameState.getEnemyStructures().values())
@@ -235,7 +238,7 @@ export class AttackManager
 				const dist = VectorDistance(entPos, structPos);
 				if (dist > range)
 				{
-					const safety = struct.footprintRadius() + 30;
+					const safety = (struct.footprintRadius() ?? 0) + 30;
 					x = structPos[0] + (entPos[0] - structPos[0]) * safety / dist;
 					z = structPos[1] + (entPos[1] - structPos[1]) * safety / dist;
 					const owner = gameState.ai.HQ.territoryMap.getOwner([x, z]);
@@ -264,7 +267,8 @@ export class AttackManager
 				}
 				attackingUnits.add(ent.id());
 				if (dist > range)
-					ent.move(x, z);
+					if (x !== undefined && z !== undefined)
+						ent.move(x, z);
 				ent.attack(struct.id(), false, dist > range);
 				break;
 			}
@@ -349,7 +353,8 @@ export class AttackManager
 								attack.getName());
 						}
 						if (this.Config.chat)
-							chat.launchAttack(gameState, attack.targetPlayer, attack.getType());
+							if (attack.targetPlayer !== undefined)
+								chat.launchAttack(gameState, attack.targetPlayer, attack.getType());
 						this.startedAttacks[attackType].push(attack);
 					}
 					else
@@ -416,7 +421,8 @@ export class AttackManager
 				this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length == 0 ||
 			gameState.getPopulationMax() - gameState.getPopulation() > 12))
 		{
-			if (barracksNb >= 1 && (gameState.currentPhase() > 1 || gameState.isResearching(gameState.getPhaseName(2))) ||
+			const phase2 = gameState.getPhaseName(2);
+			if (barracksNb >= 1 && (gameState.currentPhase() > 1 || (phase2 !== undefined && gameState.isResearching(phase2))) ||
 				!gameState.ai.HQ.hasPotentialBase())	// if we have no base ... nothing else to do than attack
 			{
 				const type = this.attackNumber < 2 ||
@@ -655,7 +661,7 @@ export class AttackManager
 				enemyWonder = wonder;
 				break;
 			}
-			if (enemyWonder && moreAdvanced > progress)
+			if (enemyWonder && moreAdvanced !== undefined && moreAdvanced > progress)
 				continue;
 			enemyWonder = wonder;
 			moreAdvanced = progress;
@@ -787,7 +793,7 @@ export class AttackManager
 				if (SquareVectorDistance(pos, army.foePosition) > data.range * data.range)
 					continue;
 			}
-			else if (army.ID != +data.armyID)
+			else if (army.ID != (data.armyID ?? NaN))
 				continue;
 
 			while (army.foeEntities.length > 0)
@@ -797,6 +803,8 @@ export class AttackManager
 				const unitId = army.ownEntities[0];
 				army.removeOwn(gameState, unitId);
 				const unit = gameState.getEntityById(unitId);
+				if (!unit)
+					continue;
 				const accessOk = unit.getMetadata(PlayerID, "transport") !== undefined ||
 					unit.position() && getLandAccess(gameState, unit) == targetAccess;
 				if (unit && accessOk && attackPlan.isAvailableUnit(gameState, unit))

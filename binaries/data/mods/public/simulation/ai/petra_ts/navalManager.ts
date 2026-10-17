@@ -267,7 +267,7 @@ export class NavalManager
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) != region)
 				return;
-			const i = seas.indexOf(getSeaAccess(gameState, dock));
+			const i = seas.indexOf(getSeaAccess(gameState, dock) ?? NaN);
 			if (i != -1)
 				seas.splice(i, 1);
 		});
@@ -340,7 +340,7 @@ export class NavalManager
 					// otherwise, we should require another transport
 					// TODO if attacking and no more ships available, remove the units from the attack
 					// to avoid delaying it too much
-					if (access != endIndex)
+					if (access != endIndex && access !== undefined && endPos !== undefined)
 						this.requireTransport(gameState, ent, access, endIndex, endPos);
 				}
 			}
@@ -438,7 +438,7 @@ export class NavalManager
 		}
 		newplan.init(gameState);
 
-		for (const ent of plan.needSplit)
+		for (const ent of plan.needSplit ?? [])
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
@@ -464,7 +464,7 @@ export class NavalManager
 		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
 		if (fromAccess !== 1)
 			return;
-		if (toAccess < 2)
+		if ((toAccess ?? NaN) < 2)
 			return;
 
 		for (const ship of this.ships.values())
@@ -473,10 +473,16 @@ export class NavalManager
 				continue;
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined)
 				continue;
-			const units = [];
+			const units: CommonEntity[] = [];
 			for (const entId of ship.garrisoned())
-				units.push(gameState.getEntityById(entId));
+			{
+				const unit = gameState.getEntityById(entId);
+				if (unit)
+					units.push(unit);
+			}
 			// TODO check that the garrisoned units have not another purpose
+			if (toAccess === undefined)
+				continue;
 			const plan = new TransportPlan(gameState, units, fromAccess, toAccess, toPos, ship);
 			if (plan.failed)
 				continue;
@@ -577,7 +583,7 @@ export class NavalManager
 	{
 		if (!ship.position())
 			return false;
-		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
+		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter") ?? NaN);
 		if (!plan || !plan.boardingPos[ship.id()])
 			return false;
 		const bp = plan.boardingPos[ship.id()];
@@ -617,7 +623,7 @@ export class NavalManager
 					continue;
 				}
 				// New transport ships receive boarding commands only on the following turn.
-				if (gameState.ai.playedTurn < ship.getMetadata(PlayerID, "turnPreviousPosition") + 2)
+				if (gameState.ai.playedTurn < (ship.getMetadata(PlayerID, "turnPreviousPosition") ?? NaN) + 2)
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
@@ -675,7 +681,7 @@ export class NavalManager
 					continue;
 				}
 				// New transport ships receives boarding commands only on the following turn.
-				if (gameState.ai.playedTurn < ship.getMetadata(PlayerID, "turnPreviousPosition") + 2)
+				if (gameState.ai.playedTurn < (ship.getMetadata(PlayerID, "turnPreviousPosition") ?? NaN) + 2)
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
@@ -713,8 +719,12 @@ export class NavalManager
 		for (const ship of blockedShips)
 		{
 			const shipPosition = ship.position();
+			if (!shipPosition)
+				continue;
 			const sea = ship.getMetadata(PlayerID, "sea");
-			for (const blockingShip of this.seaShips[sea].values())
+			if (sea === undefined)
+				continue;
+			for (const blockingShip of this.seaShips[sea]?.values() ?? [])
 			{
 				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
 					continue;
@@ -773,13 +783,16 @@ export class NavalManager
 						break;
 					if (!base.anchor || base.constructing)
 						continue;
-					const remaining = this.getUnconnectedSeas(gameState, base.accessIndex);
+					const baseAccessIndex = base.accessIndex;
+					if (baseAccessIndex === undefined)
+						continue;
+					const remaining = this.getUnconnectedSeas(gameState, baseAccessIndex);
 					for (const sea of remaining)
 					{
 						if (!gameState.ai.HQ.navalRegions[sea])
 							continue;
-						const wantedLand = {};
-						wantedLand[base.accessIndex] = true;
+						const wantedLand: Record<number, boolean> = {};
+						wantedLand[baseAccessIndex] = true;
 						queues.dock.addPlan(new ConstructionPlan(gameState, "structures/{civ}/dock",
 							{ "land": wantedLand, "sea": sea }));
 						dockStarted = true;
@@ -808,9 +821,9 @@ export class NavalManager
 			template = "structures/{civ}/shipyard";
 		else
 			return;
-		const wantedLand = {};
+		const wantedLand: Record<number, boolean> = {};
 		for (const base of gameState.ai.HQ.baseManagers())
-			if (base.anchor)
+			if (base.anchor && base.accessIndex !== undefined)
 				wantedLand[base.accessIndex] = true;
 		const sea = this.docks.toEntityArray()[0].getMetadata(PlayerID, "sea");
 		queues.militaryBuilding.addPlan(
@@ -826,7 +839,7 @@ export class NavalManager
 			function(ent: CommonEntity): void
 			{
 				const trainables = ent.trainableEntities(civ);
-				for (const trainable of trainables)
+				for (const trainable of trainables ?? [])
 				{
 					if (gameState.isTemplateDisabled(trainable))
 						continue;
@@ -843,6 +856,8 @@ export class NavalManager
 		for (const trainable of trainableShips)
 		{
 			const template = gameState.getTemplate(trainable);
+			if (!template)
+				continue;
 			if (!template.available(gameState))
 				continue;
 

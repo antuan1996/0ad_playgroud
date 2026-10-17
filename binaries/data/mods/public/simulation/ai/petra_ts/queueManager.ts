@@ -403,6 +403,8 @@ export class QueueManager
 			if (queue.hasQueuedUnits() && !queue.paused)
 			{
 				const item = queue.getNext();
+				if (!item)
+					continue;
 				if (this.accounts[name].canAfford(item.getCost()) && item.canStart(gameState))
 				{
 					// canStart may update the cost because of the costMultiplier so we must check it again

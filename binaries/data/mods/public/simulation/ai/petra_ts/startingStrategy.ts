@@ -174,6 +174,8 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 			}
 			else
 			{
+				if (seaIndex === undefined)
+					continue;
 				const traject = accessibility.getTrajectToIndex(seaIndex, i);
 				if (traject && traject.length === 2)
 				{
@@ -366,13 +368,14 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				if (!cc.position() || getLandAccess(gameState, cc) != access)
+				const ccPos = cc.position();
+				if (!ccPos || getLandAccess(gameState, cc) != access)
 					continue;
 				--num;
 				--num1;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(cc.position()[0], cc.position()[1], range, range + 5);
+				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
 		});
@@ -386,13 +389,14 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				if (!cc.position() || getLandAccess(gameState, cc) != access)
+				const ccPos = cc.position();
+				if (!ccPos || getLandAccess(gameState, cc) != access)
 					continue;
 				--num;
 				--num2;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(cc.position()[0], cc.position()[1], range, range + 5);
+				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
 		});
@@ -406,13 +410,14 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				if (!cc.position() || getLandAccess(gameState, cc) != access)
+				const ccPos = cc.position();
+				if (!ccPos || getLandAccess(gameState, cc) != access)
 					continue;
 				if (!ent.hasClass("Support"))
 					--num;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(cc.position()[0], cc.position()[1], range, range + 5);
+				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
 		});
@@ -519,7 +524,8 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	if (!gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
 	{
 		const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
-		if (newDP.quality > 40 && HQ.canBuild(gameState, newDP.templateName))
+		const templateName = newDP.templateName;
+		if (newDP.quality > 40 && templateName !== undefined && HQ.canBuild(gameState, templateName))
 		{
 			// if we start with enough workers, put our available resources in this first dropsite
 			// same thing if our pop exceed the allowed one, as we will need several houses
@@ -527,14 +533,14 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 			if (numWorkers > 12 && newDP.quality > 60 ||
 				gameState.getPopulation() > gameState.getPopulationLimit() + 20)
 			{
-				const templateObj = gameState.getTemplate(newDP.templateName);
+				const templateObj = gameState.getTemplate(templateName);
 				if (templateObj)
 				{
 					const cost = new ResourcesManager(templateObj.cost());
 					gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 				}
 			}
-			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
+			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, templateName,
 				{ "base": HQ.baseManagers()[0].ID }, newDP.pos));
 		}
 	}

@@ -169,7 +169,8 @@ export function answerRequestAttack(gameState: CommonGameState, player: PlayerId
 		"message": "/allies " + pickRandom(answerRequestAttackMessages[answer]),
 		"translateMessage": true,
 		"translateParameters": answer != "other" ? ["_player_"] : ["_player_", "_player_2"],
-		"parameters": answer != "other" ? { "_player_": player } : { "_player_": player, "_player_2": other }
+		"parameters": answer != "other" ? { "_player_": player } :
+		other !== undefined ? { "_player_": player, "_player_2": other } : { "_player_": player }
 	});
 }
 
@@ -209,9 +210,12 @@ export function newTradeRoute(gameState: CommonGameState, player: PlayerId): voi
 export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 	newDiplomaticStance: keyof typeof newDiplomacyMessages): void
 {
+	const message = pickRandom(newDiplomacyMessages[newDiplomaticStance]);
+	if (message === undefined)
+		return;
 	Engine.PostCommand(PlayerID, {
 		"type": "aichat",
-		"message": pickRandom(newDiplomacyMessages[newDiplomaticStance]),
+		"message": message,
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
 		"parameters": { "_player_": player }

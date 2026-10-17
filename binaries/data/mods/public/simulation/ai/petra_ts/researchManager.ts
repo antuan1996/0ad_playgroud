@@ -93,7 +93,11 @@ export class ResearchManager
 			if (tech[0].indexOf("unlock_champion") == 0)
 				return { "name": tech[0], "increasePriority": true };
 			if (tech[0] == "traditional_army_sele" || tech[0] == "reformed_army_sele")
-				return { "name": pickRandom(["traditional_army_sele", "reformed_army_sele"]), "increasePriority": true };
+			{
+				const selected = pickRandom(["traditional_army_sele", "reformed_army_sele"]);
+				if (selected !== undefined)
+					return { "name": selected, "increasePriority": true };
+			}
 
 			if (!tech[1]._template.modifications)
 				continue;
@@ -110,13 +114,13 @@ export class ResearchManager
 			for (const i in template.modifications)
 			{
 				if (gameState.ai.HQ.navalMap && template.modifications[i].value === "ResourceGatherer/Rates/food.fish")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/food.fruit")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/food.grain")
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/wood.tree")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value.startsWith("ResourceGatherer/Capacities"))
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "Attack/Ranged/MaxRange")
@@ -149,11 +153,11 @@ export class ResearchManager
 			for (const i in template.modifications)
 			{
 				if (template.modifications[i].value === "ResourceGatherer/Rates/stone.rock")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/metal.ore")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "BuildingAI/DefaultArrowCount")
-					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "Health/RegenRate")
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "Health/IdleRegenRate")
@@ -229,7 +233,10 @@ export class ResearchManager
 			return;
 
 		// randomly pick one. No worries about pairs in that case.
-		queues.minorTech.addPlan(new ResearchPlan(gameState, pickRandom(techs)[0]));
+		const pickedTech = pickRandom(techs);
+		if (!pickedTech)
+			return;
+		queues.minorTech.addPlan(new ResearchPlan(gameState, pickedTech[0]));
 	}
 
 	CostSum(cost: CommonResourceAmounts): number

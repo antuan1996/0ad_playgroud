@@ -64,11 +64,14 @@ export class ResearchPlan extends QueuePlan
 	{
 		// Prefer researcher with shortest queues (no need to serialize this.researchers
 		// as the functions canStart and start are always called on the same turn)
-		this.researchers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number => a.trainingQueueTime() - b.trainingQueueTime());
+		const researchers = this.researchers;
+		if (!researchers)
+			return;
+		researchers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number => (a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN));
 		// Drop anything in the queue if we rush it.
 		if (this.rush)
-			this.researchers[0].stopAllProduction(0.45);
-		this.researchers[0].research(this.type);
+			researchers[0]?.stopAllProduction(0.45);
+		researchers[0]?.research(this.type);
 		this.onStart(gameState);
 	}
 

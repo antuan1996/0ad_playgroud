@@ -48,9 +48,10 @@ export abstract class QueuePlan
 		this.type = gameState.applyCiv(type);
 		this.metadata = metadata;
 
-		this.template = gameState.getTemplate(this.type);
-		if (!this.template)
+		const template = gameState.getTemplate(this.type);
+		if (!template)
 			throw new Error("Tried to add the inexisting template " + this.type + " to Petra.");
+		this.template = template;
 		this.ID = gameState.ai.uniqueIDs.plans++;
 		this.cost = new ResourcesManager(this.template.cost());
 		this.number = 1;

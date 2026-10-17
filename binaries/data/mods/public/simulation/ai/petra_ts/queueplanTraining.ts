@@ -15,9 +15,10 @@ export class TrainingPlan extends QueuePlan
 		super(gameState, type, metadata);
 
 		// Refine the estimated cost and add pop cost
+		const template = this.template;
 		const trainers = this.getBestTrainers(gameState);
 		const trainer = trainers ? trainers[0] : undefined;
-		this.cost = new ResourcesManager(this.template.cost(trainer), +this.template._template.Cost.Population);
+		this.cost = new ResourcesManager(template.cost(trainer), (template.get("Cost/Population") ?? NaN));
 
 		this.category = "unit";
 		this.number = number;
@@ -29,7 +30,8 @@ export class TrainingPlan extends QueuePlan
 		this.trainers = this.getBestTrainers(gameState);
 		if (!this.trainers)
 			return false;
-		this.cost = new ResourcesManager(this.template.cost(this.trainers[0]), +this.template._template.Cost.Population);
+		const template = this.template;
+		this.cost = new ResourcesManager(template.cost(this.trainers[0]), (template.get("Cost/Population") ?? NaN));
 		return true;
 	}
 
@@ -69,6 +71,10 @@ export class TrainingPlan extends QueuePlan
 
 	start(gameState: CommonGameState): void
 	{
+		const trainers = this.trainers;
+		if (!trainers)
+			return;
+
 		if (this.metadata && this.metadata.trainer)
 		{
 			const metadata: Record<string, unknown> = {};
@@ -78,7 +84,7 @@ export class TrainingPlan extends QueuePlan
 			this.metadata = metadata;
 		}
 
-		if (this.trainers.length > 1)
+		if (trainers.length > 1)
 		{
 			let wantedIndex: number | undefined;
 			if (this.metadata && this.metadata.index)
@@ -86,11 +92,11 @@ export class TrainingPlan extends QueuePlan
 			const workerUnit = this.metadata && this.metadata.role &&
 				this.metadata.role === Worker.ROLE_WORKER;
 			const supportUnit = this.template.hasClass("Support");
-			this.trainers.sort(function(a: CommonEntity, b: CommonEntity): number
+			trainers.sort(function(a: CommonEntity, b: CommonEntity): number
 			{
 				// Prefer training buildings with short queues
-				let aa = a.trainingQueueTime();
-				let bb = b.trainingQueueTime();
+				let aa = a.trainingQueueTime() ?? NaN;
+				let bb = b.trainingQueueTime() ?? NaN;
 				// Give priority to support units in the cc
 				if (a.hasClass("Civic") && !supportUnit)
 					aa += 10;
@@ -109,28 +115,45 @@ export class TrainingPlan extends QueuePlan
 				const bBase = b.getMetadata(PlayerID, "base");
 				if (wantedIndex)
 				{
-					if (!aBase || gameState.ai.HQ.getBaseByID(aBase).accessIndex != wantedIndex)
+					if (!aBase)
 						aa += 30;
-					if (!bBase || gameState.ai.HQ.getBaseByID(bBase).accessIndex != wantedIndex)
+					else
+					{
+						const aBaseManager = gameState.ai.HQ.getBaseByID(aBase);
+						if (!aBaseManager || aBaseManager.accessIndex != wantedIndex)
+							aa += 30;
+					}
+					if (!bBase)
 						bb += 30;
+					else
+					{
+						const bBaseManager = gameState.ai.HQ.getBaseByID(bBase);
+						if (!bBaseManager || bBaseManager.accessIndex != wantedIndex)
+							bb += 30;
+					}
 				}
 				// Then, if workers, small preference for bases with less workers
 				if (workerUnit && aBase && bBase && aBase != bBase)
 				{
-					const apop = gameState.ai.HQ.getBaseByID(aBase).workers.length;
-					const bpop = gameState.ai.HQ.getBaseByID(bBase).workers.length;
-					if (apop > bpop)
-						aa++;
-					else if (bpop > apop)
-						bb++;
+					const aBaseManager = gameState.ai.HQ.getBaseByID(aBase);
+					const bBaseManager = gameState.ai.HQ.getBaseByID(bBase);
+					if (aBaseManager && bBaseManager)
+					{
+						const apop = aBaseManager.workers.length;
+						const bpop = bBaseManager.workers.length;
+						if (apop > bpop)
+							aa++;
+						else if (bpop > apop)
+							bb++;
+					}
 				}
 				return aa - bb;
 			});
 		}
 
 		if (this.metadata && this.metadata.base !== undefined && this.metadata.base === 0)
-			this.metadata.base = this.trainers[0].getMetadata(PlayerID, "base");
-		this.trainers[0].train(gameState.getPlayerCiv(), this.type, this.number, this.metadata);
+			this.metadata.base = trainers[0].getMetadata(PlayerID, "base");
+		trainers[0].train(gameState.getPlayerCiv(), this.type, this.number, this.metadata);
 
 		this.onStart(gameState);
 	}

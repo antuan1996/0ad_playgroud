@@ -50,6 +50,8 @@ export class GarrisonManager
 				if (id != evt.entity)
 					continue;
 				const data = this.holders.get(id);
+				if (!data)
+					continue;
 				const newHolder = gameState.getEntityById(evt.newentity);
 				if (newHolder && newHolder.isGarrisonHolder())
 				{
@@ -148,9 +150,10 @@ export class GarrisonManager
 			if (!holder.position())     // could happen with siege unit inside a ship
 				continue;
 
-			if (gameState.ai.elapsedTime - holder.getMetadata(PlayerID, "holderTimeUpdate") > 3)
+			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
 			{
-				const range = holder.attackRange("Ranged") ? holder.attackRange("Ranged").max : 80;
+				const holderAttackRange = holder.attackRange("Ranged");
+				const range = holderAttackRange ? holderAttackRange.max : 80;
 				const around = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
 				for (const ent of gameState.getEnemyEntities().values())
 				{
@@ -161,7 +164,8 @@ export class GarrisonManager
 					}
 					else if (ent.hasClass("Unit"))
 					{
-						if (ent.owner() == 0 && (!ent.unitAIState() || ent.unitAIState().split(".")[1] != "COMBAT"))
+						const unitAIState = ent.unitAIState();
+						if (ent.owner() == 0 && (!unitAIState || unitAIState.split(".")[1] != "COMBAT"))
 							continue;
 					}
 					else
@@ -175,7 +179,7 @@ export class GarrisonManager
 						around.defenseStructure = true;
 					else if (isSiegeUnit(ent))
 					{
-						if (ent.attackTypes().indexOf("Melee") !== -1)
+						if (ent.attackTypes()?.indexOf("Melee") !== -1)
 							around.meleeSiege = true;
 						else
 							around.rangeSiege = true;
@@ -192,12 +196,16 @@ export class GarrisonManager
 				for (const entId of holder.garrisoned())
 				{
 					const ent = gameState.getEntityById(entId);
+					if (!ent)
+						continue;
 					if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
 						holder.unload(entId);
 				}
 				for (let j = 0; j < list.length; ++j)
 				{
 					const ent = gameState.getEntityById(list[j]);
+					if (!ent)
+						continue;
 					if (this.keepGarrisoned(ent, holder, around))
 						continue;
 					if (ent.getMetadata(PlayerID, "garrisonHolder") == id)
@@ -232,7 +240,8 @@ export class GarrisonManager
 		if (!this.holders.has(holder.id()))
 			return holder.garrisoned().length;
 
-		return holder.garrisoned().length + this.holders.get(holder.id()).list.length;
+		const holderData = this.holders.get(holder.id());
+		return holder.garrisoned().length + (holderData ? holderData.list.length : 0);
 	}
 
 	/** TODO should add the units garrisoned inside garrisoned units */
@@ -241,7 +250,8 @@ export class GarrisonManager
 		if (!this.holders.has(holder.id()))
 			return holder.garrisonedSlots();
 
-		return holder.garrisonedSlots() + this.holders.get(holder.id()).list.length;
+		const holderData = this.holders.get(holder.id());
+		return holder.garrisonedSlots() + (holderData ? holderData.list.length : 0);
 	}
 
 	allowMelee(holder: CommonEntity): boolean | undefined
@@ -249,7 +259,8 @@ export class GarrisonManager
 		if (!this.holders.has(holder.id()))
 			return undefined;
 
-		return this.holders.get(holder.id()).allowMelee;
+		const holderData = this.holders.get(holder.id());
+		return holderData ? holderData.allowMelee : undefined;
 	}
 
 	/** This is just a pre-garrison state, while the entity walk to the garrison holder */
@@ -259,7 +270,9 @@ export class GarrisonManager
 			return;
 
 		this.registerHolder(gameState, holder);
-		this.holders.get(holder.id()).list.push(ent.id());
+		const holderData = this.holders.get(holder.id());
+		if (holderData)
+			holderData.list.push(ent.id());
 
 		if (gameState.ai.Config.debug > 2)
 		{
@@ -302,7 +315,10 @@ export class GarrisonManager
 		const holderId = ent.getMetadata(PlayerID, "garrisonHolder");
 		if (!holderId || !this.holders.has(holderId))
 			return;
-		const list = this.holders.get(holderId).list;
+		const holderData = this.holders.get(holderId);
+		if (!holderData)
+			return;
+		const list = holderData.list;
 		const index = list.indexOf(ent.id());
 		if (index !== -1)
 			list.splice(index, 1);
@@ -328,26 +344,26 @@ export class GarrisonManager
 				if (around.unit || around.defenseStructure)
 					return true;
 				if (around.meleeSiege || around.rangeSiege)
-					return ent.attackTypes().indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
+					return ent.attackTypes()?.indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
 				return false;
 			}
-			if (ent.attackTypes() && ent.attackTypes().indexOf("Melee") !== -1)
+			if (ent.attackTypes()?.indexOf("Melee") !== -1)
 				return false;
 			if (around.unit)
 				return ent.hasClass("Support") || isSiegeUnit(ent);	// only ranged siege here and below as melee siege already released above
 			if (isSiegeUnit(ent))
 				return around.meleeSiege;
-			return holder.buffHeal() && ent.needsHeal();
+			return !!holder.buffHeal() && ent.needsHeal();
 		}
 		case GarrisonManager.TYPE_DECAY:
-			return ent.captureStrength() && this.decayingStructures.has(holder.id());
+			return !!ent.captureStrength() && this.decayingStructures.has(holder.id());
 		case GarrisonManager.TYPE_EMERGENCY: // f.e. hero in regicide mode
 			if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
 				return true;
 			if (around.unit || around.defenseStructure || around.meleeSiege ||
 				around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
 				return true;
-			return holder.buffHeal() && ent.needsHeal();
+			return !!holder.buffHeal() && ent.needsHeal();
 		default:
 			if (ent.getMetadata(PlayerID, "onBoard") === "onBoard")  // transport is not (yet ?) managed by garrisonManager
 				return true;

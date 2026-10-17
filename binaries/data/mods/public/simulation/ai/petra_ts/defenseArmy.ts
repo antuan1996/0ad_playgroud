@@ -155,9 +155,10 @@ export class DefenseArmy
 
 		this.ownEntities.splice(idx, 1);
 
-		if (this.assignedTo[id] !== 0)
+		const assignedToId = this.assignedTo[id];
+		if (assignedToId !== undefined && assignedToId !== 0)
 		{
-			const temp = this.assignedAgainst[this.assignedTo[id]];
+			const temp = this.assignedAgainst[assignedToId];
 			if (temp)
 				temp.splice(temp.indexOf(id), 1);
 		}
@@ -184,7 +185,7 @@ export class DefenseArmy
 		// Remove from transport plan if not yet on Board
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport") ?? NaN);
 			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
 				plan.removeUnit(gameState, ent);
 		}
@@ -281,7 +282,10 @@ export class DefenseArmy
 					defensiveFound = true;
 				distmin = dist;
 				destination = pos;
-				radius = struct.obstructionRadius().max;
+				const structRadius = struct.obstructionRadius();
+				if (!structRadius)
+					continue;
+				radius = structRadius.max;
 			}
 		}
 		while (this.ownEntities.length > 0)
@@ -344,20 +348,21 @@ export class DefenseArmy
 				break;
 			}
 
+			const assignedAgainstId = this.assignedAgainst[id];
 			// already enough units against it
-			if (this.assignedAgainst[id].length > 8 ||
-				this.assignedAgainst[id].length > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
+			if ((assignedAgainstId?.length ?? 0) > 8 ||
+				(assignedAgainstId?.length ?? 0) > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
 				continue;
 
 			const dist = SquareVectorDistance(ent.position(), eEnt.position());
-			if (idMinAll === undefined || dist < distMinAll)
+			if (idMinAll === undefined || dist < (distMinAll ?? NaN))
 			{
 				idMinAll = id;
 				distMinAll = dist;
 			}
-			if (this.assignedAgainst[id].length > 2)
+			if ((assignedAgainstId?.length ?? 0) > 2)
 				continue;
-			if (idMin === undefined || dist < distMin)
+			if (idMin === undefined || dist < (distMin ?? NaN))
 			{
 				idMin = id;
 				distMin = dist;
@@ -374,15 +379,19 @@ export class DefenseArmy
 
 		const ownIndex = getLandAccess(gameState, ent);
 		const foeEnt = gameState.getEntityById(idFoe);
+		if (!foeEnt)
+			return false;
 		const foePosition = foeEnt.position();
 		const foeIndex = gameState.ai.accessibility.getAccessValue(foePosition);
 		if (ownIndex == foeIndex || ent.hasClass("Ship"))
 		{
 			this.assignedTo[entID] = idFoe;
-			this.assignedAgainst[idFoe].push(entID);
+			const foeAssigned = this.assignedAgainst[idFoe];
+			if (foeAssigned)
+				foeAssigned.push(entID);
 			ent.attack(idFoe, allowCapture(gameState, ent, foeEnt), queued);
 		}
-		else
+		else if (ownIndex !== undefined)
 			gameState.ai.HQ.navalManager.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
 		return true;
 	}
@@ -605,11 +614,12 @@ export class DefenseArmy
 
 		if (this.type == "capturing")
 		{
-			if (this.foeEntities.length && gameState.getEntityById(this.foeEntities[0]))
+			const firstFoe = gameState.getEntityById(this.foeEntities[0]);
+			if (this.foeEntities.length && firstFoe)
 			{
 				// Check if we still still some capturePoints to recover
 				// and if not, remove this foe from the list (capture army have only one foe)
-				const capture = gameState.getEntityById(this.foeEntities[0]).capturePoints();
+				const capture = firstFoe.capturePoints();
 				if (capture)
 					for (let j = 0; j < capture.length; ++j)
 						if (gameState.isPlayerEnemy(j) && capture[j] > 0)

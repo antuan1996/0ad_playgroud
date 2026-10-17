@@ -73,13 +73,17 @@ export class TradeManager
 		if (!this.hasTradeRoute() || queues.trader.hasQueuedUnits())
 			return;
 
+		const route = this.tradeRoute;
+		if (!route)
+			return;
+
 		let numTraders = this.traders.length;
 		let numSeaTraders = this.traders.filter(filters.byClass("Ship")).length;
 		let numLandTraders = numTraders - numSeaTraders;
 		// add traders already in training
 		gameState.getOwnTrainingFacilities().forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
 		{
-			for (const item of ent.trainingQueue())
+			for (const item of ent.trainingQueue() ?? [])
 			{
 				if (!item.metadata || !item.metadata.role || item.metadata.role !== Worker.ROLE_TRADER)
 					continue;
@@ -91,20 +95,20 @@ export class TradeManager
 			}
 		});
 		if (numTraders >= this.targetNumTraders &&
-			(!this.tradeRoute.sea && numLandTraders >= Math.floor(this.targetNumTraders/2) ||
-			  this.tradeRoute.sea && numSeaTraders >= Math.floor(this.targetNumTraders/2)))
+			(!route.sea && numLandTraders >= Math.floor(this.targetNumTraders/2) ||
+			  route.sea && numSeaTraders >= Math.floor(this.targetNumTraders/2)))
 			return;
 
 		let template;
 		const metadata: Record<string, unknown> = { "role": Worker.ROLE_TRADER };
-		if (this.tradeRoute.sea)
+		if (route.sea)
 		{
 			// if we have some merchand ships assigned to transport, try first to reassign them
 			// May-be, there were produced at an early stage when no other ship were available
 			// and the naval manager will train now more appropriate ships.
 			let already = false;
 			let shipToSwitch: CommonEntity | undefined;
-			gameState.ai.HQ.navalManager.seaTransportShips[this.tradeRoute.sea]?.forEach(function(ship: CommonEntity): void 
+			gameState.ai.HQ.navalManager.seaTransportShips[route.sea ?? -1]?.forEach(function(ship: CommonEntity): void 
 			{
 				if (already || !ship.hasClass("Trader"))
 					return;
@@ -127,16 +131,18 @@ export class TradeManager
 			}
 
 			template = gameState.applyCiv("units/{civ}/ship_merchant");
-			metadata.sea = this.tradeRoute.sea;
+			metadata.sea = route.sea;
 		}
 		else
 		{
 			template = gameState.applyCiv("units/{civ}/support_trader");
-			const sourceObject = gameState.getEntityById(this.tradeRoute.source);
+			const sourceObject = gameState.getEntityById(route.source);
+			if (!sourceObject)
+				return;
 			const baseObject = sourceObject.hasClass("Naval") ?
-				gameState.getEntityById(this.tradeRoute.target) : sourceObject;
+				gameState.getEntityById(route.target) : sourceObject;
 
-			metadata.base = baseObject.getMetadata(PlayerID, "base");
+			metadata.base = baseObject ? baseObject.getMetadata(PlayerID, "base") : undefined;
 		}
 
 		if (!gameState.getTemplate(template))
@@ -154,7 +160,7 @@ export class TradeManager
 	updateTrader(gameState: CommonGameState, ent: CommonEntity): void
 	{
 		if (ent.hasClass("Ship") && gameState.ai.playedTurn % 5 == 0 &&
-			!ent.unitAIState().startsWith("INDIVIDUAL.COLLECTTREASURE") &&
+			(ent.unitAIState() ?? "").startsWith("INDIVIDUAL.COLLECTTREASURE") &&
 			gatherTreasure(gameState, ent, true))
 		{
 			return;
@@ -185,6 +191,8 @@ export class TradeManager
 		}
 		const routeSource = gameState.getEntityById(route.source);
 		const routeTarget = gameState.getEntityById(route.target);
+		if (!routeSource || !routeTarget)
+			return;
 
 		let nearerSource = true;
 		if (SquareVectorDistance(routeTarget.position(), ent.position()) <
@@ -193,7 +201,7 @@ export class TradeManager
 			nearerSource = false;
 		}
 
-		if (!ent.hasClass("Ship") && route.land != access)
+		if (!ent.hasClass("Ship") && route.land !== undefined && route.land != access)
 		{
 			if (nearerSource)
 				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, access, route.land, routeSource.position());
@@ -595,9 +603,14 @@ export class TradeManager
 
 		if (this.Config.chat)
 		{
-			let owner = gameState.getEntityById(this.tradeRoute.source).owner();
+			const sourceEnt = gameState.getEntityById(this.tradeRoute.source);
+			let owner = sourceEnt ? sourceEnt.owner() : PlayerID;
 			if (owner == PlayerID)
-				owner = gameState.getEntityById(this.tradeRoute.target).owner();
+			{
+				const targetEnt = gameState.getEntityById(this.tradeRoute.target);
+				if (targetEnt)
+					owner = targetEnt.owner();
+			}
 			if (owner != PlayerID && !this.warnedAllies[owner])
 			{	// Warn an ally that we have a trade route with him
 				chatNewTradeRoute(gameState, owner);
@@ -647,11 +660,15 @@ export class TradeManager
 			if (!possibleRoute && !ent.hasClass("Ship"))
 			{
 				const closestBase = getBestBase(gameState, ent, true);
-				if (closestBase.accessIndex == access)
+				if (closestBase && closestBase.accessIndex == access)
 				{
-					const closestBasePos = closestBase.anchor.position();
-					ent.moveToRange(closestBasePos[0], closestBasePos[1], 0, 15);
-					return;
+					const closestBaseAnchor = closestBase.anchor;
+					if (closestBaseAnchor)
+					{
+						const closestBasePos = closestBaseAnchor.position();
+						ent.moveToRange(closestBasePos[0], closestBasePos[1], 0, 15);
+						return;
+					}
 				}
 			}
 			ent.stopMoving();

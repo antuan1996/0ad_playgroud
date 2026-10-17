@@ -4,6 +4,9 @@ import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { ResearchPlan } from "./queueplanResearch.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 
+type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> | ReturnType<TrainingPlan["Serialize"]>;
+type PlanDeserialize = ReturnType<ConstructionPlan["Serialize"]> & ReturnType<ResearchPlan["Serialize"]> & ReturnType<TrainingPlan["Serialize"]>;
+
 /**
  * Holds a list of wanted plans to train or construct
  */
@@ -24,7 +27,7 @@ export class Queue implements PetraRuntime.QueueLike
 			return;
 		for (const plan of this.plans)
 		{
-			if (newPlan.category === "unit" && plan.type == newPlan.type && plan.number + newPlan.number <= plan.maxMerge &&
+			if (newPlan.category === "unit" && plan.type == newPlan.type && plan.number + newPlan.number <= (plan.maxMerge ?? NaN) &&
 				"addItem" in plan && typeof plan.addItem === "function")
 			{
 				plan.addItem(newPlan.number);
@@ -43,6 +46,8 @@ export class Queue implements PetraRuntime.QueueLike
 			if (!this.plans[0].isInvalid(gameState))
 				return;
 			const plan = this.plans.shift();
+			if (!plan)
+				continue;
 			if (plan.queueToReset)
 				gameState.ai.queueManager.changePriority(plan.queueToReset, gameState.ai.Config.priorities[plan.queueToReset]);
 		}
@@ -59,7 +64,9 @@ export class Queue implements PetraRuntime.QueueLike
 	{
 		if (this.plans.length > 0)
 		{
-			this.plans.shift().start(gameState);
+			const plan = this.plans.shift();
+			if (plan)
+				plan.start(gameState);
 			return true;
 		}
 		return false;
@@ -127,28 +134,29 @@ export class Queue implements PetraRuntime.QueueLike
 	{
 		let count = 0;
 		for (const plan of this.plans)
-			if (plan.metadata[data] && plan.metadata[data] == value)
+		{
+			const metadata = plan.metadata;
+			if (metadata && metadata[data] && metadata[data] == value)
 				count += plan.number;
+		}
 		return count;
 	}
 
 	Serialize(): {
-		plans: Array<ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> |
-			ReturnType<TrainingPlan["Serialize"]>>;
+		plans: Array<PlanSerialize>;
 		paused: boolean;
 		switched: number;
 	}
 	{
-		const plans = [];
+		const plans: PlanSerialize[] = [];
 		for (const plan of this.plans)
-			plans.push(plan.Serialize());
+			plans.push(plan.Serialize() as PlanSerialize);
 
 		return { "plans": plans, "paused": this.paused, "switched": this.switched };
 	}
 
 	Deserialize(gameState: CommonGameState, data: {
-		plans: Array<ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> |
-			ReturnType<TrainingPlan["Serialize"]>>;
+		plans: Array<PlanSerialize>;
 		paused: boolean;
 		switched: number;
 	}): void
@@ -170,7 +178,7 @@ export class Queue implements PetraRuntime.QueueLike
 				aiWarn("Petra deserialization error: plan unknown " + uneval(dataPlan));
 				continue;
 			}
-			plan.Deserialize(gameState, dataPlan);
+			plan.Deserialize(gameState, dataPlan as PlanDeserialize);
 			this.plans.push(plan);
 		}
 	}
