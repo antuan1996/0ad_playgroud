@@ -104,3 +104,16 @@ export abstract class QueuePlan
 	{
 	}
 }
+
+/**
+ * An already queued plan is considered "the same" as an incoming plan
+ * when their type matches. When this is true, both plans are narrowed
+ * to the same concrete QueuePlan subclass.
+ */
+export function samePlanType<P extends PetraRuntime.ConcretePlan>(
+	queued: PetraRuntime.ConcretePlan,
+	incoming: P,
+): queued is P
+{
+	return queued.type === incoming.type;
+}

@@ -3,12 +3,14 @@
  *
  * These describe what a Queue does, independent of which implementation is
  * loaded (see harness/target.ts). A plan is faked here rather than taken from
- * queueplan*.ts, because those constructors need a template and a world; the
- * queue itself only ever touches the handful of fields used below.
+ * queueplan*.ts, because the queue itself only ever touches the handful of
+ * fields used below. Restoring a save is the exception: that path is the queue
+ * choosing its plans, so those checks use the real plan classes and templates.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { logs } from "./harness/engine.ts";
 import { loadCommonModule, loadPetraModule } from "./harness/target.ts";
 import { makeFakeGameState } from "./harness/world.ts";
 
@@ -27,7 +29,8 @@ interface FakePlan
 	category: string;
 	type: string;
 	number: number;
-	maxMerge: number;
+	/** Only some plans set a merge limit; QueuePlan declares it optional. */
+	maxMerge?: number;
 	metadata: Record<string, unknown>;
 	template?: { hasClass(name: string): boolean };
 	addItem?(amount: number): void;
@@ -37,6 +40,14 @@ interface FakePlan
 	start(): void;
 	Serialize(): Record<string, unknown>;
 	queueToReset?: string;
+}
+
+/** The save shape a Queue exchanges: one entry per plan, plus its own flags. */
+interface SavedQueue
+{
+	plans: Record<string, unknown>[];
+	paused: boolean;
+	switched: number;
 }
 
 interface QueueLike
@@ -57,11 +68,28 @@ interface QueueLike
 	hasQueuedUnitsWithClass(name: string): boolean;
 	countQueuedUnitsWithClass(name: string): number;
 	countQueuedUnitsWithMetadata(key: string, value: unknown): number;
-	Serialize(): { plans: Record<string, unknown>[]; paused: boolean; switched: number };
+	Serialize(): SavedQueue;
+	/** Restore the plans from a save; see the "restoring a saved queue" block. */
+	Deserialize(gameState: CommonGameState, data: SavedQueue): void;
 }
 
 const { Queue } = await loadPetraModule<{ Queue: new () => QueueLike }>("queue");
 const { ResourcesManager } = await loadCommonModule<{ ResourcesManager: ResourcesManagerCtor }>("resources");
+
+/**
+ * Restoring a save is the one place the queue builds plans itself: it
+ * constructs a real TrainingPlan/ConstructionPlan/ResearchPlan from each
+ * saved entry rather than reusing the entry, so the restore tests need the
+ * plan classes and templates that answer what those constructors ask.
+ */
+interface SavedPlan
+{
+	Serialize(): Record<string, unknown>;
+}
+
+const { TrainingPlan } = await loadPetraModule<{ TrainingPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanTraining");
+const { ConstructionPlan } = await loadPetraModule<{ ConstructionPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanBuilding");
+const { ResearchPlan } = await loadPetraModule<{ ResearchPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanResearch");
 
 function food(amount: number): ResourcesManagerLike
 {
@@ -146,6 +174,20 @@ describe("Queue", () =>
 		assert.equal(existing.number, 4, "the existing plan must not have been touched");
 	});
 
+	// QueuePlan declares maxMerge optional and only TrainingPlan sets it, so a
+	// unit plan that leaves it unset compares against NaN and never merges.
+	it("keeps a unit plan whose match sets no merge limit", () =>
+	{
+		const queue = new Queue();
+		const existing = makePlan({ number: 1 });
+		delete existing.maxMerge;
+		queue.addPlan(existing);
+		queue.addPlan(makePlan({ number: 2 }));
+
+		assert.equal(queue.length(), 2, "a plan without a merge limit absorbs nothing");
+		assert.equal(existing.number, 1, "the existing plan must not have been touched");
+	});
+
 	it("keeps a unit plan of a different type", () =>
 	{
 		const queue = new Queue();
@@ -171,22 +213,6 @@ describe("Queue", () =>
 		queue.addPlan(makePlan({ category: "technology", type: "phase_town" }));
 		queue.addPlan(makePlan({ category: "technology", type: "phase_city" }));
 		assert.equal(queue.length(), 2);
-	});
-
-	// The reference implementation calls addItem() on the matching plan without
-	// checking it exists, so it raises a TypeError here. Enqueuing the plan
-	// instead is the port's deliberate improvement, not a regression: a plan
-	// that cannot merge is still a plan the queue can run.
-	it("enqueues a unit plan whose match cannot take items", () =>
-	{
-		const queue = new Queue();
-		const existing = makePlan();
-		delete existing.addItem;
-		queue.addPlan(existing);
-		queue.addPlan(makePlan({ number: 2 }));
-
-		assert.equal(queue.length(), 2, "the new plan should be queued rather than merged or lost");
-		assert.equal(existing.number, 1);
 	});
 
 	it("reports the plan it would start next", () =>
@@ -306,6 +332,24 @@ describe("Queue", () =>
 		assert.equal(queue.getNext(), keeper);
 	});
 
+	// The reference reads queueToReset off whatever shift returned, so an
+	// emptied queue throws there; the port's guard against that is deliberate,
+	// and this is the only way to reach it.
+	it("keeps walking when the queue emptied itself mid-check", () =>
+	{
+		const { gameState } = makeFakeGameState();
+		const queue = new Queue();
+		queue.addPlan(makePlan({ type: "self-clearing", isInvalid: () =>
+		{
+			queue.empty();
+			return true;
+		} }));
+
+		queue.check(gameState);
+
+		assert.equal(queue.length(), 0, "the queue emptied itself and nothing was left to take");
+	});
+
 	it("serializes its plans and its flags", () =>
 	{
 		const queue = new Queue();
@@ -318,5 +362,88 @@ describe("Queue", () =>
 		assert.equal(data.switched, 3);
 		assert.equal(data.plans.length, 1);
 		assert.equal(data.plans[0].type, "first");
+	});
+});
+
+// Restoring a save is the one place the queue builds plans itself: it
+// constructs a TrainingPlan/ConstructionPlan/ResearchPlan from each saved
+// entry rather than reusing the entry, so these checks need the plan classes
+// and templates that answer what those constructors ask (cost, pop cost,
+// research time).
+describe("restoring a saved queue", () =>
+{
+	const { gameState } = makeFakeGameState({
+		templates:
+		{
+			"units/athenians_soldier": { cost: { food: 150, wood: 20 }, population: 4 },
+			"structures/athenians_barracks": { cost: { wood: 120, stone: 100 } },
+			"research/athenians_myrnidian_founding": { cost: { food: 200 }, researchTime: 60 }
+		}
+	});
+
+	/** One save entry, written by the plan class that would have produced it. */
+	function savedEntry(category: string, type: string): Record<string, unknown>
+	{
+		const plan = category === "unit" ? new TrainingPlan(gameState, type)
+			: category === "building" ? new ConstructionPlan(gameState, type)
+			: new ResearchPlan(gameState, type);
+		return plan.Serialize();
+	}
+
+	it("rebuilds a plan for every saved entry", () =>
+	{
+		const saved =
+		{
+			plans:
+			[
+				savedEntry("unit", "units/athenians_soldier"),
+				savedEntry("building", "structures/athenians_barracks"),
+				savedEntry("technology", "research/athenians_myrnidian_founding")
+			],
+			paused: true,
+			switched: 4
+		};
+
+		const queue = new Queue();
+		queue.Deserialize(gameState, saved);
+
+		assert.equal(queue.length(), 3, "each entry should have rebuilt a plan");
+		assert.equal(queue.countQueuedUnits(), 3, "each rebuilt plan keeps its own count");
+		assert.equal(queue.paused, true, "the paused flag comes from the save");
+		assert.equal(queue.switched, 4, "the switched flag comes from the save");
+	});
+
+	it("empties the queue when the save holds no plans", () =>
+	{
+		const queue = new Queue();
+		queue.addPlan(makePlan({ type: "leftover" }));
+		queue.Deserialize(gameState, { plans: [], paused: false, switched: 0 });
+
+		assert.equal(queue.length(), 0, "restoring replaces the plans, it does not append");
+	});
+
+	it("reports a saved entry it cannot rebuild", () =>
+	{
+		const logged = logs.length;
+		const queue = new Queue();
+		queue.Deserialize(gameState,
+		{
+			plans:
+			[
+				savedEntry("unit", "units/athenians_soldier"),
+				// A category the queue has no plan class for: an old save, or a
+				// plan class the queue never learned about.
+				{ category: "garrison", type: "units/athenians_soldier" }
+			],
+			paused: false,
+			switched: 0
+		});
+
+		assert.equal(queue.length(), 1, "an entry the queue cannot build must not be queued");
+		assert.equal(
+			logs.slice(logged).filter((message) => message.includes("Petra deserialization error")).length,
+			1,
+			"the entry should have been reported to the game log"
+		);
 	});
 });

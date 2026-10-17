@@ -7,9 +7,15 @@ can be pointed at different builds of it.
 ## Running
 
 ```sh
-npm run test:petra            # the port: simulation/ai/petra_ts/*.ts
-npm run test:petra -- ref     # the original: simulation/ai/petra/*.js
+npm run test:petra                 # the port: simulation/ai/petra_ts/*.ts
+npm run test:petra -- ref          # the original: simulation/ai/petra/*.js
+npm run test:petra:coverage        # the port, plus a coverage report
+npm run test:petra:coverage:ref    # the original, plus a coverage report
 ```
+
+Coverage counts the code under test only: the report takes the target's own
+modules and leaves `tests/` out, so a class that reads 0% is a class no test
+has loaded yet.
 
 `ref` is the game's own copy of Petra, the `petra` folder that sits next to the
 port's `petra_ts` folder in the mod, so the suite reads whatever the game would
@@ -19,7 +25,7 @@ third implementation to test.
 
 Running against `ref` is expected to fail wherever the port deliberately
 behaves differently from the original — that failure is the record of the
-difference, not a regression. `queue.test.ts` says so above the test that only
+difference, not a regression. `queue.test.ts` says so above each test that only
 the port passes.
 
 Type checking:

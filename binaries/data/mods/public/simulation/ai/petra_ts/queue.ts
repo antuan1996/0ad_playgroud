@@ -3,6 +3,7 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { ResearchPlan } from "./queueplanResearch.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
+import { samePlanType } from "./queueplan.ts";
 
 type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> | ReturnType<TrainingPlan["Serialize"]>;
 
@@ -26,13 +27,13 @@ export class Queue implements PetraRuntime.QueueLike
 			return;
 		for (const plan of this.plans)
 		{
-			if (newPlan.category === "unit" && plan.type == newPlan.type && plan.number + newPlan.number <= (plan.maxMerge ?? NaN) &&
-				"addItem" in plan && typeof plan.addItem === "function")
+			if (newPlan.category === "unit" && samePlanType(plan, newPlan) &&
+				plan.number + newPlan.number <= (plan.maxMerge ?? NaN))
 			{
 				plan.addItem(newPlan.number);
 				return;
 			}
-			else if (newPlan.category === "technology" && plan.type === newPlan.type)
+			else if (newPlan.category === "technology" && samePlanType(plan, newPlan))
 				return;
 		}
 		this.plans.push(newPlan);

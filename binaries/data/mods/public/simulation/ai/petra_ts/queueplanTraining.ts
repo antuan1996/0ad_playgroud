@@ -6,6 +6,7 @@ import { Worker } from "./worker.ts";
 
 export class TrainingPlan extends QueuePlan
 {
+	declare category: "unit";
 	declare maxMerge: number;
 	declare trainers: CommonEntity[] | undefined;
 

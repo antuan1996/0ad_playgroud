@@ -78,18 +78,39 @@ export interface FakeTemplate
 	cost(): Record<string, number>;
 	costSum(): number;
 	_template: { Cost: { Population: number } };
+	/** A value from the template JSON, by path, e.g. "Cost/Population". */
+	get(path: "Cost/Population"): number | undefined;
+	get(path: string): unknown;
 	researchTime?: number;
 }
 
 export function makeFakeTemplate(options: FakeTemplateOptions = {}): FakeTemplate
 {
 	const cost = options.cost ?? {};
+	const _template = { Cost: { Population: options.population ?? 0 } };
 	return {
 		cost: () => ({ ...cost }),
 		costSum: () => Object.values(cost).reduce((sum, amount) => sum + amount, 0),
-		_template: { Cost: { Population: options.population ?? 0 } },
+		_template,
+		// Plans read a few values straight off the template JSON, so the fake
+		// answers the same way the real one walks it. Only the paths the fake
+		// declares above answer - the costs themselves stay with `cost`.
+		get: (path: string) => templateValue(_template, path),
 		researchTime: options.researchTime
 	};
+}
+
+/** Read a template value by path, the way the real template walks its JSON. */
+function templateValue(_template: Record<string, unknown>, path: string): any
+{
+	let value: any = _template;
+	for (const part of path.split("/"))
+	{
+		value = value?.[part];
+		if (value == undefined)
+			break;
+	}
+	return value;
 }
 
 /** A built template, as opposed to the options to build one from. */

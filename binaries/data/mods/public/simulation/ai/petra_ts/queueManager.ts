@@ -26,19 +26,22 @@ import type { Config } from "./config.ts";
  * This system should be improved. It's probably not flexible enough.
  */
 
-function sortQueues(queueArrays: Array<[string, Queue]>, priorities: Record<string, number>): void
+/**
+ * All queues, the one with the highest priority first, ties broken by queue
+ * name. The keys of `queues` are unique, so a tie is always between two
+ * different names and everything is strictly ordered.
+ */
+function sortedQueues(queues: Record<string, Queue>, priorities: PetraRuntime.Dict<number>): Array<[string, Queue]>
 {
-	queueArrays.sort((a: [string, Queue], b: [string, Queue]): number =>
-	{
-		const priorityDifference = priorities[b[0]] - priorities[a[0]];
-		if (priorityDifference !== 0)
-			return priorityDifference;
-		if (b[0] < a[0])
-			return 1;
-		if (b[0] > a[0])
-			return -1;
-		return 0;
-	});
+	return Object.keys(queues)
+		.sort((a: string, b: string): number =>
+		{
+			const priorityDifference = priorities[b] - priorities[a];
+			if (priorityDifference !== 0)
+				return priorityDifference;
+			return a < b ? -1 : 1;
+		})
+		.map((name: string): [string, Queue] => [name, queues[name]]);
 }
 
 export class QueueManager
@@ -58,15 +61,11 @@ export class QueueManager
 		for (const i in Config.priorities)
 			this.priorities[i] = Config.priorities[i];
 		this.accounts = {};
+		for (const q in this.queues)
+			this.accounts[q] = new ResourcesManager();
 
 		// the sorting is updated on priority change.
-		this.queueArrays = [];
-		for (const q in this.queues)
-		{
-			this.accounts[q] = new ResourcesManager();
-			this.queueArrays.push([q, this.queues[q]]);
-		}
-		sortQueues(this.queueArrays, this.priorities);
+		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
 	getAvailableResources(gameState: CommonGameState): ResourcesManager
@@ -208,11 +207,9 @@ export class QueueManager
 			}
 			for (const plan of q.plans)
 			{
-				let qStr = "     " + plan.type + " ";
-				if (plan.number)
-					qStr += "x" + plan.number;
-				qStr += "   isGo " + plan.isGo(gameState);
-				aiWarn(qStr);
+				// Plans always plan for at least one unit (or build/research a
+				// single thing), so the count is always printed.
+				aiWarn("     " + plan.type + " x" + plan.number + "   isGo " + plan.isGo(gameState));
 			}
 		}
 		aiWarn("Accounts");
@@ -402,9 +399,9 @@ export class QueueManager
 			const queue = q[1];
 			if (queue.hasQueuedUnits() && !queue.paused)
 			{
-				const item = queue.getNext();
-				if (!item)
-					continue;
+				// The queue just said it has plans and getNext() classes the
+				// empty queue itself, so the item cannot be null here.
+				const item = queue.getNext()!;
 				if (this.accounts[name].canAfford(item.getCost()) && item.canStart(gameState))
 				{
 					// canStart may update the cost because of the costMultiplier so we must check it again
@@ -569,10 +566,7 @@ export class QueueManager
 		this.priorities[queueName] = priority;
 		this.accounts[queueName] = new ResourcesManager();
 
-		this.queueArrays = [];
-		for (const q in this.queues)
-			this.queueArrays.push([q, this.queues[q]]);
-		sortQueues(this.queueArrays, this.priorities);
+		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
 	removeQueue(queueName: string): void
@@ -584,10 +578,7 @@ export class QueueManager
 		delete this.priorities[queueName];
 		delete this.accounts[queueName];
 
-		this.queueArrays = [];
-		for (const q in this.queues)
-			this.queueArrays.push([q, this.queues[q]]);
-		sortQueues(this.queueArrays, this.priorities);
+		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
 	getPriority(queueName: string): number
@@ -604,7 +595,7 @@ export class QueueManager
 		}
 		if (this.queues[queueName] !== undefined)
 			this.priorities[queueName] = newPriority;
-		sortQueues(this.queueArrays, this.priorities);
+		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
 	Serialize(): {
@@ -651,8 +642,8 @@ export class QueueManager
 			this.queues[q].Deserialize(gameState, data.queues[q]);
 			this.accounts[q] = new ResourcesManager();
 			this.accounts[q].Deserialize(data.accounts[q]);
-			this.queueArrays.push([q, this.queues[q]]);
 		}
-		sortQueues(this.queueArrays, data.priorities);
+		// the sorting is updated on priority change.
+		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 }

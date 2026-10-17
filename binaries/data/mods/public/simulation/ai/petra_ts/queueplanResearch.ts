@@ -3,6 +3,7 @@ import { QueuePlan } from "./queueplan.ts";
 
 export class ResearchPlan extends QueuePlan
 {
+	declare category: "technology";
 	declare queueToReset: string | undefined;
 	declare researchers: CommonEntity[] | undefined;
 	declare rush: boolean;

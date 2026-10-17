@@ -24,6 +24,7 @@ type BuildingPosition = {
 
 export class ConstructionPlan extends QueuePlan
 {
+	declare category: "building";
 	declare goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
 	declare position: CommonPosition | 0;
 	declare queueToReset: string | undefined;
