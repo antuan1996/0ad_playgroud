@@ -357,8 +357,10 @@ export class NavalManager
 	}
 
 
-	getPlan(ID: number): TransportPlan | undefined
+	getPlan(ID: number | undefined): TransportPlan | undefined
 	{
+		if (ID === undefined)
+			return undefined;
 		for (const plan of this.transportPlans)
 			if (plan.ID === ID)
 				return plan;
@@ -438,7 +440,7 @@ export class NavalManager
 		}
 		newplan.init(gameState);
 
-		for (const ent of plan.needSplit ?? [])
+		for (const ent of plan.needSplit)
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
@@ -464,7 +466,7 @@ export class NavalManager
 		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
 		if (fromAccess !== 1)
 			return;
-		if ((toAccess ?? NaN) < 2)
+		if (toAccess === undefined || toAccess < 2)
 			return;
 
 		for (const ship of this.ships.values())
@@ -481,8 +483,6 @@ export class NavalManager
 					units.push(unit);
 			}
 			// TODO check that the garrisoned units have not another purpose
-			if (toAccess === undefined)
-				continue;
 			const plan = new TransportPlan(gameState, units, fromAccess, toAccess, toPos, ship);
 			if (plan.failed)
 				continue;
@@ -583,7 +583,7 @@ export class NavalManager
 	{
 		if (!ship.position())
 			return false;
-		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter") ?? NaN);
+		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
 		if (!plan || !plan.boardingPos[ship.id()])
 			return false;
 		const bp = plan.boardingPos[ship.id()];

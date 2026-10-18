@@ -28,7 +28,7 @@ export class Queue implements PetraRuntime.QueueLike
 		for (const plan of this.plans)
 		{
 			if (newPlan.category === "unit" && samePlanType(plan, newPlan) &&
-				plan.number + newPlan.number <= (plan.maxMerge ?? NaN))
+				plan.number + newPlan.number <= plan.maxMerge)
 			{
 				plan.addItem(newPlan.number);
 				return;

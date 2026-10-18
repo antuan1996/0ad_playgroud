@@ -308,7 +308,7 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 	for (const base of gameState.ai.HQ.baseManagers())
 	{
 		const baseless = gameState.ai.HQ.basesManager.baselessBase();
-		if ((baseless !== undefined && base.ID == baseless.ID) || exclude && base.ID == exclude)
+		if (base.ID == baseless.ID || exclude && base.ID == exclude)
 			continue;
 		if (onlyConstructedBase && (!base.anchor || base.anchor.foundationProgress() !== undefined))
 			continue;

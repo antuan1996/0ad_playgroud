@@ -31,7 +31,7 @@ export interface SerializedTransportPlan {
 	endPos: CommonPosition;
 	endIndex: number;
 	startIndex: number;
-	sea: number | undefined;
+	sea: number;
 	state: string;
 	boardingPos: Record<string, CommonPosition | undefined>;
 	needTransportShips: boolean;
@@ -53,10 +53,10 @@ export class TransportPlan
 	declare failed: boolean;
 	declare flotilla: boolean;
 	declare nTry: Record<number, number>;
-	declare needSplit: CommonEntity[] | undefined;
+	declare needSplit: CommonEntity[];
 	declare needTransportShips: boolean;
 	declare recovered: Array<{ entId: number; entPos: CommonPosition; shipId: number }>;
-	declare sea: number | undefined;
+	declare sea: number;
 	declare ships: CommonEntityCollection;
 	declare startIndex: number;
 	declare state: string;
@@ -69,6 +69,7 @@ export class TransportPlan
 		this.ID = gameState.ai.uniqueIDs.transports++;
 		this.debug = gameState.ai.Config.debug;
 		this.flotilla = false;   // when false, only one ship per transport ... not yet tested when true
+		this.needSplit = [];
 
 		this.endPos = endPos;
 		this.endIndex = endIndex;
@@ -83,7 +84,15 @@ export class TransportPlan
 				this.failed = true;
 				return;
 			}
-			this.sea = ship.getMetadata(PlayerID, "sea");
+			const shipSea = ship.getMetadata(PlayerID, "sea");
+			if (shipSea === undefined)
+			{
+				this.failed = true;
+				if (this.debug > 1)
+					aiWarn("transport plan started by a ship without a sea: " + ship.id());
+				return;
+			}
+			this.sea = shipSea;
 			ship.setMetadata(PlayerID, "transporter", this.ID);
 			ship.setStance("none");
 			for (const ent of units)
@@ -91,8 +100,8 @@ export class TransportPlan
 		}
 		else
 		{
-			this.sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, startIndex, endIndex);
-			if (!this.sea)
+			const sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, startIndex, endIndex);
+			if (!sea)
 			{
 				this.failed = true;
 				if (this.debug > 1)
@@ -102,6 +111,7 @@ export class TransportPlan
 				}
 				return;
 			}
+			this.sea = sea;
 		}
 
 		for (const ent of units)
@@ -190,10 +200,7 @@ export class TransportPlan
 			return;
 		}
 
-		if (!this.needSplit)
-			this.needSplit = [ent];
-		else
-			this.needSplit.push(ent);
+		this.needSplit.push(ent);
 	}
 
 	assignShip(gameState: CommonGameState): boolean
@@ -210,7 +217,7 @@ export class TransportPlan
 		// and choose the nearest available ship from this unit
 		let distmin = Math.min();
 		let nearest: CommonEntity | undefined;
-		const seaShips = this.sea === undefined ? undefined : gameState.ai.HQ.navalManager.seaTransportShips[this.sea];
+		const seaShips = gameState.ai.HQ.navalManager.seaTransportShips[this.sea];
 		if (seaShips)
 		seaShips.forEach((ship: CommonEntity): void =>
 		{
@@ -375,7 +382,7 @@ export class TransportPlan
 						continue;
 					if (!this.boardingPos[shipId])
 					{
-						const bp = this.sea === undefined ? undefined : this.getBoardingPos(gameState, ship, this.startIndex, this.sea, ent.position(), false);
+						const bp = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, ent.position(), false);
 						this.boardingPos[shipId] = bp;
 						if (bp)
 							ship.move(bp[0], bp[1]);
@@ -438,7 +445,7 @@ export class TransportPlan
 							this.nTry[shipId] = 0;
 							if (this.debug > 1)
 								aiWarn("ship " + shipId + " new attempt for a landing point ");
-							this.boardingPos[shipId] = this.sea === undefined ? undefined : this.getBoardingPos(gameState, ship, this.startIndex, this.sea, undefined, false);
+							this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, undefined, false);
 						}
 						const bp = this.boardingPos[shipId];
 						if (bp)
@@ -485,10 +492,10 @@ export class TransportPlan
 			}
 		}
 
-		if (this.needSplit)
+		if (this.needSplit.length)
 		{
 			gameState.ai.HQ.navalManager.splitTransport(gameState, this);
-			this.needSplit = undefined;
+			this.needSplit = [];
 		}
 
 		if (!ready)
@@ -497,7 +504,7 @@ export class TransportPlan
 		for (const ship of this.ships.values())
 		{
 			this.boardingPos[ship.id()] = undefined;
-			this.boardingPos[ship.id()] = this.sea === undefined ? undefined : this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
+			this.boardingPos[ship.id()] = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
 			const bp = this.boardingPos[ship.id()];
 			if (bp)
 				ship.move(bp[0], bp[1]);
@@ -693,7 +700,7 @@ export class TransportPlan
 		}
 		for (const shipId in shipsToMove)
 		{
-			const boardingPos = this.sea === undefined ? undefined : this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
+			const boardingPos = this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
 			this.boardingPos[shipId] = boardingPos;
 			if (!boardingPos)
 				continue;
@@ -706,7 +713,7 @@ export class TransportPlan
 			for (const ship of this.ships.values())
 			{
 				this.boardingPos[ship.id()] = undefined;
-				const boardingPos = this.sea === undefined ? undefined : this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
+				const boardingPos = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
 				this.boardingPos[ship.id()] = boardingPos;
 				if (!boardingPos)
 					continue;
@@ -761,7 +768,7 @@ export class TransportPlan
 					this.nTry[shipId] = 0;
 					if (this.debug > 1)
 						aiWarn(shipId + " new attempt for a landing point ");
-					this.boardingPos[shipId] = this.sea === undefined ? undefined : this.getBoardingPos(gameState, ship, this.endIndex, this.sea, undefined, true);
+					this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, undefined, true);
 				}
 				const bp = this.boardingPos[shipId];
 				if (bp)

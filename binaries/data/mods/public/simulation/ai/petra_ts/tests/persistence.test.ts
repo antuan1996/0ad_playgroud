@@ -248,10 +248,14 @@ describe("save and reload", () =>
 		const build = () =>
 		{
 			const bases = new BasesManager(makeConfig());
-			// Built the way the game builds one. A base only holds its entity
-			// collections after init, and restoring runs init as well, so a base
-			// that skipped it would differ for a reason that has nothing to do
-			// with the save.
+			// The game always runs init() on a bases manager (fresh game and
+			// restore alike) before using or saving it, which is what creates
+			// its baseless base, so build this one the same way.
+			(bases as { init(gameState: CommonGameState, deserialize: boolean): void })
+				.init(world, false);
+			// A base only holds its entity collections after init, and
+			// restoring runs init as well, so a base that skipped it would
+			// differ for a reason that has nothing to do with the save.
 			const base = new BaseManager(world, bases) as BaseLike;
 			base.init(world, states.STATE_WITH_ANCHOR);
 			bases["baseManagers"] = [base];

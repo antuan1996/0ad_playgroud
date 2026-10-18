@@ -5,11 +5,11 @@ function addBuilder(builders: Map<string, number[]>, civ: string, entity: Common
 {
 	for (const buildable of entity.buildableEntities(civ))
 	{
-		if (!builders.has(buildable))
-			builders.set(buildable, []);
 		const buildableList = builders.get(buildable);
 		if (buildableList)
 			buildableList.push(entity.id());
+		else
+			builders.set(buildable, [entity.id()]);
 	}
 }
 

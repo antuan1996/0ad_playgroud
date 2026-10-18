@@ -552,8 +552,8 @@ declare module "simulation/ai/common-api/gamestate.js"
 		isEntityEnemy(entity: CommonEntity | undefined): boolean;
 /** Represents the is Entity Own. */
 		isEntityOwn(entity: CommonEntity | undefined): boolean;
-/** Gets the Entity By Id. */
-		getEntityById(id: number): CommonEntity | undefined;
+/** Gets the Entity By Id. Returns undefined for an undefined, zero or stale id. */
+		getEntityById(id: number | undefined): CommonEntity | undefined;
 /** Gets the Entities. */
 		getEntities(id?: number): CommonEntityCollection;
 /** Gets the Structures. */

@@ -237,9 +237,6 @@ export class GarrisonManager
 	/** TODO should add the units garrisoned inside garrisoned units */
 	numberOfGarrisonedUnits(holder: CommonEntity): number
 	{
-		if (!this.holders.has(holder.id()))
-			return holder.garrisoned().length;
-
 		const holderData = this.holders.get(holder.id());
 		return holder.garrisoned().length + (holderData ? holderData.list.length : 0);
 	}
@@ -247,20 +244,13 @@ export class GarrisonManager
 	/** TODO should add the units garrisoned inside garrisoned units */
 	numberOfGarrisonedSlots(holder: CommonEntity): number
 	{
-		if (!this.holders.has(holder.id()))
-			return holder.garrisonedSlots();
-
 		const holderData = this.holders.get(holder.id());
 		return holder.garrisonedSlots() + (holderData ? holderData.list.length : 0);
 	}
 
 	allowMelee(holder: CommonEntity): boolean | undefined
 	{
-		if (!this.holders.has(holder.id()))
-			return undefined;
-
-		const holderData = this.holders.get(holder.id());
-		return holderData ? holderData.allowMelee : undefined;
+		return this.holders.get(holder.id())?.allowMelee;
 	}
 
 	/** This is just a pre-garrison state, while the entity walk to the garrison holder */
@@ -269,10 +259,7 @@ export class GarrisonManager
 		if (this.numberOfGarrisonedSlots(holder) >= holder.garrisonMax() || !ent.canGarrison())
 			return;
 
-		this.registerHolder(gameState, holder);
-		const holderData = this.holders.get(holder.id());
-		if (holderData)
-			holderData.list.push(ent.id());
+		this.registerHolder(gameState, holder).list.push(ent.id());
 
 		if (gameState.ai.Config.debug > 2)
 		{
@@ -313,7 +300,7 @@ export class GarrisonManager
 		ent.stopMoving();
 		this.leaveGarrison(ent);
 		const holderId = ent.getMetadata(PlayerID, "garrisonHolder");
-		if (!holderId || !this.holders.has(holderId))
+		if (holderId === undefined)
 			return;
 		const holderData = this.holders.get(holderId);
 		if (!holderData)
@@ -375,13 +362,17 @@ export class GarrisonManager
 		}
 	}
 
-	/** Add this holder in the list managed by the garrisonManager */
-	registerHolder(gameState: CommonGameState, holder: CommonEntity): void
+	/** Add this holder in the list managed by the garrisonManager, and return its (existing or new) data */
+	registerHolder(gameState: CommonGameState, holder: CommonEntity): GarrisonHolderData
 	{
-		if (this.holders.has(holder.id()))    // already registered
-			return;
-		this.holders.set(holder.id(), { "list": [], "allowMelee": true });
-		holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+		let holderData = this.holders.get(holder.id());    // already registered
+		if (!holderData)
+		{
+			holderData = { "list": [], "allowMelee": true };
+			this.holders.set(holder.id(), holderData);
+			holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+		}
+		return holderData;
 	}
 
 	/**

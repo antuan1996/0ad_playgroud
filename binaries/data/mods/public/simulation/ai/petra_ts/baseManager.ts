@@ -232,7 +232,7 @@ export class BaseManager
 		this.dropsites[dropsiteId] = true;
 
 		const baseless = this.basesManager.baselessBase();
-		if (baseless !== undefined && this.ID == baseless.ID)
+		if (this.ID == baseless.ID)
 			accessIndex = getLandAccess(gameState, dropsite);
 
 		const maxDistResourceSquare = this.maxDistResourceSquare;
@@ -352,11 +352,14 @@ export class BaseManager
 	 *			its quality and its template name.
 	 */
 	findBestDropsiteAndLocation(gameState: CommonGameState, resource: string):
-		{ quality: number; pos: CommonPosition; templateName?: string }
+		{ quality: number; pos: CommonPosition; templateName: string }
 	{
-		let bestResult: { quality: number; pos: CommonPosition; templateName?: string } = {
+		// templateName is set together with quality, so it is "" only when the
+		// quality is 0, which every caller rejects before using it.
+		let bestResult: { quality: number; pos: CommonPosition; templateName: string } = {
 			"quality": 0,
-			"pos": [0, 0]
+			"pos": [0, 0],
+			"templateName": ""
 		};
 		for (const templateName of gameState.ai.HQ.buildManager.findStructuresByFilter(gameState,
 			filters.isDropsite(resource)))
@@ -364,8 +367,7 @@ export class BaseManager
 			const dp = this.findBestDropsiteLocation(gameState, resource, templateName);
 			if (dp.quality < bestResult.quality)
 				continue;
-			bestResult = dp;
-			bestResult.templateName = templateName;
+			bestResult = { ...dp, "templateName": templateName };
 		}
 		return bestResult;
 	}
@@ -576,10 +578,10 @@ export class BaseManager
 				if (ratio > 0.15)
 				{
 					const newDP = this.findBestDropsiteAndLocation(gameState, type);
-					const dpTemplateName = newDP.templateName;
-					if (dpTemplateName !== undefined && newDP.quality > 50 && gameState.ai.HQ.canBuild(gameState, dpTemplateName))
+					// templateName is only "" when quality is 0, which the > 50 check rejects.
+					if (newDP.quality > 50 && gameState.ai.HQ.canBuild(gameState, newDP.templateName))
 					{
-						queues.dropsites.addPlan(new ConstructionPlan(gameState, dpTemplateName,
+						queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
 							{ "base": this.ID, "type": type }, newDP.pos));
 					}
 					else if (!gameState.getOwnFoundations().filter(filters.byClass("CivCentre"))
@@ -588,12 +590,12 @@ export class BaseManager
 					{
 						// No good dropsite, try to build a new base if no base already planned,
 						// and if not possible, be less strict on dropsite quality.
-						if (dpTemplateName !== undefined && (!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
+						if ((!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
 							newDP.quality > Math.min(25, 50*0.15/ratio) &&
-							gameState.ai.HQ.canBuild(gameState, dpTemplateName))
+							gameState.ai.HQ.canBuild(gameState, newDP.templateName))
 						{
 							queues.dropsites.addPlan(new ConstructionPlan(gameState,
-								dpTemplateName, { "base": this.ID, "type": type },
+								newDP.templateName, { "base": this.ID, "type": type },
 								newDP.pos));
 						}
 					}
@@ -1110,7 +1112,7 @@ export class BaseManager
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): boolean
 	{
 		const baseless = this.basesManager.baselessBase();
-		if (baseless !== undefined && this.ID == baseless.ID)
+		if (this.ID == baseless.ID)
 		{
 			// if some active base, reassigns the workers/buildings
 			// otherwise look for anything useful to do, i.e. treasures to gather

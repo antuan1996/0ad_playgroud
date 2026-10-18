@@ -11,7 +11,7 @@ export interface SerializedBasesManager {
 	properties: {
 		currentBase: number;
 	};
-	noBase: SerializedBaseManager | undefined;
+	noBase: SerializedBaseManager;
 	baseManagers: SerializedBaseManager[];
 }
 
@@ -39,7 +39,7 @@ export class BasesManager
 	turnCache: BasesManagerTurnCache = {};
 
 	// Deals with unit/structure without base.
-	noBase: BaseManager | undefined = undefined;
+	declare noBase: BaseManager;
 
 	baseManagers: BaseManager[] = [];
 
@@ -401,8 +401,7 @@ export class BasesManager
 			return false;
 		const baseBest = this.baseManagers.slice();
 		// We can also use workers without a base.
-		if (this.noBase)
-			baseBest.push(this.noBase);
+		baseBest.push(this.noBase);
 		baseBest.sort((a: BaseManager, b: BaseManager): 0 | 1 | -1 =>
 		{
 			if (a.accessIndex == accessIndex && b.accessIndex != accessIndex)
@@ -570,7 +569,7 @@ export class BasesManager
 		this.turnCache.base = undefined;
 	}
 
-	baselessBase(): BaseManager | undefined
+	baselessBase(): BaseManager
 	{
 		return this.noBase;
 	}
@@ -581,7 +580,7 @@ export class BasesManager
 	 */
 	getBaseByID(baseID: number): BaseManager | undefined
 	{
-		if (this.noBase && this.noBase.ID === baseID)
+		if (this.noBase.ID === baseID)
 			return this.noBase;
 		return this.baseManagers.find((base: BaseManager): boolean => base.ID === baseID);
 	}
@@ -650,7 +649,7 @@ export class BasesManager
 					bestbase.assignEntity(gameState, garrisoned);
 			}
 		// and find something useful to do if we already have a base
-		if (ent.position() && bestbase && this.noBase && bestbase.ID !== this.noBase.ID)
+		if (ent.position() && bestbase && bestbase.ID !== this.noBase.ID)
 		{
 			bestbase.assignRolelessUnits(gameState, [ent]);
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
@@ -800,8 +799,7 @@ export class BasesManager
 		this.assignGatherers();
 		let nbBases = this.baseManagers.length;
 		let activeBase = false;
-		if (this.noBase)
-			this.noBase.update(gameState, queues, events);
+		this.noBase.update(gameState, queues, events);
 		while (!activeBase && nbBases != 0)
 		{
 			this.currentBase %= this.baseManagers.length;
@@ -825,8 +823,7 @@ export class BasesManager
 
 		return {
 			"properties": properties,
-			// noBase can be undefined if the region analysis failed and the managers haven't been initialised.
-			"noBase": this.noBase?.Serialize(),
+			"noBase": this.noBase.Serialize(),
 			"baseManagers": baseManagers
 		};
 	}
@@ -835,13 +832,10 @@ export class BasesManager
 	{
 		this.currentBase = data.properties.currentBase;
 
-		if (data.noBase)
-		{
-			this.noBase = new BaseManager(gameState, this);
-			this.noBase.Deserialize(gameState, data.noBase);
-			this.noBase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
-			this.noBase.Deserialize(gameState, data.noBase);
-		}
+		this.noBase = new BaseManager(gameState, this);
+		this.noBase.Deserialize(gameState, data.noBase);
+		this.noBase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
+		this.noBase.Deserialize(gameState, data.noBase);
 
 		this.baseManagers = [];
 		for (const basedata of data.baseManagers)

@@ -524,8 +524,8 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	if (!gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
 	{
 		const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
-		const templateName = newDP.templateName;
-		if (newDP.quality > 40 && templateName !== undefined && HQ.canBuild(gameState, templateName))
+		// templateName is only "" when quality is 0, which the > 40 check rejects.
+		if (newDP.quality > 40 && HQ.canBuild(gameState, newDP.templateName))
 		{
 			// if we start with enough workers, put our available resources in this first dropsite
 			// same thing if our pop exceed the allowed one, as we will need several houses
@@ -533,14 +533,14 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 			if (numWorkers > 12 && newDP.quality > 60 ||
 				gameState.getPopulation() > gameState.getPopulationLimit() + 20)
 			{
-				const templateObj = gameState.getTemplate(templateName);
+				const templateObj = gameState.getTemplate(newDP.templateName);
 				if (templateObj)
 				{
 					const cost = new ResourcesManager(templateObj.cost());
 					gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 				}
 			}
-			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, templateName,
+			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
 				{ "base": HQ.baseManagers()[0].ID }, newDP.pos));
 		}
 	}

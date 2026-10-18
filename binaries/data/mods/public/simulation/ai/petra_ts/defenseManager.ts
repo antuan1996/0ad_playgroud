@@ -166,6 +166,8 @@ export class DefenseManager
 			return false;
 		let dist2Min = 6000;
 		// TODO the 30 is to take roughly into account the structure size in following checks. Can be improved.
+		// attackRange("Ranged") is defined whenever Ranged is in attackTypes
+		// (undefined was already filtered out just above).
 		const ranged = entity.attackRange("Ranged");
 		if (attackTypes.indexOf("Ranged") != -1 && ranged)
 			dist2Min = (ranged.max + 30) * (ranged.max + 30);
@@ -502,7 +504,7 @@ export class DefenseManager
 				if (!ent || !ent.position())
 					continue;
 				let aMin;
-				let distMin;
+				let distMin = Infinity;
 				const access = ipass == 0 ? getLandAccess(gameState, ent) : undefined;
 				for (let a = 0; a < armiesNeeding.length; ++a)
 				{
@@ -513,15 +515,15 @@ export class DefenseManager
 					if (!armiesNeeding[a].army.foeEntities.some((eEnt: number): boolean =>
 					{
 						const eEntID = gameState.getEntityById(eEnt);
-					if (!eEntID)
-						return false;
+						if (!eEntID)
+							return false;
 						return ent.canAttackTarget(eEntID, allowCapture(gameState, ent, eEntID));
 					}))
 						continue;
 
 					const dist = SquareVectorDistance(ent.position(),
 						armiesNeeding[a].army.foePosition);
-					if (aMin !== undefined && distMin !== undefined && dist > distMin)
+					if (aMin !== undefined && dist > distMin)
 						continue;
 					aMin = a;
 					distMin = dist;
@@ -529,7 +531,7 @@ export class DefenseManager
 
 				// If outside our territory (helping an ally or attacking a cc foundation)
 				// or if in another access, keep some troops in backup.
-				if (backup < 12 && (aMin == undefined || distMin !== undefined && distMin > 40000 &&
+				if (backup < 12 && (aMin == undefined || distMin > 40000 &&
 					  this.territoryMap.getOwner(armiesNeeding[aMin].army.foePosition) != PlayerID))
 				{
 					++backup;
@@ -762,11 +764,13 @@ export class DefenseManager
 					{
 						// Take the nearest unit also attacking this structure to help us.
 						const capturableTarget = gameState.ai.HQ.capturableTargets.get(orderId);
-						let minDist;
+						if (!capturableTarget)
+							continue;
+						capturableTarget.ents.delete(target.id());
+						let minDist = Infinity;
 						let minEnt;
 						const pos = attacker.position();
-						if (capturableTarget) capturableTarget.ents.delete(target.id());
-						for (const entId of capturableTarget ? capturableTarget.ents : [])
+						for (const entId of capturableTarget.ents)
 						{
 							if (allAttacked[entId])
 								continue;
@@ -785,12 +789,12 @@ export class DefenseManager
 							     entOrderData[0].target != orderId)
 								continue;
 							const dist = SquareVectorDistance(pos, ent.position());
-							if (minEnt && minDist !== undefined && dist > minDist)
+							if (minEnt && dist > minDist)
 								continue;
 							minDist = dist;
 							minEnt = ent;
 						}
-						if (minEnt && capturableTarget)
+						if (minEnt)
 						{
 							capturableTarget.ents.delete(minEnt.id());
 							minEnt.attack(attacker.id(), allowCapture(gameState, minEnt, attacker));
@@ -818,10 +822,9 @@ export class DefenseManager
 			if (!attackTypes || attackTypes.indexOf("Ranged") == -1)
 				return false;
 			const dist = SquareVectorDistance(data.attacker.position(), target.position());
-			const ranged = target.attackRange("Ranged");
-			if (!ranged)
-				return false;
-			const range = ranged.max;
+			// attackRange("Ranged") is defined whenever Ranged is in attackTypes
+			// (checked just above).
+			const range = target.attackRange("Ranged")!.max;
 			if (dist >= range*range)
 				return false;
 		}

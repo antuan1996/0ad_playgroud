@@ -18,8 +18,8 @@ export class DefenseArmy
 {
 	declare Config: Config;
 	declare ID: number;
-	declare assignedAgainst: Record<number, number[] | undefined>;
-	declare assignedTo: Record<number, number | undefined>;
+	declare assignedAgainst: Record<number, number[]>;
+	declare assignedTo: Record<number, number>;
 	declare breakawaySize: number;
 	declare compactSize: number;
 	declare foeEntities: number[];
@@ -103,10 +103,11 @@ export class DefenseArmy
 
 		this.foeEntities.splice(idx, 1);
 
-		this.assignedAgainst[enemyId] = undefined;
+		delete this.assignedAgainst[enemyId];
+		// entities assigned against this foe become unassigned
 		for (const to in this.assignedTo)
 			if (this.assignedTo[to] == enemyId)
-				this.assignedTo[to] = undefined;
+				this.assignedTo[to] = 0;
 
 		const ent = enemyEntity ? enemyEntity : gameState.getEntityById(enemyId);
 		if (ent)    // TODO recompute strength when no entities (could happen if capture+destroy)
@@ -156,13 +157,13 @@ export class DefenseArmy
 		this.ownEntities.splice(idx, 1);
 
 		const assignedToId = this.assignedTo[id];
-		if (assignedToId !== undefined && assignedToId !== 0)
+		if (assignedToId !== 0)
 		{
 			const temp = this.assignedAgainst[assignedToId];
 			if (temp)
 				temp.splice(temp.indexOf(id), 1);
 		}
-		this.assignedTo[id] = undefined;
+		this.assignedTo[id] = 0;
 
 		const ent = Entity ? Entity : gameState.getEntityById(id);
 		if (!ent)
@@ -185,7 +186,7 @@ export class DefenseArmy
 		// Remove from transport plan if not yet on Board
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport") ?? NaN);
+			const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
 			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
 				plan.removeUnit(gameState, ent);
 		}
@@ -329,9 +330,9 @@ export class DefenseArmy
 		const queued = returnResources(gameState, ent);
 
 		let idMin;
-		let distMin;
+		let distMin = Infinity;
 		let idMinAll;
-		let distMinAll;
+		let distMinAll = Infinity;
 		for (const id of this.foeEntities)
 		{
 			const eEnt = gameState.getEntityById(id);
@@ -349,20 +350,21 @@ export class DefenseArmy
 			}
 
 			const assignedAgainstId = this.assignedAgainst[id];
+			const nbAssigned = assignedAgainstId ? assignedAgainstId.length : 0;
 			// already enough units against it
-			if ((assignedAgainstId?.length ?? 0) > 8 ||
-				(assignedAgainstId?.length ?? 0) > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
+			if (nbAssigned > 8 ||
+				nbAssigned > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
 				continue;
 
 			const dist = SquareVectorDistance(ent.position(), eEnt.position());
-			if (idMinAll === undefined || dist < (distMinAll ?? NaN))
+			if (idMinAll === undefined || dist < distMinAll)
 			{
 				idMinAll = id;
 				distMinAll = dist;
 			}
-			if ((assignedAgainstId?.length ?? 0) > 2)
+			if (nbAssigned > 2)
 				continue;
-			if (idMin === undefined || dist < (distMin ?? NaN))
+			if (idMin === undefined || dist < distMin)
 			{
 				idMin = id;
 				distMin = dist;
@@ -391,8 +393,9 @@ export class DefenseArmy
 				foeAssigned.push(entID);
 			ent.attack(idFoe, allowCapture(gameState, ent, foeEnt), queued);
 		}
-		else if (ownIndex !== undefined)
-			gameState.ai.HQ.navalManager.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
+		else
+			// ownIndex is a number: ent.position() was checked at the entry of this function.
+			gameState.ai.HQ.navalManager.requireTransport(gameState, ent, ownIndex!, foeIndex, foePosition);
 		return true;
 	}
 
@@ -421,7 +424,7 @@ export class DefenseArmy
 			if (this.assignedAgainst[i] === undefined)
 				this.assignedAgainst[i] = otherArmy.assignedAgainst[i];
 			else
-				this.assignedAgainst[i] = this.assignedAgainst[i].concat(otherArmy.assignedAgainst[i] ?? []);
+				this.assignedAgainst[i] = this.assignedAgainst[i].concat(otherArmy.assignedAgainst[i]);
 		}
 		for (const i in otherArmy.assignedTo)
 			this.assignedTo[i] = otherArmy.assignedTo[i];
@@ -551,7 +554,7 @@ export class DefenseArmy
 				const idx = this.foeEntities.indexOf(evt.entity);
 				this.foeEntities[idx] = evt.newentity;
 				this.assignedAgainst[evt.newentity] = this.assignedAgainst[evt.entity];
-				this.assignedAgainst[evt.entity] = undefined;
+				delete this.assignedAgainst[evt.entity];
 				for (const to in this.assignedTo)
 					if (this.assignedTo[to] === evt.entity)
 						this.assignedTo[to] = evt.newentity;
@@ -564,7 +567,7 @@ export class DefenseArmy
 				const idx = this.ownEntities.indexOf(evt.entity);
 				this.ownEntities[idx] = evt.newentity;
 				this.assignedTo[evt.newentity] = this.assignedTo[evt.entity];
-				this.assignedTo[evt.entity] = undefined;
+				this.assignedTo[evt.entity] = 0;
 				for (const against in this.assignedAgainst)
 				{
 					if (!this.assignedAgainst[against])

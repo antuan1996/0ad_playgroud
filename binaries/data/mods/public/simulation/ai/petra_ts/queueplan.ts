@@ -39,7 +39,6 @@ export abstract class QueuePlan
 	declare number: number;
 	declare template: CommonTemplate;
 	declare type: string;
-	declare maxMerge?: number;
 	declare queueToReset?: string;
 	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 

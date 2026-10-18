@@ -800,8 +800,8 @@ export class Headquarters
 				dpList.push({ "ent": dp, "pos": pos, "territory": this.territoryMap.getOwner(pos) });
 		}
 
-		let bestIdx;
-		let bestVal;
+		let bestIdx = -1;
+		let bestVal = -Infinity;
 		const obstructionRadius = template.obstructionRadius();
 		if (!obstructionRadius)
 			return false;
@@ -939,7 +939,7 @@ export class Headquarters
 			if (oversea)
 				val = Math.max(val, cut + 0.1);
 
-			if (bestVal !== undefined && val < bestVal)
+			if (val < bestVal)
 				continue;
 			if (this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
@@ -949,14 +949,10 @@ export class Headquarters
 
 		Engine.ProfileStop();
 
-		if (bestVal === undefined)
-			return false;
 		if (this.Config.debug > 1)
 			aiWarn("we have found a base for " + resource + " with best (cut=" + cut + ") = " + bestVal);
 		// not good enough.
 		if (bestVal < cut)
-			return false;
-		if (bestIdx === undefined)
 			return false;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
@@ -1012,8 +1008,8 @@ export class Headquarters
 		else if (template.get("Footprint/Circle"))
 			halfSize = +template.get("Footprint/Circle/@radius");
 
-		let bestIdx;
-		let bestVal;
+		let bestIdx = -1;
+		let bestVal = Infinity;
 		const obstructionRadius = template.obstructionRadius();
 		if (!obstructionRadius)
 			return false;
@@ -1022,7 +1018,7 @@ export class Headquarters
 		const width = this.territoryMap.width;
 		const cellSize = this.territoryMap.cellSize;
 		let currentVal, delta;
-		let distcc0, distcc1, distcc2;
+		let distcc0 = Infinity, distcc1 = Infinity, distcc2 = Infinity;
 		const favoredDistance = (template.hasClass("Colony") ? 220 : 280) - 40 * this.Config.personality.defensive;
 
 		for (let j = 0; j < this.territoryMap.length; ++j)
@@ -1041,7 +1037,7 @@ export class Headquarters
 			// checking distances to other cc
 			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			let minDist = Math.min();
-			distcc0 = undefined;
+			distcc0 = Infinity;
 
 			for (const cc of ccList)
 			{
@@ -1061,28 +1057,28 @@ export class Headquarters
 				if (dist < minDist)
 					minDist = dist;
 
-				if (!distcc0 || dist < distcc0)
+				if (dist < distcc0)
 				{
 					distcc2 = distcc1;
 					distcc1 = distcc0;
 					distcc0 = dist;
 				}
-				else if (!distcc1 || dist < distcc1)
+				else if (dist < distcc1)
 				{
 					distcc2 = distcc1;
 					distcc1 = dist;
 				}
-				else if (!distcc2 || dist < distcc2)
+				else if (dist < distcc2)
 					distcc2 = dist;
 			}
 			if (minDist < 1 || minDist > 170000 && !this.navalMap)
 				continue;
 
-			delta = Math.sqrt(distcc0 ?? NaN) - favoredDistance;
+			delta = Math.sqrt(distcc0) - favoredDistance;
 			currentVal = delta*delta;
-			delta = Math.sqrt(distcc1 ?? NaN) - favoredDistance;
+			delta = Math.sqrt(distcc1) - favoredDistance;
 			currentVal += delta*delta;
-			if (distcc2)
+			if (distcc2 !== Infinity)
 			{
 				delta = Math.sqrt(distcc2) - favoredDistance;
 				currentVal += delta*delta;
@@ -1091,7 +1087,7 @@ export class Headquarters
 			if (this.borderMap.map[j] & mapMask.fullBorder)
 				currentVal += 10000;
 
-			if (bestVal !== undefined && currentVal > bestVal)
+			if (currentVal > bestVal)
 				continue;
 			if (this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
@@ -1155,11 +1151,11 @@ export class Headquarters
 		else if (template.get("Footprint/Circle"))
 			halfSize = +template.get("Footprint/Circle/@radius");
 
-		let bestIdx;
-		let bestJdx;
-		let bestVal;
-		let bestDistSq;
-		let bestGainMult;
+		let bestIdx = -1;
+		let bestJdx = -1;
+		let bestVal = -Infinity;
+		let bestDistSq = 0;
+		let bestGainMult = 0;
 		const obstructionRadius = template.obstructionRadius();
 		if (!obstructionRadius)
 			return false;
@@ -1188,8 +1184,8 @@ export class Headquarters
 			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
 			// checking distances to other markets
 			let maxVal = 0;
-			let maxDistSq;
-			let maxGainMult;
+			let maxDistSq = 0;
+			let maxGainMult = 0;
 			let gainMultiplier;
 			for (const market of markets)
 			{
@@ -1216,7 +1212,7 @@ export class Headquarters
 			}
 			if (maxVal == 0)
 				continue;
-			if (bestVal !== undefined && maxVal < bestVal)
+			if (maxVal < bestVal)
 				continue;
 			if (this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
@@ -1230,10 +1226,8 @@ export class Headquarters
 		if (this.Config.debug > 1)
 			aiWarn("We found a market position with bestVal = " + bestVal);
 
-		if (bestVal === undefined)  // no constraints. For the time being, place it arbitrarily by the ConstructionPlan
+		if (bestVal === -Infinity)  // no constraints. For the time being, place it arbitrarily by the ConstructionPlan
 			return [-1, -1, -1, 0];
-		if (bestIdx === undefined || bestGainMult === undefined || bestDistSq === undefined || bestJdx === undefined)
-			return false;
 		const expectedGain = Math.round(bestGainMult * TradeGain(bestDistSq, gameState.sharedScript.mapSize));
 		if (this.Config.debug > 1)
 			aiWarn("this would give a trading gain of " + expectedGain);
@@ -1285,7 +1279,7 @@ export class Headquarters
 		}
 
 		let wonderMode = gameState.getVictoryConditions().has("wonder");
-		let wonderDistmin;
+		let wonderDistmin = Infinity;
 		let wonders;
 		if (wonderMode)
 		{
@@ -1307,9 +1301,9 @@ export class Headquarters
 		else if (template.get("Footprint/Circle"))
 			halfSize = +template.get("Footprint/Circle/@radius");
 
-		let bestIdx;
-		let bestJdx;
-		let bestVal;
+		let bestIdx = -1;
+		let bestJdx = -1;
+		let bestVal = Infinity;
 		const width = this.territoryMap.width;
 		const cellSize = this.territoryMap.cellSize;
 
@@ -1351,7 +1345,7 @@ export class Headquarters
 				const wonderPos = wonders[0].position();
 				if (wonderPos)
 					dista = SquareVectorDistance(wonderPos, pos);
-				if (wonderDistmin !== undefined && dista < wonderDistmin)
+				if (wonderDistmin !== Infinity && dista < wonderDistmin)
 					continue;
 				dista *= 200;   // empirical factor (TODO should depend on map size) to stay near the wonder
 			}
@@ -1389,7 +1383,7 @@ export class Headquarters
 			}
 			if (minDist < 0 || minDist == Math.min())
 				continue;
-			if (bestVal !== undefined && minDist > bestVal)
+			if (minDist > bestVal)
 				continue;
 			if (this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
@@ -1398,9 +1392,7 @@ export class Headquarters
 			bestJdx = j;
 		}
 
-		if (bestVal === undefined)
-			return undefined;
-		if (bestIdx === undefined || bestJdx === undefined)
+		if (bestVal === Infinity)
 			return undefined;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
@@ -1971,7 +1963,7 @@ export class Headquarters
 		// find nearest base anchor
 		const distcut = 20000;
 		let nearestAnchor: CommonEntity | undefined;
-		let distmin;
+		let distmin = Infinity;
 		for (const pos of positions)
 		{
 			const access = gameState.ai.accessibility.getAccessValue(pos);
@@ -1995,13 +1987,13 @@ export class Headquarters
 						continue;
 				}
 				const dist = SquareVectorDistance(base.anchor.position(), pos);
-				if (nearestAnchor && distmin !== undefined && dist > distmin)
+				if (nearestAnchor && dist > distmin)
 					continue;
 				distmin = dist;
 				nearestAnchor = base.anchor;
 			}
 		}
-		if (!nearestAnchor || distmin === undefined || distmin > distcut)
+		if (!nearestAnchor || distmin > distcut)
 			return false;
 
 		// We will choose randomly ranged and melee units, except when garrisonHolder is full

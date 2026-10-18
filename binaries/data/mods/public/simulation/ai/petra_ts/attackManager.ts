@@ -193,7 +193,9 @@ export class AttackManager
 			filters.byClasses(["BoltShooter", "StoneThrower"]), gameState.getOwnUnits());
 		for (const ent of bombers.values())
 		{
-			if (!ent.position() || !ent.isIdle() || !ent.attackRange("Ranged"))
+			// Filtered on having a Ranged attack, so attackRange("Ranged") is defined.
+			const ranged = ent.attackRange("Ranged");
+			if (!ent.position() || !ent.isIdle() || !ranged)
 				continue;
 			if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
 				continue;
@@ -215,9 +217,6 @@ export class AttackManager
 			if (alreadyBombing)
 				break;
 
-			const ranged = ent.attackRange("Ranged");
-			if (!ranged)
-				continue;
 			const range = ranged.max;
 			const entPos = ent.position();
 			const access = getLandAccess(gameState, ent);
@@ -227,8 +226,6 @@ export class AttackManager
 					continue;
 
 				const structPos = struct.position();
-				let x;
-				let z;
 				if (struct.hasClass("Field"))
 				{
 					if (!struct.resourceSupplyNumGatherers() ||
@@ -236,18 +233,24 @@ export class AttackManager
 						continue;
 				}
 				const dist = VectorDistance(entPos, structPos);
+				// targetPos holds the position to move to when out of range.
+				let targetPos: CommonPosition | undefined;
 				if (dist > range)
 				{
 					const safety = (struct.footprintRadius() ?? 0) + 30;
-					x = structPos[0] + (entPos[0] - structPos[0]) * safety / dist;
-					z = structPos[1] + (entPos[1] - structPos[1]) * safety / dist;
-					const owner = gameState.ai.HQ.territoryMap.getOwner([x, z]);
+					targetPos = [
+						structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
+						structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
+					];
+					const owner = gameState.ai.HQ.territoryMap.getOwner(targetPos);
 					if (owner != 0 && gameState.isPlayerEnemy(owner))
 						continue;
-					x = structPos[0] + (entPos[0] - structPos[0]) * range / dist;
-					z = structPos[1] + (entPos[1] - structPos[1]) * range / dist;
-					if (gameState.ai.HQ.territoryMap.getOwner([x, z]) != PlayerID ||
-					    gameState.ai.accessibility.getAccessValue([x, z]) != access)
+					targetPos = [
+						structPos[0] + (entPos[0] - structPos[0]) * range / dist,
+						structPos[1] + (entPos[1] - structPos[1]) * range / dist,
+					];
+					if (gameState.ai.HQ.territoryMap.getOwner(targetPos) != PlayerID ||
+					    gameState.ai.accessibility.getAccessValue(targetPos) != access)
 						continue;
 				}
 				let attackingUnits;
@@ -266,9 +269,8 @@ export class AttackManager
 					this.bombingAttacks.set(struct.id(), attackingUnits);
 				}
 				attackingUnits.add(ent.id());
-				if (dist > range)
-					if (x !== undefined && z !== undefined)
-						ent.move(x, z);
+				if (targetPos)
+					ent.move(targetPos[0], targetPos[1]);
 				ent.attack(struct.id(), false, dist > range);
 				break;
 			}
@@ -661,10 +663,12 @@ export class AttackManager
 				enemyWonder = wonder;
 				break;
 			}
-			if (enemyWonder && moreAdvanced !== undefined && moreAdvanced > progress)
-				continue;
-			enemyWonder = wonder;
-			moreAdvanced = progress;
+			// only remember this wonder if it is the most advanced one so far
+			if (moreAdvanced === undefined || progress >= moreAdvanced)
+			{
+				enemyWonder = wonder;
+				moreAdvanced = progress;
+			}
 		}
 		if (enemyWonder)
 		{
@@ -793,7 +797,8 @@ export class AttackManager
 				if (SquareVectorDistance(pos, army.foePosition) > data.range * data.range)
 					continue;
 			}
-			else if (army.ID != (data.armyID ?? NaN))
+			// If range is not given, the entry check ensured armyID is set.
+			else if (army.ID != data.armyID!)
 				continue;
 
 			while (army.foeEntities.length > 0)

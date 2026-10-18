@@ -660,15 +660,12 @@ export class TradeManager
 			if (!possibleRoute && !ent.hasClass("Ship"))
 			{
 				const closestBase = getBestBase(gameState, ent, true);
-				if (closestBase && closestBase.accessIndex == access)
+				// onlyConstructedBase (third argument) ensures the anchor exists when a base matched
+				if (closestBase && closestBase.accessIndex == access && closestBase.anchor)
 				{
-					const closestBaseAnchor = closestBase.anchor;
-					if (closestBaseAnchor)
-					{
-						const closestBasePos = closestBaseAnchor.position();
-						ent.moveToRange(closestBasePos[0], closestBasePos[1], 0, 15);
-						return;
-					}
+					const closestBasePos = closestBase.anchor.position();
+					ent.moveToRange(closestBasePos[0], closestBasePos[1], 0, 15);
+					return;
 				}
 			}
 			ent.stopMoving();

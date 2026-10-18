@@ -53,18 +53,15 @@ export class Worker
 			// Except if builder with their foundation destroyed, in which case cancel the transport if not yet on board
 			if (subrole === Worker.SUBROLE_BUILDER && ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 			{
-				const transportId = ent.getMetadata(PlayerID, "transport") ?? 0;
-				const plan = gameState.ai.HQ.navalManager.getPlan(transportId);
-				const targetFoundationId = ent.getMetadata(PlayerID, "target-foundation") ?? 0;
-				const target = gameState.getEntityById(targetFoundationId);
+				const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+				const target = gameState.getEntityById(ent.getMetadata(PlayerID, "target-foundation"));
 				if (!target && plan && plan.state === TransportPlan.BOARDING && ent.position())
 					plan.removeUnit(gameState, ent);
 			}
 			// and gatherer if there are no more dropsite accessible in the base the ent is going to
 			if (subrole === Worker.SUBROLE_GATHERER || subrole === Worker.SUBROLE_HUNTER)
 			{
-				const transportId = ent.getMetadata(PlayerID, "transport") ?? 0;
-				const plan = gameState.ai.HQ.navalManager.getPlan(transportId);
+				const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
 				if (plan && plan.state === TransportPlan.BOARDING && ent.position())
 				{
 					let hasDropsite = false;
@@ -103,7 +100,7 @@ export class Worker
 
 		this.entAccess = getLandAccess(gameState, ent) ?? -1;
 		// Base for unassigned entities has no accessIndex, so take the one from the entity.
-		if (this.baseID == (gameState.ai.HQ.basesManager.baselessBase()?.ID ?? -1))
+		if (this.baseID == gameState.ai.HQ.basesManager.baselessBase().ID)
 			this.baseAccess = this.entAccess;
 		else
 			this.baseAccess = this.base.accessIndex ?? -1;
@@ -141,7 +138,7 @@ export class Worker
 					const targetSupplyType = target ? target.resourceSupplyType() : undefined;
 					if (target && targetPos && targetSupplyType && targetSupplyType.generic == "food")
 					{
-						const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(targetPos) ?? 0;
+						const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(targetPos);
 						if (gameState.isPlayerEnemy(territoryOwner))
 						{
 							if (this.retryWorking(gameState, subrole))
@@ -160,7 +157,7 @@ export class Worker
 								const dropsitePos = dropsite.position();
 								if (!dropsitePos)
 									continue;
-								const owner = dropsite.owner() ?? 0;
+								const owner = dropsite.owner();
 								// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
 								if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 									continue;
@@ -221,7 +218,7 @@ export class Worker
 					// If we are here, an enemy structure must have targeted one of our workers
 					// and UnitAI sent it fight back with allowCapture=true
 					const target = gameState.getEntityById(orderData.target);
-					const targetOwner = target ? (target.owner() ?? 0) : 0;
+					const targetOwner = target ? target.owner() : 0;
 					if (target && targetOwner > 0 && !gameState.isPlayerAlly(targetOwner))
 						ent.attack(orderData.target, allowCapture(gameState, ent, target));
 				}
@@ -355,7 +352,7 @@ export class Worker
 					ent.setMetadata(PlayerID, "target-foundation", undefined);
 					ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
 					ent.stopMoving();
-					if (this.baseID != (gameState.ai.HQ.basesManager.baselessBase()?.ID ?? -1))
+					if (this.baseID != gameState.ai.HQ.basesManager.baselessBase().ID)
 					{
 						// reassign it to something useful
 						this.base.reassignIdleWorkers(gameState, [ent]);
@@ -372,7 +369,7 @@ export class Worker
 			// okay so apparently we aren't working.
 			// Unless we've been explicitely told to keep our role, make us idle.
 			const targetFoundationId = ent.getMetadata(PlayerID, "target-foundation");
-			const target = gameState.getEntityById(targetFoundationId ?? 0);
+			const target = gameState.getEntityById(targetFoundationId);
 			if (!target || target.foundationProgress() === undefined && target.needsRepair() === false)
 			{
 				ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
@@ -380,7 +377,7 @@ export class Worker
 				// If worker elephant, move away to avoid being trapped in between constructions
 				if (ent.hasClass("Elephant"))
 					this.moveToGatherer(gameState, ent, true);
-				else if (this.baseID != (gameState.ai.HQ.basesManager.baselessBase()?.ID ?? -1))
+				else if (this.baseID != gameState.ai.HQ.basesManager.baselessBase().ID)
 				{
 					// reassign it to something useful
 					this.base.reassignIdleWorkers(gameState, [ent]);
@@ -434,7 +431,7 @@ export class Worker
 				{
 					// we may have drifted towards ennemy territory during the hunt, if yes go home
 					const entPos = ent.position();
-					const territoryOwner = entPos ? (gameState.ai.HQ.territoryMap.getOwner(entPos) ?? 0) : 0;
+					const territoryOwner = entPos ? (gameState.ai.HQ.territoryMap.getOwner(entPos)) : 0;
 					if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 						this.startHunting(gameState);
 					else if (unitAIState == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
@@ -459,7 +456,7 @@ export class Worker
 			else	// if we have drifted towards ennemy territory during the fishing, go home
 			{
 				const entPos = ent.position();
-				const territoryOwner = entPos ? (gameState.ai.HQ.territoryMap.getOwner(entPos) ?? 0) : 0;
+				const territoryOwner = entPos ? (gameState.ai.HQ.territoryMap.getOwner(entPos)) : 0;
 				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 					this.startFishing(gameState);
 			}
@@ -486,7 +483,7 @@ export class Worker
 	startBuilding(gameState: CommonGameState): boolean
 	{
 		const targetFoundationId = this.ent.getMetadata(PlayerID, "target-foundation");
-		const target = gameState.getEntityById(targetFoundationId ?? 0);
+		const target = gameState.getEntityById(targetFoundationId);
 		if (!target || target.foundationProgress() === undefined && target.needsRepair() == false)
 			return false;
 		if (getLandAccess(gameState, target) != this.entAccess)
@@ -541,7 +538,7 @@ export class Worker
 				const entityPos = entity.position();
 			if (!entityPos)
 					continue;
-				const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(entityPos) ?? 0;
+				const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(entityPos);
 				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 					continue;
 				worker.base.AddTCGatherer(supplies[i].id);
@@ -827,7 +824,7 @@ export class Worker
 				const dropsitePos = dropsite.position();
 				if (!dropsitePos)
 					continue;
-				const owner = dropsite.owner() ?? 0;
+				const owner = dropsite.owner();
 				// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
 				if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 					continue;
@@ -880,7 +877,7 @@ export class Worker
 				continue;
 
 			// Avoid enemy territory.
-			const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(supplyPos) ?? 0;
+			const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(supplyPos);
 			if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // Player is its own ally.
 				continue;
 			// And if in ally territory, don't hunt this ally's cattle.
@@ -942,7 +939,7 @@ export class Worker
 				const dropsitePos = dropsite.position();
 				if (!dropsitePos)
 					continue;
-				const owner = dropsite.owner() ?? 0;
+				const owner = dropsite.owner();
 				// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
 				if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 					continue;
