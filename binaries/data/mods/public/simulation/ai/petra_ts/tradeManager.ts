@@ -3,7 +3,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireTemplate } from
+import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate } from
 	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
@@ -142,7 +142,8 @@ export class TradeManager
 			const baseObject = sourceObject.hasClass("Naval") ?
 				gameState.getEntityById(route.target) : sourceObject;
 
-			metadata.base = baseObject ? baseObject.getMetadata(PlayerID, "base") : undefined;
+			// all our own markets always have their base set (see assignEntity)
+			metadata.base = baseObject ? requireMetadata(baseObject, "base") : undefined;
 		}
 
 		if (!gameState.getTemplate(template))

@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, setSeaAccess } from
+import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, setSeaAccess } from
 	"./entityExtend.ts";
 import type { Queue } from "./queue.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
@@ -623,7 +623,8 @@ export class NavalManager
 					continue;
 				}
 				// New transport ships receive boarding commands only on the following turn.
-				if (gameState.ai.playedTurn < (ship.getMetadata(PlayerID, "turnPreviousPosition") ?? NaN) + 2)
+				// turnPreviousPosition is set together with previousPosition, which is known to be set here.
+				if (gameState.ai.playedTurn < requireMetadata(ship, "turnPreviousPosition") + 2)
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
@@ -646,7 +647,8 @@ export class NavalManager
 				if (gatherTreasure(gameState, ship, true))
 					continue;
 				// Do not stay idle near a dock to not disturb other ships
-				const sea = ship.getMetadata(PlayerID, "sea");
+				// our transport ships always have their sea set (see init and checkEvents)
+				const sea = requireMetadata(ship, "sea");
 				for (const dock of
 					gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
 				{
@@ -681,7 +683,8 @@ export class NavalManager
 					continue;
 				}
 				// New transport ships receives boarding commands only on the following turn.
-				if (gameState.ai.playedTurn < (ship.getMetadata(PlayerID, "turnPreviousPosition") ?? NaN) + 2)
+				// turnPreviousPosition is set together with previousPosition, which is known to be set here.
+				if (gameState.ai.playedTurn < requireMetadata(ship, "turnPreviousPosition") + 2)
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
@@ -704,7 +707,8 @@ export class NavalManager
 				if (gatherTreasure(gameState, ship, true))
 					continue;
 				// Do not stay idle near a dock to not disturb other ships
-				const sea = ship.getMetadata(PlayerID, "sea");
+				// our trader ships always have their sea set (see init and checkEvents)
+				const sea = requireMetadata(ship, "sea");
 				for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
 				{
 					if (getSeaAccess(gameState, dock) != sea)
@@ -721,9 +725,8 @@ export class NavalManager
 			const shipPosition = ship.position();
 			if (!shipPosition)
 				continue;
-			const sea = ship.getMetadata(PlayerID, "sea");
-			if (sea === undefined)
-				continue;
+			// our transport ships always have their sea set (see init and checkEvents)
+			const sea = requireMetadata(ship, "sea");
 			for (const blockingShip of this.seaShips[sea]?.values() ?? [])
 			{
 				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
@@ -825,7 +828,8 @@ export class NavalManager
 		for (const base of gameState.ai.HQ.baseManagers())
 			if (base.anchor && base.accessIndex !== undefined)
 				wantedLand[base.accessIndex] = true;
-		const sea = this.docks.toEntityArray()[0].getMetadata(PlayerID, "sea");
+		// our docks always have their sea set (see init and checkEvents)
+		const sea = requireMetadata(this.docks.toEntityArray()[0], "sea");
 		queues.militaryBuilding.addPlan(
 			new ConstructionPlan(gameState, template, { "land": wantedLand, "sea": sea }));
 	}

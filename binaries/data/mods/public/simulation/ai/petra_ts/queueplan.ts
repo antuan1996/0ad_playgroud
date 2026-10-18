@@ -110,9 +110,9 @@ export abstract class QueuePlan
  * to the same concrete QueuePlan subclass.
  */
 export function samePlanType<P extends PetraRuntime.ConcretePlan>(
-	queued: PetraRuntime.ConcretePlan,
-	incoming: P,
-): queued is P
+	broad: PetraRuntime.ConcretePlan,
+	narrowed: P,
+): broad is P
 {
-	return queued.type === incoming.type;
+	return broad.type === narrowed.type;
 }

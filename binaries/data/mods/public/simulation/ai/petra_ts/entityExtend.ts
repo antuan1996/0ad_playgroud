@@ -185,6 +185,26 @@ export function requireTemplate(gameState: CommonGameState, type: string): Commo
 	return template;
 }
 
+/**
+ * Reads entity metadata that Petra has necessarily set before, e.g. right before
+ * in the same flow, or when initializing one of the entities it manages (like the
+ * "sea" of its ships, docks and trains).
+ * Throws (after a warning) if the metadata is unexpectedly missing, so that such
+ * an unexpected case is noticed instead of silently skipping a decision.
+ */
+export function requireMetadata<K extends keyof PetraEntityMetadata>(ent: CommonEntity, key: K): PetraEntityMetadata[K]
+{
+	const value = ent.getMetadata(PlayerID, key);
+	if (value === undefined)
+	{
+		const message = "Petra error: metadata " + key + " not found on entity " +
+			ent.id() + " although it should always have been set.";
+		aiWarn(message);
+		throw new Error(message);
+	}
+	return value;
+}
+
 /** Decide if we should try to capture (returns true) or destroy (return false) */
 export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean
 {
