@@ -292,7 +292,7 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean
 {
 	return ent.isFull() === true ||
-		(ent.resourceSupplyNumGatherers() ?? NaN) + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		ent.resourceSupplyNumGatherers() + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
 }
 
 /**

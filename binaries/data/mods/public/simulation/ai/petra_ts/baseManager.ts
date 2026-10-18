@@ -483,7 +483,7 @@ export class BaseManager
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);
 				if (supplyEntity)
-					count += supplyEntity.resourceSupplyAmount() ?? NaN;
+					count += supplyEntity.resourceSupplyAmount();
 			}
 		return count;
 	}

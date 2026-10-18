@@ -165,7 +165,7 @@ export class GarrisonManager
 					else if (ent.hasClass("Unit"))
 					{
 						const unitAIState = ent.unitAIState();
-						if (ent.owner() == 0 && (!unitAIState || unitAIState.split(".")[1] != "COMBAT"))
+						if (ent.owner() == 0 && unitAIState.split(".")[1] != "COMBAT")
 							continue;
 					}
 					else

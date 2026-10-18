@@ -103,6 +103,8 @@ interface PetraEntityMetadata
 	route: { source: number; target: number; gain: number; land?: number; sea?: number };
 	lastGathered: number;
 	carriedBefore: number;
+/** The subrole of the entity before it was turned into a defender. */
+	formerSubrole?: string;
 }
 
 interface CommonTemplateData
@@ -874,7 +876,9 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the max Gatherers. */
 		maxGatherers(): number;
 /** Represents the resource Gather Rates. */
-		resourceGatherRates(): Record<string, number> | undefined;
+/* Always a value for units, as they all have a ResourceGatherer component
+ * (undefined only for templates without one, e.g. buildings). */
+		resourceGatherRates(): Record<string, number>;
 /** Represents the resource Dropsite Types. */
 		resourceDropsiteTypes(): string[] | undefined;
 /** Represents the is Resource Dropsite. */
@@ -996,7 +1000,8 @@ declare module "simulation/ai/common-api/entity.js"
 /** Gets the Stance. */
 		getStance(): string | undefined;
 /** Represents the unit AI State. */
-		unitAIState(): string | undefined;
+/* Always defined for units, as they are all defined by their UnitAI component. */
+		unitAIState(): string;
 /** Represents the unit AI Order Data. */
 		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
 /** Represents the hitpoints. */
@@ -1032,9 +1037,11 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the is Own. */
 		isOwn(player: number): boolean;
 /** Represents the resource Supply Amount. */
-		resourceSupplyAmount(): number | undefined;
+/* Always defined for resource-supply entities, which all have a ResourceSupply component. */
+		resourceSupplyAmount(): number;
 /** Represents the resource Supply Num Gatherers. */
-		resourceSupplyNumGatherers(): number | undefined;
+/* Same as above. */
+		resourceSupplyNumGatherers(): number;
 /** Represents the is Full. */
 		isFull(): boolean | undefined;
 		resourceCarrying(): Array<{ class?: string; type: string; amount: number }> | undefined;

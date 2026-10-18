@@ -668,12 +668,9 @@ export class Headquarters
 				else if (param[0] == "canGather")
 				{
 					// checking against wood, could be anything else really.
-					const aRates = a[1].resourceGatherRates();
-					if (aRates && aRates["wood.tree"])
+					if (a[1].resourceGatherRates()["wood.tree"])
 						aValue *= param[1];
-					const bRates = b[1].resourceGatherRates();
-					if (bRates && bRates["wood.tree"])
-						bValue *= param[1];
+					if (b[1].resourceGatherRates()["wood.tree"])
 						bValue *= param[1];
 				}
 				else
@@ -2256,7 +2253,7 @@ export class Headquarters
 			if (!ent.canCapture())
 				continue;
 			const state = ent.unitAIState();
-			if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
+			if (state.split(".")[1] != "COMBAT")
 				continue;
 			const orderData = ent.unitAIOrderData();
 			if (!orderData || !orderData.length || !orderData[0].target)

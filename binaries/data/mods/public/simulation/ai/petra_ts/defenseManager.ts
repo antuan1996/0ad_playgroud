@@ -127,7 +127,7 @@ export class DefenseManager
 			return false;
 		// Check if the entity is trying to build a new base near our buildings,
 		// and if yes, add this base in our target list.
-		if (entity.unitAIState() && entity.unitAIState() == "INDIVIDUAL.REPAIR.REPAIRING")
+		if (entity.unitAIState() == "INDIVIDUAL.REPAIR.REPAIRING")
 		{
 			const targetId = entity.unitAIOrderData()[0].target;
 			if (targetId !== undefined)
@@ -278,7 +278,7 @@ export class DefenseManager
 			if (ent.hasClass("Animal"))
 			{
 				const state = ent.unitAIState();
-				if (!state || state.split(".")[1] != "COMBAT")
+				if (state.split(".")[1] != "COMBAT")
 					continue;
 				const orders = ent.unitAIOrderData();
 				if (!orders || !orders.length || !orders[0].target)
@@ -616,7 +616,7 @@ export class DefenseManager
 				// (enemy non-defensive structure are not considered to stay in sync with garrisonManager).
 				if (attacker.position() && attacker.isGarrisonHolder() && attacker.getArrowMultiplier() &&
 				    (target.owner() != 0 || !target.hasClass("Unit") ||
-				     targetAIState && targetAIState.split(".")[1] == "COMBAT"))
+				     targetAIState.split(".")[1] == "COMBAT"))
 					this.garrisonUnitsInside(gameState, attacker, { "attacker": target });
 			}
 
@@ -630,7 +630,7 @@ export class DefenseManager
 			if (attacker && attacker.position() && target.hasClass("FishingBoat"))
 			{
 				const unitAIState = target.unitAIState();
-				const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
+				const unitAIStateOrder = unitAIState.split(".")[1];
 				if (target.isIdle() || unitAIStateOrder == "GATHER")
 				{
 					const pos = attacker.position();
@@ -753,7 +753,7 @@ export class DefenseManager
 				if (currentTarget)
 				{
 					const unitAIState = target.unitAIState();
-					const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
+					const unitAIStateOrder = unitAIState.split(".")[1];
 					if (unitAIStateOrder === "COMBAT" && (currentTarget.id() === attacker.id() ||
 						!currentTarget.hasClasses(["Structure", "Support"])))
 						continue;
@@ -782,7 +782,7 @@ export class DefenseManager
 							}
 							// Check that the unit is still attacking the structure (since the last played turn).
 							const state = ent.unitAIState();
-							if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
+							if (state.split(".")[1] != "COMBAT")
 								continue;
 							const entOrderData = ent.unitAIOrderData();
 							if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||

@@ -1746,7 +1746,7 @@ export class AttackPlan
 				else if (siegeUnit && targetId)
 				{
 					const target = gameState.getEntityById(targetId);
-					if (!target || gameState.isPlayerAlly(target.owner() ?? -1))
+					if (!target || gameState.isPlayerAlly(target.owner()))
 						needsUpdate = true;
 					else if (unitTargets[targetId] && unitTargets[targetId] > 0)
 					{
@@ -1759,7 +1759,7 @@ export class AttackPlan
 				else if (targetId)
 				{
 					const target = gameState.getEntityById(targetId);
-					if (!target || gameState.isPlayerAlly(target.owner() ?? -1))
+					if (!target || gameState.isPlayerAlly(target.owner()))
 						needsUpdate = true;
 					else if (unitTargets[targetId] && unitTargets[targetId] > 0)
 					{
@@ -1771,7 +1771,7 @@ export class AttackPlan
 					else if (attackedByStructure[ent.id()] && target.hasClass("Field"))
 						maybeUpdate = true;
 					else if (!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
-						target.hasClass("Civilian") && (target.unitAIState() || "").split(".")[1] == "FLEEING")
+						target.hasClass("Civilian") && target.unitAIState().split(".")[1] == "FLEEING")
 						maybeUpdate = true;
 				}
 
@@ -1868,7 +1868,7 @@ export class AttackPlan
 							return false;
 						if (enemy.hasClass("Animal"))
 							return false;
-						if (nearby && enemy.hasClass("Civilian") && (enemy.unitAIState() || "").split(".")[1] == "FLEEING")
+						if (nearby && enemy.hasClass("Civilian") && enemy.unitAIState().split(".")[1] == "FLEEING")
 							return false;
 						const dist = SquareVectorDistance(enemyPos, entPos);
 						if (dist > range)
@@ -1977,7 +1977,7 @@ export class AttackPlan
 								if (!unitPos)
 									return;
 								const orderData = unit.unitAIOrderData();
-								if ((unit.unitAIState() || "").split(".")[1] != "COMBAT" || !orderData || !orderData.length ||
+								if (unit.unitAIState().split(".")[1] != "COMBAT" || !orderData || !orderData.length ||
 									!orderData[0].target)
 									return;
 								const target = gameState.getEntityById(orderData[0].target ?? -1);
@@ -2192,7 +2192,7 @@ export class AttackPlan
 			if (!this.targetPos)
 			{
 				const holder = getHolder(gameState, this.target);
-				if (holder && gameState.isPlayerEnemy(holder.owner() ?? -1))
+				if (holder && gameState.isPlayerEnemy(holder.owner()))
 				{
 					this.target = holder;
 					this.targetPos = holder.position();
@@ -2237,7 +2237,7 @@ export class AttackPlan
 						if (attack.name == this.name)
 							continue;
 						if (!attack.target || !gameState.getEntityById(attack.target.id()) ||
-						    !gameState.isPlayerEnemy(attack.target.owner() ?? -1))
+						    !gameState.isPlayerEnemy(attack.target.owner()))
 							continue;
 						if (accessIndex != getLandAccess(gameState, attack.target))
 							continue;
@@ -2382,7 +2382,7 @@ export class AttackPlan
 			const ent = gameState.getEntityById(evt.entity);
 			if (!ent || !ent.position() || !ent.hasClass("Structure"))
 				continue;
-			if (!gameState.isPlayerEnemy(ent.owner() ?? -1))
+			if (!gameState.isPlayerEnemy(ent.owner()))
 				continue;
 			const access = getLandAccess(gameState, ent);
 			for (const base of gameState.ai.HQ.baseManagers())

@@ -75,7 +75,7 @@ export class NavalManager
 		for (const fish of gameState.getFishableSupplies().values())
 		{
 			const sea = this.getFishSea(gameState, fish);
-			const amount = fish.resourceSupplyAmount() ?? 0;
+			const amount = fish.resourceSupplyAmount();
 			if (sea && availableFishes[sea])
 				availableFishes[sea] += amount;
 			else if (sea)

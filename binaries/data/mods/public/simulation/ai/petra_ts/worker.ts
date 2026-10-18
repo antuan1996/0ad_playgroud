@@ -115,7 +115,7 @@ export class Worker
 
 		this.ent = ent;
 
-		const unitAIState = ent.unitAIState() ?? "";
+		const unitAIState = ent.unitAIState();
 		if ((subrole === Worker.SUBROLE_HUNTER || subrole === Worker.SUBROLE_GATHERER) &&
 		    (unitAIState == "INDIVIDUAL.GATHER.GATHERING" || unitAIState == "INDIVIDUAL.GATHER.APPROACHING" ||
 		     unitAIState == "INDIVIDUAL.COMBAT.APPROACHING"))
@@ -260,8 +260,8 @@ export class Worker
 					if (supply && !supply.hasClasses(["Field", "Animal"]) &&
 						supplyId != ent.getMetadata(PlayerID, "supply"))
 					{
-						const nbGatherers = (supply.resourceSupplyNumGatherers() ?? 0) + this.base.GetTCGatherer(supplyId);
-						if (nbGatherers > 1 && (supply.resourceSupplyAmount() ?? 0)/nbGatherers < 30)
+						const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supplyId);
+						if (nbGatherers > 1 && supply.resourceSupplyAmount()/nbGatherers < 30)
 						{
 							this.base.RemoveTCGatherer(supplyId);
 							this.startGathering(gameState);
@@ -508,7 +508,7 @@ export class Worker
 		{
 			const ent = worker.ent;
 			let ret: CommonEntity | false = false;
-			const gatherRates = ent.resourceGatherRates() ?? {};
+			const gatherRates = ent.resourceGatherRates();
 			for (let i = 0; i < supplies.length; ++i)
 			{
 				const entity = gameState.getEntityById(supplies[i].id);
@@ -527,10 +527,10 @@ export class Worker
 				if (!gatherRates[supplyType])
 					continue;
 				// check if available resource is worth one additionnal gatherer (except for farms)
-				const nbGatherers = (entity.resourceSupplyNumGatherers() ?? 0) + worker.base.GetTCGatherer(supplies[i].id);
+				const nbGatherers = entity.resourceSupplyNumGatherers() + worker.base.GetTCGatherer(supplies[i].id);
 				const supplyTypeObj = entity.resourceSupplyType();
 				if (supplyTypeObj && supplyTypeObj.specific != "grain" && nbGatherers > 0 &&
-					(entity.resourceSupplyAmount() ?? 0)/(1+nbGatherers) < 30)
+					entity.resourceSupplyAmount()/(1+nbGatherers) < 30)
 				{
 					continue;
 				}
@@ -836,7 +836,7 @@ export class Worker
 			return false;
 		};
 
-		const gatherRates = this.ent.resourceGatherRates() ?? {};
+		const gatherRates = this.ent.resourceGatherRates();
 		for (const supply of resources.values())
 		{
 			const supplyPos = supply.position();
@@ -854,8 +854,8 @@ export class Worker
 			if (isSupplyFull(gameState, supply))
 				continue;
 			// Check if available resource is worth one additionnal gatherer (except for farms).
-			const nbGatherers = (supply.resourceSupplyNumGatherers() ?? 0) + this.base.GetTCGatherer(supply.id());
-			if (nbGatherers > 0 && (supply.resourceSupplyAmount() ?? 0)/(1+nbGatherers) < 30)
+			const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supply.id());
+			if (nbGatherers > 0 && supply.resourceSupplyAmount()/(1+nbGatherers) < 30)
 				continue;
 
 			const canFlee = !supply.hasClass("Domestic") && supply.templateName().indexOf("resource|") == -1;
@@ -951,7 +951,7 @@ export class Worker
 		};
 
 		let exhausted = true;
-		const gatherRates = this.ent.resourceGatherRates() ?? {};
+		const gatherRates = this.ent.resourceGatherRates();
 		resources.forEach((supply: import("simulation/ai/common-api/entity.js").Entity): void =>
 		{
 			if (!supply.position())
@@ -970,8 +970,8 @@ export class Worker
 			if (isSupplyFull(gameState, supply))
 				return;
 			// check if available resource is worth one additionnal gatherer (except for farms)
-			const nbGatherers = (supply.resourceSupplyNumGatherers() ?? 0) + this.base.GetTCGatherer(supply.id());
-			if (nbGatherers > 0 && (supply.resourceSupplyAmount() ?? 0)/(1+nbGatherers) < 30)
+			const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supply.id());
+			if (nbGatherers > 0 && supply.resourceSupplyAmount()/(1+nbGatherers) < 30)
 				return;
 
 			// Avoid ennemy territory
@@ -1013,7 +1013,7 @@ export class Worker
 			.filter(filters.byMetadata(PlayerID, "base", baseID));
 		let bestFarm;
 
-		const gatherRates = this.ent.resourceGatherRates() ?? {};
+		const gatherRates = this.ent.resourceGatherRates();
 		for (const field of ownFields.values())
 		{
 			if (isSupplyFull(gameState, field))
@@ -1026,7 +1026,7 @@ export class Worker
 			const diminishing = field.getDiminishingReturns();
 			if (diminishing < 1)
 			{
-				const num = (field.resourceSupplyNumGatherers() ?? 0) + this.base.GetTCGatherer(field.id());
+				const num = field.resourceSupplyNumGatherers() + this.base.GetTCGatherer(field.id());
 				if (num > 0)
 					rate = Math.pow(diminishing, num);
 			}

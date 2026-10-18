@@ -606,7 +606,7 @@ export class BasesManager
 			for (const worker of base.workers.values())
 			{
 				const aiState = worker.unitAIState();
-				if (!aiState || aiState.split(".").indexOf("RETURNRESOURCE") === -1)
+				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
 				const orders = worker.unitAIOrderData();
 				if (orders.length < 2 || !orders[1].target || orders[1].target != worker.getMetadata(PlayerID, "supply"))
