@@ -345,8 +345,6 @@ export class ConstructionPlan extends QueuePlan
 		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
 
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return false;
 		let radius;
 		if (template.hasClasses(["Fortress", "Arsenal"]) ||
 			this.type == gameState.applyCiv("structures/{civ}/elephant_stable"))
@@ -426,8 +424,6 @@ export class ConstructionPlan extends QueuePlan
 		}
 		const dropsiteTypes = template.resourceDropsiteTypes();
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return false;
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		let halfSize = 0;    // used for dock angle

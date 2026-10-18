@@ -374,7 +374,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				--num;
 				--num1;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -395,7 +395,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				--num;
 				--num2;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -416,7 +416,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				if (!ent.hasClass("Support"))
 					--num;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * (cc.footprintRadius() ?? 0);
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}

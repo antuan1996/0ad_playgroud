@@ -825,9 +825,14 @@ declare module "simulation/ai/common-api/entity.js"
 		costSum(productionQueue?: unknown): number;
 /** Represents the tech Cost Multiplier. */
 		techCostMultiplier(type: string): number;
-		obstructionRadius(): { max: number; min: number } | undefined;
-/** Represents the footprint Radius. */
-		footprintRadius(): number | undefined;
+/** Always returns a value for game entities and for templates that can exist as game
+ * entities, as they all have an Obstruction component. Only returns undefined for
+ * component-less templates that never exist as entities (e.g. some decorations). */
+		obstructionRadius(): { max: number; min: number };
+/** Always returns a value for game entities and for templates that can exist as game
+ * entities, as they all have a Footprint component. Only returns undefined for
+ * component-less templates that never exist as entities. */
+		footprintRadius(): number;
 /** Represents the max Hitpoints. */
 		maxHitpoints(): number;
 /** Represents the is Healable. */

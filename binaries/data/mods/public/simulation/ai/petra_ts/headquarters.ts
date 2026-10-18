@@ -803,8 +803,6 @@ export class Headquarters
 		let bestIdx = -1;
 		let bestVal = -Infinity;
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return false;
 		let radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		let scale = 250 * 250;
 		let proxyAccess;
@@ -1011,8 +1009,6 @@ export class Headquarters
 		let bestIdx = -1;
 		let bestVal = Infinity;
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return false;
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const width = this.territoryMap.width;
@@ -1157,8 +1153,6 @@ export class Headquarters
 		let bestDistSq = 0;
 		let bestGainMult = 0;
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return false;
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		const isNavalMarket = template.hasClasses(["Naval+Trade"]);
 
@@ -1287,9 +1281,9 @@ export class Headquarters
 			wonderMode = wonders.length != 0;
 			if (wonderMode)
 			{
+				// wonders always have a footprint
 				const wonderRadius = wonders[0].footprintRadius();
-				if (wonderRadius !== undefined)
-					wonderDistmin = (50 + wonderRadius) * (50 + wonderRadius);
+				wonderDistmin = (50 + wonderRadius) * (50 + wonderRadius);
 			}
 		}
 
@@ -1310,8 +1304,6 @@ export class Headquarters
 		const isTower = template.hasClass("Tower");
 		const isFortress = template.hasClass("Fortress");
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return undefined;
 		let radius;
 		if (isFortress)
 			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);

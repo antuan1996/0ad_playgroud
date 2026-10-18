@@ -97,9 +97,8 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 		let minDist = distance.MinDistance ? +distance.MinDistance : 0;
 		if (minDist)
 		{
-			const obstructionRadius = template ? template.obstructionRadius() : undefined;
-			if (obstructionRadius)
-				minDist -= obstructionRadius.min;
+			// a distance requirement is template data, so a template was necessarily passed
+			minDist -= template!.obstructionRadius().min;
 			const fromClass = distance.FromClass;
 			const cellSize = passabilityMap.cellSize;
 			const cellDist = 1 + minDist / cellSize;

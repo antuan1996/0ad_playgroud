@@ -235,8 +235,9 @@ export class VictoryManager
 						continue;
 
 					const pos = holderEnt.position();
+					// garrison holders always have an obstruction
 					const obstructionRadius = holderEnt.obstructionRadius();
-					if (pos && obstructionRadius)
+					if (pos)
 						guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
 				}
 			}
@@ -543,11 +544,14 @@ export class VictoryManager
 		if (bestBase && bestBase.accessIndex == accessIndex)
 		{
 			const bestBaseAnchor = bestBase.anchor;
-			const bestBasePos = bestBaseAnchor ? bestBaseAnchor.position() : undefined;
-			const bestBaseRadius = bestBaseAnchor ? bestBaseAnchor.obstructionRadius() : undefined;
-			if (bestBasePos && bestBaseRadius)
-				criticalEnt.moveToRange(bestBasePos[0], bestBasePos[1],
-					0, bestBaseRadius.max);
+			if (bestBaseAnchor)
+			{
+				const bestBasePos = bestBaseAnchor.position();
+				// anchors always have an obstruction
+				if (bestBasePos)
+					criticalEnt.moveToRange(bestBasePos[0], bestBasePos[1],
+						0, bestBaseAnchor.obstructionRadius().max);
+			}
 		}
 	}
 

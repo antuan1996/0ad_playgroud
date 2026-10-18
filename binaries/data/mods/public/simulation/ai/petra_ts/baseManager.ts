@@ -407,9 +407,8 @@ export class BaseManager
 
 		let bestIdx;
 		let bestVal = 0;
+		// dropsite templates always have an obstruction
 		const obstructionRadius = template.obstructionRadius();
-		if (!obstructionRadius)
-			return { "quality": 0, "pos": [0, 0] };
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const territoryMap = gameState.ai.HQ.territoryMap;

@@ -1276,10 +1276,8 @@ export class AttackPlan
 
 		const pathPos: CommonPosition = [path[0].x, path[0].y];
 		const dist = VectorDistance(pathPos, targetPos);
-		const obstruction = target.obstructionRadius();
-		if (!obstruction)
-			return undefined;
-		const radius = obstruction.max;
+		// targets (units or structures) always have an obstruction
+		const radius = target.obstructionRadius().max;
 		for (const struct of gameState.getEnemyStructures().values())
 		{
 			const structPos = struct.position();

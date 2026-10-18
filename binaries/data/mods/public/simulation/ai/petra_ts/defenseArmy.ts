@@ -283,10 +283,8 @@ export class DefenseArmy
 					defensiveFound = true;
 				distmin = dist;
 				destination = pos;
-				const structRadius = struct.obstructionRadius();
-				if (!structRadius)
-					continue;
-				radius = structRadius.max;
+				// ally structures always have an obstruction
+				radius = struct.obstructionRadius().max;
 			}
 		}
 		while (this.ownEntities.length > 0)
