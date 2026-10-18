@@ -1991,8 +1991,10 @@ export class Headquarters
 		{
 			for (const item of nearestAnchor._entity.trainingQueue)
 			{
+				// only unit batches are trained with a garrisonType metadata (Petra never
+				// attaches it to research), so the unit-only `count` field is present.
 				if (item.metadata && item.metadata.garrisonType)
-					numGarrisoned += item.count;
+					numGarrisoned += requireValue(item.count);
 				else if (!item.progress && (!item.metadata || !item.metadata.trainer))
 					nearestAnchor.stopProduction(item.id);
 			}

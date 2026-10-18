@@ -362,7 +362,7 @@ export class Config
 			"ResourceGatherer/BaseSpeed": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
 			"Trader/GainMultiplier": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
 			"Cost/BuildTime": [{ "affects": ["Unit", "Structure"], "multiply": time[AIDiff] }],
-		}, [gameState.player]);
+		}, gameState.playerData.entity);
 	}
 
 	Serialize(): Record<string, unknown>
