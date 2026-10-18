@@ -3,7 +3,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources } from
+import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireValue } from
 	"./entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
@@ -1277,7 +1277,7 @@ export class AttackPlan
 		const pathPos: CommonPosition = [path[0].x, path[0].y];
 		const dist = VectorDistance(pathPos, targetPos);
 		// targets (units or structures) always have an obstruction
-		const radius = target.obstructionRadius().max;
+		const radius = requireValue(target.obstructionRadius()).max;
 		for (const struct of gameState.getEnemyStructures().values())
 		{
 			const structPos = struct.position();
@@ -1771,7 +1771,7 @@ export class AttackPlan
 					else if (attackedByStructure[ent.id()] && target.hasClass("Field"))
 						maybeUpdate = true;
 					else if (!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
-						target.hasClass("Civilian") && target.unitAIState().split(".")[1] == "FLEEING")
+						target.hasClass("Civilian") && requireValue(target.unitAIState()).split(".")[1] == "FLEEING")
 						maybeUpdate = true;
 				}
 
@@ -1868,7 +1868,7 @@ export class AttackPlan
 							return false;
 						if (enemy.hasClass("Animal"))
 							return false;
-						if (nearby && enemy.hasClass("Civilian") && enemy.unitAIState().split(".")[1] == "FLEEING")
+						if (nearby && enemy.hasClass("Civilian") && requireValue(enemy.unitAIState()).split(".")[1] == "FLEEING")
 							return false;
 						const dist = SquareVectorDistance(enemyPos, entPos);
 						if (dist > range)
@@ -1977,7 +1977,7 @@ export class AttackPlan
 								if (!unitPos)
 									return;
 								const orderData = unit.unitAIOrderData();
-								if (unit.unitAIState().split(".")[1] != "COMBAT" || !orderData || !orderData.length ||
+								if (requireValue(unit.unitAIState()).split(".")[1] != "COMBAT" || !orderData || !orderData.length ||
 									!orderData[0].target)
 									return;
 								const target = gameState.getEntityById(orderData[0].target ?? -1);

@@ -1,5 +1,5 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, returnResources } from
+import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue, returnResources } from
 	"./entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
@@ -284,7 +284,7 @@ export class DefenseArmy
 				distmin = dist;
 				destination = pos;
 				// ally structures always have an obstruction
-				radius = struct.obstructionRadius().max;
+				radius = requireValue(struct.obstructionRadius()).max;
 			}
 		}
 		while (this.ownEntities.length > 0)

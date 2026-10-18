@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, setSeaAccess } from
+import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, requireValue, setSeaAccess } from
 	"./entityExtend.ts";
 import type { Queue } from "./queue.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
@@ -75,7 +75,7 @@ export class NavalManager
 		for (const fish of gameState.getFishableSupplies().values())
 		{
 			const sea = this.getFishSea(gameState, fish);
-			const amount = fish.resourceSupplyAmount();
+			const amount = requireValue(fish.resourceSupplyAmount());
 			if (sea && availableFishes[sea])
 				availableFishes[sea] += amount;
 			else if (sea)

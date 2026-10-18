@@ -1,3 +1,4 @@
+import { requireValue } from "./entityExtend.ts";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { getMapIndices } from "simulation/ai/common-api/utils.js";
@@ -98,7 +99,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 		if (minDist)
 		{
 			// a distance requirement is template data, so a template was necessarily passed
-			minDist -= template!.obstructionRadius().min;
+			minDist -= requireValue(template?.obstructionRadius()).min;
 			const fromClass = distance.FromClass;
 			const cellSize = passabilityMap.cellSize;
 			const cellDist = 1 + minDist / cellSize;

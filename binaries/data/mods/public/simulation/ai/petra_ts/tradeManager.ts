@@ -3,7 +3,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate } from
+import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate, requireValue } from
 	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
@@ -161,7 +161,7 @@ export class TradeManager
 	updateTrader(gameState: CommonGameState, ent: CommonEntity): void
 	{
 		if (ent.hasClass("Ship") && gameState.ai.playedTurn % 5 == 0 &&
-			ent.unitAIState().startsWith("INDIVIDUAL.COLLECTTREASURE") &&
+			requireValue(ent.unitAIState()).startsWith("INDIVIDUAL.COLLECTTREASURE") &&
 			gatherTreasure(gameState, ent, true))
 		{
 			return;

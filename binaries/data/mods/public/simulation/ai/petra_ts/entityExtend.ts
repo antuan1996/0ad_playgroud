@@ -205,6 +205,24 @@ export function requireMetadata<K extends keyof PetraEntityMetadata>(ent: Common
 	return value;
 }
 
+/**
+ * Asserts that a possibly-undefined value is present, for call sites where the
+ * calling context guarantees it, so that the common-api declarations can keep
+ * stating their true (possibly-undefined) return types.
+ * Throws (after a warning) if the value is unexpectedly missing, so that such
+ * an unexpected case is noticed instead of silently skipping a decision.
+ */
+export function requireValue<T>(value: T | undefined): T
+{
+	if (value === undefined)
+	{
+		const message = "Petra error: required value was unexpectedly undefined.";
+		aiWarn(message);
+		throw new Error(message);
+	}
+	return value;
+}
+
 /** Decide if we should try to capture (returns true) or destroy (return false) */
 export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean
 {
@@ -312,7 +330,7 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean
 {
 	return ent.isFull() === true ||
-		ent.resourceSupplyNumGatherers() + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		requireValue(ent.resourceSupplyNumGatherers()) + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
 }
 
 /**

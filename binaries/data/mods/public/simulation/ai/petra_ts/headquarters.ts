@@ -12,7 +12,7 @@ import * as difficulty from "./difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
-	requireTemplate, getSeaAccess, setSeaAccess } from "./entityExtend.ts";
+	requireTemplate, requireValue, getSeaAccess, setSeaAccess } from "./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "./mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
@@ -668,9 +668,9 @@ export class Headquarters
 				else if (param[0] == "canGather")
 				{
 					// checking against wood, could be anything else really.
-					if (a[1].resourceGatherRates()["wood.tree"])
+					if (a[1].resourceGatherRates()?.["wood.tree"])
 						aValue *= param[1];
-					if (b[1].resourceGatherRates()["wood.tree"])
+					if (b[1].resourceGatherRates()?.["wood.tree"])
 						bValue *= param[1];
 				}
 				else
@@ -799,7 +799,7 @@ export class Headquarters
 
 		let bestIdx = -1;
 		let bestVal = -Infinity;
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		let radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		let scale = 250 * 250;
 		let proxyAccess;
@@ -1005,7 +1005,7 @@ export class Headquarters
 
 		let bestIdx = -1;
 		let bestVal = Infinity;
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const width = this.territoryMap.width;
@@ -1149,7 +1149,7 @@ export class Headquarters
 		let bestVal = -Infinity;
 		let bestDistSq = 0;
 		let bestGainMult = 0;
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		const isNavalMarket = template.hasClasses(["Naval+Trade"]);
 
@@ -1279,7 +1279,7 @@ export class Headquarters
 			if (wonderMode)
 			{
 				// wonders always have a footprint
-				const wonderRadius = wonders[0].footprintRadius();
+				const wonderRadius = requireValue(wonders[0].footprintRadius());
 				wonderDistmin = (50 + wonderRadius) * (50 + wonderRadius);
 			}
 		}
@@ -1300,7 +1300,7 @@ export class Headquarters
 
 		const isTower = template.hasClass("Tower");
 		const isFortress = template.hasClass("Fortress");
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		let radius;
 		if (isFortress)
 			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
@@ -2252,7 +2252,7 @@ export class Headquarters
 		{
 			if (!ent.canCapture())
 				continue;
-			const state = ent.unitAIState();
+			const state = requireValue(ent.unitAIState());
 			if (state.split(".")[1] != "COMBAT")
 				continue;
 			const orderData = ent.unitAIOrderData();

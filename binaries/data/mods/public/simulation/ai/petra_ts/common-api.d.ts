@@ -827,14 +827,9 @@ declare module "simulation/ai/common-api/entity.js"
 		costSum(productionQueue?: unknown): number;
 /** Represents the tech Cost Multiplier. */
 		techCostMultiplier(type: string): number;
-/** Always returns a value for game entities and for templates that can exist as game
- * entities, as they all have an Obstruction component. Only returns undefined for
- * component-less templates that never exist as entities (e.g. some decorations). */
-		obstructionRadius(): { max: number; min: number };
-/** Always returns a value for game entities and for templates that can exist as game
- * entities, as they all have a Footprint component. Only returns undefined for
- * component-less templates that never exist as entities. */
-		footprintRadius(): number;
+		obstructionRadius(): { max: number; min: number } | undefined;
+/** Represents the footprint Radius. */
+		footprintRadius(): number | undefined;
 /** Represents the max Hitpoints. */
 		maxHitpoints(): number;
 /** Represents the is Healable. */
@@ -876,9 +871,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the max Gatherers. */
 		maxGatherers(): number;
 /** Represents the resource Gather Rates. */
-/* Always a value for units, as they all have a ResourceGatherer component
- * (undefined only for templates without one, e.g. buildings). */
-		resourceGatherRates(): Record<string, number>;
+		resourceGatherRates(): Record<string, number> | undefined;
 /** Represents the resource Dropsite Types. */
 		resourceDropsiteTypes(): string[] | undefined;
 /** Represents the is Resource Dropsite. */
@@ -1000,8 +993,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Gets the Stance. */
 		getStance(): string | undefined;
 /** Represents the unit AI State. */
-/* Always defined for units, as they are all defined by their UnitAI component. */
-		unitAIState(): string;
+		unitAIState(): string | undefined;
 /** Represents the unit AI Order Data. */
 		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
 /** Represents the hitpoints. */
@@ -1037,11 +1029,9 @@ declare module "simulation/ai/common-api/entity.js"
 /** Represents the is Own. */
 		isOwn(player: number): boolean;
 /** Represents the resource Supply Amount. */
-/* Always defined for resource-supply entities, which all have a ResourceSupply component. */
-		resourceSupplyAmount(): number;
+		resourceSupplyAmount(): number | undefined;
 /** Represents the resource Supply Num Gatherers. */
-/* Same as above. */
-		resourceSupplyNumGatherers(): number;
+		resourceSupplyNumGatherers(): number | undefined;
 /** Represents the is Full. */
 		isFull(): boolean | undefined;
 		resourceCarrying(): Array<{ class?: string; type: string; amount: number }> | undefined;

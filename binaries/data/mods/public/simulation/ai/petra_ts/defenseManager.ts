@@ -7,7 +7,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
 import { DefenseArmy } from "./defenseArmy.ts";
-import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit } from
+import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from
 	"./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { Worker } from "./worker.ts";
@@ -277,7 +277,7 @@ export class DefenseManager
 			// Keep animals attacking us or our allies.
 			if (ent.hasClass("Animal"))
 			{
-				const state = ent.unitAIState();
+				const state = requireValue(ent.unitAIState());
 				if (state.split(".")[1] != "COMBAT")
 					continue;
 				const orders = ent.unitAIOrderData();
@@ -616,7 +616,7 @@ export class DefenseManager
 				// (enemy non-defensive structure are not considered to stay in sync with garrisonManager).
 				if (attacker.position() && attacker.isGarrisonHolder() && attacker.getArrowMultiplier() &&
 				    (target.owner() != 0 || !target.hasClass("Unit") ||
-				     targetAIState.split(".")[1] == "COMBAT"))
+				     targetAIState && targetAIState.split(".")[1] == "COMBAT"))
 					this.garrisonUnitsInside(gameState, attacker, { "attacker": target });
 			}
 
@@ -630,7 +630,7 @@ export class DefenseManager
 			if (attacker && attacker.position() && target.hasClass("FishingBoat"))
 			{
 				const unitAIState = target.unitAIState();
-				const unitAIStateOrder = unitAIState.split(".")[1];
+				const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
 				if (target.isIdle() || unitAIStateOrder == "GATHER")
 				{
 					const pos = attacker.position();
@@ -753,7 +753,7 @@ export class DefenseManager
 				if (currentTarget)
 				{
 					const unitAIState = target.unitAIState();
-					const unitAIStateOrder = unitAIState.split(".")[1];
+					const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
 					if (unitAIStateOrder === "COMBAT" && (currentTarget.id() === attacker.id() ||
 						!currentTarget.hasClasses(["Structure", "Support"])))
 						continue;
@@ -781,7 +781,7 @@ export class DefenseManager
 								continue;
 							}
 							// Check that the unit is still attacking the structure (since the last played turn).
-							const state = ent.unitAIState();
+							const state = requireValue(ent.unitAIState());
 							if (state.split(".")[1] != "COMBAT")
 								continue;
 							const entOrderData = ent.unitAIOrderData();

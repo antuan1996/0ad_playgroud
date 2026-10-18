@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "./attackPlan.ts";
-import { getAttackBonus, getBestBase, getLandAccess, returnResources } from
+import { getAttackBonus, getBestBase, getLandAccess, returnResources, requireValue } from
 	"./entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
@@ -236,7 +236,7 @@ export class VictoryManager
 
 					const pos = holderEnt.position();
 					// garrison holders always have an obstruction
-					const obstructionRadius = holderEnt.obstructionRadius();
+					const obstructionRadius = requireValue(holderEnt.obstructionRadius());
 					if (pos)
 						guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
 				}
@@ -550,7 +550,7 @@ export class VictoryManager
 				// anchors always have an obstruction
 				if (bestBasePos)
 					criticalEnt.moveToRange(bestBasePos[0], bestBasePos[1],
-						0, bestBaseAnchor.obstructionRadius().max);
+						0, requireValue(bestBaseAnchor.obstructionRadius()).max);
 			}
 		}
 	}

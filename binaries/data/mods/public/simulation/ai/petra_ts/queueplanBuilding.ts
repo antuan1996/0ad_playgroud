@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate } from "./entityExtend.ts";
+import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate, requireValue } from "./entityExtend.ts";
 import * as mapMask from "./mapMask.ts";
 import { createObstructionMap } from "./mapModule.ts";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
@@ -344,7 +344,7 @@ export class ConstructionPlan extends QueuePlan
 		const obstructions = createObstructionMap(gameState, 0, template);
 		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
 
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		let radius;
 		if (template.hasClasses(["Fortress", "Arsenal"]) ||
 			this.type == gameState.applyCiv("structures/{civ}/elephant_stable"))
@@ -423,7 +423,7 @@ export class ConstructionPlan extends QueuePlan
 			wantedLand[proxyAccess] = true;
 		}
 		const dropsiteTypes = template.resourceDropsiteTypes();
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		let halfSize = 0;    // used for dock angle

@@ -3,7 +3,7 @@ import type { BasesManager } from "./basesManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate } from
+import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate, requireValue } from
 	"./entityExtend.ts";
 import { createObstructionMap } from "./mapModule.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
@@ -408,7 +408,7 @@ export class BaseManager
 		let bestIdx;
 		let bestVal = 0;
 		// dropsite templates always have an obstruction
-		const obstructionRadius = template.obstructionRadius();
+		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const territoryMap = gameState.ai.HQ.territoryMap;
@@ -483,7 +483,7 @@ export class BaseManager
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);
 				if (supplyEntity)
-					count += supplyEntity.resourceSupplyAmount();
+					count += requireValue(supplyEntity.resourceSupplyAmount());
 			}
 		return count;
 	}

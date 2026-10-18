@@ -3,7 +3,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate } from
+import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate, requireValue } from
 	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
@@ -374,7 +374,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				--num;
 				--num1;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
+				const range = 1.5 * requireValue(cc.footprintRadius());
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -395,7 +395,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				--num;
 				--num2;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
+				const range = 1.5 * requireValue(cc.footprintRadius());
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -416,7 +416,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 				if (!ent.hasClass("Support"))
 					--num;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
+				const range = 1.5 * requireValue(cc.footprintRadius());
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}

@@ -4,7 +4,7 @@ import { AttackPlan, type SerializedAttackPlan } from "./attackPlan.ts";
 import * as chat from "./chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { allowCapture, getLandAccess } from "./entityExtend.ts";
+import { allowCapture, getLandAccess, requireValue } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
 
 export type SerializedAttackManager = {
@@ -237,7 +237,7 @@ export class AttackManager
 				let targetPos: CommonPosition | undefined;
 				if (dist > range)
 				{
-					const safety = struct.footprintRadius() + 30;
+					const safety = requireValue(struct.footprintRadius()) + 30;
 					targetPos = [
 						structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
 						structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
