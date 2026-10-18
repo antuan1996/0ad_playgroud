@@ -3,7 +3,7 @@ import type { BasesManager } from "./basesManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding } from
+import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate } from
 	"./entityExtend.ts";
 import { createObstructionMap } from "./mapModule.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
@@ -377,9 +377,9 @@ export class BaseManager
 	 */
 	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: string): { quality: number; pos: CommonPosition }
 	{
-		const template = gameState.getTemplate(gameState.applyCiv(templateName));
-		if (!template)
-			return { "quality": 0, "pos": [0, 0] };
+		// Callers pass a template name from findStructuresByFilter(), which only
+		// returns names whose template exists and is available.
+		const template = requireTemplate(gameState, gameState.applyCiv(templateName));
 
 		// CCs and Docks are handled elsewhere.
 		if (template.hasClasses(["CivCentre", "Dock"]))

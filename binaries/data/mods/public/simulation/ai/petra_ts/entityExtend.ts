@@ -166,6 +166,25 @@ export function setSeaAccess(gameState: CommonGameState, ent: CommonEntity): voi
 	getSeaAccess(gameState, ent);
 }
 
+/**
+ * Gets the template of the given type at call sites where it is already known
+ * to exist, e.g. because gameState.canBuild() or gameState.isTemplateAvailable()
+ * was checked earlier in the same code path.
+ * Throws (after a warning) if the template is unexpectedly missing, so that
+ * such an unexpected case is noticed instead of silently skipping a decision.
+ */
+export function requireTemplate(gameState: CommonGameState, type: string): CommonTemplate
+{
+	const template = gameState.getTemplate(type);
+	if (!template)
+	{
+		const message = "Petra error: template " + type + " not found although it should always be available.";
+		aiWarn(message);
+		throw new Error(message);
+	}
+	return template;
+}
+
 /** Decide if we should try to capture (returns true) or destroy (return false) */
 export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean
 {

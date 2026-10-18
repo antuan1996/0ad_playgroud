@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { getBuiltEntity, getLandAccess, getSeaAccess } from "./entityExtend.ts";
+import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate } from "./entityExtend.ts";
 import * as mapMask from "./mapMask.ts";
 import { createObstructionMap } from "./mapModule.ts";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
@@ -170,8 +170,9 @@ export class ConstructionPlan extends QueuePlan
 				const templateName = gameState.applyCiv("structures/{civ}/dock");
 				if (gameState.ai.HQ.canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
 				{
-					const dockTemplate = gameState.getTemplate(templateName);
-					if (dockTemplate && gameState.getResources().canAfford(
+					// canBuild() above already verified that the template exists.
+					const dockTemplate = requireTemplate(gameState, templateName);
+					if (gameState.getResources().canAfford(
 						new ResourcesManager(dockTemplate.cost())))
 					{
 						this.buildOverseaDock(gameState, dockTemplate);

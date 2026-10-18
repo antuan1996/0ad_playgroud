@@ -12,7 +12,7 @@ import * as difficulty from "./difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
-	getSeaAccess, setSeaAccess } from "./entityExtend.ts";
+	requireTemplate, getSeaAccess, setSeaAccess } from "./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "./mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
@@ -1486,9 +1486,8 @@ export class Headquarters
 
 		if (!force)
 		{
-			const template = gameState.getTemplate(gameState.applyCiv("structures/{civ}/wonder"));
-			if (!template)
-				return;
+			// canBuild() above already verified that the template exists.
+			const template = requireTemplate(gameState, gameState.applyCiv("structures/{civ}/wonder"));
 			// Check that we have enough resources to start thinking to build a wonder
 			const cost = template.cost();
 			const resources = gameState.getResources();
@@ -1583,12 +1582,13 @@ export class Headquarters
 		if (numPlanned > 0 && this.phasing && gameState.getPhaseEntityRequirements(this.phasing).length)
 		{
 			const houseTemplateName = gameState.applyCiv(houseTemplateString);
-			const houseTemplate = gameState.getTemplate(houseTemplateName);
+			// isTemplateAvailable() above already verified that this template exists.
+			const houseTemplate = requireTemplate(gameState, houseTemplateName);
 
 			let needed = 0;
 			for (const entityReq of gameState.getPhaseEntityRequirements(this.phasing))
 			{
-				if (!houseTemplate || !houseTemplate.hasClass(entityReq.class))
+				if (!houseTemplate.hasClass(entityReq.class))
 					continue;
 
 				const count = gameState.getOwnStructures().filter(filters.byClass(entityReq.class))
@@ -1616,9 +1616,10 @@ export class Headquarters
 
 		if (this.requireHouses)
 		{
-			const houseTemplate = gameState.getTemplate(gameState.applyCiv(houseTemplateString));
+			// isTemplateAvailable() above already verified that this template exists.
+			const houseTemplate = requireTemplate(gameState, gameState.applyCiv(houseTemplateString));
 			if (!this.phasing || gameState.getPhaseEntityRequirements(this.phasing).every((req: { class: string; count: number; }): boolean =>
-				!houseTemplate || !houseTemplate.hasClass(req.class) ||
+				!houseTemplate.hasClass(req.class) ||
 				gameState.getOwnStructures().filter(filters.byClass(req.class)).length >= req.count))
 			{
 				this.requireHouses = undefined;
@@ -1630,9 +1631,8 @@ export class Headquarters
 		//    - otherwise increase temporarily the priority of houses
 		const house = gameState.applyCiv(houseTemplateString);
 		const HouseNb = gameState.getOwnFoundations().filter(filters.byClass("House")).length;
-		const houseTemplate = gameState.getTemplate(house);
-		if (!houseTemplate)
-			return;
+		// isTemplateAvailable() above already verified that this template exists.
+		const houseTemplate = requireTemplate(gameState, house);
 		const popBonus = houseTemplate.getPopulationBonus();
 		const freeSlots = gameState.getPopulationLimit() + HouseNb*popBonus - this.getAccountedPopulation(gameState);
 		let priority;
@@ -1902,9 +1902,8 @@ export class Headquarters
 			{
 				if (gameState.countEntitiesAndQueuedByType(advanced, true) > 0 || !this.canBuild(gameState, advanced))
 					continue;
-				const template = gameState.getTemplate(advanced);
-				if (!template)
-					continue;
+				// canBuild() above already verified that the template exists.
+				const template = requireTemplate(gameState, advanced);
 				const civ = gameState.getPlayerCiv();
 				if (template.hasDefensiveFire() || template.trainableEntities(civ))
 					queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, advanced, { "militaryBase": true }));

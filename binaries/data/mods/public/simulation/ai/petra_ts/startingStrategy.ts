@@ -3,7 +3,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getHolder, getLandAccess, isFastMoving } from
+import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate } from
 	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
@@ -533,12 +533,9 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 			if (numWorkers > 12 && newDP.quality > 60 ||
 				gameState.getPopulation() > gameState.getPopulationLimit() + 20)
 			{
-				const templateObj = gameState.getTemplate(newDP.templateName);
-				if (templateObj)
-				{
-					const cost = new ResourcesManager(templateObj.cost());
-					gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
-				}
+				// canBuild() above already verified that the template exists.
+				const cost = new ResourcesManager(requireTemplate(gameState, newDP.templateName).cost());
+				gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 			}
 			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
 				{ "base": HQ.baseManagers()[0].ID }, newDP.pos));
