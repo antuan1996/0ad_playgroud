@@ -134,7 +134,9 @@ export function createTerritoryMap(gameState: CommonGameState): InfoMap & {
 	// engine's grid, whose array is `data` (CCmpAIManager reads the same name
 	// back), so `.map` was undefined and InfoMap fell back to an all-zero map:
 	// every territory came out unowned, with nothing thrown to say so.
-	const ret = new InfoMap(gameState.sharedScript, "territory", map.data) as InfoMap & {
+	// (The territory grid is a Grid<uint8_t>, so the data array is a
+	// Uint8Array; the narrowing below documents that.)
+	const ret = new InfoMap(gameState.sharedScript, "territory", map.data as Uint8Array) as InfoMap & {
 		getOwner: (position: CommonPosition) => number;
 		getOwnerIndex: (index: number) => number;
 		isBlinking: (position: CommonPosition) => boolean;

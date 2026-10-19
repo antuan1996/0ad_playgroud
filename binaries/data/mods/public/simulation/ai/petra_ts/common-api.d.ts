@@ -1,36 +1,51 @@
-type CommonPosition = [number, number];
-type CommonResourceAmounts = Record<string, number>;
+// Ambient type declarations for the common-api JS modules
+// (binaries/data/mods/public/simulation/ai/common-api/*.js).
+//
+// petra_ts runs on top of these unmodified JS files at runtime; they are not
+// transpiled, so this file is the single source of truth for their types.
+// Every declaration was verified against the actual code of its module; the
+// comments state runtime behaviour (including engine-side details such as
+// which grid element sizes the engine produces) rather than paraphrasing
+// method names.
+
+type CommonPosition = Vec2;
+type CommonResourceAmounts = ResourceAmounts;
 type CommonResourcesManager = import("simulation/ai/common-api/resources.js").ResourcesManager;
 type CommonEntityFilter = {
 	func: (entity: CommonEntity | CommonTemplate) => boolean;
 	dynamicProperties: string[];
 };
 /**
- * A grid as the engine hands it to the AI: `Script::ToJSVal<Grid<uint8_t>>`
- * builds exactly `{width, height, data}`, and the AI side adds `cellSize`.
- * `data` is always there — treating it as optional lets a wrong field name
- * quietly read `undefined` instead of failing.
+ * A raw engine grid as common-api sees it: `EngineGridMap` (see
+ * engine-api.d.ts), with the `cellSize` the engine does NOT send filled in
+ * by Petra's common-api/shared.js (world metres per cell, 1 for the navcell
+ * passability grid, 4 for the territory grid).
  */
-type CommonPassabilityMap = {
-	width: number;
-	height: number;
+type CommonPassabilityMap = EngineGridMap & {
 	cellSize: number;
-	data: Uint8Array;
 };
+/**
+ * An AI-side analysis map: the {width, height, cellSize} dimensions common
+ * to every consecutive-collection InfoMap built on top of engine data,
+ * indexing an 8-bit `map` array.
+ */
 type CommonMap = {
 	width: number;
 	height: number;
 	cellSize: number;
 	map: Uint8Array;
 };
-type CommonRequirement = {
-	techs?: string[];
-	entities?: Array<{
-		class: string;
-		number: number;
-		check: "count" | "variants";
-	}>;
-};
+/**
+ * The engine's requirement-group shape as documented on `TechnologyRequirements`
+ * (globalscripts.d.ts — the two are the same type, aliased for the common-api
+ * naming).
+ */
+type CommonRequirement = TechnologyRequirements;
+/**
+ * The unit-item projection of `EngineProductionQueueItem` (engine-api.d.ts)
+ * that Petra reads out of `Entity.trainingQueue()`: unit batches always carry
+ * these fields, while technology items in the same engine queue omit them.
+ */
 type CommonTrainingQueueItem = {
 	id: number;
 	unitTemplate: string;
@@ -57,6 +72,13 @@ type CommonGameState = import("simulation/ai/common-api/gamestate.js").GameState
 type CommonSharedScript = import("simulation/ai/common-api/shared.js").SharedScript;
 type CommonTechnology = import("simulation/ai/common-api/technology.js").Technology;
 
+/**
+ * Petra's own metadata namespace: every key Petra ever stores through
+ * setMetadata / sharedScript.setMetadata. All declared fields are optional at
+ * runtime (metadata is a plain per-(player, entity) JS object that Petra
+ * fills lazily); access through getMetadata typed by the key returns the
+ * declared value type when the key was set, undefined otherwise.
+ */
 interface PetraEntityMetadata
 {
 	[key: string]: unknown;
@@ -107,6 +129,11 @@ interface PetraEntityMetadata
 	formerSubrole?: string;
 }
 
+/**
+ * Data extracted from a template by the wrappers in entity.js / shared.js
+ * (each wrapper object embeds the raw template plus precomputed fields).
+ * Loose by design: only the fields Petra actually reads are declared.
+ */
 interface CommonTemplateData
 {
 	[key: string]: unknown;
@@ -124,7 +151,7 @@ interface CommonTemplateData
 	}> }>;
 }
 
-/** Describes a technology modification. */
+/** One modification entry of a tech/aura template (engine-side shapes, see TechnologyModification in globalscripts.d.ts). */
 interface CommonTechnologyModification
 {
 	value: string;
@@ -136,6 +163,11 @@ interface CommonTechnologyModification
 	[key: string]: unknown;
 }
 
+/**
+ * A tech template's `modifications` list, as stored by shared.js
+ * modification caches: an array whose prototype also carries per-value-path
+ * sub-lists attached as properties by DeriveModifications helpers.
+ */
 type CommonTechnologyModificationList = CommonTechnologyModification[] & {
 	[key: string]: CommonTechnologyModification;
 };
@@ -160,240 +192,273 @@ type PetraBaseManager = import("./baseManager.ts").BaseManager;
 
 declare module "simulation/ai/common-api/utils.js"
 {
-/** Logs a warning message for the AI. */
+/** Logs a warning from AI script code (prefix-tagged for script debugging). */
 	export function aiWarn(output: unknown): void;
-/** Stops the AI script with the given exit code. */
+/** Stops the AI script with the given exit code (only used for fatal errors). */
 	export function exit(exitStatus: number): void;
-/** Computes the distance between two positions. */
+/** Euclidean distance between two [x, z] positions (uses the deterministic Math.euclidDistance2D). */
 	export function VectorDistance(a: CommonPosition, b: CommonPosition): number;
-/** Computes the squared distance between two positions. */
+/** Squared Euclidean distance between two [x, z] positions. */
 	export function SquareVectorDistance(a: CommonPosition, b: CommonPosition): number;
-/** Maps a flat index to the corresponding source indices. */
+/**
+ * All indices of `map2` covered by cell `index` of `map1`; `map1.cellSize`
+ * must be an integer multiple of `map2.cellSize` (typically 4x navcells).
+ */
 	export function getMapIndices(index: number, map1: CommonMap | CommonPassabilityMap, map2: CommonMap | CommonPassabilityMap): number[];
 }
 
 declare module "simulation/ai/common-api/terrain-states.js"
 {
-/** Marks a tile as impassable. */
+/** Terrain value marking a navcell as impassable (0). */
 	export let IMPASSABLE: number;
-/** Marks a tile as deep water. */
+/** Terrain value marking a navcell as deep water (200). */
 	export let DEEP_WATER: number;
-/** Marks a tile as shallow water. */
+/** Terrain value marking a navcell as shallow/fordable water (201). */
 	export let SHALLOW_WATER: number;
-/** Marks a tile as land. */
+/** Terrain value marking a navcell as walkable land (255). */
 	export let LAND: number;
 }
 
 declare module "simulation/ai/common-api/terrain-analysis.js"
 {
-/** Analyzes terrain values and influence over a map. */
+/**
+ * Region/terrain analyzers over the classified passability data. Both classes
+ * extend InfoMap in the actual JS (terrain-analysis.js); two "extends
+ * CommonInfoMap" interfaces are merged with the classes below because an
+ * ambient module block cannot reference the sibling map-module.js class for
+ * a heritage clause.
+ */
+	interface TerrainAnalysis extends CommonInfoMap
+	{
+	}
+/**
+ * Terrain analyzer built once per game by shared.js from the raw state: for
+ * every passability-grid navcell it classifies IMPASSABLE / DEEP_WATER /
+ * SHALLOW_WATER / LAND (terrain-states.js values) using the
+ * "default-terrain-only" land mask and the "ship-terrain-only" water mask.
+ * Note the data flow: the passability grid data is uint16 bit-masked,
+ * narrowed into an 8-bit classified `map`.
+ */
 	export class TerrainAnalysis
 	{
-/** Initializes the object. */
 		constructor(sharedScript: CommonSharedScript, rawState: EngineAIState);
-		width: number;
-		height: number;
-		cellSize: number;
-		length: number;
-		maxVal: number;
-		map: Uint8Array;
-/** Sets the maximum value for the map. */
-		setMaxVal(value: number): void;
-/** Converts a world position into a map-space position. */
-		gamePosToMapPos(position: CommonPosition): CommonPosition;
-/** Gets the value at the given map position. */
-		point(position: CommonPosition): number;
-/** Runs a loop over a map region and invokes a callback. */
-		runLoop(x0: number, x1: number, y0: number, y1: number, cx: number, cy: number, maxDistSquared: number, callback: (index: number, distanceSquared: number) => number): void;
-/** Adds influence around a center point. */
-		addInfluence(cx: number, cy: number, maxDist: number, strength?: number, type?: string): void;
-/** Represents the multiply Influence. */
-		multiplyInfluence(cx: number, cy: number, maxDist: number, strength?: number, type?: string): void;
-/** Adds another map or influence layer. */
-		add(map: CommonInfoMap): void;
-/** Sets the . */
-		set(index: number, value: number): void;
-		findBestTile(radius: number, obstruction: CommonInfoMap): { idx: number | undefined; val: number };
-/** Finds a nearby tile that is not obstructed. */
-		getNonObstructedTile(index: number, radius: number, obstruction: CommonInfoMap): number;
-		isObstructedTile(x: number, y: number, radius: number): { x: number; y: number } | null;
-/** Dumps the map for debugging. */
-		dumpIm(name?: string, threshold?: number): void;
 	}
-/** Calculates region connectivity and passability. */
-	export class Accessibility extends TerrainAnalysis
+/**
+ * Region passability analyzer built over a fresh TerrainAnalysis map: every
+ * connected area of passable land/navcell water gets a unique region id, an
+ * area size and optionally links to adjacent regions of the other domain.
+ */
+	interface Accessibility extends CommonInfoMap
 	{
-/** Initializes the object. */
+	}
+	export class Accessibility
+	{
 		constructor(rawState: EngineAIState, terrainAnalyzer: TerrainAnalysis);
+/** Per-region id of each navcell for land movement (region 1 = impassable, ids start at 2). */
 		landPassMap: Uint16Array;
+/** Per-region id of each navcell for naval movement. */
 		navalPassMap: Uint16Array;
+/** Constant ceiling of region ids (65535; Uint16 region maps). */
 		maxRegions: number;
+/** Total navcell count per region index ([0] and [1] unused). */
 		regionSize: number[];
+/** "land" / "water" / "inaccessible" classification per region index. */
 		regionType: string[];
+/** Region ids adjacent to the region of a given index (e.g. across a navigable river). */
 		regionLinks: number[][];
+/** Id the next floodFill will allocate (starts at 2: 0 unknown, 1 impassable). */
 		regionID: number;
-/** Gets the accessibility value at a position. */
+/** Region id of the cell containing `position` (of the land or, with `onWater`, the naval map). */
 		getAccessValue(position: CommonPosition, onWater?: boolean): number;
-/** Gets the Traject To. */
+/** Chain of region ids to travel from `start` to `end` (crossing linked regions); false when unreachable, undefined for invalid regions. */
 		getTrajectTo(start: CommonPosition, end: CommonPosition): number[] | false | undefined;
-/** Gets a path between two regions. */
+/** getTrajectTo for already-known region indices. */
 		getTrajectToIndex(startRegion: number, endRegion: number): number[] | undefined;
-/** Gets the Region Size. */
+/** Navcell count of the region containing `position` (land or water map). */
 		getRegionSize(position: CommonPosition, onWater: boolean): number;
-/** Gets the size of a region by index. */
+/** getRegionSize for an already-known region index. */
 		getRegionSizei(index: number, onWater: boolean): number;
-/** Represents the flood Fill. */
+/** Flood-fills one region from `startIndex` on the land or naval map; true when a region was (re)allocated. */
 		floodFill(startIndex: number, value: number, onWater: boolean): boolean;
 	}
 }
 
 declare module "simulation/ai/common-api/technology.js"
 {
-/** Represents a technology definition and its effects. */
+/**
+ * Wrapper around one technology template from the global TechnologyTemplates
+ * cache. Note the constructor resolves `partOfPair` links; a template name
+ * that is not a loaded technology yields undefined template accesses.
+ */
 	export class Technology
 	{
-/** Initializes the object. */
 		constructor(templateName: string);
 		_templateName: string;
 		_template: CommonTechnologyTemplate;
-		get(path: "Cost/Population"): number | undefined;
-		get(path: "ResourceSupply/Type"): string | undefined;
-		get(path: string): any;
-/** Gets the technology name. */
+/** Generic display name, or the civ-specific one when `civ` is given (undefined when no such name exists). */
 		name(civ?: string): string | undefined;
-/** Checks whether the technology is paired by definition. */
+/** Whether this template only defines a pair of technologies and nothing else. */
 		pairDef(): boolean;
-/** Gets the technologies paired with this one. */
+/** The two technologies this pair-defining template groups; undefined for any other template. */
 		getPairedTechs(): Technology[] | undefined;
-/** Represents the pair. */
+/** The `partOfPair` name this tech is grouped under (undefined for unpaired techs). */
 		pair(): string | undefined;
-/** Gets the technology paired with this one. */
+/** The sibling technology name resolved from `partOfPair` at construction (undefined for unpaired techs). */
 		pairedWith(): string | undefined;
-/** Represents the cost. */
+/** Per-resource cost with unary + coercion, multiplied by `researcher`'s tech-cost multipliers; undefined when the tech has no cost entry. */
 		cost(researcher?: CommonTemplate | CommonEntity): CommonResourceAmounts | undefined;
-/** Gets the total cost of the technology. */
+/** Sum of `cost(researcher)`, 0 when there is none. */
 		costSum(researcher?: CommonTemplate | CommonEntity): number;
-/** Represents the research Time. */
+/** Base research time in seconds (0 when the tech sets none). */
 		researchTime(): number;
-/** Gets the technology requirements. */
-		requirements(civ?: string): TechnologyRequirements | CommonRequirement[] | false | undefined;
-/** Represents the auto Research. */
+/** DeriveTechnologyRequirements applied to this tech, or false if impossible for `civ`. */
+		requirements(civ?: string): TechnologyRequirements | false;
+/** The `autoResearch` marker of the template (undefined unless set; stored verbatim, historically also as string). */
 		autoResearch(): boolean | string | undefined;
-/** Gets the technology this one supersedes. */
+/** Names of techs this tech supersedes (undefined when it supersedes none). */
 		supersedes(): string[] | string | undefined;
-/** Gets the technology modifications. */
+/** The template's modification list (undefined when it modifies nothing). */
 		modifications(): CommonTechnologyModificationList | undefined;
-/** Gets the targets affected by this technology. */
+/** The template's `affects` specification (undefined when it affects all). */
 		affects(): Array<string | string[]> | undefined;
-/** Checks whether the provided classes are affected. */
+/** Whether any `affects` entry of the template matches `classes`; undefined when the template lists no affects. */
 		isAffected(classes: string[] | string | undefined): boolean | undefined;
 	}
 }
 
 declare module "simulation/ai/common-api/shared.js"
 {
-/** Stores shared AI state, templates, and entity collections. */
+/**
+ * Shared per-game AI data, instanced once per AI script (per player): the raw
+ * entity snapshots kept in lockstep with the engine, template and metadata
+ * caches, per-player derived GameState objects and the resource maps.
+ */
 	export class SharedScript
 	{
-/** Initializes the object. */
 		constructor(settings?: Record<string, unknown>);
+/** Events collected since the last processed turn (as pushed by the engine's message list). */
 		events: EngineAIEvents;
+/** Player ids Petra owns, read from the settings' players map. */
 		_players: number[];
+/** Cache of all entity templates ever requested, keyed by template name; null entries mark failed downloads. */
 		_templates: Record<string, Record<string, unknown> | null>;
+/** All alive entity snapshot objects, keyed by entity id. */
 		_entities: Map<number, CommonEntity>;
+/** Collection of all currently-visible entities. */
 		entities: CommonEntityCollection;
 		_entityCollections: Map<number, CommonEntityCollection>;
 		_entityCollectionsName: Map<string, CommonEntityCollection>;
 		_entityCollectionsByDynProp: Record<string, Map<number, CommonEntityCollection>>;
 		_entityCollectionsUID: number;
+/** Modification caches per entity template and per entity instance (values keyed by tech). */
 		_entitiesModifications: Map<number, Map<string, unknown>>;
 		_templatesModifications: Record<string, Record<number, Map<string, unknown>>>;
+/** Metadata store: [player id][entity id][key]. */
 		_entityMetadata: Record<number, Record<number, Record<string, unknown>>>;
+/** Pass-class masks keyed by class name as given by the engine passability data. */
 		passabilityClasses: Record<string, number>;
 		playersData: EnginePlayerState[];
+/** Game time in seconds at the last processed turn. */
 		timeElapsed: number;
+/** Whether the map wraps around horizontally. */
 		circularMap: boolean;
+/** Map size in metres. */
 		mapSize: number;
+/** The victory conditions active in the game ("conquest", "wonder", ...). */
 		victoryConditions: Set<string>;
 		alliedVictory: boolean;
 		ceasefireActive: boolean;
+/** Seconds of ceasefire remaining, when ceasefire was set. */
 		ceasefireTimeRemaining: number;
+	/** Latest barter exchange prices as pushed by the engine (list of per-resource amount objects). */
 		barterPrices: number[];
+/** Terrain passability flags per navcell (engine Grid), with cellSize added. */
 		passabilityMap: CommonPassabilityMap;
+/** Territory ownership flags per tile (engine Grid), with cellSize added. */
 		territoryMap: CommonPassabilityMap;
+/** Terrain-type analyzer over the classified passability data (built once at init). */
 		terrainAnalyzer: CommonInfoMap;
+/** Region analyzer built over the terrain analyzer (built once at init). */
 		accessibility: CommonInfoMap;
+/** Per-player derived GameState objects, created lazily per AI player id. */
 		gameState: Record<number, CommonGameState>;
+/** Entity ids of all supplies covered by the resource influence maps. */
 		resources: number[];
+/** Gather-rate influence maps per resource type, keyed "food"/"wood"/... */
 		resourceMaps: Record<string, CommonInfoMap>;
+/** Same maps, cut to civil-centre influence ranges (Tier-1 civ centre proximity). */
 		ccResourceMaps: Record<string, CommonInfoMap>;
 		normalizationFactor: Record<string, number>;
 		influenceRadius: Record<string, number>;
 		ccInfluenceRadius: Record<string, number>;
-/** Serializes the object state. */
+/** Serializes everything Petra persists between turns (entities' metadata, collections, caches). */
 		Serialize(): Record<string, unknown>;
-/** Represents the Deserialize. */
+/** Restores the object from Serialize()'s output. */
 		Deserialize(data: Record<string, unknown>): void;
-/** Gets a template by name. */
+/**
+ * Downloads and caches the entity template `name` via Engine.GetTemplate;
+ * caches null for missing templates. Returns the data or null afterwards;
+ * the AI never reads the engine's templates without going through here.
+ */
 		GetTemplate(name: string): Record<string, unknown> | null;
-/** Represents the init. */
+/** Fills all per-game caches from a fresh `state` dump; with `deserialization`, skips creating derived entities (they arrive through Deserialize). */
 		init(state: EngineAIState, deserialization?: boolean): void;
-/** Runs the update pass for the current state. */
+/** Processes a full state dump for a new turn: applies events, deltas of entities and templates, then bumps derived per-player states. */
 		onUpdate(state: EngineAIState): void;
-/** Applies Entities Delta. */
+/** Applies the entity changes received since the last turn (arrival/attribute/foundation updates). */
 		ApplyEntitiesDelta(state: EngineAIState): void;
-/** Applies template changes from the engine delta. */
+/** Applies the `changedTemplateInfo` of the last state dump to the per-template, per-player modification caches. */
 		ApplyTemplatesDelta(state: EngineAIState): void;
-/** Represents the register Updating Entity Collection. */
+/** Registers a collection to receive automatic updates when its stored filters change membership. */
 		registerUpdatingEntityCollection(collection: CommonEntityCollection): void;
-/** Removes a dynamic entity collection. */
+/** Unregisters a previously registered updating collection. */
 		removeUpdatingEntityCollection(collection: CommonEntityCollection): void;
-/** Updates the Entity Collections. */
+/** Updates the metadata-keyed collections after a metadata change for `property`. */
 		updateEntityCollections(property: string, entity: CommonEntity): void;
-/** Stores metadata for a player and entity. */
+/** Assigns Petra's custom metadata for a player+entity+key triple (extending/creating the per-entity metadata object). */
 		setMetadata(player: number, entity: CommonEntity, key: string, value: unknown): void;
-/** Gets the Metadata. */
+/** Reads metadata for a player+entity; undefined when never set. */
 		getMetadata<K extends keyof PetraEntityMetadata>(player: number, entity: CommonEntity, key: K): PetraEntityMetadata[K] | undefined;
 		getMetadata(player: number, entity: CommonEntity, key: string): unknown;
-/** Deletes metadata for a player and entity. */
+/** Deletes one metadata key; returns whether a value was actually removed. */
 		deleteMetadata(player: number, entity: CommonEntity, key: string): boolean;
-/** Represents the create Resource Maps. */
+/** Rebuilds the resource influence maps from scratch (used at init). */
 		createResourceMaps(): void;
-/** Updates the resource maps from engine events. */
+/** Applies Destroy/Gathering progress events to the influence maps. */
 		updateResourceMaps(events: EngineAIEvents): void;
-/** Adds Entity To Resource Map. */
+/** Adds the contribution of a living supply entity to the resource influence maps. */
 		addEntityToResourceMap(entity: CommonEntity): void;
-/** Removes an entity from the resource map. */
+/** Removes a supply entity's contribution from the resource influence maps. */
 		removeEntityFromResourceMap(entity: CommonEntity): void;
-/** Represents the change Entity In Resource Map Helper. */
+/** Adds (or, with `multiplication`, subtracts) one entity's contribution to the influence maps. */
 		changeEntityInResourceMapHelper(entity: CommonEntity | undefined, multiplication?: number): void;
 	}
 }
 
 declare module "simulation/ai/common-api/resources.js"
 {
-/** Tracks resource amounts and population. */
+/** Plain resource amount account (also used for costs and gather-rate quotas). Amounts live on both the named fields and the object itself, so mod-added resource names work through the index signature. */
 	export class ResourcesManager
 	{
-/** Initializes the object. */
 		constructor(amounts?: CommonResourceAmounts, population?: number);
 		population: number;
 		food: number;
 		wood: number;
 		stone: number;
 		metal: number;
-/** Represents the reset. */
+/** Zeroes all amounts and population. */
 		reset(): void;
-/** Represents the can Afford. */
+/** Whether every resource code currently defined (Resources.GetCodes()) is held in at least the requested amount. */
 		canAfford(amounts: CommonResourceAmounts | ResourcesManager): boolean;
-/** Adds another map or influence layer. */
+/** Adds the given amounts; `population` is added too, resource entries added by name. */
 		add(amounts: CommonResourceAmounts | ResourcesManager): void;
-/** Represents the subtract. */
+/** Subtracts the given amounts (population subtracted as well). */
 		subtract(amounts: CommonResourceAmounts | ResourcesManager): void;
-/** Represents the multiply. */
+/** Multiplies every resource amount by `multiplier`. */
 		multiply(multiplier: number): void;
+/** Round-trips the account (amounts keyed by resource name, plus population). */
 		Serialize(): { amounts: CommonResourceAmounts; population: number };
-/** Deserializes a saved object state. */
+/** Restores the account from Serialize()'s output. */
 		Deserialize(data: { amounts: CommonResourceAmounts; population: number }): void;
 		[key: string]: any;
 	}
@@ -401,723 +466,810 @@ declare module "simulation/ai/common-api/resources.js"
 
 declare module "simulation/ai/common-api/map-module.js"
 {
-/** Stores terrain or influence data for AI analysis. */
+/**
+ * Single-channel 8-bit value map over the game world: the base class behind
+ * the gather-rate resource maps, the territory influence maps, obstruction
+ * analyses (TerrainAnalysis/Accessibility) and the maps Petra builds for base
+ * placement. Resolution varies by instantiation — navcell-sized (cellSize 1)
+ * for accessibility, tile-sized (cellSize 4) for most influence maps.
+ */
 	export class InfoMap
 	{
-/** Initializes the object. */
+/**
+ * When `sharedScript` is a SharedScript, dimensions and cell size are read
+ * from its passability map; when it is a plain object, its {width, height,
+ * cellSize} triple is used instead. `originalMap` seeds `map` from a real
+ * engine grid (`actualCopy` decides between copying and aliasing it).
+ */
 		constructor(sharedScript: CommonSharedScript | Record<string, unknown>, type: string, originalMap?: Uint8Array, actualCopy?: boolean);
 		width: number;
 		height: number;
+/** World-metre size of one cell of this map (1 = navcell, 4 = terrain tile in practice). */
 		cellSize: number;
+/** width * height in cells. */
 		length: number;
+/** Highest value any operation has written (influences may regenerate it). */
 		maxVal: number;
 		map: Uint8Array;
+/** Precomputed per-distance circle widths used by the obstruction searches (see findBestTile; index = distance). */
 		pattern?: number[];
-/** Sets the maximum value for the map. */
+/** Re-declares the highest possible map value (used by influence maths). */
 		setMaxVal(value: number): void;
-/** Converts a world position into a map-space position. */
+/** Converts a world [x, z] position to its [x, z] map coordinates. */
 		gamePosToMapPos(position: CommonPosition): CommonPosition;
-/** Gets the value at the given map position. */
+/** Map value at the cell containing `position`. */
 		point(position: CommonPosition): number;
-/** Runs a loop over a map region and invokes a callback. */
+/** Iterates the cells within `maxDistSquared` around (cx, cy) calling `callback` (whose return value is added to the cell). */
 		runLoop(x0: number, x1: number, y0: number, y1: number, cx: number, cy: number, maxDistSquared: number, callback: (index: number, distanceSquared: number) => number): void;
-/** Adds influence around a center point. */
+/** Adds an influence profile ("linear"/"constant"/"inverted") around (cx, cy) with radius maxDist. */
 		addInfluence(cx: number, cy: number, maxDist: number, strength?: number, type?: string): void;
-/** Represents the multiply Influence. */
+/** Multiplies an influence profile ("constant"/"linear") around (cx, cy). */
 		multiplyInfluence(cx: number, cy: number, maxDist: number, strength?: number, type?: string): void;
-/** Adds another map or influence layer. */
+/** Adds the values of another InfoMap into this one (element-wise sum, clamped to [0, maxVal]). */
 		add(map: CommonInfoMap): void;
-/** Sets the . */
+/** Overwrites the value of cell `index` (clamped to [0, maxVal]). */
 		set(index: number, value: number): void;
+/** Finds the best cell for a building of `radius` inside `obstruction`'s constraint map (winning cell index and its valuation; idx undefined when nothing fits). */
 		findBestTile(radius: number, obstruction: CommonInfoMap): { idx: number | undefined; val: number };
-/** Finds a nearby tile that is not obstructed. */
+/** Searches the nearest non-obstructed tile of radius `radius` around the cell `index`. */
 		getNonObstructedTile(index: number, radius: number, obstruction: CommonInfoMap): number;
+/** Tests whether a circular building at (x, y) overlaps an obstruction in the map, returning one blocked cell. */
 		isObstructedTile(x: number, y: number, radius: number): { x: number; y: number } | null;
-/** Dumps the map for debugging. */
+/** Writes the map out as a PNG via Engine.DumpImage (debugging helper; values above `threshold`, or at maxVal when omitted). */
 		dumpIm(name?: string, threshold?: number): void;
 	}
 }
 
 declare module "simulation/ai/common-api/gamestate.js"
 {
-/** Provides per-player state and collection helpers. */
+/**
+ * Per-player view of the shared game state: diplomacy queries, entity and
+ * resource lookups and train/research helpers. Built per player against the
+ * shared script (init once, then update() each turn).
+ */
 	export class GameState
 	{
-/** Initializes the object. */
 		constructor();
+/** The bot's persistent state object (PetraRuntime.AIState). */
 		ai: PetraRuntime.AIState;
 		sharedScript: CommonSharedScript;
+/** All entities of the game (as collection). */
 		entities: CommonEntityCollection;
 		EntCollecNames: Map<string, CommonEntityCollection>;
+/** Shared-script game time in milliseconds. */
 		timeElapsed: number;
 		circularMap: boolean;
 		templates: Record<string, Record<string, unknown> | null>;
+/** Player id of this view (gameState.player). */
 		player: number;
 		playerData: EnginePlayerState;
 		victoryConditions: Set<string>;
 		alliedVictory: boolean;
 		ceasefireActive: boolean;
 		ceasefireTimeRemaining: number;
+/** Phase progression of this civ, precomputed at init from the civil centre's researchable techs ({name, requirements} in research order). */
 		phases: Array<{ name: string; requirements: CommonRequirement[] }>;
-/** Initializes the script with the current engine state. */
+/** Fills this per-player state from the shared script (and refreshes the phases list). */
 		init(sharedScript: CommonSharedScript, state: Record<string, unknown>, player: number): void;
-/** Updates the . */
+/** Copies the shared script's current values into this object (per-turn refresh). */
 		update(sharedScript: CommonSharedScript): void;
-/** Represents the updating Collection. */
+/** Registers a named, auto-updating entity collection filtered by `filter`, derived from `parentCollection` (or the own entities). */
 		updatingCollection(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection): CommonEntityCollection;
-/** Represents the destroy Collection. */
+/** Unregisters a per-player updating collection by id. */
 		destroyCollection(id: string): void;
-/** Represents the updating Global Collection. */
+/** Updating collection filtered over the whole map's entities instead of one player's. */
 		updatingGlobalCollection(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection): CommonEntityCollection;
-/** Represents the destroy Global Collection. */
+/** destroys a global updating collection by id. */
 		destroyGlobalCollection(id: string): void;
-/** Represents the reset On Diplomacy Changed. */
+/** Rebuilds auto-updating collections after a diplomacy change reclassifies owners. */
 		resetOnDiplomacyChanged(): void;
-/** Gets the Time Elapsed. */
+/** Time since the game started, in milliseconds. */
 		getTimeElapsed(): number;
-/** Gets the Barter Prices. */
+/** Current barter prices as {buy, sell} per-resource-value objects. */
 		getBarterPrices(): { buy: CommonResourceAmounts; sell: CommonResourceAmounts };
-/** Gets the Victory Conditions. */
+/** The set of active victory condition codes shared by all players. */
 		getVictoryConditions(): Set<string>;
-/** Gets the Allied Victory. */
+/** Whether team-victory (allied victory) is enabled. */
 		getAlliedVictory(): boolean;
-/** Represents the is Ceasefire Active. */
+/** Whether a ceasefire is running in the current game. */
 		isCeasefireActive(): boolean;
-/** Gets the Template. */
+/**
+ * Template wrapper for one template name. Returns a Template for entity and
+ * technology template names alike: gamestate.getTemplate returns a
+ * Technology object for technology template names (see its implementation)
+ * — but Petra only ever calls the methods that the two wrapper classes
+ * duck-type in common (cost, costSum, researchTime, ...). Callers whose
+ * template names come from trainable/buildable lists always get a Template;
+ * ResearchPlan is the only path that looks up a technology and calls only
+ * the duck-typed methods. Returns null for templates that failed lookup.
+ */
 		getTemplate(type: string): CommonTemplate | null;
-/** Gets the Built Template. */
-		getBuiltTemplate(foundationName: string): CommonEntity | null;
-/** Represents the apply Civ. */
+/** Template of the structure a foundation builds (strips the "foundation|" filter prefix); null for a bogus name or unknown template. */
+		getBuiltTemplate(foundationName: string): CommonTemplate | null;
+/** Replaces the {civ} wildcard in a template name with this player's civ. */
 		applyCiv(templateName: string): string;
-/** Gets the Player Civ. */
+/** Civ of `player` (this player's own when omitted). */
 		getPlayerCiv(player?: number): string;
-/** Represents the current Phase. */
+/** Number of the last researched phase (1-based); 0 when none reached yet. */
 		currentPhase(): number;
-/** Gets the Number Of Phases. */
+/** Count of this civ's phases. */
 		getNumberOfPhases(): number;
-/** Gets the Phase Name. */
+/** Name of phase `i` (1-based); undefined when out of range. */
 		getPhaseName(index: number): string | undefined;
+/** Entity-class requirements ("check: count" entries only) of phase `i`, flattened to {class, count} pairs. */
 		getPhaseEntityRequirements(index: number): Array<{ class: string; count: number }>;
-/** Represents the is Researched. */
+/** Whether `template` is already researched by this player. */
 		isResearched(template: string): boolean;
-/** Represents the is Researching. */
+/** Whether `template` is currently being researched (by anyone in this player's queues). */
 		isResearching(template: string): boolean;
-/** Represents the can Research. */
+/**
+ * Whether this player may research `techTemplateName`: requirement checks
+ * against the phase chain, completeness of researcher production, and
+ * template availability; `noRequirementCheck` skips only the requirement
+ * subtree.
+ */
 		canResearch(templateName: string, noRequirementCheck?: boolean): boolean;
-/** Represents the check Tech Requirements. */
+/** Whether a requirement list (as produced by DeriveTechnologyRequirements) is satisfiable; false values give false. */
 		checkTechRequirements(requirements: CommonRequirement[] | false): boolean;
-/** Gets the Passability Map. */
+/** Terrain passability grid of the map (engine Grid, cellSize added by shared.js). */
 		getPassabilityMap(): CommonPassabilityMap;
-/** Gets the Passability Class Mask. */
+/** Access bit mask handed by the engine for a named pathfinding pass class. */
 		getPassabilityClassMask(name: string): number;
-/** Gets the Resources. */
+/** Own resource stock (shortcuts this player's current amounts entry). */
 		getResources(): CommonResourcesManager;
-/** Gets the Population. */
+/** Current population count of the player (playerData.popCount). */
 		getPopulation(): number;
-/** Gets the Population Limit. */
+/** Current population limit of the player, i.e. including housing already built (playerData.popLimit). */
 		getPopulationLimit(): number;
-/** Gets the Population Max. */
+/** Total population the player may ever reach, incl. everything still building (playerData.popMax). */
 		getPopulationMax(): number;
-/** Gets the Player ID. */
+/** Own player id (shortcuts `this.player`). */
 		getPlayerID(): number;
-/** Represents the has Allies. */
+/** Whether the player has current-game allies. */
 		hasAllies(): boolean;
-/** Represents the has Enemies. */
+/** Whether the player has current-game enemies. */
 		hasEnemies(): boolean;
-/** Represents the has Neutrals. */
+/** Whether the player has current-game neutral parties. */
 		hasNeutrals(): boolean;
-/** Represents the is Player Neutral. */
+/** Diplomacy relationship checks by id (gaia is neither ally, enemy nor neutral). */
 		isPlayerNeutral(id: number): boolean;
-/** Represents the is Player Ally. */
 		isPlayerAlly(id: number): boolean;
-/** Represents the is Player Mutual Ally. */
 		isPlayerMutualAlly(id: number): boolean;
-/** Represents the is Player Enemy. */
 		isPlayerEnemy(id: number): boolean;
-/** Gets the Num Player Enemies. */
+/** Count of enemy players (everyone listed in getEnemies). */
 		getNumPlayerEnemies(): number;
-/** Gets the Enemies. */
+/** Player ids whose isEnemy flag is set in this player's diplomacy data. */
 		getEnemies(): number[];
-/** Gets the Neutrals. */
+/** Player ids whose isNeutral flag is set. */
 		getNeutrals(): number[];
-/** Gets the Allies. */
+/** Player ids whose isAlly flag is set (includes the player itself). */
 		getAllies(): number[];
-/** Gets the Exclusive Allies. */
+/** getAllies without this player's own id. */
 		getExclusiveAllies(): number[];
-/** Gets the Mutual Allies. */
+/** Player ids with mutual ally relationships (both directions true), used by Petra for trade planning. */
 		getMutualAllies(): number[];
-/** Represents the is Entity Ally. */
+/** Diplomacy checks for an entity's owner (undefined/false-y entities are safe). */
 		isEntityAlly(entity: CommonEntity | undefined): boolean;
-/** Represents the is Entity Exclusive Ally. */
 		isEntityExclusiveAlly(entity: CommonEntity | undefined): boolean;
-/** Represents the is Entity Enemy. */
 		isEntityEnemy(entity: CommonEntity | undefined): boolean;
-/** Represents the is Entity Own. */
+/** Whether the entity belongs to this player (its own). */
 		isEntityOwn(entity: CommonEntity | undefined): boolean;
-/** Gets the Entity By Id. Returns undefined for an undefined, zero or stale id. */
+/** Live entity by id (undefined/0/stale ids give undefined). */
 		getEntityById(id: number | undefined): CommonEntity | undefined;
-/** Gets the Entities. */
+/** Updating collection keyed over all entities: entities of owner `id`, or the whole world collection when omitted. */
 		getEntities(id?: number): CommonEntityCollection;
-/** Gets the Structures. */
+/** All structures of the world (any owner, as global collection). */
 		getStructures(): CommonEntityCollection;
-/** Gets the Own Entities. */
+/** All entities owned by the AI player. */
 		getOwnEntities(): CommonEntityCollection;
-/** Gets the Own Structures. */
+/** Structures of the AI player. */
 		getOwnStructures(): CommonEntityCollection;
-/** Gets the Own Units. */
+/** Units of the AI player. */
 		getOwnUnits(): CommonEntityCollection;
-/** Gets the Ally Entities. */
+/** Entities of all non-enemy allied players (global view). */
 		getAllyEntities(): CommonEntityCollection;
-/** Gets the Exclusive Ally Entities. */
+/** Entity ids of exclusive allies. */
 		getExclusiveAllyEntities(): CommonEntityCollection;
-/** Gets the Ally Structures. */
+/** Structures of ally `allyID` or of all allies. */
 		getAllyStructures(allyID?: number): CommonEntityCollection;
-/** Gets the Neutral Structures. */
+/** All structures of neutral players as global collection. */
 		getNeutralStructures(): CommonEntityCollection;
-/** Gets the Enemy Entities. */
+/** Entities/structures/units of all enemy players (global view). */
 		getEnemyEntities(): CommonEntityCollection;
-/** Gets the Enemy Structures. */
 		getEnemyStructures(enemyID?: number): CommonEntityCollection;
-/** Gets the Enemy Units. */
 		getEnemyUnits(enemyID?: number): CommonEntityCollection;
-/** Gets the Own Entities By Metadata. */
+/** Auto-updating collections of Petra's own entities whose metadata key matches `value`. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
-/** Gets the Own Entities By Role. */
+/** By `role` metadata (helper over getOwnEntitiesByMetadata). */
 		getOwnEntitiesByRole(role: string | undefined, maintain?: boolean): CommonEntityCollection;
-/** Gets the Own Entities By Type. */
+/** By template name, included in the collection when `maintain` is set. */
 		getOwnEntitiesByType(type: string, maintain?: boolean): CommonEntityCollection;
-/** Gets the Own Entities By Class. */
+/** By Identity class single (Collection filtered by class). */
 		getOwnEntitiesByClass(cls: string, maintain?: boolean): CommonEntityCollection;
-/** Gets the Own Foundations By Class. */
+/** Foundations of the AI player with a given identity class (placement helpers). */
 		getOwnFoundationsByClass(cls: string, maintain?: boolean): CommonEntityCollection;
-/** Gets the Own Training Facilities. */
+/** Own structures able to train (has Trainer). */
 		getOwnTrainingFacilities(): CommonEntityCollection;
-/** Gets the Own Research Facilities. */
+/** Own structures able to research. */
 		getOwnResearchFacilities(): CommonEntityCollection;
-/** Represents the count Entities By Type. */
+/** Count of the AI player's entities of one template. */
 		countEntitiesByType(type: string, maintain?: boolean): number;
-/** Represents the count Entities And Queued By Type. */
+/** Count including currently-queued units (training queue of the AI's structures). */
 		countEntitiesAndQueuedByType(type: string, maintain?: boolean): number;
-/** Represents the count Foundations By Type. */
+/** Count of foundations of one template. */
 		countFoundationsByType(type: string, maintain?: boolean): number;
-/** Represents the count Own Entities By Role. */
+/** Own entities with the given role metadata. */
 		countOwnEntitiesByRole(role: string): number;
-/** Represents the count Own Entities And Queued With Role. */
+/** countOwnEntitiesByRole plus queued role units. */
 		countOwnEntitiesAndQueuedWithRole(role: string): number;
-/** Represents the count Own Queued Entities With Metadata. */
+/** countOwnEntitiesAndQueuedWithRole parameterized on arbitrary metadata. */
 		countOwnQueuedEntitiesWithMetadata(data: string, value: unknown): number;
-/** Gets the Own Foundations. */
+/** Own foundations. */
 		getOwnFoundations(): CommonEntityCollection;
-/** Gets the Own Dropsites. */
+/** Own dropsite structures (optionally for one resource). */
 		getOwnDropsites(resource?: string): CommonEntityCollection;
-/** Gets the Any Dropsites. */
+/** Dropsites of all players (any owner). */
 		getAnyDropsites(resource?: string): CommonEntityCollection;
-/** Gets the Resource Supplies. */
+/** Supplies of one resource (auto-updating collection over all entities). */
 		getResourceSupplies(resource: string): CommonEntityCollection;
-/** Gets the Huntable Supplies. */
+/** Animal resource supplies ("huntable" — non-defensive, killable prey). */
 		getHuntableSupplies(): CommonEntityCollection;
-/** Gets the Fishable Supplies. */
+/** Fish resource supplies. */
 		getFishableSupplies(): CommonEntityCollection;
-/** Represents the find Trainable Units. */
+/**
+ * Aggregate list of all units the AI's own structures train, filtered by
+ * class affinity (`classes` vs `anticlasses` matches-class-list specs) and by
+ * the player's entity limits; [templateName, Template] pairs in iteration
+ * order (no cost weighting happens here).
+ */
 		findTrainableUnits(classes: Array<string | string[]>, anticlasses?: string[]): Array<[string, CommonTemplate]>;
-/** Represents the find Available Tech. */
+/** Available technologies across all own researchable structures, deduplicated and not disabled; [name, Technology] pairs (the wrapper for tech names is a Technology). */
 		findAvailableTech(): Array<[string, CommonTemplate]>;
-/** Represents the has Trainer. */
+/** Whether one of the AI's structures can train `template`. */
 		hasTrainer(template: string): boolean;
-/** Represents the find Trainers. */
+/** Own structures able to train `template`, as collection. */
 		findTrainers(template: string): CommonEntityCollection;
-/** Represents the find Builder. */
+/** One builder able to construct `template`, preferring the nearest idle one. */
 		findBuilder(template: string): CommonEntity | undefined;
-/** Represents the has Researchers. */
+/** Whether one of the AI's structures can research `templateName`. */
 		hasResearchers(templateName: string, noRequirementCheck?: boolean): boolean;
-/** Represents the find Researchers. */
+/** Own structures able to research `templateName` (undefined when the tech is not available). */
 		findResearchers(templateName: string, noRequirementCheck?: boolean): CommonEntityCollection | undefined;
-/** Gets the Entity Limits. */
+/** Per-template entity limit categories, straight from this player's engine player state. */
 		getEntityLimits(): Record<string, number>;
-/** Gets the Entity Match Counts. */
+/** Per-template counts of existing entities with active match markers (playerData.matchEntityCounts). */
 		getEntityMatchCounts(): Record<string, number>;
-/** Gets the Entity Counts. */
+/** Per-template existing entity counts (playerData.entityCounts). */
 		getEntityCounts(): Record<string, number>;
-/** Represents the is Template Available. */
-		isTemplateAvailable(templateName: string): boolean | undefined;
-/** Represents the is Template Disabled. */
+/** Whether a template is both downloaded and not disabled by the player; undefined (truthy template object, etc.) otherwise. */
+		isTemplateAvailable(templateName: string): boolean | Record<string, unknown> | null | undefined;
+/** Whether a template is disabled by this player (the disabled-templates data of game settings). */
 		isTemplateDisabled(templateName: string): boolean;
-/** Represents the is Entity Limit Reached. */
+/** Whether category `category` has reached its entity limit. */
 		isEntityLimitReached(category: string): boolean;
+/** Trade-gain multipliers of the trainable trader templates, keyed by land/naval transport. */
 		getTraderTemplatesGains(): { landGainMultiplier?: number; navalGainMultiplier?: number };
 	}
 }
 
 declare module "simulation/ai/common-api/filters.js"
 {
-/** Represents the by Type. */
+/**
+ * Filter descriptors consumed by GameState.updatingCollection and
+ * EntityCollection.filter. Each returns a {func, dynamicProperties} pair:
+ * `func` is the predicate, `dynamicProperties` the list of entity fields
+ * whose changes should re-evaluate members of auto-updating collections.
+ * By convention `by*` filters select by structure (type, class, owner) while
+ * `is*`/`has*` filters assert a state (idle, foundation, dropsite...); all
+ * are plain positive predicates.
+ */
 	export function byType(type: string): CommonEntityFilter;
-/** Represents the by Class. */
+/** Matches entities whose template's identity class list contains `cls` (exact, case-sensitive). */
 	export function byClass(cls: string): CommonEntityFilter;
-/** Represents the by Classes. */
+/** byClass with a matches-class-list specification ("Class1+Class2 Class3" etc.). */
 	export function byClasses(clsList: string[] | string): CommonEntityFilter;
-/** Represents the by Metadata. */
+/** Matches own entities whose metadata `key` equals `value`. */
 	export function byMetadata(player: number, key: string, value: unknown): CommonEntityFilter;
-/** Represents the by Has Metadata. */
+/** Matches entities that have any value for the metadata `key` of `player`. */
 	export function byHasMetadata(player: number, key: string): CommonEntityFilter;
-/** Represents the and. */
+/** Logical AND of two filters (dynamic properties merged). */
 	export function and(filter1: CommonEntityFilter, filter2: CommonEntityFilter): CommonEntityFilter;
-/** Represents the or. */
+/** Logical OR of two filters. */
 	export function or(filter1: CommonEntityFilter, filter2: CommonEntityFilter): CommonEntityFilter;
-/** Represents the not. */
+/** Inverts a filter over the same entity universe. */
 	export function not(filter: CommonEntityFilter): CommonEntityFilter;
-/** Represents the by Owner. */
+/** Owner checks by player id, sets of ids, and negated variants. */
 	export function byOwner(owner: number): CommonEntityFilter;
-/** Represents the by Not Owner. */
 	export function byNotOwner(owner: number): CommonEntityFilter;
-/** Represents the by Owners. */
 	export function byOwners(owners: number[]): CommonEntityFilter;
-/** Represents the by Can Garrison. */
+/** Matches entities that can garrison (Garrisonable classes non-empty). */
 	export function byCanGarrison(): CommonEntityFilter;
-/** Represents the by Training Queue. */
+/** Matches own structures with a non-empty production queue. */
 	export function byTrainingQueue(): CommonEntityFilter;
-/** Represents the by Research Available. */
+/** Matches structures that can research from `gameState` for civ `civ`. */
 	export function byResearchAvailable(gameState: CommonGameState, civ: string): CommonEntityFilter;
-/** Represents the by Can Attack Class. */
+/** Matches entities with an Attack component able to hit identity class `aClass`. */
 	export function byCanAttackClass(aClass: string): CommonEntityFilter;
-/** Represents the by Can Attack Target. */
+/** Matches entities able to damage `target`. */
 	export function byCanAttackTarget(target: CommonEntity): CommonEntityFilter;
-/** Represents the is Garrisoned. */
+/** Matches units currently garrisoned inside another entity. */
 	export function isGarrisoned(): CommonEntityFilter;
-/** Represents the is Idle. */
+/** Matches own units that have no task and stand idle. */
 	export function isIdle(): CommonEntityFilter;
-/** Represents the is Foundation. */
+/** Matches foundations (unit/building being built). */
 	export function isFoundation(): CommonEntityFilter;
-/** Represents the is Built. */
+/** Matches built structures (non-foundation). */
 	export function isBuilt(): CommonEntityFilter;
-/** Represents the has Defensive Fire. */
+/** Matches structures able to fire arrows from their own defence. */
 	export function hasDefensiveFire(): CommonEntityFilter;
-/** Represents the is Dropsite. */
+/** Matches dropsite structures (optionally only for one resource). */
 	export function isDropsite(resourceType?: string): CommonEntityFilter;
-/** Represents the is Treasure. */
+/** Matches treasure-collectible entities (Treasure components). */
 	export function isTreasure(): CommonEntityFilter;
-/** Represents the by Resource. */
+/** Matches resource-supply entities of `resourceType`. */
 	export function byResource(resourceType: string): CommonEntityFilter;
-/** Represents the is Huntable. */
+/** Matches huntable animals (killable, non-defensive fauna). */
 	export function isHuntable(): CommonEntityFilter;
-/** Represents the is Fishable. */
+/** Matches fisher-resource fish (water supplies). */
 	export function isFishable(): CommonEntityFilter;
 }
 
 declare module "simulation/ai/common-api/entitycollection.js"
 {
-/** Represents the Entity Collection. */
+/**
+ * A set of entities with cached filters and optional auto-updating
+ * behaviour. When frozen, updates received from the engine queue up until
+ * defreeze. The class also provides the formation move/attack command helpers
+ * (each issuing a PostCommand for all members at once).
+ */
 	export class EntityCollection
 	{
-/** Initializes the object. */
+/**
+ * Builds the collection from the given map of entities (default: an empty
+ * map) and initial filters. `sharedAI` is required to enable membership
+ * tracking of dynamic filters and the registration updates.
+ */
 		constructor(sharedAI: CommonSharedScript, entities?: Map<number, CommonEntity>, filters?: CommonEntityFilter[]);
+/** Number of entities in the collection (a getter backed by the entity map). */
 		readonly length: number;
+/** Whether updates from the engine are queued (deferred) rather than applied instantly. */
 		frozen: boolean;
+/** Round-trips the entity ids, the frozen flag and the filter specs by name. */
 		Serialize(): { ents: number[]; frozen: boolean; filters: string[] };
-/** Deserializes a saved object state. */
+/** Restores the collection from Serialize()'s output. */
 		Deserialize(data: { ents: number[]; frozen: boolean; filters: string[] }, sharedAI: CommonSharedScript): void;
-/** Represents the freeze. */
+/** Freeze: auto-updates stop adding entities (removals still happen), so dead members are cleaned up automatically. */
 		freeze(): void;
-/** Represents the defreeze. */
+/** Applies all deferred updates. */
 		defreeze(): void;
-/** Represents the to Id Array. */
+/** Entity ids as plain array. */
 		toIdArray(): number[];
-/** Represents the to Entity Array. */
+/** Entity objects as plain array. */
 		toEntityArray(): CommonEntity[];
-/** Represents the values. */
+/** Iterates over the entities (unsorted). */
 		values(): IterableIterator<CommonEntity>;
-/** Represents the to String. */
+/** Debug helper printing the template names of the members. */
 		toString(): string;
-/** Represents the filter. */
+/**
+ * Returns a new collection limited to the entities for which `filter` holds;
+ * the entries of `dynamicProperties` of CommonEntityFilter cause re-checking
+ * on the listed entity field changes.
+ */
 		filter(filter: CommonEntityFilter | ((entity: CommonEntity, id: number, collection: this) => boolean), thisp?: unknown): EntityCollection;
+/** The entities of the collection nearest to `targetPos` (all of them when `n` is omitted; entities without a position are skipped), as a new collection. */
 		filterNearest(targetPos: CommonPosition, n?: number): EntityCollection;
-/** Represents the filter raw. */
+/** filter() with a raw function that receives the raw entity object rather than the wrapper (faster, e.g. velocity check). */
 		filter_raw(callback: (entity: unknown, id: number, collection: this) => boolean, thisp?: unknown): EntityCollection;
-/** Represents the for Each. */
+/** Runs `callback` on each member entity and returns the collection. */
 		forEach(callback: (entity: CommonEntity) => void): this;
-/** Represents the has Entities. */
+/** Whether the collection holds at least one entity. */
 		hasEntities(): boolean;
-/** Represents the move. */
+/** Move in formation to (x, z) in world coordinates. */
 		move(x: number, z: number, queued?: boolean, pushFront?: boolean): this;
-/** Represents the move To Range. */
+/** Move to the edge of a range band `(min, max)` around (x, z). */
 		moveToRange(x: number, z: number, min: number, max: number, queued?: boolean, pushFront?: boolean): this;
-/** Represents the attack Move. */
+/** Attack-move toward (x, z); targetClasses either a plain class list, or an object with attack/avoid lists and vetoEntity overrides. */
 		attackMove(x: number, z: number, targetClasses: string[] | {
 			attack: string[];
 			avoid: string[];
 			vetoEntities: Record<string, boolean>;
 		}, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
-/** Represents the move Indiv. */
+/** Same as move but issuing each order individually so that stragglers do not queue via others. */
 		moveIndiv(x: number, z: number, queued?: boolean, pushFront?: boolean): this;
-/** Represents the garrison. */
+/** Garrison all entities into `target`. */
 		garrison(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the occupy Turret. */
+/** Occupy the turret point of `target` with the relevant subset of the collection. */
 		occupyTurret(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the destroy. */
+/** Destroys all members (via the engine "delete-entity" command). */
 		destroy(): this;
-/** Represents the attack. */
+/** Orders all members to attack `unitId` (entity id, not wrapper). */
 		attack(unitId: number, queued?: boolean, pushFront?: boolean): this;
-/** Sets the Stance. */
+/** Sets a stance for all members (only meaningful for unit members with a stance component). */
 		setStance(stance: string): this;
-/** Gets the Centre Position. */
+/** Average position of all positioned members; undefined when the collection is empty. */
 		getCentrePosition(): CommonPosition | undefined;
-/** Gets the Approximate Position. */
+/** Average over the first `sample` positioned members (faster, but less exact); undefined when empty. */
 		getApproximatePosition(sample: number): CommonPosition | undefined;
-/** Represents the has Ent Id. */
+/** Whether the collection includes the entity id `id`. */
 		hasEntId(id: number): boolean;
-/** Removes Ent. */
+/** Removes one entity from the collection (entity wrapper); true actually removed. */
 		removeEnt(entity: CommonEntity): boolean;
-/** Adds Ent. */
+/** Adds one entity (when not already in); true added. */
 		addEnt(entity: CommonEntity): boolean;
-/** Represents the update Ent. */
+/** Re-evaluates a member against the collection's filters; true kept, false dropped. */
 		updateEnt(entity: CommonEntity, force?: boolean): boolean;
-/** Represents the register Updates. */
+/** Registers this collection with the shared script for automatic updates. */
 		registerUpdates(): void;
-/** Represents the unregister. */
+/** Unregisters this collection. */
 		unregister(): void;
-/** Represents the dynamic Properties. */
+/** Dynamic properties of the filters of this collection. */
 		dynamicProperties(): string[];
-/** Sets the UID. */
+/** Sets the collection's registration uid (collection re-created after autoload). */
 		setUID(id: number): void;
-/** Gets the UID. */
+/** Returns the registration uid. */
 		getUID(): number;
 	}
 }
 
 declare module "simulation/ai/common-api/entity.js"
 {
-/** Represents the Template. */
+/**
+ * Wrapper around one entity template with tech-modification support: the
+ * owning template's per-player modifications are checked first on every
+ * get() path, then the raw template value (per path cached in _tpCache).
+ */
 	export class Template
 	{
-/** Initializes the object. */
+/** Holds the sharedAI template-name → modifications registry and a per-path value cache (see the override in Entity for the per-entity variant). */
 		constructor(sharedAI: CommonSharedScript, templateName: string, template: Record<string, unknown>);
 		_template: CommonTemplateData;
 		_templateName?: string;
-/** Gets the template value, adjusting for tech. */
+/**
+ * Dotted-path template lookup (e.g. "Cost/Population"), with per-owner tech
+ * modifications from _templateModif (and — for entities — _entityModif)
+ * applied before the raw walk; per-path results are cached. Note the loose
+ * overloads: the typed ones exist for the paths where a return type is
+ * statically known; the generic overload returns whatever the template holds.
+ */
 		get(path: "Cost/Population"): number | undefined;
 		get(path: "UnitAI/DefaultStance"): string | undefined;
 		get(path: "ResourceSupply/Type"): string | undefined;
+/** Bonus modifiers of the attack type's bonus list (Civ/Classes filters with Multiplier). */
 		get(path: "Attack/Melee/Bonuses" | "Attack/Ranged/Bonuses"): Array<{
 			Civ?: string;
 			Classes?: string[];
 			Multiplier: number;
 		}> | undefined;
 		get(path: string): any;
-/** Represents the template Name. */
+/** Full template name (civ or wildcard substitution already applied where appropriate). */
 		templateName(): string;
-/** Represents the generic Name. */
+/** Display name from the template (undefined if absent). */
 		genericName(): string | undefined;
-/** Represents the civ. */
+/** Template civ restriction from Identity/Civ (undefined when the template sets none). */
 		civ(): string | undefined;
-/** Represents the match Limit. */
+/** Numeric limit attached by a TrainingRestrictions block (undefined when the template sets none). */
 		matchLimit(): number | undefined;
-/** Represents the classes. */
+/** All identity classes of the template (undefined for templates without an Identity block). */
 		classes(): string[] | undefined;
-/** Represents the has Class. */
+/** Whether the template's class list includes `name` (exact, case-sensitive). */
 		hasClass(name: string): boolean | undefined;
-/** Represents the has Classes. */
+/** Whether the class list matches a nested matches-class-list specification ("Hero"/"Unit" strings or [[Class1],[Class2]] arrays). */
 		hasClasses(classes: string[] | string | string[][] | undefined): boolean | undefined;
-/** Gets the technology requirements. */
+/** Identity/Requirements spec of the template, verbatim (undefined when none); see DeriveTechnologyRequirements in globalscripts.d.ts for evaluation. */
 		requirements(): TechnologyRequirements | CommonRequirement[] | undefined;
-/** Represents the available. */
+/** Whether the template is available for `gameState` (not disabled, applicable for this player's phase). */
 		available(gameState: CommonGameState): boolean;
-/** Represents the cost. */
+/** Resource cost of the template (with Technology-researcher cost multipliers ignored for undefined productionQueue). */
 		cost(productionQueue?: unknown): CommonResourceAmounts;
-/** Gets the total cost of the technology. */
+/** Total resource cost of the template. */
 		costSum(productionQueue?: unknown): number;
-/** Represents the tech Cost Multiplier. */
+/** Technician "Researcher/TechCostMultiplier/<type>" of the template, coerced to number with default 1. */
 		techCostMultiplier(type: string): number;
+/** Obstruction radii derived from the template's footprint; undefined for structures without a footprint. */
 		obstructionRadius(): { max: number; min: number } | undefined;
-/** Represents the footprint Radius. */
+/** Inscribed circle radius of the footprint (half the shorter side). */
 		footprintRadius(): number | undefined;
-/** Represents the max Hitpoints. */
+/** Max hitpoints of the template (0 when the template has none). */
 		maxHitpoints(): number;
-/** Represents the is Healable. */
+/** Whether the template has a Health block that isn't marked Unhealable. */
 		isHealable(): boolean;
-/** Represents the is Repairable. */
+/** Whether the template can be repaired. */
 		isRepairable(): boolean;
-/** Gets the Population Bonus. */
+/** Population/Bonus of the template (0 when it adds none). */
 		getPopulationBonus(): number;
-/** Represents the resistance Strengths. */
+/** Damage/Capture resistances of the template (undefined for templates without a Resistance component). */
 		resistanceStrengths(): { Capture?: number; Damage?: Record<string, number> } | undefined;
-/** Represents the attack Types. */
+/** Names of the attack types the template performs (Melee, Ranged, Capture, ...). */
 		attackTypes(): string[] | undefined;
+/** Range (min/max) of one attack type; undefined when the type has no Range. */
 		attackRange(type: string): { max: number; min: number } | undefined;
-/** Represents the attack Strengths. */
+/** Damage strengths (Hack, Pierce, Crush...) of one attack type. */
 		attackStrengths(type: string): Record<string, number> | undefined;
-/** Represents the capture Strength. */
+/** Capture-attack strength of the template (undefined when it has none). */
 		captureStrength(): number | undefined;
+/** Repeat times of one attack type (prepare/repeat/recover delays). */
 		attackTimes(type: string): Record<string, number> | undefined;
-/** Gets the Countered Classes. */
+/** Classes this template deals bonus damage against, as [classes, multiplier] pairs (undefined without bonuses). */
 		getCounteredClasses(): Array<[string[], number]> | undefined;
-/** Represents the counters. */
+/** Whether the template deals any significant bonus damage against `target`'s classes. */
 		counters(target: CommonTemplate | CommonEntity): boolean;
-/** Gets the Multiplier Against. */
+/** Bonus multiplier of a given attack type against one identity class (undefined without a matching bonus entry). */
 		getMultiplierAgainst(type: string, againstClass: string): number | undefined;
-/** Represents the buildable Entities. */
+/** All structure templates a builder-class template can construct for a civ. */
 		buildableEntities(civ: string): string[];
-/** Represents the trainable Entities. */
+/** All units trainable by the template for a civ (undefined when it trains none). */
 		trainableEntities(civ: string): string[] | undefined;
-/** Represents the researchable Techs. */
+/** Techs researchable by the template for `gameState` and civ (undefined when it researches none). */
 		researchableTechs(gameState: CommonGameState, civ: string): string[] | undefined;
-/** Represents the resource Supply Type. */
+/** {generic, specific} resource names the template supplies (undefined when it supplies nothing). */
 		resourceSupplyType(): CommonResourceSupplyType | undefined;
-/** Gets the Resource Type. */
+/** Generic part of ResourceSupply/Type (everything before the first dot); undefined when the template supplies nothing. */
 		getResourceType(): string | undefined;
-/** Gets the Diminishing Returns. */
+/** DiminishingReturns factor of the supply, coerced to number, default 1 (no change). */
 		getDiminishingReturns(): number;
-/** Represents the resource Supply Max. */
+/** Total amount supplied (integer >= 1; 0 when the template is not a supply). */
 		resourceSupplyMax(): number;
-/** Represents the max Gatherers. */
+/** Maximum simultaneous gatherers (undefined when there is no limit marker). */
 		maxGatherers(): number;
-/** Represents the resource Gather Rates. */
+/** Gather rates by resource category for a gatherer (undefined when the template cannot gather). */
 		resourceGatherRates(): Record<string, number> | undefined;
-/** Represents the resource Dropsite Types. */
+/** Resources the template receives when used as a dropsite (undefined when it is none). */
 		resourceDropsiteTypes(): string[] | undefined;
-/** Represents the is Resource Dropsite. */
+/** Whether the template accepts the given resource (undefined unless dropsite). */
 		isResourceDropsite(resourceType?: string): boolean | undefined;
-/** Represents the is Treasure. */
+/** Whether the template is a treasure (collectible goodwill resource). */
 		isTreasure(): boolean;
-/** Represents the treasure Resources. */
+/** Treasure resources carried by the template (undefined when it is not a treasure). */
 		treasureResources(): Record<string, number> | undefined;
-/** Represents the garrisonable Classes. */
+/** Classes garrisonable into this garrison holder (undefined when it garrisons none). */
 		garrisonableClasses(): string[] | undefined;
-/** Represents the garrison Max. */
+/** Garrisoning capacity of the holder as capacity in entity slots. */
 		garrisonMax(): number;
-/** Represents the garrison Size. */
+/** Capacity each garrisoned entity consumes (default 1). */
 		garrisonSize(): number;
-/** Represents the garrison Eject Health. */
+/** Health fraction of garrisoned members returned to them on eject (ejection damage fraction). */
 		garrisonEjectHealth(): number;
-/** Gets the Default Arrow. */
+/** Default arrow count of an attack-defending structure (0 unless it has defensive fire). */
 		getDefaultArrow(): number;
-/** Gets the Arrow Multiplier. */
+/** Bonus arrow count multiplier given by garrisoned archers (0 unless defined). */
 		getArrowMultiplier(): number;
-/** Gets the Garrison Arrow Classes. */
+/** Class list whose members add bonus arrows when garrisoned (undefined when it garrisons none). */
 		getGarrisonArrowClasses(): string[] | undefined;
-/** Represents the buff Heal. */
+/** Heal rate of a garrison/aura buffing healer (0 when none). */
 		buffHeal(): number;
-/** Represents the promotion. */
+/** Template this one promotes to (undefined when there is no promotion). */
 		promotion(): string | undefined;
-/** Represents the is Packable. */
+/** Whether the template can be packed/unpacked (siege units etc). */
 		isPackable(): boolean;
-/** Represents the is Huntable. */
+/** Whether the template is a huntable animal (by its classes and walk speed). */
 		isHuntable(): boolean;
-/** Represents the walk Speed. */
+/** Walk speed in metres per second as declared by the template (structures have none). */
 		walkSpeed(): number;
-/** Represents the training Category. */
+/** TrainingRestrictions/Category marker of the template (e.g. "Hero"), undefined when unrestricted. */
 		trainingCategory(): string | undefined;
-/** Represents the build Time. */
+/** Construction time in seconds, optionally scaled by `researcher`'s tech-cost multipliers. */
 		buildTime(researcher?: CommonTemplate | CommonEntity): number;
+/** Research time of the template ([0 when none is defined]). */
 		researchTime(): number;
-/** Represents the build Category. */
+/** Build category marker class of the template (used to match foundations matching build limits). */
 		buildCategory(): string | undefined;
-/** Represents the build Distance. */
+/** Minimum-distance build constraint {MinDistance, FromClass}; undefined when unconstrained. */
 		buildDistance(): { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined } | undefined;
-/** Represents the build Placement Type. */
+/** Placement type marker ("shore" for shore-constrained structures), undefined for normal structures. */
 		buildPlacementType(): string | undefined;
-/** Represents the build Territories. */
+/** Buildable territory strings (own, allied, neutral, enemy) from the template. */
 		buildTerritories(): string[] | undefined;
-/** Represents the has Build Territory. */
+/** Whether the template can be built on the named territory. */
 		hasBuildTerritory(territory: string): boolean | undefined;
-/** Represents the has Territory Influence. */
+/** Whether the template carries a TerritoryInfluence block (radius, weight). */
 		hasTerritoryInfluence(): boolean;
-/** Represents the has Defensive Fire. */
+/** Whether the template has defensive fire (mixed returns: arrow count, or false when none). */
 		hasDefensiveFire(): number | false;
-/** Represents the territory Influence Radius. */
+/** Territory influence radius (0 when none). */
 		territoryInfluenceRadius(): number;
-/** Represents the territory Influence Weight. */
+/** Territory influence weight (0 when none). */
 		territoryInfluenceWeight(): number;
-/** Represents the territory Decay Rate. */
+/** Territory decay rate of the template (0 default decay of structures). */
 		territoryDecayRate(): number;
-/** Represents the default Regen Rate. */
+/** Base health-regeneration rate (0 unless defined). */
 		defaultRegenRate(): number;
-/** Represents the garrison Regen Rate. */
+/** Additional health-regeneration per garrisoned entity (0 unless defined). */
 		garrisonRegenRate(): number;
-/** Represents the vision Range. */
+/** Vision range in metres. */
 		visionRange(): number;
-/** Represents the gain Multiplier. */
+/** Trade gain multiplier of a trader (1 default; modified by traders' upgrades). */
 		gainMultiplier(): number;
-/** Represents the is Builder. */
+/** Whether this template can build (has the Builder component). */
 		isBuilder(): boolean;
-/** Represents the is Gatherer. */
+/** Whether this template can gather (has the Gatherer component). */
 		isGatherer(): boolean;
-/** Represents the can Gather. */
+/** Whether this template can gather the given resource type. */
 		canGather(type: string): boolean;
-/** Represents the is Garrison Holder. */
+/** Whether this template can garrison other entities (a garrison holder). */
 		isGarrisonHolder(): boolean;
-/** Represents the is Turret Holder. */
+/** Whether this template has a turret point. */
 		isTurretHolder(): boolean;
-/** Represents the can Capture. */
+/** Whether the template can capture (has a Capture attack against the given optional target). */
 		canCapture(target?: CommonTemplate | CommonEntity): boolean;
-/** Represents the is Capturable. */
+/** Whether the template is capturable (has capture points). */
 		isCapturable(): boolean;
-/** Represents the can Guard. */
+/** Whether the template can guard another entity (has a Guard component). */
 		canGuard(): boolean;
-/** Represents the can Garrison. */
+/** Whether this template can be garrisoned into other entities (a garrisonable unit). */
 		canGarrison(): boolean;
-/** Represents the can Occupy Turret. */
+/** Whether this template can occupy a turret (generally a projectile weapon). */
 		canOccupyTurret(): boolean;
-/** Represents the is Treasure Collector. */
+/** Whether this template can collect treasures (a "collector"). */
 		isTreasureCollector(): boolean;
-/** Represents the has Unit AI. */
+/** Whether the template has a UnitAI component (comparable to hasClass("Unit")). */
 		hasUnitAI(): boolean;
 	}
-/** Represents the Entity. */
+/**
+ * Wrapper around one live engine entity. All read-only data comes from the
+ * engine snapshot in `_entity`; commands are sent via PostCommand (Petra's
+ * AI-side command channel). Metadata accessors rely on the shared script's
+ * per-(player, entity) metadata store.
+ */
 	export class Entity extends Template
 	{
-/** The raw engine entity state (private `_entity` in entity.js). */
+/** The raw engine entity snapshot (private `_entity` in entity.js). */
 		_entity: EngineAIEntityState;
-/** Initializes the object. */
 		constructor(sharedAI: CommonSharedScript, entity: Record<string, unknown>);
-/** Represents the query Interface. */
+/** Live component query straight into the running simulation (SimEngine.QueryInterface of the entity id); the returned object is the raw component interface. */
 		queryInterface(iid: string | number): any;
-/** Represents the to String. */
+/** Debug helper "\<template> (id)" describing the entity briefly. */
 		toString(): string;
-/** Represents the id. */
+/** The entity id (INVALID_ENTITY never occurs inside a collection — dead entities are removed). */
 		id(): number;
-/** Gets metadata for a player and entity. */
+/** Metadata for a player+entity pair from the shared script's metadata cache (undefined unless set). */
 		getMetadata<K extends keyof PetraEntityMetadata>(player: number, key: K): PetraEntityMetadata[K] | undefined;
 		getMetadata(player: number, key: string): any;
-/** Sets the Metadata. */
+/** Sets metadata for a player+entity via the shared script. */
 		setMetadata(player: number, key: string, value: unknown): void;
-/** Represents the delete All Metadata. */
+/** Deletes all metadata of one player+entity pair. */
 		deleteAllMetadata(player: number): void;
-/** Represents the delete Metadata. */
+/** Deletes one metadata key of a player+entity pair. */
 		deleteMetadata(player: number, key: string): void;
-/** Represents the position. */
+/** World position [x, z]. Entities without a position component (rare, mostly short-lived effects) are not usable here. */
 		position(): CommonPosition;
-/** Represents the angle. */
+/** Facing angle in radians (built from the position coordinates of the engine direction data). */
 		angle(): number | undefined;
-/** Represents the is Idle. */
+/** Whether the entity is currently idle (undefined when it has no UnitAI). */
 		isIdle(): boolean | undefined;
-/** Gets the Stance. */
+/** Current stance name (undefined when it has no UnitAI). */
 		getStance(): string | undefined;
-/** Represents the unit AI State. */
+/** UnitAI state name (undefined unless the UnitAI is active). */
 		unitAIState(): string | undefined;
-/** Represents the unit AI Order Data. */
+/** Order targets of the UnitAI (target entity ids and other per-order data; empty for complex orders). */
 		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
-/** Represents the hitpoints. */
+/** Current hitpoints from the snapshot (0 for entities the engine reports none for). */
 		hitpoints(): number;
-/** Represents the is Hurt. */
+/** Whether the entity is below full health. */
 		isHurt(): boolean;
-/** Represents the health Level. */
+/** Health fraction in (0, 1]. */
 		healthLevel(): number;
-/** Represents the needs Heal. */
+/** Whether the entity needs healing: isHurt and not unhealable. */
 		needsHeal(): boolean;
-/** Represents the needs Repair. */
+/** Whether the entity needs repairing: isHurt and repairable. */
 		needsRepair(): boolean;
-/** Represents the decaying. */
+/** Whether the entity's territory decay currently runs (undefined when inapplicable). */
 		decaying(): boolean | undefined;
-/** Represents the capture Points. */
+/** Capture points of the entity, as the per-player value list (undefined unless capturable). */
 		capturePoints(): number[] | undefined;
-/** Represents the is Invulnerable. */
+/** Whether the entity is invulnerable to further damage (the engine's Invulnerability marker). */
 		isInvulnerable(): boolean;
-/** Represents the is Shared Dropsite. */
+/** Whether this entity is a shared (team-shared) dropsite, i.e. allied players can deposit here. */
 		isSharedDropsite(): boolean;
-/** Represents the training Queue. */
+/** Training production queue of a structure as reported by the snapshot (undefined for entities without one). */
 		trainingQueue(): CommonTrainingQueueItem[] | undefined;
-/** Represents the training Queue Time. */
+/** Seconds the head of the training queue needs (undefined for a non-producer). */
 		trainingQueueTime(): number | undefined;
-/** Represents the foundation Progress. */
+/** Completion fraction [0, 1] of a foundation (undefined once built, for fully-built structures). */
 		foundationProgress(): number | undefined;
-/** Gets the Builders. */
+/** Entity ids currently building the structure (undefined unless a foundation). */
 		getBuilders(): number[] | undefined;
-/** Gets the Builders Nb. */
+/** Number of currently paired builders (undefined unless a foundation). */
 		getBuildersNb(): number | undefined;
-/** Represents the owner. */
+/** Owner player id straight from the snapshot (0 = gaia). */
 		owner(): number;
-/** Represents the is Own. */
+/** Whether the owner is `player`. */
 		isOwn(player: number): boolean;
-/** Represents the resource Supply Amount. */
+/** Amount of the supply remaining (undefined for non-supplies). */
 		resourceSupplyAmount(): number | undefined;
-/** Represents the resource Supply Num Gatherers. */
+/** Number of units currently gathering the supply (undefined for non-supplies). */
 		resourceSupplyNumGatherers(): number | undefined;
-/** Represents the is Full. */
+/** Whether the supply has the maximum simultaneous gatherers (undefined without gatherers). */
 		isFull(): boolean | undefined;
+/** Carried resources of a gatherer ({class, type, amount} entries; undefined for non-gatherers). */
 		resourceCarrying(): Array<{ class?: string; type: string; amount: number }> | undefined;
-/** Represents the current Gather Rate. */
+/** Current gather rate of the unit (undefined when not gathering). */
 		currentGatherRate(): number | undefined;
-/** Represents the garrison Holder ID. */
+/** Id of the entity this unit is garrisoned in (undefined unless garrisoned). */
 		garrisonHolderID(): number | undefined;
-/** Represents the garrisoned. */
+/** Entity ids of the units garrisoned in this holder (empty for empty holder). */
 		garrisoned(): number[];
-/** Represents the garrisoned Slots. */
+/** Summed garrison slots currently occupied (0 for empty holders). */
 		garrisonedSlots(): number;
-/** Represents the can Garrison Inside. */
+/** Whether this entity can garrison other entities (garrisoning capacity > 0). */
 		canGarrisonInside(): boolean;
-/** Represents the can Attack Class. */
+/** Whether this entity can damage identity class `aClass`. */
 		canAttackClass(aClass: string): boolean;
-/** Represents the can Attack Target. */
+/** Whether this entity can damage `target` (optional allowCapture vs. unit-only capture weapons). */
 		canAttackTarget(target: CommonEntity, allowCapture?: boolean): boolean;
-/** Represents the move. */
+/** Move in formation to (x, z) in world coordinates. */
 		move(x: number, z: number, queued?: boolean, pushFront?: boolean): this;
-/** Represents the move To Range. */
+/** Move to the edge of a range band `(min, max)` around (x, z). */
 		moveToRange(x: number, z: number, min: number, max: number, queued?: boolean, pushFront?: boolean): this;
-/** Represents the attack Move. */
-		attackMove(x: number, z: number, targetClasses?: string[] | {
+/** Attack-move toward (x, z); targetClasses can be a plain class list or the {attack, avoid, vetoEntities} object. */
+		attackMove(x: number, z: number, targetClasses: string[] | {
 			attack: string[];
 			avoid?: string[];
 			vetoEntities?: Record<string, boolean>;
 		}, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
-/** Sets the Stance. */
+/** Sets a stance; undefined (with the order swallowed) when the entity has no stance set. */
 		setStance(stance: string): this | undefined;
-/** Represents the stop Moving. */
+/** Issues a stop order, cancelling the unit's current movement. */
 		stopMoving(): void;
-/** Represents the unload. */
+/** Orders entity `id` (one unit garrisoned here) out of this holder. */
 		unload(id: number): this | undefined;
-/** Represents the unload All. */
+/** Ejects every garrisoned entity of this holder. */
 		unloadAll(): this | undefined;
-/** Represents the garrison. */
+/** Garrison (move inside) into `target` with optional queue/pushFront handling. */
 		garrison(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
 		["occupy-turret"](target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the attack. */
+/** Attacks the entity with id `unitId` (a raw entity id, not another wrapper). */
 		attack(unitId: number, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
-/** Represents the collect Treasure. */
+/** Moves to and collects treasure `target`. */
 		collectTreasure(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the move Apart. */
+/** Moves at least `distance` metres away from `point`. */
 		moveApart(point: CommonPosition, distance: number): this;
-/** Represents the flee. */
+/** Flees from `unitToFleeFrom` to a safe distance outside its attack range. */
 		flee(unitToFleeFrom: CommonEntity): this;
-/** Represents the gather. */
+/** Move to and gather `target`. */
 		gather(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the repair. */
+/** Move to and repair/continue the building `target`. */
 		repair(target: CommonEntity, autocontinue?: boolean, queued?: boolean, pushFront?: boolean): this;
-/** Represents the return Resources. */
+/** Move to and deposit the carried resources at `target`. */
 		returnResources(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Represents the destroy. */
+/** Destroys this entity via the engine "delete-entity" command. */
 		destroy(): this;
-/** Represents the barter. */
+/** Barter transaction with the market: buys `amount` of `buyType` paying in `sellType`. */
 		barter(buyType: string, sellType: string, amount: number): this;
-/** Represents the trade Route. */
+/** Sets up this trader to run goods between `source` and `target` (both markets). */
 		tradeRoute(target: CommonEntity, source: CommonEntity): this;
-/** Sets the Rally Point. */
+/** Sets the rally point of a producer to `target`. */
 		setRallyPoint(target: CommonEntity, command?: string): this;
-/** Represents the unset Rally Point. */
+/** Clears the rally point. */
 		unsetRallyPoint(): this;
-/** Represents the train. */
+/** Trains `count` units of `type`, attaching `metadata` to their training batches. */
 		train(civ: string, type: string, count: number, metadata?: Record<string, unknown>, pushFront?: boolean): this;
-/** Represents the construct. */
+/** Places a building foundation of `template` at (x, z), rotated by `angle`, with this entity as builder. */
 		construct(template: string, x: number, z: number, angle: number, metadata?: Record<string, unknown>): this;
-/** Represents the research. */
+/** Starts researching `template` in this structure. */
 		research(template: string, pushFront?: boolean): this;
-/** Represents the stop Production. */
+/** Cancels the training/research production with queue id `id`. */
 		stopProduction(id: number): this;
-/** Represents the stop All Production. */
+/** Cancels productions of this structure under `percentToStopAt` completion (returning true when there was no queue). */
 		stopAllProduction(percentToStopAt: number): this | true;
-/** Represents the guard. */
+/** Orders this unit to guard `target`. */
 		guard(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
-/** Removes Guard. */
+/** Releases this unit's current guard assignment. */
 		removeGuard(): this;
 	}
 }
 
 declare module "simulation/ai/common-api/baseAI.js"
 {
-/** Represents the Base AI. */
+/**
+ * Common base of all per-player AI bot scripts (Petra extends it). baseAI
+ * holds references to the shared territory grid and accessibility analyzer
+ * (refreshed each turn by HandleMessage) and defines the
+ * Init/CustomInit/OnUpdate integration points a concrete AI fills in.
+ */
 	export class BaseAI
 	{
-/** Initializes the object. */
 		constructor(settings?: Record<string, unknown>);
+/** Player id passed when the AI was instantiated. */
 		player: number;
 		/**
 		 * The engine's territory grid, handed to the AI as `{width, height, data}`
@@ -1125,22 +1277,25 @@ declare module "simulation/ai/common-api/baseAI.js"
 		 * `sharedAI.territoryMap` here without wrapping it.
 		 */
 		territoryMap: CommonPassabilityMap;
+/** Copy of the shared accessibility analyzer (read-only use). */
 		accessibility: CommonInfoMap;
+/** Shared territory/accessibility references and the per-player GameState (this.ai State for Petra's code paths through gameState.ai). */
 		gameState: CommonGameState;
+/** Time elapsed at the last turn's update. */
 		timeElapsed: number;
-/** Serializes the object state. */
+/** Serializes the base class state (empty by default; AIs extend it via their own Serialize). */
 		Serialize(): Record<string, unknown>;
-/** Represents the Deserialize. */
+/** Restores the serialized base state (empty by default; no-op common services). */
 		Deserialize(data: Record<string, unknown>, sharedScript: CommonSharedScript): void;
-/** Represents the Init. */
+/** Binds this AI to `sharedAI` and `playerID`, copies the territory/accessibility references and creates its GameState; ends in CustomInit. */
 		Init(playerID: number, sharedAI: CommonSharedScript): void;
-/** Represents the Custom Init. */
+/** Hook the concrete AI implements to fill its own state (called once at init). */
 		CustomInit(gameState: CommonGameState): void;
-/** Handles Message. */
+/** Turn integration point: refreshes PlayerID and the territory grid copy, then calls OnUpdate. */
 		HandleMessage(state: Record<string, unknown>, playerID: number, sharedAI: CommonSharedScript): void;
-/** Represents the On Update. */
+/** Per-turn drive of the custom AI update. */
 		OnUpdate(sharedAI: CommonSharedScript): void;
-/** Represents the chat. */
+/** Sends a chat line as this player (through the engine Chat command). */
 		chat(message: string): void;
 	}
 }

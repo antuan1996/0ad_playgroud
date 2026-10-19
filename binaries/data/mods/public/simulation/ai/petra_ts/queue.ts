@@ -10,17 +10,26 @@ type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<Rese
 /**
  * Holds a list of wanted plans to train or construct
  */
-export class Queue implements PetraRuntime.QueueLike
+export class Queue
 {
+	/** Plan list in submission order; the head (index 0) is the next plan to start. */
 	plans: PetraRuntime.ConcretePlan[] = [];
+	/** Set by queueManager priority changes to suspend the queue's processing. */
 	paused = false;
+	/** Number of times the queue was force-switched (exit conditions), saved along with the plans. */
 	switched = 0;
 
+	/** Drops all plans without starting them. */
 	empty(): void
 	{
 		this.plans = [];
 	}
 
+	/**
+	 * Appends a plan, or merges it into an identical unit-plan head-group when
+	 * the merged count stays within the plan's `maxMerge`; technology
+	 * duplicates are silently swallowed. A null/undefined plan is ignored.
+	 */
 	addPlan(newPlan: PetraRuntime.ConcretePlan | null | undefined): void
 	{
 		if (!newPlan)
@@ -39,6 +48,7 @@ export class Queue implements PetraRuntime.QueueLike
 		this.plans.push(newPlan);
 	}
 
+	/** Pops plans from the head while they fail their own invalidity check (e.g. targets gone). */
 	check(gameState: CommonGameState): void
 	{
 		while (this.plans.length > 0)
@@ -52,6 +62,7 @@ export class Queue implements PetraRuntime.QueueLike
 		}
 	}
 
+	/** The plan at the head of the queue, or null when empty. */
 	getNext(): PetraRuntime.PlanLike | null
 	{
 		if (this.plans.length > 0)
@@ -59,6 +70,7 @@ export class Queue implements PetraRuntime.QueueLike
 		return null;
 	}
 
+	/** Starts (shifts) the head plan; false when the queue is empty. */
 	startNext(gameState: CommonGameState): boolean
 	{
 		if (this.plans.length > 0)

@@ -1,24 +1,48 @@
+// Type declarations for the engine's global scripts
+// (binaries/data/mods/public/globalscripts/*.js).
+//
+// The AI worker script context loads these files at startup
+// (CAIWorker::Init -> ScriptInterface::LoadGlobalScripts), exactly like the
+// simulation and GUI contexts, so all of the declarations below are available
+// as plain globals inside the AI. The AI receives the SAME definitions as
+// every other script context, including deterministic overrides of several
+// Math functions (see the `Math` interface below).
+//
+// Every declaration here was verified against the corresponding source file;
+// the comments state the runtime behaviour rather than paraphrasing names.
+
 declare global
 {
-/** Extends Math with geometry helpers. */
+/**
+ * Extension of the standard `Math` object installed by globalscripts/Math.js.
+ *
+ * IMPORTANT for AI code: Math.js *replaces* the engine's native cos, sin,
+ * atan, atan2, pow, exp and log with deterministic JS approximations. This
+ * makes all JS(schema) scripts produce bit-identical results across platforms
+ * and rejoins (rejoin/Out-of-sync safety); precision of the approximations is
+ * roughly double-precision. acos, asin and tan have no portable implementation
+ * and are stubs that log an error and return undefined. The helpers below
+ * (square, intPow, euclid*, clamp) are additions on top of that.
+ */
 	interface Math
 	{
-/** Squares a number. */
+/** Deterministic square: simply `value * value` (avoids the slower Math.pow). */
 		square(value: number): number;
-/** Represents the int Pow. */
+/** X raised to a positive integer exponent by binary exponentiation; handles infinite exponents and x of |1|. */
 		intPow(x: number, y: number): number;
-/** Computes the squared 2D Euclidean distance. */
+/** Squared Euclidean distance in 2D, `(x2-x1)² + (y2-y1)²`; faster than Math.hypot and preserves determinism. */
 		euclidDistance2DSquared(x1: number, y1: number, x2: number, y2: number): number;
-/** Represents the euclid Distance2 D. */
+/** Euclidean distance in 2D (`sqrt` of `euclidDistance2DSquared`); can be faster than Math.hypot. */
 		euclidDistance2D(x1: number, y1: number, x2: number, y2: number): number;
-/** Computes the squared 3D Euclidean distance. */
+/** Squared Euclidean distance in 3D. */
 		euclidDistance3DSquared(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number): number;
-/** Represents the euclid Distance3 D. */
+/** Euclidean distance in 3D. */
 		euclidDistance3D(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number): number;
-/** Clamps a value to a range. */
+/** Clamps `value` into the closed interval `[min, max]`. */
 		clamp(value: number, min: number, max: number): number;
 	}
 
+/** Structural subset of an entity template's `<Identity>` node used by the class helpers of Templates.js. */
 	type IdentityTemplate = {
 		Classes?: { _string?: string };
 		VisibleClasses?: { _string?: string };
@@ -26,6 +50,14 @@ declare global
 		[key: string]: unknown;
 	};
 
+/**
+ * One entry of a tech/aura `modifications` array after path resolution.
+ * `affects` is the class-match specification (space-separated string, or the
+ * nested-array form produced by DeriveModificationsFromTech where each
+ * element is a list of AND-ed class tokens); the other keys are the numeric
+ * / string operations understood by GetTechModifiedProperty, plus any extra
+ * fields the modification carried.
+ */
 	type TechnologyModification = {
 		affects?: string | string[] | string[][];
 		add?: number;
@@ -35,27 +67,53 @@ declare global
 		[key: string]: unknown;
 	};
 
+/**
+ * Technology/aura research requirement list as computed by
+ * DeriveTechnologyRequirements / InterpretTechRequirements: an OR-list of
+ * prerequisites, each either a list of prerequisite tech names or a list of
+ * required entity classes (`check` distinguishes counting units from counting
+ * distinct variants). `false` replaces the list when the requirement can
+ * never be met by the given civ.
+ */
 	type TechnologyRequirements = Array<{
 		techs?: string[];
 		entities?: Array<{ class: string; number: number; check: "count" | "variants" }>;
 	}>;
 
+/** A message passed to FSM.ProcessMessage / handler functions. */
 	type FSMMessage = { type: string; [key: string]: unknown };
+/** A message handler function of an FSM spec. */
 	type FSMHandler<T = unknown> = (this: T, message: FSMMessage) => unknown;
+/**
+ * One node of an FSM spec: message handlers keyed by message type plus the
+ * special "enter"/"leave" transition hooks and "_name"/"_parent" metadata.
+ * State names may only contain the characters A-Z, joined with "." for
+ * sub-states (see globalscripts/FSM.js and UnitAI.js for the full syntax).
+ */
 	type FSMStateSpec<T = unknown> = {
 		[key: string]: FSMHandler<T> | FSMStateSpec<T> | string;
 	};
 
-/** Represents an object managed by an FSM. */
+/**
+ * The bookkeeping an FSM keeps on the managed object itself
+ * (FSM.Init sets both fields; the `FsmStateNameChanged` callback is invoked
+ * by FSM.SwitchToNextState whenever a transition is aborted by a hook).
+ */
 	interface FSMObject
 	{
+/** Always up-to-date name of the innermost state the object is in. */
 		fsmStateName: string;
+/** Queued next state (set by handlers calling FSM.SetNextState); undefined when no transition is pending. */
 		fsmNextState: string | undefined;
-/** Represents the Fsm State Name Changed. */
+/** Called when an enter/leave hook interrupts a state transition. */
 		FsmStateNameChanged(name: string): void;
 	}
 
-/** Describes a resource definition from the game data. */
+/**
+ * One entry of simulation/data/resources/*.json, sorted by `order`, with
+ * `code`/`name` plus optional subtypes and property tags ("barterable",
+ * "tradable", "tributable", "aiAnalysisInfluenceGroup", ...).
+ */
 	interface ResourceData
 	{
 		code: string;
@@ -67,39 +125,29 @@ declare global
 		[key: string]: unknown;
 	}
 
-/** Exposes resource metadata and lookup helpers. */
+/** Instance of the global `Resources` singleton below (globalscripts/Resources.js). */
 	interface Resources
 	{
-/** Gets the available resources. */
+/** All resource definitions from simulation/data/resources/, sorted by `order`. */
 		GetResources(): ResourceData[];
-/** Gets a resource definition by type. */
+/** Definition of a single resource by its code, or undefined for unknown codes. */
 		GetResource(type: string): ResourceData | undefined;
-/** Gets all resource codes. */
+/** Base resource codes ("food", "wood", ...) in their defined sort order. */
 		GetCodes(): string[];
-/** Gets the barterable resource codes. */
+/** Resource codes flagged as barterable in their JSON definition. */
 		GetBarterableCodes(): string[];
-/** Gets the tradable resource codes. */
+/** Resource codes flagged as tradable. */
 		GetTradableCodes(): string[];
-/** Gets the tributable resource codes. */
+/** Resource codes flagged as tributable. */
 		GetTributableCodes(): string[];
-/** Gets the resource names. */
+/** Mapping from resource code (and each resource's subtypes) to human-readable display name. */
 		GetNames(): Record<string, string>;
 	}
 
-/** Stores template data for gameplay modifications. */
-	interface ModificationTemplates
-	{
-/** Gets the resource names. */
-		GetNames(): string[];
-/** Checks whether  exists. */
-		Has(name: string): boolean;
-/** Gets the . */
-		Get(name: string): Record<string, unknown> | undefined;
-/** Gets all entries for this collection. */
-		GetAll(): Record<string, Record<string, unknown>>;
-	}
-
-/** Stores one entry in a multi-key map. */
+/**
+ * One stored item of a MultiKeyMap. `_count` implements stacking: adding the
+ * same (primaryKey, itemID, secondaryKey) tuple repeatedly increments it.
+ */
 	interface MultiKeyMapEntry<T = unknown>
 	{
 		_ID: string;
@@ -107,14 +155,14 @@ declare global
 		value: T;
 	}
 
-/** Represents a 2D position-like value. */
+/** Structural stand-in for a {x, y} value; Vector2D methods accept these. */
 	interface Vector2DLike
 	{
 		x: number;
 		y: number;
 	}
 
-/** Represents a 3D position-like value. */
+/** Structural stand-in for a {x, y, z} value; Vector3D methods accept these. */
 	interface Vector3DLike
 	{
 		x: number;
@@ -122,252 +170,343 @@ declare global
 		z: number;
 	}
 
-/** Two-dimensional vector math utilities. */
+/**
+ * Instance type of the global `Vector2D` constructor (globalscripts/vector.js).
+ * Mutating methods (`set`, `add`, `sub`, `mult`, ..., including `toFixed`)
+ * modify the vector in place and return `this` for chaining; methods listed
+ * as returning `Vector2D` (`clone`, `perpendicular`, `lerp`) return a NEW
+ * vector and leave `this` untouched.
+ */
 	interface Vector2D extends Vector2DLike
 	{
-/** Clones the object. */
+/** Copies the values into a new vector. */
 		clone(): Vector2D;
-/** Sets the . */
+/** Overwrites both components and returns the same vector. */
 		set(x: number, y: number): this;
-/** Copies the values from another vector. */
+/** Copies the components of `vector` into this vector. */
 		setFrom(vector: Vector2DLike): this;
-/** Adds . */
+/** Adds `vector` in place. */
 		add(vector: Vector2DLike): this;
-/** Represents the sub. */
+/** Subtracts `vector` in place. */
 		sub(vector: Vector2DLike): this;
-/** Represents the mult. */
+/** Multiplies both components by `factor` in place. */
 		mult(factor: number): this;
-/** Divides the value by a scalar. */
+/** Divides both components by `factor` in place. */
 		div(factor: number): this;
-/** Represents the normalize. */
+/** Scales to unit length in place; a zero vector is left unchanged (division by zero is avoided). */
 		normalize(): this;
-/** Rotates the vector by an angle. */
+/** Rotates the vector by `angle` radians anti-clockwise, in place. */
 		rotate(angle: number): this;
-/** Represents the rotate Around. */
+/** Rotates the vector by `angle` radians anti-clockwise around `center`, in place. */
 		rotateAround(angle: number, center: Vector2DLike): this;
-/** Rounds the vector components. */
+/** Rounds both components (Math.round) in place. */
 		round(): this;
-/** Represents the floor. */
+/** Floors both components (Math.floor) in place. */
 		floor(): this;
-/** Rounds the vector components to a precision. */
+/** Rounds both components to `digits` decimals in place. */
 		toFixed(digits: number): this;
-/** Represents the perpendicular. */
+/** Returns a new vector rotated 90° anti-clockwise ((-y, x)). */
 		perpendicular(): Vector2D;
-/** Computes the dot product. */
+/** Scalar (dot) product with `vector`. */
 		dot(vector: Vector2DLike): number;
-/** Represents the cross. */
+/** Z-component of the cross product of two 2D vectors (`x1*y2 - y1*x2`); sign gives the relative orientation, magnitude the parallelogram area. */
 		cross(vector: Vector2DLike): number;
-/** Gets the squared length. */
+/** Squared length of the vector. */
 		lengthSquared(): number;
-/** Represents the length. */
+/** Length of the vector. */
 		length(): number;
-/** Compares the length with another vector. */
+/** Sign of `this.lengthSquared() - vector.lengthSquared()`: -1, 0 or 1 (NaN when the lengths aren't comparable). */
 		compareLength(vector: Vector2DLike): number;
-/** Represents the distance To Squared. */
+/** Squared Euclidean distance to `vector`. */
 		distanceToSquared(vector: Vector2DLike): number;
-/** Gets the distance to another point. */
+/** Euclidean distance to `vector`. */
 		distanceTo(vector: Vector2DLike): number;
-/** Represents the angle To. */
+/** Angle (Math.atan2, radians, counter-clockwise from +y) from this vector to `vector`. */
 		angleTo(vector: Vector2DLike): number;
-/** Interpolates between two vectors. */
+/** Returns a NEW vector interpolated `t` of the way from this vector to `vector`. */
 		lerp(vector: Vector2DLike, t: number): Vector2D;
 	}
 
-/** Constructs and transforms 2D vectors. */
+/** Class type of the global `Vector2D` (globalscripts/vector.js). */
 	interface Vector2DConstructor
 	{
-/** Creates a new instance. */
+/** Creates a vector with the given components (defaulting to 0, 0). */
 		new(x?: number, y?: number): Vector2D;
-/** Represents the from3 D. */
+/** Projects a 3D vector onto the game plane: returns (v.x, v.z) — y is dropped because 2D world coordinates use y for the up (z) axis. */
 		from3D(vector: Vector3DLike): Vector2D;
-/** Adds another map or influence layer. */
+/** Returns a new vector with the component-wise sum of `a` and `b`. */
 		add(a: Vector2DLike, b: Vector2DLike): Vector2D;
-/** Represents the sub. */
+/** Returns a new vector with the component-wise difference of `a` and `b`. */
 		sub(a: Vector2DLike, b: Vector2DLike): Vector2D;
-/** Represents the is Equal To. */
+/** Loose equality (==) of the components of two vectors. */
 		isEqualTo(a: Vector2DLike, b: Vector2DLike): boolean;
-/** Represents the mult. */
+/** Returns a new vector scaled by `factor`. */
 		mult(vector: Vector2DLike, factor: number): Vector2D;
-/** Divides the value by a scalar. */
+/** Returns a new vector divided by `factor`. */
 		div(vector: Vector2DLike, factor: number): Vector2D;
-/** Represents the min. */
+/** Returns a new vector with the component-wise minimum of `a` and `b`. */
 		min(a: Vector2DLike, b: Vector2DLike): Vector2D;
-/** Represents the max. */
+/** Returns a new vector with the component-wise maximum of `a` and `b`. */
 		max(a: Vector2DLike, b: Vector2DLike): Vector2D;
-/** Represents the average. */
+/** Returns a new vector holding the average (sum divided by the list length) of all given vectors. */
 		average(vectors: Vector2DLike[]): Vector2D;
-/** Gets the sum of multiple vectors. */
+/** Returns a new vector holding the component-wise sum of all given vectors. */
 		sum(vectors: Vector2DLike[]): Vector2D;
-/** Represents the dot. */
+/** Scalar product of two vectors. */
 		dot(a: Vector2DLike, b: Vector2DLike): number;
 	}
 
-/** Three-dimensional vector math utilities. */
+/**
+ * Instance type of the global `Vector3D` constructor (globalscripts/vector.js).
+ * As with Vector2D, in-place methods return `this`; `clone`, `cross` and
+ * `normalize`'s counterparts that build vectors return new ones. Note that in
+ * the game's world coordinates the y component is the up axis.
+ */
 	interface Vector3D extends Vector3DLike
 	{
-/** Clones the object. */
+/** Copies the values into a new vector. */
 		clone(): Vector3D;
-/** Sets the . */
+/** Overwrites all three components and returns the same vector. */
 		set(x: number, y: number, z: number): this;
-/** Adds another map or influence layer. */
+/** Adds `vector` in place. */
 		add(vector: Vector3DLike): this;
-/** Represents the sub. */
+/** Subtracts `vector` in place. */
 		sub(vector: Vector3DLike): this;
-/** Multiplies the value by a scalar. */
+/** Multiplies all components by `factor` in place. */
 		mult(factor: number): this;
-/** Represents the div. */
+/** Divides all components by `factor` in place. */
 		div(factor: number): this;
-/** Normalizes the vector. */
+/** Scales to unit length in place. */
 		normalize(): this;
-/** Represents the round. */
+/** Rounds all components in place. */
 		round(): this;
-/** Rounds the vector components down. */
+/** Floors all components in place. */
 		floor(): this;
-/** Represents the to Fixed. */
+/** Rounds all components to `digits` decimals in place. */
 		toFixed(digits: number): this;
-/** Computes the dot product. */
+/** Scalar (dot) product with `vector`. */
 		dot(vector: Vector3DLike): number;
-/** Represents the cross. */
+/** Returns a NEW vector holding the cross product with `vector`. */
 		cross(vector: Vector3DLike): Vector3D;
-/** Gets the squared length. */
+/** Squared length of the vector. */
 		lengthSquared(): number;
-/** Represents the length. */
+/** Length of the vector. */
 		length(): number;
-/** Compares the length with another vector. */
+/** Sign of the squared-length difference to `vector` (-1, 0, 1; NaN when not comparable). */
 		compareLength(vector: Vector3DLike): number;
-/** Represents the distance To Squared. */
+/** Squared 3D Euclidean distance to `vector`. */
 		distanceToSquared(vector: Vector3DLike): number;
-/** Gets the distance to another point. */
+/** 3D Euclidean distance to `vector`. */
 		distanceTo(vector: Vector3DLike): number;
-/** Represents the horiz Distance To Squared. */
+/** Squared distance to `vector` using only the horizontal (x, z) components. */
 		horizDistanceToSquared(vector: Vector3DLike): number;
-/** Gets the horizontal distance to another point. */
+/** Distance to `vector` using only the horizontal (x, z) components. */
 		horizDistanceTo(vector: Vector3DLike): number;
-/** Represents the horiz Angle To. */
+/** Angle (radians) from this vector to `vector`, measured in the horizontal (x, z) plane. */
 		horizAngleTo(vector: Vector3DLike): number;
 	}
 
-/** Constructs and transforms 3D vectors. */
+/** Class type of the global `Vector3D` (globalscripts/vector.js). */
 	interface Vector3DConstructor
 	{
-/** Creates a new instance. */
+/** Creates a vector with the given components (defaulting to 0, 0, 0). */
 		new(x?: number, y?: number, z?: number): Vector3D;
-/** Adds . */
+/** Returns a new vector with the component-wise sum of `a` and `b`. */
 		add(a: Vector3DLike, b: Vector3DLike): Vector3D;
-/** Represents the sub. */
+/** Returns a new vector with the component-wise difference of `a` and `b`. */
 		sub(a: Vector3DLike, b: Vector3DLike): Vector3D;
-/** Checks whether two vectors are equal. */
+/** Loose equality (==) of the components of two vectors. */
 		isEqualTo(a: Vector3DLike, b: Vector3DLike): boolean;
-/** Multiplies the value by a scalar. */
+/** Returns a new vector scaled by `factor`. */
 		mult(vector: Vector3DLike, factor: number): Vector3D;
-/** Represents the div. */
+/** Returns a new vector divided by `factor`. */
 		div(vector: Vector3DLike, factor: number): Vector3D;
 	}
 
-/** Lists attack effects and their target receivers. */
+/**
+ * Global instance (created once at script load) holding the receivers listed
+ * in simulation/data/attack_effects/*.json, sorted by their `order` field.
+ */
 	class AttackEffects
 	{
-/** Initializes the object. */
 		constructor();
+/** The possible attack impact effects and the component interface ("IID", e.g. "IID_StatusEffectsReceiver") plus method name that receives each effect type. */
 		Receivers(): Array<{ type: string; IID: string; method: string }>;
 	}
 
-/** Looks up damage type metadata and sorting rules. */
+/**
+ * Global instance (created once at script load) caching the damage-type
+ * metadata from simulation/data/damage_types/*.json. Damage types without a
+ * JSON definition are still legal in-game (modding affordance).
+ */
 	class DamageTypesMetadata
 	{
-/** Initializes the object. */
 		constructor();
-/** Represents the sort. */
+/**
+ * Returns a sorted copy of `damageTypes`: first all types that have metadata,
+ * in the order given by their `order` field, then all types without metadata
+ * (preserving their relative input order).
+ */
 		sort(damageTypes: string[]): string[];
-/** Gets the formatted name for a damage type. */
+/** Human-readable name of the damage type; the code itself is returned when no metadata exists for it. */
 		getName(code: string): string;
 	}
 
-/** Uses the null formation sentinel. */
+/**
+ * Value of the global `NULL_FORMATION` constant (globalscripts/Formation.js):
+ * assigning this formation makes units act as individuals.
+ */
 	const NULL_FORMATION: "special/formations/null";
 
-/** Runs a small state machine for AI decisions. */
+/**
+ * Hierarchical finite-state machine runner (globalscripts/FSM.js), used by
+ * e.g. UnitAI. The spec handed to the constructor maps message names and
+ * hierarchical state names (A-Z words joined by "." only) to handler
+ * functions; stateless ("default") handlers can be overridden per state, and
+ * "enter"/"leave" hooks fire when a transition crosses that state's level.
+ */
 	class FSM
 	{
-/** Initializes the object. */
+/** Compiles the given spec into internal lookup tables. */
 		constructor(spec: FSMStateSpec<FSMObject>);
-/** Initializes the state machine for an object. */
+/** Resets `object`'s FSM bookkeeping and enters `initialState` (running its enter hooks). */
 		Init(object: FSMObject, initialState: string): void;
-/** Sets the next state for an object. */
+/** Queues `state` as the next state for `object`; the actual transition happens when the current handler returns to FSM.ProcessMessage. */
 		SetNextState(object: FSMObject, state: string): void;
-/** Processes a message in the state machine. */
+/**
+ * Dispatches `message` to the handler for `object`'s current state (falling
+ * back to default handlers), then performs any transition queued via
+ * SetNextState. Returns the handler's return value, or undefined (with an
+ * error logged) when no handler accepted the message type.
+ */
 		ProcessMessage(object: FSMObject, message: FSMMessage): unknown;
-/** Defers a message for later processing. */
+/** Re-dispatches `message` from the parent state of the state it was last handled in (used to forward unhandled sub-state messages). */
 		DeferMessage(object: FSMObject, message: FSMMessage): void;
-/** Looks up a state by name. */
+/** Resolves a (possibly dotted) relative state name against `currentStateName`. */
 		LookupState(currentStateName: string, stateName: string): string;
-/** Gets the current FSM state. */
+/** Innermost state name `object` is currently in. */
 		GetCurrentState(object: FSMObject): string;
-/** Switches to the next state. */
+/**
+ * Performs the transition from the current state to `nextStateName` right
+ * away: runs leave hooks bottom-up and enter hooks top-down over the states
+ * between the two branches of the hierarchy; if any hook returns true the
+ * remainder of the transition is aborted and `FsmStateNameChanged` is
+ * notified instead. Transitioning to the current state still runs the
+ * one-level leave/enter cycle.
+ */
 		SwitchToNextState(object: FSMObject, nextStateName: string): void;
 	}
 
-/** Stores template data for gameplay modifications. */
+/**
+ * Cache for aura or technology definition JSONs (created by
+ * LoadModificationTemplates for global.AuraTemplates and
+ * global.TechnologyTemplates). Never serialize instances: they depend on
+ * disk reads and must be re-created on load, otherwise rejoined clients would
+ * hold different objects and desync.
+ */
 	class ModificationTemplates
 	{
-/** Initializes the object. */
+/** Reads and caches every *.json below `path` (e.g. "simulation/data/auras/"). */
 		constructor(path: string);
 		names: string[];
 		templates: Record<string, Record<string, unknown>>;
+/** Names of the loaded definition files, without directory or ".json" suffix. */
+		GetNames(): string[];
+/** Whether an aura/technology definition with this name was loaded. */
+		Has(name: string): boolean;
+/** The parsed definition JSON for `name`, or undefined if not loaded. */
+		Get(name: string): Record<string, unknown> | undefined;
+/** All loaded definitions keyed by file name. */
+		GetAll(): Record<string, Record<string, unknown>>;
 	}
 
-/** Represents the Modification Schema. */
+/** RelaxNG schema fragment for one in-template modification (Globalscripts/ModificationTemplates.js; used to validate entity XML). */
 	const ModificationSchema: string;
-/** Represents the Modifications Schema. */
+/** Full RelaxNG schema (wrapping ModificationSchema) for a template's `<Modifiers>` block. */
 	const ModificationsSchema: string;
-/** Loads the available modification templates. */
+/**
+ * Instantiates global.AuraTemplates ("simulation/data/auras/") and
+ * global.TechnologyTemplates ("simulation/data/technologies/"). Until this
+ * runs, both globals are undefined.
+ */
 	function LoadModificationTemplates(): void;
-/** Derives Modifications From Tech. */
+/**
+ * Turns one aura/technology template's `modifications` array into a mapping
+ * from value path ("Health/Max", ...) to the list of modifications applying
+ * to that path; missing `affects` matches every class. Returns an empty
+ * object when the template has no modifications.
+ */
 	function DeriveModificationsFromTech(techTemplate: Record<string, unknown>): Record<string, TechnologyModification[]>;
-/** Derives modifications from a technology list. */
+/**
+ * Combines DeriveModificationsFromTech over an array of aura/technology
+ * template data. Templates whose `reqs` exists but is falsy (locked, e.g.
+ * unresearched prerequisite chains in GUI summaries) are skipped; auras have
+ * no `reqs` and always count.
+ */
 	function DeriveModificationsFromTechnologies(technologies: Record<string, unknown>[]): Record<string, TechnologyModification[]>;
-/** Derives Modification From XML Template. */
+/**
+ * Builds a single value-path keyed modification set from an entity template's
+ * modification XML node (`Paths`, `Affects`, `Add`/`Multiply`/`Replace`),
+ * coercing Add/Multiply values with unary +.
+ */
 	function DeriveModificationFromXMLTemplate(template: Record<string, unknown>): Record<string, TechnologyModification[]>;
-/** Derives modifications from XML template data. */
+/** DeriveModificationFromXMLTemplate combined over several templates' modification nodes. */
 	function DeriveModificationsFromXMLTemplate(template: Record<string, unknown>): Record<string, TechnologyModification[]>;
 
-/** Stores values keyed by multiple dimensions. */
+/**
+ * Global 3-tuple keyed store (globalscripts/MultiKeyMap.js), used by
+ * ModifiersManager to hold modifiers by (property path, entity, item ID).
+ * Returns of list getters are live references and must be treated as
+ * read-only; the boolean results mean "cached derived values may need
+ * recomputation".
+ */
 	class MultiKeyMap<T = unknown>
 	{
-/** Initializes the object. */
 		constructor();
 		items: Map<unknown, Map<unknown, MultiKeyMapEntry<T>[]>>;
-/** Serializes the object state. */
+/** Round-trips the whole store to a plain nested array structure (arrays of [primaryKey, [secondaryKey, entries]] pairs). */
 		Serialize(): Array<[unknown, Array<[unknown, MultiKeyMapEntry<T>[]]>]>;
-/** Represents the Deserialize. */
+/** Restores the store from Serialize()'s output. */
 		Deserialize(data: Array<[unknown, Array<[unknown, MultiKeyMapEntry<T>[]]>]>): void;
-/** Adds an item for the given keys. */
+/**
+ * Adds one item under (primaryKey, itemID, secondaryKey); re-adding the same
+ * IDs only bumps the entry's `_count` (stacking). Returns true if the stored
+ * value list changed in a way that invalidates caches (`stackable` matters
+ * for the stacked case).
+ */
 		AddItem(primaryKey: string, itemID: string, item: T, secondaryKey: unknown, stackable?: boolean): boolean;
-/** Adds Items. */
+/** AddItem for several primary keys at once, keyed by `items`; true if anything changed. */
 		AddItems(itemID: string, items: Record<string, T>, secondaryKey: unknown, stackable?: boolean): boolean;
-/** Removes an item for the given keys. */
+/** Decrements the stack for (primaryKey, itemID, secondaryKey) and deletes empty groups; true if the store changed. */
 		RemoveItem(primaryKey: string, itemID: string, secondaryKey: unknown, stackable?: boolean): boolean;
-/** Removes All Items. */
+/** RemoveItem over every primary key for the given itemID; true if any store changed. */
 		RemoveAllItems(itemID: string, secondaryKey: unknown, stackable?: boolean): boolean;
-/** Checks whether an item exists for the given keys. */
+/** Whether at least one entry exists for (primaryKey, itemID, secondaryKey). */
 		HasItem(primaryKey: string, itemID: string, secondaryKey: unknown): boolean;
-/** Checks whether Any Item exists. */
+/** Whether any entry with that itemID exists for `secondaryKey`, under any primary key. */
 		HasAnyItem(itemID: string, secondaryKey: unknown): boolean;
-/** Gets the entries for a primary key. */
+/** Entries stored under (primaryKey, secondaryKey); an empty array when none. */
 		GetItems(primaryKey: string, secondaryKey: unknown): MultiKeyMapEntry<T>[];
-/** Gets the All Items. */
+/** All entries for `secondaryKey`, keyed by primary key (only keys that hold entries). */
 		GetAllItems(secondaryKey: unknown): Record<string, MultiKeyMapEntry<T>[]>;
 	}
 
-/** Exposes resource metadata and lookup helpers. */
+/** Global Resources singleton (globalscripts/Resources.js), built once at script load from simulation/data/resources/*.json. */
 	const Resources: Resources;
 
-/** Provides status-effect metadata and tooltips. */
+/**
+ * Global instance (created once at script load) caching status-effect
+ * metadata from simulation/data/status_effects/*.json.
+ */
 	class StatusEffectsMetadata
 	{
-/** Initializes the object. */
 		constructor();
-/** Gets the Data. */
+/**
+ * Full metadata for the status effect `code`. Known codes always carry all
+ * five fields (missing JSON fields default to "", "default" or the code
+ * itself); for an unknown code a warning is logged and an empty object is
+ * returned, so treat the sub-fields as present-but-possibly-undefined.
+ */
 		getData(code: string): {
 			applierTooltip?: string;
 			code?: string;
@@ -375,51 +514,101 @@ declare global
 			statusName?: string;
 			receiverTooltip?: string;
 		};
-/** Gets the applier tooltip for a status effect. */
+/** Tooltip shown to the entity applying the effect; undefined for unknown codes. */
 		getApplierTooltip(code: string): string | undefined;
-/** Gets the Icon. */
+/** Icon path of the effect, defaulting to "default"; undefined for unknown codes. */
 		getIcon(code: string): string | undefined;
-/** Gets the formatted name for a damage type. */
+/** Display name of the effect, defaulting to the code; undefined for unknown codes. */
 		getName(code: string): string | undefined;
-/** Gets the Receiver Tooltip. */
+/** Tooltip shown on affected entities; undefined for unknown codes. */
 		getReceiverTooltip(code: string): string | undefined;
 	}
 
-/** Applies technology modifiers to a property value. */
+/**
+ * Applies technology/aura modifications to one property value.
+ * Dispatches on the type of `originalValue` (string -> string helper,
+ * number -> numeric helper, anything else -> generic helper for Replace /
+ * token modifications only); `classes` is the class list of the affected
+ * template ("Unit"+!Hero" string form, or array/nested-array form).
+ */
 	function GetTechModifiedProperty(
 		modifications: TechnologyModification[],
 		classes: string[] | string | undefined,
 		originalValue: unknown): unknown;
-/** Applies generic technology modifiers to a value. */
+/** Generic variant: only `replace` and `tokens` operations are honoured. */
 	function GetTechModifiedProperty_generic(modifications: TechnologyModification[], classes: string[] | string | undefined, originalValue: unknown): unknown;
-/** Gets the Tech Modified Property numeric. */
+/** Numeric variant: the first applicable `replace` wins outright, otherwise the value becomes `originalValue * product(multiply) + sum(add)` (a warning is logged for unrecognised modification shapes). */
 	function GetTechModifiedProperty_numeric(modifications: TechnologyModification[], classes: string[] | string | undefined, originalValue: number): number;
-/** Applies string technology modifiers to a value. */
+/** String variant: first applicable `replace` wins, otherwise `tokens` operations are applied in modification order. */
 	function GetTechModifiedProperty_string(modifications: TechnologyModification[], classes: string[] | string | undefined, originalValue: string): string;
-/** Represents the Does Modification Apply. */
+/** Whether a modification's `affects` specification matches a class list (an empty `affects` matches everything). */
 	function DoesModificationApply(modification: TechnologyModification, classes: string[] | string | undefined): boolean;
-/** Expands tokens in a string value. */
+/**
+ * Rewrites a space-separated token string: tokens of `modification` are
+ * appended, "-token" removes a token, and "old>new" renames one.
+ */
 	function HandleTokens(originalValue: string, modification: string): string;
-/** Derives Technology Requirements. */
+/**
+ * Computes the technology requirements of a template, taking its `supersedes`
+ * chain into account. Returns false for requirements that can never be met
+ * (chiefly a civ restriction failing for the given `civ`).
+ */
 	function DeriveTechnologyRequirements(template: Record<string, unknown>, civ: string | undefined): TechnologyRequirements | false;
-/** Interprets a technology requirement operator and value. */
+/**
+ * Interprets one requirement operator ("civ", "notciv", "entity", "tech",
+ * "all", "any", "none", ...), where `value` is the operator's payload;
+ * nested operators recurse. The result is the OR-list of prerequisite groups
+ * or false (condition impossible for `civ`; civ-null checks are used to
+ * compute the "any civ" wording in GUI code).
+ */
 	function InterpretTechRequirements(civ: string | null | undefined, operator: string, value: unknown): TechnologyRequirements | false;
-/** Represents the Unravel Phases. */
+/**
+ * Orders the phase definitions of a mod into a research order: for each phase
+ * with `reqs`/`replaces` mappings, returns the list of phase names such that
+ * each phase comes after the phase it supersedes/requires.
+ */
 	function UnravelPhases(phases: Record<string, { reqs: Array<{ techs?: string[] }>; replaces?: string[] }>): string[];
 
-/** Loads civilization files for the current game data. */
+/**
+ * Reads every simulation/data/civs/*.json (selectable civs only when
+ * `selectableOnly`), flattening the listed top-level properties and
+ * validating their presence; returns civ data keyed by the JSON `Code`.
+ * Handled by the GUI and data mods; scenario maps may add non-selectable
+ * civs.
+ */
 	function loadCivFiles(selectableOnly: boolean): Record<string, Record<string, unknown>>;
-/** Gets the Identity Classes. */
+/**
+ * All identity classes of a template: the union of `Classes._string`,
+ * `VisibleClasses._string`, and the template's `Rank`, as a token array,
+ * or [] when none.
+ */
 	function GetIdentityClasses(template: IdentityTemplate): string[];
-/** Gets the visible identity classes from a template. */
+/** Classes from `VisibleClasses._string` only (the subset meant to be shown to the player), or []. */
 	function GetVisibleIdentityClasses(template: IdentityTemplate): string[];
-/** Represents the Matches Class List. */
+/**
+ * Matches a class list against a match specification. `classes` is a token
+ * array; `match` is either a string like "Class1 Class2+!Class3" (space = OR,
+ * "+" = AND, "!" = NOT) or the equivalent nested-array form
+ * [[Class1], [Class2, Class3]]. Returns true when any AND-group matches,
+ * false when none does, and undefined (meaning "no constraint given") when
+ * either argument is missing/empty — callers must treat undefined as true.
+ */
 	function MatchesClassList(
 		classes: string[] | undefined,
 		match: string | Array<string | string[]> | undefined): boolean | undefined;
-/** Reads a numeric template value from a path. */
+/**
+ * Reads `template[valuePath]` for a dotted path and coerces it with unary +.
+ * Note the `||` semantics: a stored value of 0 falls back to `defaultValue`,
+ * and a missing value with no default yields NaN.
+ */
 	function GetBaseTemplateDataValue(template: Record<string, unknown>, valuePath: string, defaultValue?: number): number;
-/** Gets the Modified Template Data Value. */
+/**
+ * GetBaseTemplateDataValue plus tech modifications: when `player` is truthy
+ * the engine's ApplyValueModificationsToTemplate is used for that player
+ * (player 0/gaia and undefined fall back to the explicit `modifiers`
+ * argument keyed by `modKey || valuePath`). The result is rounded away from
+ * SpiderMonkey float noise via +toFixed(8).
+ */
 	function GetModifiedTemplateDataValue(
 		template: Record<string, unknown>,
 		valuePath: string,
@@ -427,54 +616,75 @@ declare global
 		player: number | null | undefined,
 		modifiers?: Record<string, TechnologyModification[]>,
 		defaultValue?: number): number;
-/** Builds template data for the AI helper context. */
+/**
+ * Aggregates a full per-template data bag for the AI/GUI (same structure as
+ * GetEntityState): identity, cost, speed, attack, armour, resources, auras and
+ * technologies, with player-specific modifier application when `player` is
+ * given. Keyed sub-objects pass through GetModifiedTemplateDataValue /
+ * GetBaseTemplateDataValue; the returned structure mirrors what the GUI's
+ * template helpers publish.
+ */
 	function GetTemplateDataHelper(
 		template: Record<string, unknown>,
 		player: number | null | undefined,
 		auraTemplates: Record<string, Record<string, unknown>> | undefined,
 		resources: Resources,
 		modifiers?: Record<string, TechnologyModification[]>): Record<string, unknown>;
-/** Builds the basic technology helper data. */
+/** Technology data bag without resource/tooltip enrichment: generic, phases and requirements for `civ`. */
 	function GetTechnologyBasicDataHelper(template: Record<string, unknown>, civ: string | null | undefined): Record<string, unknown>;
-/** Gets the Technology Data Helper. */
+/** GetTechnologyBasicDataHelper plus localized name/tooltip/icon and cost data resolved against `resources`. */
 	function GetTechnologyDataHelper(template: Record<string, unknown>, civ: string | null | undefined, resources: Resources): Record<string, unknown>;
-/** Builds aura helper data for a template. */
+/** Aura data bag: name, description, icon and effect range/duration fields for the aura template. */
 	function GetAuraDataHelper(template: Record<string, unknown>): Record<string, unknown>;
-/** Calculates Carried Resources. */
+/**
+ * Amounts of each carried resource of an entity: `carriedResources` entries
+ * are summed per type, and a trader's `tradingGoods` contribution adds
+ * traderGain + market1Gain + market2Gain for its type. Zero amounts are kept
+ * (the Object.value || 0 idiom means 0-valued entries survive).
+ */
 	function calculateCarriedResources(
 		carriedResources?: Array<{ type: string; amount: number }>,
 		tradingGoods?: {
 			type: string;
 			amount?: { traderGain?: number; market1Gain?: number; market2Gain?: number };
 		}): Record<string, number>;
-/** Removes template filters from a template name. */
+/** Strips a leading "filter|" prefix (mirage, corpse, etc.) from a template name: only the segment after the last "|" survives. */
 	function removeFiltersFromTemplateName(templateName: string): string;
 
-/** Normalizes trade gain values for map size. */
+/**
+ * Normalisation factor for trade gains as a function of map size: the pair
+ * TradeGainNormalization(mapSize) * TradeGain(distanceSquared, mapSize) is
+ * calibrated such that a route of 10000 distance-squared (= 100 m) on an
+ * official size-1024 map yields the reference gain.
+ */
 	function TradeGainNormalization(mapSize: number): number;
-/** Represents the Trade Gain. */
+/** Distance-dependent part of the trade gain: distanceSquared / (1 + 0.25 * sqrt(distanceSquared) / mapSize). */
 	function TradeGain(distanceSquared: number, mapSize: number): number;
 
-/** Stores weighted items and picks random entries. */
+/**
+ * Weighted random container (globalscripts/WeightedList.js). NOTE the
+ * runtime quirk: `push` sets the item's weight via Map.set and then adds that
+ * weight to `totalWeight` unconditionally, so re-pushing an already-stored
+ * item inflates the stored total.
+ */
 	class WeightedList<T = unknown>
 	{
-/** Initializes the object. */
 		constructor();
 		elements: Map<T, number>;
 		totalWeight: number;
-/** Gets the length. */
+/** Number of stored items (distinct, not weight-summed). */
 		length(): number;
-/** Represents the push. */
+/** Overwrites the weight of `item` (default 1) and adds it to totalWeight (see quirk above). */
 		push(item: T, weight?: number): void;
-/** Removes . */
+/** Removes `item` if present, subtracting its old weight from totalWeight. */
 		remove(item: T): void;
-/** Represents the random Item. */
+/** Uniform-randomly selects an item proportionally to the weights; undefined when the list is empty. */
 		randomItem(): T | undefined;
 	}
 
-/** Interpolates a value with cubic smoothing. */
+/** Cardinal/Catmull-Rom style cubic interpolation over four control points at parameter `x` in [0, 1], with `tension` controlling smoothing; used by camera paths. */
 	function cubicInterpolation(tension: number, x: number, p0: number, p1: number, p2: number, p3: number): number;
-/** Represents the bicubic Interpolation. */
+/** Bicubic interpolation over a 4x4 grid of control points, evaluated at `position` (coordinates in [0, 1] within the cell); used by terrain height smoothing. */
 	function bicubicInterpolation(
 		position: Vector2DLike,
 		p00: number, p01: number, p02: number, p03: number,
@@ -482,42 +692,59 @@ declare global
 		p20: number, p21: number, p22: number, p23: number,
 		p30: number, p31: number, p32: number, p33: number): number;
 
-/** Generates a random 2D normal vector. */
+/**
+ * Pair of independent standard-normal random numbers (zero mean, variance 1)
+ * via the polar-rejection method.
+ */
 	function randomNormal2D(): [number, number];
-/** Represents the pick Random. */
+/** Uniformly picks one element of `source`, or undefined when the array is empty. */
 	function pickRandom<T>(source: readonly T[]): T | undefined;
-/** Generates a random float in a range. */
+/** Uniform random float in the half-open interval [min, max). */
 	function randFloat(min: number, max: number): number;
-/** Represents the rand Int Inclusive. */
+/** Uniform random integer in [floor(min), ceil(max)]; non-integer endpoints cut off the distribution at that boundary. */
 	function randIntInclusive(min: number, max: number): number;
-/** Generates a random integer in an exclusive range. */
+/** Uniform random integer in [floor(min), ceil(max) - 1]; non-integer endpoints cut off the distribution likewise. */
 	function randIntExclusive(min: number, max: number): number;
-/** Represents the rand Bool. */
+/** Bernoulli trial with success probability `p` (default 0.5). */
 	function randBool(probability?: number): boolean;
-/** Generates a random angle in radians. */
+/** Uniform random angle in [0, 2π). */
 	function randomAngle(): number;
 
-/** Shuffles an array copy. */
+/**
+ * Fisher-Yates ("inside-out") shuffle that returns a NEW array; the input is
+ * never modified. An empty input yields an empty result.
+ */
 	function shuffleArray<T>(source: readonly T[]): T[];
-/** Represents the heaps Permute. */
+/**
+ * Runs `callback` on every permutation of `array` (B. R. Heap's algorithm);
+ * the input array is modified in place and each callback receives a cloned
+ * copy produced by `cloneFunc`.
+ */
 	function heapsPermute<T>(array: T[], cloneFunc: (item: T) => T, callback: (permutation: T[]) => void): void;
-/** Checks whether two values are deeply equal. */
+/** Structural deep equality of any two values (handles undefined, Sets, arrays, objects — more accurate than a JSON.roundtrip comparison). */
 	function deepCompare(first: unknown, second: unknown): boolean;
-/** Represents the basename. */
-	function basename(path: string): string | undefined;
-/** Gets the parent directory of a file path. */
+/** Last "/"-separated segment of `path`. */
+	function basename(path: string): string;
+/** Everything before the last "/" in `path` ("" for a bare filename). */
 	function dirname(path: string): string;
-/** Represents the list Files. */
+/**
+ * Wrapper for Engine.ListDirectoryFiles(path, "*" + extension, recurse) that
+ * strips BOTH the directory prefix and the trailing extension from every
+ * returned name.
+ */
 	function listFiles(path: string, extension: string, recurse: boolean): string[];
-/** Builds the Cartesian product of arrays. */
+/** Cartesian product of the given arrays, computed left to right. */
 	function cartesianProduct<T>(arrays: readonly (readonly T[])[]): T[][];
 
-/** Two-dimensional vector math utilities. */
+/** Global Vector2D class (globalscripts/vector.js). */
 	const Vector2D: Vector2DConstructor;
-/** Represents the Vector3 D. */
+/** Global Vector3D class (globalscripts/vector.js). */
 	const Vector3D: Vector3DConstructor;
 
-/** Represents the global. */
+/**
+ * The engine's `global` script object. LoadModificationTemplates() assigns
+ * these two caches, which hold every aura resp. technology definition:
+ */
 	const global: {
 		AuraTemplates?: ModificationTemplates;
 		TechnologyTemplates?: ModificationTemplates;

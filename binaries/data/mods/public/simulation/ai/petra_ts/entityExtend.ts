@@ -411,8 +411,8 @@ export function getHolder(gameState: CommonGameState, ent: CommonEntity): Common
 	return undefined;
 }
 
-/** return the template of the built foundation if a foundation, otherwise return the entity itself */
-export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonEntity
+/** Returns the template of the structure a foundation builds when `ent` is a foundation, otherwise `ent` itself; callers only use template-level queries. */
+export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonTemplate
 {
 	if (ent.foundationProgress() !== undefined)
 	{
