@@ -160,6 +160,10 @@ export function installEngineGlobals(): void
 
 	g["Engine"] = makeEngine();
 	g["uneval"] = uneval;
+	// The engine registers its deepcopy builtin as "clone" (Interface.cpp 370).
+	// The AI calls it on plain data (positions, path arrays) only, so Node's
+	// structuredClone is the same answer.
+	g["clone"] = (value: unknown) => structuredClone(value);
 	g["global"] = globalThis;
 	g["warn"] = (message: unknown) => { logs.push(String(message)); };
 	g["error"] = (message: unknown) => { logs.push(String(message)); };
