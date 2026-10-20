@@ -37,6 +37,17 @@ export interface FakeEnt
 	setMetadata(player: number, key: string, value: unknown): void;
 	/** the metadata store, for assertions */
 	metadata: Record<string, unknown>;
+	/** overridable engine reads the army and worker code asks entities */
+	unitAIOrderData?(): Array<{ target?: number; attackType?: string }>;
+	canAttackTarget?(target: FakeEnt, capture?: boolean): boolean;
+	canCapture?(target: FakeEnt): boolean;
+	capturePoints?(): number[] | undefined;
+	getDefaultArrow?(): number | undefined;
+	hasDefensiveFire?(): boolean;
+	healthLevel?(): number;
+	resourceCarrying?(): Array<{ type: string; amount: number }> | undefined;
+	returnResources?(gameState: CommonGameState, queued?: boolean): boolean;
+	stopMoving?(): void;
 }
 
 /** What a fake plan object looks like inside a queue. */
@@ -124,6 +135,12 @@ export interface ConfigLike
 	popScaling: number;
 	personality: { aggressive: number; defensive: number; military: number };
 	personalityCut?: { weak: number; medium: number; strong: number };
+	/** how much each damage type counts towards attack strength; the real config values */
+	DamageTypeImportance: Record<string, number>;
+	/** Petra's defense knobs, as config.ts sets them */
+	Defense: { defenseRatio: Record<string, number>; armyCompactSize: number; armyBreakawaySize: number };
+	/** config.garrisonHealthLevel */
+	garrisonHealthLevel: Record<string, number>;
 	/** chat announcements; the attack manager asks but the managers' tests mostly do not */
 	chat?: boolean;
 	priorities: Record<string, number>;
@@ -146,6 +163,7 @@ export interface DefenseArmyLike
 	recalculatePosition(gameState: CommonGameState): void;
 	removeFoe(gameState: CommonGameState, entId: number): void;
 	removeOwn(gameState: CommonGameState, entId: number): void;
+	clear?(gameState: CommonGameState): void;
 }
 
 /** The HQ surface the managers touch; every knob starts neutral. */
@@ -160,6 +178,8 @@ export interface HQLike
 		seaTransportShips: Record<number, FakeEnt[]>;
 		setMinimalTransportShips(gameState: CommonGameState, sea: number, needed: number): void;
 		requireTransport(gameState: CommonGameState, ent: FakeEnt, from: number, to: number, toPos: [number, number] | undefined): void;
+		/** the transport plan of a given number; undefined means the plan is gone */
+		getPlan(planName: number): { state: string; removeUnit(gameState: CommonGameState, ent: FakeEnt): void } | undefined;
 	};
 	attackManager: {
 		upcomingAttacks: Record<string, unknown[]>;
@@ -170,7 +190,12 @@ export interface HQLike
 		getEnemyPlayer(gameState: CommonGameState, plan: unknown): number | undefined;
 		getAttackInPreparation(type: string): unknown | undefined;
 	};
-	defenseManager: { targetList: number[]; armies: DefenseArmyLike[] };
+	defenseManager: {
+		targetList: number[];
+		armies: DefenseArmyLike[];
+		/** whether a wounded unit has a safe structure to garrison into */
+		garrisonAttackedUnit(gameState: CommonGameState, ent: FakeEnt): boolean;
+	};
 	victoryManager: {
 		criticalEnts: Map<number, unknown>;
 		targetedGaiaRelics: Map<number, number[]>;
@@ -235,7 +260,7 @@ export interface World
 	ai: {
 		playedTurn: number;
 		elapsedTime: number;
-		uniqueIDs: { plans: number; bases: number };
+		uniqueIDs: { plans: number; bases: number; armies: number };
 		queues: Record<string, QueueLike>;
 		queueManager: QueueManagerLike;
 		Config: ConfigLike;
@@ -357,7 +382,8 @@ export function emptyEvents(): EngineAIEvents
 	return {
 		"Create": [], "Destroy": [], "Attacked": [], "ConstructionFinished": [], "DiplomacyChanged": [],
 		"TrainingStarted": [], "TrainingFinished": [], "AIMetadata": [], "PlayerDefeated": [],
-		"AttackRequest": [], "EntityRenamed": [], "ValueModification": [], "OwnershipChanged": [], "UntrustingEvents": []
+		"AttackRequest": [], "EntityRenamed": [], "ValueModification": [], "OwnershipChanged": [], "UntrustingEvents": [],
+		"Garrison": [], "UnGarrison": []
 	} as unknown as EngineAIEvents;
 }
 
@@ -431,7 +457,8 @@ export function makeEntity(spec: {
 		garrisonRegenRate: () => 0,
 		defaultRegenRate: () => 0,
 		territoryDecayRate: () => 0,
-		resistanceStrengths: () => undefined,
+		// engine entities always expose a resistance structure (possibly empty)
+		resistanceStrengths: () => ({}),
 		attackTypes: () => undefined,
 		attackStrengths: () => undefined,
 		attackRange: () => ({ "max": 0 }),
@@ -452,6 +479,9 @@ export function makeEntity(spec: {
 		returnResources: () => undefined,
 		repair: () => undefined,
 		setRallyPoint: () => undefined,
+		// a live answer so guard code stays on the game path; a test that wants
+		// a non-attacker overrides it together with attackTypes
+		hasUnitAI: () => true,
 		...methods
 	};
 
@@ -579,8 +609,14 @@ export function makeWorld(options: WorldOptions = {}): World
 				collections.registered.splice(index, 1);
 		},
 		// three players, so the plan's endgame counting loop leaves player 2
-		// (the enemy) and skips our own player 1.
-		playersData: [{ "state": "active" }, { "state": "active" }, { "state": "active" }]
+		// (the enemy) and skips our own player 1. Each row carries the per-player
+		// diplomacy the engine fills (PlayerManager): a player is always its own
+		// ally, nobody else by default.
+		playersData: [
+			{ "state": "active", "isAlly": [true, false, false, false] },
+			{ "state": "active", "isAlly": [false, true, false, false] },
+			{ "state": "active", "isAlly": [false, false, true, false] }
+		]
 	};
 
 	const structuresOf = (owner?: number) =>
@@ -606,7 +642,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		ai: {
 			playedTurn: 0,
 			elapsedTime: 100,
-			uniqueIDs: { plans: 1, bases: 1 },
+			uniqueIDs: { plans: 1, bases: 1, armies: 1 },
 			queues: {},
 			queueManager: undefined as unknown as QueueManagerLike,
 			Config: {
@@ -614,6 +650,15 @@ export function makeWorld(options: WorldOptions = {}): World
 				difficulty: options.difficulty ?? 3,
 				popScaling: options.popScaling ?? 1,
 				personality: { aggressive: 1, defensive: options.defensive ?? 1, military: 1 },
+				// the real config values: they weight the damage types and steer
+				// army formation, so an army run against them behaves as in game
+				DamageTypeImportance: { "Hack": 0.075, "Pierce": 0.085, "Crush": 0.045, "Fire": 0.001 },
+				Defense: {
+					defenseRatio: { "ally": 1.4, "neutral": 1.8, "own": 2 },
+					armyCompactSize: 2000,
+					armyBreakawaySize: 3500
+				},
+				garrisonHealthLevel: { "low": 0.4, "medium": 0.55, "high": 0.7 },
 				priorities: {}
 			},
 			accessibility: {
@@ -658,7 +703,8 @@ export function makeWorld(options: WorldOptions = {}): World
 			seaTransportShips: { 4: [] },
 			setMinimalTransportShips: (_gs: CommonGameState, sea: number, needed: number) => minimalShipCalls.push([sea, needed]),
 			requireTransport: (_gs: CommonGameState, ent: FakeEnt, from: number, to: number, toPos: [number, number] | undefined) =>
-				transportCalls.push([ent, from, to, toPos])
+				transportCalls.push([ent, from, to, toPos]),
+			getPlan: () => undefined
 		},
 		attackManager: {
 			upcomingAttacks: { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] },
@@ -669,7 +715,11 @@ export function makeWorld(options: WorldOptions = {}): World
 			getEnemyPlayer: () => knobs.enemyPlayer,
 			getAttackInPreparation: () => undefined
 		},
-		defenseManager: { targetList: [], armies: [] },
+		defenseManager: {
+			targetList: [],
+			armies: [],
+			garrisonAttackedUnit: () => false
+		},
 		victoryManager: {
 			criticalEnts: new Map(),
 			targetedGaiaRelics: new Map(),
@@ -694,8 +744,10 @@ export function makeWorld(options: WorldOptions = {}): World
 		playerData: {
 			civ: "athen",
 			hasSharedDropsites: false,
-			isAlly: [false, false, false, false],
-			isMutualAlly: [false, false, false, false],
+			// the engine diplomacy matrix: every player is its own and everyone's
+			// gaia enemy; the player who reads this row is always their own ally
+			isAlly: [false, true, false, false],
+			isMutualAlly: [false, true, false, false],
 			isEnemy: [true, false, true, true]
 		},
 		applyCiv: (name: string) => name,
@@ -740,6 +792,10 @@ export function makeWorld(options: WorldOptions = {}): World
 		getPhaseName: (phase: number) => phase === 2 ? options.phaseName : undefined,
 		isPlayerEnemy: (id: number) => (state.playerData as { isEnemy: boolean[] }).isEnemy[id],
 		isPlayerAlly: (id: number) => (state.playerData as { isAlly: boolean[] }).isAlly[id],
+		isPlayerMutualAlly: (id: number) => (state.playerData as { isMutualAlly: boolean[] }).isMutualAlly[id],
+		/** structures of everyone we and they consider an ally, as the game defines ally collections */
+		getAllyStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
+			mapOf(structures.filter((s) => (state.playerData as { isMutualAlly: boolean[] }).isMutualAlly[s.owner()]))),
 		getPassabilityClassMask: () => 0
 	};
 	world.gameState = state as unknown as CommonGameState;
