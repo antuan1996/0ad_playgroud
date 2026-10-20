@@ -197,6 +197,8 @@ interface AttackPlanLike
 	getNearestTarget(gameState: CommonGameState, position: [number, number], sameLand?: number | false): FakeEnt | undefined;
 	isValidTarget(ent: FakeEnt): boolean;
 	checkTargetObstruction(gameState: CommonGameState, target: FakeEnt, position: [number, number]): FakeEnt | undefined;
+	defaultTargetFinder(gameState: CommonGameState, playerEnemy: number): FakeCollection;
+	rushTargetFinder(gameState: CommonGameState, playerEnemy?: number): FakeCollection;
 	getPathToTarget(gameState: CommonGameState, fixedRallyPoint?: boolean): boolean;
 	setRallyPoint(gameState: CommonGameState): void;
 	StartAttack(gameState: CommonGameState): boolean;
@@ -717,7 +719,9 @@ function makeWorld(options: WorldOptions = {}): World
 					((s.trainableEntities as (civ: string) => string[] | undefined)("athen") ?? []).indexOf(template) !== -1))),
 		getNumPlayerEnemies: () => knobs.enemyPlayer === undefined ? 0 : 1,
 		getEntityById: (id: number | string) => ents.get(+id),
-		getEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf([...ents.values()])),
+		getEntities: (owner?: number) => new EntityCollection(
+			sharedAI as unknown as CommonSharedScript,
+			mapOf([...ents.values()].filter((e) => owner === undefined || e.owner() === owner))),
 		getOwnUnits: () => new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf(units)),
 		getOwnEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf([...units, ...structures.filter((s) => s.owner() === PLAYER)])),
@@ -1439,11 +1443,12 @@ describe("choosing a target", () =>
 	it("ignores decaying structures nobody mans", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
+		// houses really decay (a Carthaginian apartment or a field, never a civic centre)
 		const decayed = world.addEntity(makeEntity({
-			id: 2400, owner: ENEMY, position: [20, 20], classes: ["Structure", "CivCentre"]
+			id: 2400, owner: ENEMY, position: [20, 20], classes: ["Structure", "Village", "House"]
 		}, { decaying: () => true }));
 		const manned = world.addEntity(makeEntity({
-			id: 2401, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"]
+			id: 2401, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village", "House"]
 		}, { decaying: () => true, getDefaultArrow: () => 1 }));
 
 		const plan = makePlan(world, { name: 1, init: true });
@@ -2136,6 +2141,31 @@ describe("obstructions along the path", () =>
 				"the crossed gate blocks the path");
 		});
 		assert.equal(plan.isBlocked, true, "gates block too");
+		plan.isBlocked = false;
+	});
+
+	it("is blocked by a gate front that the path pierces", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const gate = world.addEntity(makeObstacle(world, 2100, [20, 25],
+			{
+				"Obstruction": 1, "Obstruction/Obstructions": 1,
+				"Obstruction/Obstructions/Door/@width": 4, "Obstruction/Obstructions/Door/@depth": 2,
+				"Obstruction/Obstructions/Left/@width": 2, "Obstruction/Obstructions/Left/@depth": 4,
+				"Obstruction/Obstructions/Right/@width": 2, "Obstruction/Obstructions/Right/@depth": 4
+			}, ["Structure", "Gate"]));
+		(gate as unknown as Record<string, unknown>).angle = () => Math.PI / 2;
+		const plan = makePlan(world, { name: 1, init: true });
+
+		// the first waypoint already sits inside the gate's footprint once
+		// the extra clearance step towards the target is taken
+		withPath([{ "x": 21, "y": 25 }, { "x": 30, "y": 40 }], () =>
+		{
+			assert.equal(plan.checkTargetObstruction(world.gameState, target, [10, 10]), gate,
+				"the gate front blocked the path");
+		});
+		assert.equal(plan.isBlocked, true, "gate fronts block too");
 		plan.isBlocked = false;
 	});
 
@@ -2933,6 +2963,1182 @@ describe("wrapping up a plan", () =>
 	});
 });
 
+describe("rare target finders", () =>
+{
+	it("hunts the one enemy the unique target names", () =>
+	{
+		const world = makeWorld();
+		const tower = makeTarget(world);
+		const plan = makePlan(world, { name: 1, data: { target: tower, uniqueTargetId: 2000 } });
+
+		withPath([{ "x": 30, "y": 40 }], () =>
+		{
+			const found = plan.getNearestTarget(world.gameState, [20, 20]);
+			assert.equal(found, tower, "the named target came back");
+		});
+	});
+
+	it("finds nothing when the unique target is already gone", () =>
+	{
+		const world = makeWorld();
+		const tower = makeTarget(world);
+		const plan = makePlan(world, { name: 1, data: { target: tower, uniqueTargetId: 2000 } });
+		world.removeEntity(2000);
+
+		assert.equal(plan.getNearestTarget(world.gameState, [20, 20]), undefined,
+			"the vanished target was not revived");
+	});
+
+	it("bails out in mid-attack when the unique target vanished", () =>
+	{
+		const world = makeWorld({ debug: 2 });
+		const tower = makeTarget(world);
+		const plan = makePlan(world, { name: 1, init: true, data: { target: tower, uniqueTargetId: 2000 } });
+		world.removeEntity(2000);
+		plan.position = [11, 12];
+		resetRecorder();
+
+		assert.equal(plan.UpdateTarget(world.gameState), false, "there is nowhere else to go");
+		assert.ok(logs.some((entry) => /Seems like our target for plan 1/.test(entry)),
+			"the switching warning was logged");
+	});
+
+	it("falls down the conquest ladder to the town buildings", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeEntity({
+			id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Town"]
+		}));
+		const plan = makePlan(world, { name: 1 });
+
+		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [2001],
+			"the town building was the last resort");
+	});
+
+	it("falls down the conquest ladder to villages", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeEntity({
+			id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village"]
+		}));
+		const plan = makePlan(world, { name: 1 });
+
+		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [2001],
+			"the village building was the last resort");
+	});
+
+	it("falls down the conquest ladder to plain conquest-critical units", () =>
+	{
+		const world = makeWorld();
+		const hero = world.addEntity(makeEntity({
+			id: 2001, owner: ENEMY, position: [30, 40], classes: ["Unit", "Hero", "ConquestCritical"]
+		}));
+		const plan = makePlan(world, { name: 1 });
+
+		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [hero.id()],
+			"the hero was the last resort");
+	});
+
+	it("searches every player's buildings when a rush has no chosen enemy", () =>
+	{
+		const world = makeWorld();
+		world.removeEntity(1000);   // our own centre would win by distance
+		const house = world.addEntity(makeEntity({
+			id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village", "House"]
+		}));
+		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+
+		const targets = plan.rushTargetFinder(world.gameState);
+		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [house.id()],
+			"the lone enemy house was found without a player filter");
+	});
+});
+
+describe("difficulties, dumps and init corners", () =>
+{
+	it("carries on when an island structure's sea is unknown and no target was chosen", () =>
+	{
+		const world = makeWorld({ navalMap: true });
+		world.removeEntity(1000);   // the loop of all structures breaks on the anchor otherwise
+		world.addEntity(makeEntity({
+			id: 1002, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}));
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [50, 50], classes: ["Structure", "Tower"]
+		}));
+		world.accessAt.set("50,50", 3);   // the structure's island
+
+		const plan = makePlan(world, { name: 1, type: "Attack" });
+
+		assert.equal(plan.failed, undefined, "without a target there is no complaint");
+		assert.equal(plan.overseas, 0, "and no crossing was planned");
+		assert.deepEqual(world.minimalShipCalls, [], "no ships were asked for");
+	});
+
+	it("softens the queue priority at easy difficulty", () =>
+	{
+		const world = makeWorld({ difficulty: EASY });
+		makePlan(world, { name: 2, deserialized: false });
+
+		assert.equal(world.ai.queueManager.getPriority("plan_2"), 56, "the main queue is softened to 56");
+		assert.equal(world.ai.queueManager.getPriority("plan_2_champ"), 57, "the champion queue trails one point");
+		assert.equal(world.ai.queueManager.getPriority("plan_2_siege"), 56, "the siege queue keeps up");
+	});
+
+	it("keeps a deserialized plan's easy scaling exact and stable", () =>
+	{
+		const world = makeWorld({ difficulty: EASY });
+		const plan = makePlan(world, { name: 2 });
+
+		// a deserialized plan has no variation roll, but easy attacks still
+		// shrink stably by the 0.6 factor: 16*0.6 rounds up to 10, 6*0.6 stays 4
+		assert.equal(plan.unitStat.RangedInfantry.targetSize, 10, "the ranged infantry shrank predictably");
+		assert.equal(plan.unitStat.FastMoving.targetSize, 4, "the fast movers shrank too");
+		assert.equal(plan.unitStat.RangedInfantry.minSize, 6, "the min size only follows its target");
+	});
+
+	it("spells out the attack situation when aborting for lack of men", () =>
+	{
+		const world = makeWorld({ population: 396, populationMax: 400, debug: 2 });
+		world.ai.HQ.attackManager.upcomingAttacks.Raid = [1, 2] as unknown as AttackPlanLike[];
+		world.ai.HQ.attackManager.startedAttacks.Attack = [1] as unknown as AttackPlanLike[];
+		resetRecorder();
+		const plan = makePlan(world, { name: 1, init: true });
+
+		assert.equal(plan.updatePreparation(world.gameState), 0, "the plan aborts");
+		assert.ok(logs.some((entry) => /attacks upcoming: raid 2 rush 0/.test(entry)), "upcoming was logged");
+		assert.ok(logs.some((entry) => /attacks started: .*attack 1/.test(entry)), "started was logged");
+	});
+
+	it("dumps the build order every fifty turns and keeps tied categories", () =>
+	{
+		const world = makeWorld({ debug: 2 });
+		world.ai.playedTurn = 50;
+		registerSpearman(world);
+		world.knobs.bestTrainable = "units/athen_spearman";
+		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		resetRecorder();
+		// two identical categories compare as a tie in the sort
+		plan.buildOrders = [
+			[0, ["Infantry"], plan.unitCollection, plan.unitStat.Infantry, "Infantry"],
+			[6, ["Infantry"], plan.unitCollection, plan.unitStat.Infantry, "Infantry"]
+		];
+
+		plan.trainMoreUnits(world.gameState);
+
+		assert.ok(logs.some((entry) => /======== build order for plan 1/.test(entry)), "the dump was logged");
+		assert.ok(logs.some((entry) => /Infantry done 0/.test(entry)), "the tied category was dumped");
+		assert.equal(plan.buildOrders.length, 2, "both orders survived");
+		assert.equal(plan.queue.length(), 1, "the first was trained");
+	});
+
+	it("hands a completing islander to the fleet", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const target = makeTarget(world);
+		target.foundationProgress = () => 60;
+		const marches: unknown[][] = [];
+		for (let i = 0; i < 3; ++i)
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [11, 12],
+				classes: ["Unit", "FastMoving", "CitizenSoldier"]
+			}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
+		world.accessAt.set("40,45", 3);
+		const islander = world.addEntity(makeEntity({
+			id: 1013, owner: PLAYER, position: [40, 45],
+			classes: ["Unit", "FastMoving", "CitizenSoldier"]
+		}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+
+		withPath([{ "x": 30, "y": 40 }], () =>
+		{
+			assert.equal(plan.updatePreparation(world.gameState), 1, "the raid starts completing");
+		});
+		assert.equal(plan.state, "completing", "the raid is completing");
+		assert.deepEqual(world.transportCalls, [[islander, 3, 2, plan.rallyPoint]],
+			"the islander was handed to the navy");
+		assert.equal(marches.length, 3, "the three mainlanders marched");
+	});
+});
+
+describe("attacking miscellany", () =>
+{
+	it("waits out a turn when the troops lost their bearings", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true });
+
+		assert.ok(plan.unitCollection.hasEntities(), "the unitless plan did gather its unit");
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the census was returned untouched");
+	});
+
+	it("quits before it starts when no enemy remains", () =>
+	{
+		const world = makeWorld();   // getEnemyPlayer answers undefined
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "";
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), false, "the update bailed out");
+	});
+
+	it("re-points a rushing cohort at the nearer isolated house", () =>
+	{
+		const world = makeWorld();
+		const centre = makeTarget(world);
+		const house = world.addEntity(makeEntity({
+			id: 2001, owner: ENEMY, position: [25, 25], classes: ["Structure", "Village", "House"]
+		}));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, type: "Rush", init: true, data: { target: centre } });
+		plan.state = "arrived";
+
+		withPath([{ "x": 25, "y": 25 }], () =>
+		{
+			assert.equal(plan.update(world.gameState, emptyEvents()), plan.unitCollection.length,
+				"the census was returned");
+		});
+		assert.equal(plan.target, house, "the house nearer to the fighters was chosen");
+		assert.deepEqual(plan.targetPos, [25, 25], "at the house");
+	});
+
+	it("quits as soon as the target loses its place", () =>
+	{
+		const world = makeWorld();
+		const civilian = makeTarget(world);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target: civilian } });
+		plan.state = "";
+		plan.targetPos = undefined;
+
+		// only the port passes: it bails out of UpdateTarget when a living
+		// target has no position; the original would march on with targetPos
+		// undefined and hand NaN coordinates to its next orders
+		assert.equal(plan.update(world.gameState, emptyEvents()), false, "the update bailed out");
+	});
+
+	it("picks up a fresh enemy after its target player went missing", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const target = makeTarget(world);
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = [11, 12];
+
+		withPath([{ "x": 30, "y": 40 }], () =>
+		{
+			assert.equal(plan.UpdateTarget(world.gameState), true, "the fresh enemy was groomed");
+		});
+		assert.equal(plan.targetPlayer, ENEMY, "the plan joined the only enemy");
+		assert.equal(plan.target, target, "the enemy centre was the target");
+	});
+
+	it("takes one last look for another enemy after helping fails", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY, debug: 2 });
+		world.removeEntity(1000);   // nothing structurally left to attack
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = [11, 12];
+		resetRecorder();
+
+		assert.equal(plan.UpdateTarget(world.gameState), false, "nothing was found");
+		assert.equal(plan.targetPlayer, ENEMY, "the plan joined the only enemy");
+		assert.ok(logs.some((entry) => /No new target found. Remaining units /.test(entry)),
+			"the giving-up warning was logged");
+	});
+
+	it("announces the arrival of the attack", () =>
+	{
+		const world = makeWorld({ debug: 2 });
+		const target = makeTarget(world);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "walking";
+		plan.targetPos = [30, 40];
+		resetRecorder();
+
+		assert.ok(plan.update(world.gameState, emptyEvents()), "the plan marched on");
+		assert.ok(logs.some((entry) => /has arrived to destination/.test(entry)), "the arrival was announced");
+		assert.equal(plan.state, "", "the plan is now attacking");
+	});
+
+	it("arrives once the path empties at the last waypoint", () =>
+	{
+		const world = makeWorld({ debug: 2 });
+		const target = makeTarget(world, { position: () => [100, 100] });
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, undefined, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "walking";
+		plan.targetPos = [100, 100];
+		plan.path = [[30, 40]];
+		resetRecorder();
+
+		assert.ok(plan.update(world.gameState, emptyEvents()), "the plan marched on");
+		assert.ok(logs.some((entry) => /has arrived to destination/.test(entry)), "the arrival was announced");
+	});
+
+	it("answers a flat access when nobody marches", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = [11, 12];
+
+		assert.equal(plan.getAttackAccess(world.gameState), 0, "an empty army marches on flat ground");
+	});
+});
+
+describe("the retaliating crowd", () =>
+{
+	/** A fighting plan with one positioned unit ready to answer every call. */
+	function makeFightingWorld(world: World): void
+	{
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, {
+			attackTypes: () => ["Melee"],
+			canAttackTarget: () => true
+		}, { "plan": 1 }));
+	}
+
+	it("sends the non-siege support to rescue an attacked siege engine", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, { attackTypes: () => ["Melee"] }, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const attacker = world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const rescues: unknown[][] = [];
+		(world.ents.get(1011) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			rescues.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
+		assert.deepEqual(rescues, [[3000, false]], "the melee helper attacked the foe");
+	});
+
+	it("retaliates in kind when an enemy engine comes for our melee", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const ally = world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const attacker = world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const volleys: unknown[][] = [];
+		(world.ents.get(1011) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			volleys.push([aim, capture, "ally"]);
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			volleys.push([aim, capture, "victim"]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
+		assert.ok(volleys.length >= 2, "both the helper and the victim swung back");
+		assert.ok(volleys.every((strike) => strike[0] === 3000), "every blow was at the engine");
+		assert.ok(ally, "the ally was registered");
+	});
+
+	it("does not let our melee chase a ranged sniper while blocked", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		plan.isBlocked = true;
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Ranged"]
+		}, { attackTypes: () => ["Ranged"] }));
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 1, "the cohort is kept");
+		assert.deepEqual(strikes, [], "the sniper was ignored by a blocked cohort");
+	});
+
+	it("sends melee brothers when an engine besieges one of ours", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege"]
+		}, { attackTypes: () => ["Melee"] }));
+		const helps: unknown[][] = [];
+		(world.ents.get(1011) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			helps.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
+		assert.deepEqual(helps, [[3000, false]], "the melee helper came to the rescue");
+	});
+
+	it("leaves a helper who is already busy with the very attacker", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, "victim"]);
+		(world.ents.get(1011) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, "helper"]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
+		assert.deepEqual(strikes, [], "nobody was redirected, they fight the same foe");
+	});
+
+	it("leaves a helper who is busy with another unit", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 3001 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 3001, owner: ENEMY, position: [40, 40], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, "victim"]);
+		(world.ents.get(1011) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, "helper"]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
+		// the busy helper held back; the victim swung twice: once as the
+		// nearest melee helper, once in its own retaliation
+		assert.deepEqual(strikes, [[3000, "victim"], [3000, "victim"]],
+			"only the victim retaliated");
+	});
+
+	it("lets the victim keep the attacker it had already chosen", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [70, 80] }, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 1, "the cohort is kept");
+		assert.deepEqual(strikes, [], "the victim fights the attacker already");
+	});
+
+	it("swings the siege engine back at an encroaching engine", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "Melee"]
+		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const swings: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			swings.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 1, "the engine is kept");
+		assert.deepEqual(swings, [[3000, false]], "the engine answered in kind");
+	});
+
+	it("lets the victim keep its non-structure target", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [70, 80] }, 2005);
+		world.addEntity(makeEntity({
+			id: 2006, owner: ENEMY, position: [40, 42], classes: ["Unit", "Melee"]
+		}));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 2006 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+		const events = emptyEvents();
+		events.Attacked.push({ "target": 1010, "attacker": 3000, "attackerOwner": ENEMY } as never);
+
+		assert.equal(plan.update(world.gameState, events), 1, "the cohort is kept");
+		assert.deepEqual(strikes, [], "the victim chased its unit prey on");
+	});
+});
 
 
 
+describe("directing the swarm", () =>
+{
+	it("counts the hunters on every prey and re-targets the shared one", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const prey = world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [30, 50], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		for (let i = 0; i < 4; ++i)
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+			}, {
+				isIdle: () => true,
+				attackTypes: () => ["Melee"], canAttackTarget: () => true,
+				unitAIOrderData: () => [{ "target": 3000 }]
+			}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const strikes: unknown[][] = [];
+		for (let i = 0; i < 4; ++i)
+			(world.ents.get(1010 + i) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+				strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 4, "the crowd is kept");
+		assert.deepEqual(strikes,
+			[[3000, false], [3000, false], [3000, false], [3000, false]],
+			"every hunter was sent back to its prey");
+		assert.ok(prey, "the prey was registered");
+	});
+
+	it("sweeps onward when a prey is already swarmed", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [85, 57], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		for (let i = 0; i < 4; ++i)
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
+			}, {
+				attackTypes: () => ["Melee"], canAttackTarget: () => true,
+				unitAIOrderData: () => [{ "target": 3000 }]
+			}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 4, "the crowd is kept");
+		assert.deepEqual(sweeps[0][0], 30, "the sweep aimed at the goal");
+		assert.deepEqual(sweeps[0][1], 40, "the sweep aimed at the goal");
+		assert.equal(sweeps.length, 1, "only the first hunter was probed");
+		assert.equal(sweeps[0][2] && (sweeps[0][2] as { vetoEntities: Record<number, boolean> }).vetoEntities[3000], true,
+			"the swarmed prey was on the veto list");
+	});
+
+	it("counts the champions, heroes and engines in the tally separately", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		for (const [id, extraClasses] of [[3000, []], [3001, ["Champion"]], [3002, ["Siege"]]] as const)
+			world.addEntity(makeEntity({
+				id: id as number, owner: ENEMY, position: [200, 200],
+				classes: ["Unit", "Melee", ...extraClasses]
+			}, { attackTypes: () => ["Melee"] }));
+		const preys = [3000, 3001, 3002];
+		preys.forEach((prey, i) =>
+		{
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
+			}, {
+				attackTypes: () => ["Melee"], canAttackTarget: () => true,
+				unitAIOrderData: () => [{ "target": prey }]
+			}, { "plan": 1 }));
+		});
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+		const strikes: unknown[][] = [];
+		for (let i = 0; i < 3; ++i)
+			(world.ents.get(1010 + i) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+				strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 3, "the skirmishers are kept");
+		assert.deepEqual(strikes, [], "the far preys drew nobody");
+	});
+
+	it("sends the siege engine at the most dangerous structure in reach", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, {
+			isIdle: () => true,
+			attackTypes: () => ["Melee"], attackRange: () => ({ "max": 60 }),
+			canAttackTarget: () => true, canAttackClass: () => false
+		}, { "plan": 1 }));
+		const tower = world.addEntity(makeEntity({
+			id: 2010, owner: ENEMY, position: [22, 22], classes: ["Structure", "Tower"]
+		}, { costSum: () => 400, hasDefensiveFire: () => true }));
+		const fortress = world.addEntity(makeEntity({
+			id: 2011, owner: ENEMY, position: [25, 25],
+			classes: ["Structure", "Fortress", "ConquestCritical"]
+		}, { costSum: () => 600 }));
+		const barracks = world.addEntity(makeEntity({
+			id: 2012, owner: ENEMY, position: [28, 24], classes: ["Structure", "Barracks"]
+		}, { costSum: () => 500 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the engine is kept");
+		assert.deepEqual(strikes, [[tower.id(), false]], "the shooting tower came first");
+		assert.ok(fortress && barracks, "the other structures were there");
+	});
+
+	it("marches a melee siege engine onward when nothing stands in reach", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [110, 110] }, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the engine is kept");
+		assert.deepEqual(sweeps, [[110, 110, {
+			"attack": ["Structure"], "avoid": ["Ship"], "vetoEntities": {}
+		}]], "the engine marched with structure-only classes");
+	});
+
+	it("marches a ranged siege engine with the plain siege classes", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [110, 110] }, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "Ranged"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Ranged"],
+			attackRange: () => ({ "max": 60 }), canAttackTarget: () => true
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the engine is kept");
+		assert.deepEqual(sweeps, [[110, 110, {
+			"attack": ["Structure"], "avoid": [], "vetoEntities": {}
+		}]], "the ranged engine marched without a ship avoid");
+	});
+
+	it("widens the siege prey list when the target can shoot back", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {
+			position: () => [110, 110], hasDefensiveFire: () => true
+		}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the engine is kept");
+		assert.deepEqual((sweeps[0][2] as { attack: string[] }).attack, ["Structure"], "structures only");
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid,
+			["House", "Storehouse", "Farmstead", "Field", "Forge", "Ship"],
+			"the easy buildings were delayed");
+	});
+
+	it("reconsiders a siege engine whose order hangs on a living unit", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [110, 110] }, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [25, 25], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Siege"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIOrderData: () => [{ "target": 9999 }]   // long dead
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		for (const id of [1010, 1011])
+			(world.ents.get(id) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+				sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 2, "the engines are kept");
+		assert.equal(sweeps.length, 2, "both engines rethought their orders");
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, ["Ship"], "ships were avoided");
+	});
+
+	it("strikes the main target directly when blocked and in reach", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [25, 25], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Melee"],
+			attackRange: () => ({ "max": 5 }), canAttackTarget: () => true
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		plan.isBlocked = true;
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the fighter is kept");
+		assert.deepEqual(strikes, [[2005, false]], "the main target took the direct blow");
+	});
+
+	it("reverts to a nose-length range without attack types", () =>
+	{
+		// Fixture note: this situation cannot arise in a real game. Every plan
+		// member is a citizen soldier or fast-moving unit and carries attack types
+		// (and "Support" is a class, not an attack type — the only real ones are
+		// Melee, Ranged and Capture). This covers the defensive `range = 10`
+		// fallback, which is dead code in practice in both port and original.
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [21, 20], classes: ["Unit", "Support"]
+		}, { attackTypes: () => ["Support"] }));
+		world.addEntity(makeEntity({
+			id: 3001, owner: ENEMY, position: [22, 21], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			isIdle: () => true, attackTypes: () => undefined,
+			canAttackTarget: () => true, counters: () => false
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		plan.isBlocked = true;
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the fighter is kept");
+		// both foes are within ten metres, but the paired one comes out first
+		assert.deepEqual(strikes, [[3000, false]], "the closest support foe was struck");
+	});
+
+	it("attacks everything along the way when the hunter is approaching", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		// a ramming ship the hunter was once ordered at; it has since sailed beyond reach
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [200, 200], classes: ["Unit", "Ship"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the hunter is kept");
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, ["Ship"],
+			"the approaching hunter was told to strike everything but ships");
+	});
+
+	it("marches a ranged hunter with no avoid list at all", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		// a battery ship the hunter was once ordered at; it has since sailed beyond reach
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [200, 200], classes: ["Unit", "Ship"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [80, 60], classes: ["Unit", "Ranged"]
+		}, {
+			attackTypes: () => ["Ranged"], attackRange: () => ({ "max": 60 }),
+			canAttackTarget: () => true,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the hunter is kept");
+		// only the port passes: approach-hunters with a weapon at range get an
+		// explicit empty avoid list here; the original leaves it undefined
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, [],
+			"the ranged hunter needed no avoid list");
+	});
+
+	it("lets a fleeing farmer slip past its hunter", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [85, 65], classes: ["Unit", "Civilian"]
+		}, {
+			attackTypes: () => ["Melee"], unitAIState: () => "INDIVIDUAL.FLEEING"
+		}));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the hunter is kept");
+		assert.deepEqual(strikes, [], "the fleeing farmer slipped past");
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, ["Ship"],
+			"the hunter swept the goal instead");
+	});
+
+	it("sends the stranded fighter to help its nearest fighting brother", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const foe = world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Melee"],
+			canAttackTarget: (aimed: FakeEnt) => aimed.hasClass("Unit"),
+			unitAIState: () => "INDIVIDUAL.INVOLVED.IDLE"
+		}, { "plan": 1 }));
+		world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
+		}, {
+			attackTypes: () => ["Melee"], canAttackTarget: () => true,
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => [{ "target": 3000 }]
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const strikes: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attack = (aim: unknown, capture: unknown) =>
+			strikes.push([aim, capture]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 2, "the cohort is kept");
+		assert.deepEqual(strikes, [[3000, false]], "the stranded one joined the brother's fight");
+		assert.ok(foe, "the foe was registered");
+	});
+
+	it("joins the started fight of a brother plan", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const cc = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
+		}, {}, { "plan": 1 }));
+		// a decaying house, like a Carthaginian apartment: a real raid prey the
+		// finder must overlook, so the plan has to adopt the brother's target
+		const good = world.addEntity(makeEntity({
+			id: 2601, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village", "House"]
+		}, { decaying: () => true }));
+		const gaiaHut = world.addEntity(makeEntity({
+			id: 2610, owner: 0, position: [31, 41], classes: ["Structure", "House"]
+		}));
+		const far = world.addEntity(makeEntity({
+			id: 2620, owner: ENEMY, position: [55, 66], classes: ["Structure", "House"]
+		}));
+		world.accessAt.set("55,66", 3);
+		const passedAway = makeTarget(world, {}, 2630);
+		const plan = makePlan(world, { name: 1, init: true, data: { target: cc } });
+		world.removeEntity(2005);   // the plan's own target is gone
+		world.removeEntity(2630);   // a brother's prey recently died
+		world.ai.HQ.attackManager.startedAttacks.Raid = [
+			{ "name": 1 } as unknown as AttackPlanLike,                   // our own plan, skip
+			{ "name": 2, "target": gaiaHut, "targetPlayer": ENEMY } as unknown as AttackPlanLike,  // gaia prey
+			{ "name": 3, "target": far, "targetPlayer": ENEMY } as unknown as AttackPlanLike,     // other land
+			{ "name": 4, "target": good, "targetPlayer": PLAYER } as unknown as AttackPlanLike,   // not an enemy
+			{ "name": 5, "target": passedAway, "targetPlayer": ENEMY } as unknown as AttackPlanLike,
+			{ "name": 9, "target": good, "targetPlayer": ENEMY } as unknown as AttackPlanLike     // the join
+		];
+		plan.position = [11, 12];
+
+		withPath([{ "x": 30, "y": 40 }], () =>
+		{
+			assert.equal(plan.UpdateTarget(world.gameState), true, "the plan joined the brother");
+		});
+		assert.equal(plan.target, good, "the brother's prey was adopted");
+		assert.equal(plan.targetPlayer, ENEMY, "the brother's enemy was adopted");
+		assert.deepEqual(plan.targetPos, [30, 40], "at the brother's prey");
+		assert.ok(passedAway, "the dead ref existed");
+	});
+
+	it("reveals the orders of a siege engine aimed at one living prey", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, { position: () => [110, 110] }, 2005);
+		world.addEntity(makeEntity({
+			id: 3000, owner: ENEMY, position: [200, 200], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"] }));
+		for (let i = 0; i < 4; ++i)
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+			}, {
+				attackTypes: () => ["Melee"], canAttackTarget: () => true,
+				unitAIOrderData: () => [{ "target": 3000 }]
+			}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		for (let i = 0; i < 4; ++i)
+			(world.ents.get(1010 + i) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+				sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 4, "the engines are kept");
+		assert.equal(sweeps.length, 4, "each engine rethought its single order");
+		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, ["Ship"], "ships were avoided");
+	});
+
+	it("follows the enemy keeper of a garrisoned hunter", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const holder = makeTarget(world, {
+			isGarrisonHolder: () => true, garrisoned: () => [2602]
+		}, 2501);
+		world.addEntity(makeEntity({
+			id: 2602, owner: ENEMY, classes: ["Unit", "Hero"]
+		}));
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = [11, 12];
+		plan.target = world.ents.get(2602) as FakeEnt;
+		plan.targetPlayer = ENEMY;
+
+		assert.equal(plan.UpdateTarget(world.gameState), true, "the keeper took over");
+		assert.equal(plan.target, holder, "the keeper was adopted as the target");
+		assert.deepEqual(plan.targetPos, [30, 40], "at the keeper");
+	});
+
+	it("drops the prey whose keeper is our own", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY, debug: 2 });
+		const anchor = world.ents.get(1000) as unknown as Record<string, () => unknown>;
+		anchor.isGarrisonHolder = () => true;
+		anchor.garrisoned = () => [2602];
+		world.addEntity(makeEntity({
+			id: 2602, owner: ENEMY, classes: ["Unit", "Hero"]
+		}));
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = [11, 12];
+		plan.target = world.ents.get(2602) as FakeEnt;
+		plan.targetPlayer = ENEMY;
+		resetRecorder();
+
+		assert.equal(plan.UpdateTarget(world.gameState), false, "nothing remained to attack");
+		assert.equal(plan.target, undefined, "the prey was dropped");
+		assert.ok(logs.some((entry) => /No new target found. Remaining units/.test(entry)),
+			"the surrender was logged");
+	});
+});
+
+describe("when walls and orders scatter the plan", () =>
+{
+	it("claims the breach when the wall-breaking crew announces it", () =>
+	{
+		// only the port passes: like its kin below, only the port finds the
+		// walls it can break (filters.byClass vs byClasses)
+		const world = makeWorld({ debug: 2 });
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 2010, owner: ENEMY, position: [13, 13], classes: ["Structure", "Palisade"]
+		}));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
+		}, { canAttackClass: (cls: string) => cls === "Palisade" }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "walking";
+		plan.lastPosition = [11, 12];
+		plan.targetPos = [30, 120];
+		plan.path = [[11, 12], [20, 20]];
+		resetRecorder();
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the crew moves in");
+		assert.ok(logs.some((entry) => /has met walls and is not happy/.test(entry)),
+			"the breach was announced");
+	});
+
+	it("announces defeat in front of walls it cannot break", () =>
+	{
+		// only the port passes: only the port finds the walls it cannot break
+		const world = makeWorld({ debug: 2 });
+		const target = makeTarget(world, {}, 2005);
+		world.addEntity(makeEntity({
+			id: 2010, owner: ENEMY, position: [13, 13], classes: ["Structure", "Palisade"]
+		}));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
+		}, { canAttackClass: () => false }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "walking";
+		plan.lastPosition = [11, 12];
+		plan.targetPos = [30, 120];
+		plan.path = [[11, 12], [20, 20]];
+		resetRecorder();
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 0, "the plan gave up");
+		assert.ok(logs.some((entry) => /has met walls and gives up/.test(entry)),
+			"the defeat was announced");
+	});
+
+	it("gives a siege engine marching at a unit the unit classes too", () =>
+	{
+		const world = makeWorld();
+		const prey = world.addEntity(makeEntity({
+			id: 2005, owner: ENEMY, position: [110, 110], classes: ["Unit", "Melee"]
+		}, { attackTypes: () => ["Melee"], unitAIState: () => "INDIVIDUAL.IDLE" }));
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
+		}, {
+			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
+		}, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target: prey } });
+		plan.state = "";
+		const sweeps: unknown[][] = [];
+		(world.ents.get(1010) as FakeEnt).attackMove = (x: unknown, y: unknown, classes: unknown) =>
+			sweeps.push([x, y, classes]);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the engine is kept");
+		assert.deepEqual((sweeps[0][2] as { attack: string[] }).attack, ["Unit", "Structure"],
+			"the engine marched ready for units and structures");
+	});
+});
