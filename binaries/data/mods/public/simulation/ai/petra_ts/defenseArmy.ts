@@ -191,23 +191,6 @@ export class DefenseArmy
 				plan.removeUnit(gameState, ent);
 		}
 
-		/*
-		// TODO be sure that all units in the transport need the cancelation
-		if (!ent.position())	// this unit must still be in a transport plan ... try to cancel it
-		{
-			let planID = ent.getMetadata(PlayerID, "transport");
-			// no plans must mean that the unit was in a ship which was destroyed, so do nothing
-			if (planID)
-			{
-				if (gameState.ai.Config.debug > 0)
-					warn("ent from army still in transport plan: plan " + planID + " canceled");
-				let plan = gameState.ai.HQ.navalManager.getPlan(planID);
-				if (plan && !plan.canceled)
-					plan.cancelTransport(gameState);
-			}
-		}
-	*/
-
 		return true;
 	}
 
@@ -290,8 +273,9 @@ export class DefenseArmy
 		while (this.ownEntities.length > 0)
 		{
 			const entId = this.ownEntities[0];
-			this.removeOwn(gameState, entId);
+			// fetched once: removeOwn reuses it instead of looking it up again
 			const ent = gameState.getEntityById(entId);
+			this.removeOwn(gameState, entId, ent);
 			if (ent)
 			{
 				if (!ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined ||
@@ -347,11 +331,9 @@ export class DefenseArmy
 				break;
 			}
 
-			const assignedAgainstId = this.assignedAgainst[id];
-			const nbAssigned = assignedAgainstId ? assignedAgainstId.length : 0;
 			// already enough units against it
-			if (nbAssigned > 8 ||
-				nbAssigned > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
+			if (this.assignedAgainst[id].length > 8 ||
+				this.assignedAgainst[id].length > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
 				continue;
 
 			const dist = SquareVectorDistance(ent.position(), eEnt.position());
@@ -360,7 +342,7 @@ export class DefenseArmy
 				idMinAll = id;
 				distMinAll = dist;
 			}
-			if (nbAssigned > 2)
+			if (this.assignedAgainst[id].length > 2)
 				continue;
 			if (idMin === undefined || dist < distMin)
 			{
@@ -378,17 +360,15 @@ export class DefenseArmy
 			return false;
 
 		const ownIndex = getLandAccess(gameState, ent);
-		const foeEnt = gameState.getEntityById(idFoe);
-		if (!foeEnt)
-			return false;
+		// idFoe was validated alive inside the loop above and cannot vanish
+		// synchronously in the same tick
+		const foeEnt = gameState.getEntityById(idFoe)!;
 		const foePosition = foeEnt.position();
 		const foeIndex = gameState.ai.accessibility.getAccessValue(foePosition);
 		if (ownIndex == foeIndex || ent.hasClass("Ship"))
 		{
 			this.assignedTo[entID] = idFoe;
-			const foeAssigned = this.assignedAgainst[idFoe];
-			if (foeAssigned)
-				foeAssigned.push(entID);
+			this.assignedAgainst[idFoe].push(entID);
 			ent.attack(idFoe, allowCapture(gameState, ent, foeEnt), queued);
 		}
 		else
@@ -637,8 +617,9 @@ export class DefenseArmy
 		// occasional update or breakaways, positions…
 		if (gameState.ai.elapsedTime - this.positionLastUpdate > 5)
 		{
+			// also stamps positionLastUpdate with this turn, so the
+			// non-forced later calls this turn return immediately
 			this.recalculatePosition(gameState);
-			this.positionLastUpdate = gameState.ai.elapsedTime;
 
 			// Check for breakaways.
 			for (let i = 0; i < this.foeEntities.length; ++i)
@@ -654,8 +635,6 @@ export class DefenseArmy
 						i--;
 				}
 			}
-
-			this.recalculatePosition(gameState);
 		}
 
 		return breakaways;
