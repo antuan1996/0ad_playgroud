@@ -26,7 +26,6 @@ export type SerializedAttackManager = {
 export class AttackManager
 {
 	declare Config: Config;
-	declare attackPlansEncounteredWater: boolean;
 	declare outOfPlan: CommonEntityCollection;
 
 	totalNumber = 0;
@@ -123,8 +122,10 @@ export class AttackManager
 				{
 					for (const attack of this.upcomingAttacks[attackType])
 					{
+						// every non-completing attack was re-aimed at targetPlayer by the
+						// loop above, so the original targetPlayer re-check here could
+						// never fire and was dropped
 						if (attack.state === AttackPlan.STATE_COMPLETING ||
-							attack.targetPlayer !== targetPlayer ||
 							attack.unitCollection.length < 3)
 							continue;
 						attack.forceStart();
@@ -432,9 +433,9 @@ export class AttackManager
 					AttackPlan.TYPE_DEFAULT : AttackPlan.TYPE_HUGE_ATTACK;
 				const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber, type,
 					undefined, false);
-				if (attackPlan.failed)
-					this.attackPlansEncounteredWater = true; // hack
-				else
+				// the original wrote a write-only "attackPlansEncounteredWater" hack flag
+				// on failure; nothing ever read it, so the port drops the dead write
+				if (!attackPlan.failed)
 				{
 					if (this.Config.debug > 1)
 					{
@@ -810,9 +811,11 @@ export class AttackManager
 				const unit = gameState.getEntityById(unitId);
 				if (!unit)
 					continue;
-				const accessOk = unit.getMetadata(PlayerID, "transport") !== undefined ||
-					unit.position() && getLandAccess(gameState, unit) == targetAccess;
-				if (unit && accessOk && attackPlan.isAvailableUnit(gameState, unit))
+				// the original ORed in "transport metadata exists" here, but
+				// isAvailableUnit below always rejects transport-marked units, so the
+				// clause could never lead to an enlistment and was dropped
+				if (unit.position() && getLandAccess(gameState, unit) == targetAccess &&
+					attackPlan.isAvailableUnit(gameState, unit))
 				{
 					unit.setMetadata(PlayerID, "plan", attackPlan.name);
 					unit.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
