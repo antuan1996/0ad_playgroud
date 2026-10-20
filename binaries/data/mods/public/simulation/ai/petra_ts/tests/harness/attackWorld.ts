@@ -133,12 +133,12 @@ export interface ConfigLike
 	debug: number;
 	difficulty: number;
 	popScaling: number;
-	personality: { aggressive: number; defensive: number; military: number };
+	personality: { aggressive: number; defensive: number; military: number; cooperative?: number };
 	personalityCut?: { weak: number; medium: number; strong: number };
 	/** how much each damage type counts towards attack strength; the real config values */
 	DamageTypeImportance: Record<string, number>;
 	/** Petra's defense knobs, as config.ts sets them */
-	Defense: { defenseRatio: Record<string, number>; armyCompactSize: number; armyBreakawaySize: number };
+	Defense: { defenseRatio: Record<string, number>; armyCompactSize: number; armyBreakawaySize: number; armyMergeSize: number };
 	/** config.garrisonHealthLevel */
 	garrisonHealthLevel: Record<string, number>;
 	/** chat announcements; the attack manager asks but the managers' tests mostly do not */
@@ -149,6 +149,8 @@ export interface ConfigLike
 /** A base as Petra sees it: an anchor structure and the land it sits on. */
 export interface BaseLike
 {
+	/** the base's roster id, what getBaseByID looks for */
+	ID?: number;
 	anchor: FakeEnt | null;
 	accessIndex: number | undefined;
 }
@@ -189,6 +191,12 @@ export interface HQLike
 		outOfPlan: Map<number, FakeEnt>;
 		getEnemyPlayer(gameState: CommonGameState, plan: unknown): number | undefined;
 		getAttackInPreparation(type: string): unknown | undefined;
+		/** the plan of a given number; undefined means there is none */
+		getPlan(planName: number): { state: number; removeUnit(ent: FakeEnt, removed: boolean): void } | undefined;
+		/** attackUnit interception when defense armies roll into an attack */
+		switchDefenseToAttack(gameState: CommonGameState, target: CommonEntity, data?: {
+			range?: number; armyID?: number; uniqueTarget?: boolean;
+		}): boolean;
 	};
 	defenseManager: {
 		targetList: number[];
@@ -202,10 +210,28 @@ export interface HQLike
 		tryCaptureGaiaRelic: boolean;
 		resetCaptureGaiaRelic(gameState: CommonGameState): void;
 	};
-	territoryMap: { getOwner(pos: [number, number]): number };
+	territoryMap: {
+		getOwner(pos: [number, number]): number;
+		/** whether the tile's ownership is contested (map-border / decay flicker) */
+		isBlinking(pos: [number, number]): boolean;
+	};
 	isDangerousLocation(gameState: CommonGameState, pos: [number, number], minDist: number): boolean;
 	findBestTrainableUnit(gameState: CommonGameState, classes: string[], interests: unknown): string | undefined;
 	capturableTargets: Map<number, unknown>;
+	/** the base of a given roster id */
+	getBaseByID(id: number): BaseLike | undefined;
+	/** whether the base's forces are worth defending */
+	isDefendable(ent: CommonEntity): boolean;
+	/** whether some base is running; the capture-recovery and gaia scans need one */
+	hasActiveBase(): boolean;
+	/** HQ trains emergency garrison infantry for these army positions */
+	trainEmergencyUnits(gameState: CommonGameState, positions: [number, number][]): void;
+	garrisonManager: {
+		garrison(gameState: CommonGameState, unit: FakeEnt, target: FakeEnt, type: string): void;
+		numberOfGarrisonedSlots(target: FakeEnt): number;
+		/** undefined means the garrison manager has no stored decision */
+		allowMelee(target: FakeEnt): boolean | undefined;
+	};
 }
 
 /** The world builder's knobs, each starting with its most common answer. */
@@ -229,6 +255,8 @@ export interface WorldOptions
 	victoryConditions?: string[];
 	/** territoryMap.getOwner's answer, keyed "x,y". */
 	territory?: Map<string, number>;
+	/** territoryMap.isBlinking's answer, keyed "x,y". */
+	blinking?: Map<string, boolean>;
 	/** countOwnQueuedEntitiesWithMetadata's answer. */
 	queuedInTraining?: number;
 	/** Config.personality.defensive, for the worker assignment formula. */
@@ -299,6 +327,16 @@ export interface World
 	accessAt: Map<string, number>;
 	/** the answers territoryMap.getOwner gives, keyed "x,y" */
 	territory: Map<string, number>;
+	/** the answers territoryMap.isBlinking gives, keyed "x,y" */
+	blinking: Map<string, boolean>;
+	/** garrison calls the garrisonManager saw, as [unit, target, type] */
+	garrisonCalls: Array<[FakeEnt, FakeEnt, string]>;
+	/** garrisoned slot counts the garrisonManager keeps, keyed target id */
+	garrisonCounts: Map<number, number>;
+	/** trainEmergencyUnits calls, as the army positions asked for */
+	emergencyCalls: Array<[CommonGameState, [number, number][]]>;
+	/** switchDefenseToAttack calls, as [target, data] */
+	switchCalls: Array<[FakeEnt | undefined, Record<string, unknown> | undefined]>;
 	/** transport calls the navalManager saw, as [ent, from, to, toPos] */
 	transportCalls: Array<[FakeEnt, number, number, [number, number] | undefined]>;
 	/** setMinimalTransportShips calls, as [sea, needed] */
@@ -476,6 +514,13 @@ export function makeEntity(spec: {
 		destroy: () => undefined,
 		garrison: () => undefined,
 		gather: () => undefined,
+		// garrison-holder surface, as the common engine defaults
+		getArrowMultiplier: () => 0,
+		buffHeal: () => undefined,
+		garrisonEjectHealth: () => 0.7,
+		getGarrisonArrowClasses: () => ["Infantry"],
+		garrisonableClasses: () => ["Infantry"],
+		unload: () => undefined,
 		returnResources: () => undefined,
 		repair: () => undefined,
 		setRallyPoint: () => undefined,
@@ -583,11 +628,16 @@ export function makeWorld(options: WorldOptions = {}): World
 		hasPotentialBase: options.hasPotentialBase ?? true
 	};
 	const territory = options.territory ?? new Map<string, number>();
+	const blinking = options.blinking ?? new Map<string, boolean>();
 	const buddies = options.victoryConditions ?? [];
 
 	const transportCalls: World["transportCalls"] = [];
 	const minimalShipCalls: World["minimalShipCalls"] = [];
 	const relicResets: unknown[] = [];
+	const garrisonCalls: Array<[FakeEnt, FakeEnt, string]> = [];
+	const garrisonCounts = new Map<number, number>();
+	const emergencyCalls: Array<[CommonGameState, [number, number][]]> = [];
+	const switchCalls: Array<[FakeEnt | undefined, Record<string, unknown> | undefined]> = [];
 	const units: FakeEnt[] = [];
 	const structures: FakeEnt[] = [];
 	const ents = new Map<number, FakeEnt>();
@@ -635,9 +685,14 @@ export function makeWorld(options: WorldOptions = {}): World
 		knobs,
 		accessAt,
 		territory,
+		blinking,
 		transportCalls,
 		minimalShipCalls,
 		relicResets,
+		garrisonCalls,
+		garrisonCounts,
+		emergencyCalls,
+		switchCalls,
 		collections,
 		ai: {
 			playedTurn: 0,
@@ -649,14 +704,15 @@ export function makeWorld(options: WorldOptions = {}): World
 				debug: options.debug ?? 0,
 				difficulty: options.difficulty ?? 3,
 				popScaling: options.popScaling ?? 1,
-				personality: { aggressive: 1, defensive: options.defensive ?? 1, military: 1 },
+				personality: { aggressive: 1, defensive: options.defensive ?? 1, military: 1, cooperative: 0.5 },
 				// the real config values: they weight the damage types and steer
 				// army formation, so an army run against them behaves as in game
 				DamageTypeImportance: { "Hack": 0.075, "Pierce": 0.085, "Crush": 0.045, "Fire": 0.001 },
 				Defense: {
 					defenseRatio: { "ally": 1.4, "neutral": 1.8, "own": 2 },
 					armyCompactSize: 2000,
-					armyBreakawaySize: 3500
+					armyBreakawaySize: 3500,
+					armyMergeSize: 1400
 				},
 				garrisonHealthLevel: { "low": 0.4, "medium": 0.55, "high": 0.7 },
 				priorities: {}
@@ -713,12 +769,28 @@ export function makeWorld(options: WorldOptions = {}): World
 			bombingAttacks: new Map<string, Set<number>>(),
 			outOfPlan: new Map<number, FakeEnt>(),
 			getEnemyPlayer: () => knobs.enemyPlayer,
-			getAttackInPreparation: () => undefined
+			getAttackInPreparation: () => undefined,
+			getPlan: () => undefined,
+			switchDefenseToAttack: (_gs: CommonGameState, target: CommonEntity, data) =>
+			{
+				switchCalls.push([target as unknown as FakeEnt, data as Record<string, unknown> | undefined]);
+				return true;
+			}
 		},
 		defenseManager: {
 			targetList: [],
 			armies: [],
 			garrisonAttackedUnit: () => false
+		},
+		garrisonManager: {
+			// like the engine: garrisoning fills the target's slots
+			garrison: (_gs: CommonGameState, unit: FakeEnt, target: FakeEnt, type: string) =>
+			{
+				garrisonCalls.push([unit, target, type]);
+				garrisonCounts.set(target.id(), (garrisonCounts.get(target.id()) ?? 0) + 1);
+			},
+			numberOfGarrisonedSlots: (target: FakeEnt) => garrisonCounts.get(target.id()) ?? 0,
+			allowMelee: () => undefined
 		},
 		victoryManager: {
 			criticalEnts: new Map(),
@@ -726,17 +798,24 @@ export function makeWorld(options: WorldOptions = {}): World
 			tryCaptureGaiaRelic: false,
 			resetCaptureGaiaRelic: (gs: CommonGameState) => relicResets.push(gs)
 		},
-		territoryMap: { getOwner: (pos: [number, number]) => territory.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? PLAYER },
+		territoryMap: {
+			getOwner: (pos: [number, number]) => territory.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? PLAYER,
+			isBlinking: (pos: [number, number]) => blinking.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? false
+		},
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
-		capturableTargets: new Map()
+		capturableTargets: new Map(),
+		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
+		isDefendable: () => false,
+		hasActiveBase: () => true,
+		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) => emergencyCalls.push([gs, positions])
 	};
 	world.ai.HQ = HQ;
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({ id: 1000, owner: PLAYER, position: [10, 10], classes: ["Structure", "CivCentre"], templateName: "structures/athen_civil_centre" });
 	world.addEntity(anchor);
-	bases.push({ anchor, accessIndex: 2 });
+	bases.push({ "ID": 1, anchor, accessIndex: 2 });
 
 	const state: Record<string, unknown> = {
 		ai: world.ai,
@@ -768,10 +847,13 @@ export function makeWorld(options: WorldOptions = {}): World
 		getEntities: (owner?: number) => new EntityCollection(
 			sharedAI as unknown as CommonSharedScript,
 			mapOf([...ents.values()].filter((e) => owner === undefined || e.owner() === owner))),
-		getOwnUnits: () => new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf(units)),
+		getOwnUnits: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
+			mapOf(units.filter((u) => u.owner() === PLAYER))),
 		getOwnEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf([...units, ...structures.filter((s) => s.owner() === PLAYER)])),
 		getEnemyStructures: (owner?: number) => structuresOf(owner === undefined ? undefined : owner),
+		getOwnStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
+			mapOf(structures.filter((s) => s.owner() === PLAYER))),
 		getEnemyUnits: (owner?: number) => unitsOf(owner),
 		getStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf(structures)),
 		getOwnEntitiesByRole: (role: string | undefined) =>
@@ -793,6 +875,12 @@ export function makeWorld(options: WorldOptions = {}): World
 		isPlayerEnemy: (id: number) => (state.playerData as { isEnemy: boolean[] }).isEnemy[id],
 		isPlayerAlly: (id: number) => (state.playerData as { isAlly: boolean[] }).isAlly[id],
 		isPlayerMutualAlly: (id: number) => (state.playerData as { isMutualAlly: boolean[] }).isMutualAlly[id],
+		// the gameState entity affirmations, as common-api defines them
+		isEntityOwn: (ent: FakeEnt) => ent.owner() === PLAYER,
+		isEntityAlly: (ent: FakeEnt) => (state.playerData as { isAlly: boolean[] }).isAlly[ent.owner()],
+		isEntityEnemy: (ent: FakeEnt) => (state.playerData as { isEnemy: boolean[] }).isEnemy[ent.owner()],
+		isEntityExclusiveAlly: (ent: FakeEnt) =>
+			(state.playerData as { isAlly: boolean[] }).isAlly[ent.owner()] && ent.owner() !== PLAYER,
 		/** structures of everyone we and they consider an ally, as the game defines ally collections */
 		getAllyStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf(structures.filter((s) => (state.playerData as { isMutualAlly: boolean[] }).isMutualAlly[s.owner()]))),
