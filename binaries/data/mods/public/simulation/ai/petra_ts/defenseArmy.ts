@@ -362,7 +362,7 @@ export class DefenseArmy
 		const ownIndex = getLandAccess(gameState, ent);
 		// idFoe was validated alive inside the loop above and cannot vanish
 		// synchronously in the same tick
-		const foeEnt = gameState.getEntityById(idFoe)!;
+		const foeEnt = requireValue(gameState.getEntityById(idFoe));
 		const foePosition = foeEnt.position();
 		const foeIndex = gameState.ai.accessibility.getAccessValue(foePosition);
 		if (ownIndex == foeIndex || ent.hasClass("Ship"))
@@ -372,8 +372,10 @@ export class DefenseArmy
 			ent.attack(idFoe, allowCapture(gameState, ent, foeEnt), queued);
 		}
 		else
-			// ownIndex is a number: ent.position() was checked at the entry of this function.
-			gameState.ai.HQ.navalManager.requireTransport(gameState, ent, ownIndex!, foeIndex, foePosition);
+			// ownIndex is a number: ent.position() was checked at the entry of
+			// this function, so getLandAccess resolved past its position guard.
+			gameState.ai.HQ.navalManager.requireTransport(gameState, ent,
+				requireValue(ownIndex), foeIndex, foePosition);
 		return true;
 	}
 
