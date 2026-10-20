@@ -161,7 +161,7 @@ export interface DefenseArmyLike
 	ownEntities: number[];
 	foePosition: [number, number];
 	recalculatePosition(gameState: CommonGameState): void;
-	removeFoe(gameState: CommonGameState, entId: number): void;
+	removeFoe(gameState: CommonGameState, entId: number, enemyEntity?: CommonEntity): void;
 	removeOwn(gameState: CommonGameState, entId: number): void;
 	clear?(gameState: CommonGameState): void;
 }

@@ -625,7 +625,7 @@ export class DefenseArmy
 					for (let j = 0; j < capture.length; ++j)
 						if (gameState.isPlayerEnemy(j) && capture[j] > 0)
 							return [];
-				this.removeFoe(gameState, this.foeEntities[0]);
+				this.removeFoe(gameState, this.foeEntities[0], firstFoe);
 			}
 			return [];
 		}
@@ -650,7 +650,7 @@ export class DefenseArmy
 				if (SquareVectorDistance(ent.position(), this.foePosition) > this.breakawaySize)
 				{
 					breakaways.push(id);
-					if (this.removeFoe(gameState, id))
+					if (this.removeFoe(gameState, id, ent))
 						i--;
 				}
 			}
