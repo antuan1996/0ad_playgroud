@@ -203,6 +203,8 @@ export interface HQLike
 		armies: DefenseArmyLike[];
 		/** whether a wounded unit has a safe structure to garrison into */
 		garrisonAttackedUnit(gameState: CommonGameState, ent: FakeEnt): boolean;
+		/** the decaying-structure refill call, as garrisonManager.update requests it */
+		garrisonUnitsInside(gameState: CommonGameState, target: FakeEnt, data: Record<string, unknown>): void;
 	};
 	victoryManager: {
 		criticalEnts: Map<number, unknown>;
@@ -333,6 +335,8 @@ export interface World
 	garrisonCalls: Array<[FakeEnt, FakeEnt, string]>;
 	/** garrisoned slot counts the garrisonManager keeps, keyed target id */
 	garrisonCounts: Map<number, number>;
+	/** defenseManager.garrisonUnitsInside refill calls the garrison-decay loop made */
+	decayGarrisonCalls: Array<[FakeEnt, Record<string, unknown>]>;
 	/** trainEmergencyUnits calls, as the army positions asked for */
 	emergencyCalls: Array<[CommonGameState, [number, number][]]>;
 	/** switchDefenseToAttack calls, as [target, data] */
@@ -479,6 +483,7 @@ export function makeEntity(spec: {
 		decaying: () => false,
 		getDefaultArrow: () => undefined,
 		garrisoned: () => [],
+		garrisonedSlots: () => 0,
 		garrisonMax: () => 0,
 		healthLevel: () => 1,
 		hitpoints: () => 100,
@@ -638,6 +643,7 @@ export function makeWorld(options: WorldOptions = {}): World
 	const garrisonCounts = new Map<number, number>();
 	const emergencyCalls: Array<[CommonGameState, [number, number][]]> = [];
 	const switchCalls: Array<[FakeEnt | undefined, Record<string, unknown> | undefined]> = [];
+	const decayGarrisonCalls: Array<[FakeEnt, Record<string, unknown>]> = [];
 	const units: FakeEnt[] = [];
 	const structures: FakeEnt[] = [];
 	const ents = new Map<number, FakeEnt>();
@@ -693,6 +699,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		garrisonCounts,
 		emergencyCalls,
 		switchCalls,
+		decayGarrisonCalls,
 		collections,
 		ai: {
 			playedTurn: 0,
@@ -780,7 +787,12 @@ export function makeWorld(options: WorldOptions = {}): World
 		defenseManager: {
 			targetList: [],
 			armies: [],
-			garrisonAttackedUnit: () => false
+			garrisonAttackedUnit: () => false,
+			// defenceManager's refill bookkeeping, recorded for the decay tests
+			garrisonUnitsInside: (_gs: CommonGameState, target: FakeEnt, data: Record<string, unknown>) =>
+			{
+				decayGarrisonCalls.push([target, data]);
+			}
 		},
 		garrisonManager: {
 			// like the engine: garrisoning fills the target's slots
@@ -852,6 +864,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		getOwnEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf([...units, ...structures.filter((s) => s.owner() === PLAYER)])),
 		getEnemyStructures: (owner?: number) => structuresOf(owner === undefined ? undefined : owner),
+		// every entity of a player the diplomacy row calls an enemy, as the
+		// common-api byOwners(getEnemies()) does
+		getEnemyEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
+			mapOf([...ents.values()].filter((e) =>
+				(state.playerData as { isEnemy: boolean[] }).isEnemy[e.owner()]))),
 		getOwnStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf(structures.filter((s) => s.owner() === PLAYER))),
 		getEnemyUnits: (owner?: number) => unitsOf(owner),

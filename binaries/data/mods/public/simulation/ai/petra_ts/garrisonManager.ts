@@ -298,17 +298,17 @@ export class GarrisonManager
 	cancelGarrison(ent: CommonEntity): void
 	{
 		ent.stopMoving();
-		this.leaveGarrison(ent);
+		// The booking must be read before the release below wipes the record;
+		// the release also has to happen whether or not he was still booked.
 		const holderId = ent.getMetadata(PlayerID, "garrisonHolder");
-		if (holderId === undefined)
-			return;
-		const holderData = this.holders.get(holderId);
-		if (!holderData)
-			return;
-		const list = holderData.list;
-		const index = list.indexOf(ent.id());
-		if (index !== -1)
-			list.splice(index, 1);
+		const holderData = holderId !== undefined ? this.holders.get(holderId) : undefined;
+		this.leaveGarrison(ent);
+		if (holderData)
+		{
+			const index = holderData.list.indexOf(ent.id());
+			if (index !== -1)
+				holderData.list.splice(index, 1);
+		}
 	}
 
 	keepGarrisoned(ent: CommonEntity, holder: CommonEntity, around: GarrisonThreats): boolean
@@ -334,7 +334,8 @@ export class GarrisonManager
 					return ent.attackTypes()?.indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
 				return false;
 			}
-			if (ent.attackTypes()?.indexOf("Melee") !== -1)
+			const entAttackTypes = ent.attackTypes();
+			if (entAttackTypes && entAttackTypes.indexOf("Melee") !== -1)
 				return false;
 			if (around.unit)
 				return ent.hasClass("Support") || isSiegeUnit(ent);	// only ranged siege here and below as melee siege already released above
