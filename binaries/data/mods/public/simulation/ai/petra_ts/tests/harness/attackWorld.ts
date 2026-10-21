@@ -33,6 +33,8 @@ export interface FakeEnt
 	isPackable(): boolean;
 	/** the trainer list a structure offers, when the test overrides it */
 	trainableEntities?: (civ: string) => string[] | undefined;
+	/** the live training bills a facility carries; a structure outside one answers falsy */
+	trainingQueue?(player: number): unknown[] | undefined | false;
 	getMetadata(player: number, key: string): unknown;
 	setMetadata(player: number, key: string, value: unknown): void;
 	/** the metadata store, for assertions */
@@ -118,6 +120,16 @@ export interface FakeTemplateLike
 	hasClass(cls: string): boolean;
 	classes(): string[];
 	available(gameState: CommonGameState): boolean;
+	walkSpeed(): number | undefined;
+	trainingCategory(): string | undefined;
+	matchLimit(): number | undefined;
+	resourceGatherRates(): Record<string, number> | undefined;
+	attackTypes(): string[] | undefined;
+	attackStrengths(type: string): Record<string, number> | undefined;
+	attackRange(type: string): { max: number; min: number } | undefined;
+	attackTimes(type: string): { prepare: number; repeat: number } | undefined;
+	resistanceStrengths(): Record<string, number> | undefined;
+	maxHitpoints(): number;
 }
 
 export interface UnitStatLike
@@ -579,12 +591,33 @@ export function makeTemplate(name: string, detail: {
 	popCost?: number;
 	getPaths?: Record<string, unknown>;
 	available?: boolean;
+	/** the walk speed; every unit carries template_unit's WalkSpeed, structures none */
+	walkSpeed?: number;
+	/** the TrainingRestrictions category; only unit templates carry it */
+	trainingCategory?: string | undefined;
+	/** the template match limit, from LimitMatcher; default uncapped */
+	matchLimit?: number | undefined;
+	/** the gather rates, as template_unit's Rates list gives them */
+	resourceGatherRates?: Record<string, number>;
+	/** the attack types the Identity/Attack block lists (units carry Slaughter too) */
+	attackTypes?: string[];
+	/** the Damage dictionaries, keyed by attack type, as Attack/<type>/Damage reads */
+	attackStrengths?: Record<string, Record<string, number>>;
+	/** the ranges, as Attack/<type>/MaxRange and MinRange read */
+	attackRanges?: Record<string, { max: number; min?: number }>;
+	/** the timing, as Attack/<type>/PrepareTime and RepeatTime read */
+	attackTimes?: Record<string, { prepare?: number; repeat?: number }>;
+	/** the resistance Damage dictionary, as Resistance/Entity/Damage reads */
+	resistanceStrengths?: Record<string, number>;
+	/** the Health/Max; template_unit gives 100, infantry 80, ranged 50 */
+	maxHitpoints?: number;
 } = {}): FakeTemplateLike
 {
 	const cost = detail.cost ?? {};
 	const classes = [...(detail.classes ?? [])];
 	const getPaths = detail.getPaths ? { ...detail.getPaths } : {};
 	const available = detail.available ?? true;
+	const gatherRates = detail.resourceGatherRates ? { ...detail.resourceGatherRates } : undefined;
 	return {
 		// the raw serialized template, as the original reads it
 		"_template": { "Cost": { "Population": detail.popCost ?? 1 } },
@@ -603,7 +636,31 @@ export function makeTemplate(name: string, detail: {
 		hasClass: (cls: string) => classes.includes(cls),
 		hasClasses: (list: string[]) => MatchesClassList(classes, list),
 		classes: () => classes,
-		available: () => available
+		available: () => available,
+		walkSpeed: () => detail.walkSpeed,
+		trainingCategory: () => detail.trainingCategory,
+		matchLimit: () => detail.matchLimit,
+		// as common-api template.resourceGatherRates reads Rates/<rate>/Payload
+		resourceGatherRates: () => gatherRates ? { ...gatherRates } : undefined,
+		// as common-api template.attackTypes reads the Attack block's keys
+		attackTypes: () => detail.attackTypes ? [...detail.attackTypes] : undefined,
+		// as common-api template.attackStrengths reads Attack/<type>/Damage
+		attackStrengths: (type: string) =>
+			detail.attackStrengths?.[type] ? { ...detail.attackStrengths[type] } : undefined,
+		// as common-api template.attackRange reads Attack/<type>/MaxRange, MinRange
+		attackRange: (type: string) =>
+			detail.attackRanges?.[type] ?
+				{ "max": detail.attackRanges[type].max, "min": detail.attackRanges[type].min ?? 0 } :
+				undefined,
+		// as common-api template.attackTimes reads PrepareTime and RepeatTime
+		attackTimes: (type: string) =>
+			detail.attackTimes?.[type] ?
+				{ "prepare": detail.attackTimes[type].prepare ?? 0,
+					"repeat": detail.attackTimes[type].repeat ?? 1000 } :
+				undefined,
+		// as common-api template.resistanceStrengths reads Resistance/Entity/Damage
+		resistanceStrengths: () => detail.resistanceStrengths ? { ...detail.resistanceStrengths } : undefined,
+		maxHitpoints: () => detail.maxHitpoints ?? 100
 	} as unknown as FakeTemplateLike;
 }
 
@@ -861,10 +918,12 @@ export function makeWorld(options: WorldOptions = {}): World
 		getVictoryConditions: () => new Set(buddies),
 		getPopulation: () => options.population ?? 0,
 		getPopulationMax: () => options.populationMax ?? 400,
-		/** the barracks able to train a given template, as the real implementations do */
+		// the facilities able to train a given template, as the real
+		// GameState.findTrainers does: it runs over the training-facilities
+		// collection (see below), so membership is a truthy trainingQueue
 		findTrainers: (template: string) =>
 			new EntityCollection(sharedAI as unknown as CommonSharedScript,
-				mapOf(structures.filter((s) => s.hasClass("Trainer") &&
+				mapOf(structures.filter((s) => (s.trainingQueue as (player: number) => unknown)(PLAYER) &&
 					((s.trainableEntities as (civ: string) => string[] | undefined)("athen") ?? []).indexOf(template) !== -1))),
 		getNumPlayerEnemies: () => knobs.enemyPlayer === undefined ? 0 : 1,
 		getEntityById: (id: number | string) => ents.get(+id),
@@ -890,8 +949,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		getOwnEntitiesByClass: (cls: string) => new EntityCollection(
 			sharedAI as unknown as CommonSharedScript,
 			mapOf(structures.filter((s) => s.hasClass(cls)))),
+		// as GameState.prototype.getOwnTrainingFacilities: facilities are the
+		// own entities a truthy trainingQueue answers for (filters.byTrainingQueue),
+		// not a class test
 		getOwnTrainingFacilities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
-			mapOf(structures.filter((s) => s.hasClass("Trainer")))),
+			mapOf(structures.filter((s) => (s.trainingQueue as (player: number) => unknown)(PLAYER)))),
 		countOwnQueuedEntitiesWithMetadata: () => knobs.queuedInTraining,
 		updatingCollection: (_key: string, filter: { func: (ent: FakeEnt) => boolean }, collection: FakeCollection) =>
 			collection.filter(filter),

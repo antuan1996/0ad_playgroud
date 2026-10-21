@@ -14,11 +14,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { loadPetraModule } from "./harness/target.ts";
+import { logs, resetRecorder } from "./harness/engine.ts";
 import {
 	makeGaiaSupply, makeHqEntity, makeHQConfig, makeHqWorld, seatHQ, structureTemplate, centerOfCell, PLAYER, ENEMY, GAIA,
 	type HqSeatOptions, type HqWorldOptions
 } from "./harness/hqWorld.ts";
-import { emptyEvents, restoreEngine, stubGlobal, type World } from "./harness/attackWorld.ts";
+import { emptyEvents, makeTemplate, restoreEngine, stubGlobal, type World } from "./harness/attackWorld.ts";
 import type { FakeEnt } from "./harness/attackWorld.ts";
 import type { HqInstance, HqWorld } from "./harness/hqWorld.ts";
 
@@ -849,5 +850,864 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		assert.equal(hq.maxFields, false);
 		// and the rushes table was not touched a second time
 		assert.equal(hq.attackManager.maxRushes, 0);
+	});
+});
+
+/** A town square with its training cards: the civic centre raises the
+ * native civilian (`units/{native}/support_civilian`, template_structure_civic_
+ * civil_centre's Trainer list) and the barracks the basic infantry cards. */
+type FakeFacility = FakeEnt & Record<string, (...args: any[]) => unknown>;
+function trainerTown(world: HqWorld): { civicCentre: FakeFacility; barracks: FakeFacility }
+{
+	const civicCentre = world.ents.get(1000) as unknown as FakeFacility;
+	if (civicCentre)
+	{
+		// the engine's CCmpTrainer always answers an array here (an empty
+		// queue still answers []), so the CC is a facility even at rest
+		civicCentre.trainingQueue = () => [];
+		civicCentre.trainableEntities = () => ["units/athen/support_civilian"];
+		world.templates["units/athen/support_civilian"] = makeTemplate("units/athen/support_civilian",
+			{
+				"classes": ["Unit", "Human", "Support", "Builder", "Civilian", "Worker"],
+				"cost": { "food": 50 }, "walkSpeed": 9,
+				"getPaths": { "Cost": { "Population": 1 } }
+			});
+	}
+	const barracks = world.addEntity(makeHqEntity({
+		"id": 400, "owner": PLAYER, "position": [104, 140],
+		"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks",
+	}, { "trainingQueue": () => [] })) as FakeFacility;
+	barracks.trainableEntities = () => [
+		"units/athen/infantry_spearman_b", "units/athen/infantry_archer_b"
+	];
+	world.templates["structures/athen/barracks"] = structureTemplate("structures/athen/barracks",
+		{ "classes": ["Structure", "Barracks"] });
+	// crops under the walls: the full 0.3 support share applies unless a
+	// suite drops the field again (the lost-fields suite)
+	world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
+		{ "classes": ["Structure", "Economic", "Field"] });
+	world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
+		{
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee",
+				"Spearman", "Worker", "Citizen"],
+			// the infantry base costs 50 food, the spearman adds 50 wood
+			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
+			"getPaths": { "Cost": { "Population": 1 } }
+		});
+	world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b",
+		{
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged",
+				"Archer", "Worker", "Citizen"],
+			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9,
+			"getPaths": { "Cost": { "Population": 1 } }
+		});
+	return { civicCentre, barracks };
+}
+
+/** a citizen worker already on the payroll (no plan holds it) */
+function hand(world: HqWorld, id: number, soldier: boolean): FakeEnt
+{
+	const spec = soldier ?
+		{ "id": id, "owner": PLAYER, "position": [80 + id, 80 + id] as [number, number],
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Worker"],
+			"templateName": "units/athen/infantry_spearman_b" } :
+		{ "id": id, "owner": PLAYER, "position": [60 + id, 60 + id] as [number, number],
+			"classes": ["Unit", "Human", "Support", "Worker", "Civilian", "Builder"],
+			"templateName": "units/athen/support_civilian" };
+	const ent = world.addEntity(makeHqEntity(spec, {}, { "role": "worker" })) as FakeEnt;
+	return ent;
+}
+
+/** seed a live training order on a queue, as a started TrainingPlan sits */
+async function trainingOrder(world: HqWorld, queueName: string, template: string,
+	number: number, metadata: Record<string, unknown>, count = 1)
+{
+	const { TrainingPlan } = await petraPlans();
+	const queues = world.ai.queues as unknown as
+		Record<string, { addPlan(plan: unknown): void; plans: Array<Record<string, unknown>> }>;
+	for (let i = 0; i < count; ++i)
+		queues[queueName].addPlan(new TrainingPlan(world.gameState, template, metadata,
+			number, Math.max(number, 5)));
+}
+
+/** the plan cards the suites build orders with (petra's module exports) */
+let petraPlansCache: Promise<{ TrainingPlan: unknown; ConstructionPlan: unknown }> | undefined;
+async function petraPlans(): Promise<{ TrainingPlan: any; ConstructionPlan: any }>
+{
+	petraPlansCache ??= Promise.all([
+		loadPetraModule<{ TrainingPlan: unknown }>("queueplanTraining"),
+		loadPetraModule<{ ConstructionPlan: unknown }>("queueplanBuilding")
+	]).then(([training, building]) => ({
+		"TrainingPlan": training.TrainingPlan,
+		"ConstructionPlan": building.ConstructionPlan
+	}));
+	return petraPlansCache as Promise<{ TrainingPlan: any; ConstructionPlan: any }>;
+}
+
+
+describe("headquarters and phase advance: what the city still lacks", () => {
+	it("a town requirement orders the market; the phase-up booking goes through", () =>
+	{
+		// the real ladder (phase_city_generic.json) asks three Town-class
+		// structures before the city research completes; a fresh town holds
+		// its civic centre (not a Town-class building — the civil centre
+		// template carries no Town token) so the office must raise one
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
+		});
+
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
+			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		builder(world, 17, ["structures/athen/market"]);
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		const economic = world.ai.queues as unknown as
+			Record<string, { plans: Array<Record<string, unknown>> }>;
+		const plans = economic.economicBuilding.plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0].type, "structures/athen/market");
+		// marked as the phase-up building and parked back afterwards
+		assert.deepEqual(plans[0].metadata, { "phaseUp": true });
+		assert.equal(plans[0].queueToReset, "economicBuilding");
+		// construction first: the economic queue reservation climbs to 1000
+		const priority = (world.ai.queueManager as unknown as
+			{ getPriority(queue: string): number }).getPriority("economicBuilding");
+		assert.equal(priority, 1000);
+		// and the barracks gets nothing: one building per phase-up turn
+		assert.equal((economic.militaryBuilding as { plans: unknown[] }).plans.length, 0);
+	});
+
+	it("the market already trading hands the town requirement to the temple", () =>
+	{
+		// a market stands (it counts Town) so the next code path looks for
+		// the second town anchor of a real city core
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
+		});
+
+		world.addEntity(makeHqEntity({
+			"id": 500, "owner": PLAYER, "position": [80, 120],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market",
+		}));
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
+			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple",
+			{ "classes": ["Structure", "Town", "Temple"] });
+		builder(world, 17, ["structures/athen/temple"]);
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		const economic = (world.ai.queues as unknown as
+			Record<string, { plans: Array<Record<string, unknown>> }>).economicBuilding;
+		assert.equal(economic.plans.length, 1);
+		assert.equal(economic.plans[0].type, "structures/athen/temple");
+		assert.equal(economic.plans[0].queueToReset, "economicBuilding");
+	});
+
+	it("market and temple standing: the forge answers on the military queue", () =>
+	{
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
+		});
+
+		world.addEntity(makeHqEntity({
+			"id": 500, "owner": PLAYER, "position": [80, 120],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market",
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 501, "owner": PLAYER, "position": [96, 120],
+			"classes": ["Structure", "Town", "Temple"],
+			"templateName": "structures/athen/temple",
+		}));
+		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
+			{ "classes": ["Structure", "Town", "Forge"] });
+		builder(world, 17, ["structures/athen/forge"]);
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		const military = (world.ai.queues as unknown as
+			Record<string, { plans: Array<Record<string, unknown>> }>).militaryBuilding;
+		assert.equal(military.plans.length, 1);
+		assert.equal(military.plans[0].type, "structures/athen/forge");
+		assert.equal(military.plans[0].queueToReset, "militaryBuilding");
+		// the barracks' own line climbs to 1000 for the phase-up building
+		const priority = (world.ai.queueManager as unknown as
+			{ getPriority(queue: string): number }).getPriority("militaryBuilding");
+		assert.equal(priority, 1000);
+	});
+
+	it("three town buildings standing: the requirement is already met", () =>
+	{
+		// market, temple and forge all carry the Town visible class — with
+		// three of them the city-bound count is satisfied
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
+		});
+
+		world.addEntity(makeHqEntity({
+			"id": 500, "owner": PLAYER, "position": [80, 120],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market",
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 501, "owner": PLAYER, "position": [96, 120],
+			"classes": ["Structure", "Town", "Temple"],
+			"templateName": "structures/athen/temple",
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 502, "owner": PLAYER, "position": [112, 120],
+			"classes": ["Structure", "Town", "Forge"],
+			"templateName": "structures/athen/forge",
+		}));
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		// every queue stays empty and untouched
+		for (const queue of ["economicBuilding", "militaryBuilding", "wonder", "majorTech"])
+			assert.equal(((world.ai.queues as Record<string, { plans: unknown[] }>)[queue] ??
+				{ plans: [] }).plans.length, 0, queue);
+		// no priority was lifted
+		const priorities = hq.Config.priorities;
+		assert.equal((priorities as Record<string, number>).economicBuilding, 700);
+	});
+
+	it("the economic queue is busy: a town requirement waits its turn", async () =>
+	{
+		// the town's line already builds a corral for the herd; the office
+		// will not wedge the market in front of a running project
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
+		});
+
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
+			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple",
+			{ "classes": ["Structure", "Town", "Temple"] });
+		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
+			{ "classes": ["Structure", "Town", "Forge"] });
+		builder(world, 17, ["structures/athen/market"]);
+		hq.buildManager.init(world.gameState);
+
+		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
+			{ "classes": ["Structure", "Corral"] });
+		const { ConstructionPlan } = await petraPlans();
+		const queues = world.ai.queues as unknown as
+			Record<string, { addPlan(plan: unknown): void; plans: Array<Record<string, unknown>> }>;
+		queues.economicBuilding.addPlan(new ConstructionPlan(world.gameState,
+			"structures/athen/corral"));
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		// the corral remains the only order on the economic line
+		assert.equal(queues.economicBuilding.plans.length, 1);
+		assert.equal(queues.economicBuilding.plans[0].type, "structures/athen/corral");
+		assert.equal((queues.militaryBuilding).plans.length, 0);
+	});
+
+	it("the village count is the houses' business, not the office's", () =>
+	{
+		// the true phase-town requirement (phase_town_generic.json) reads
+		// five Village-class structures; the office leaves houses half of it
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 5 }] }
+		});
+
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
+			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		builder(world, 17, ["structures/athen/market"]);
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		assert.equal(((world.ai.queues as Record<string,
+			{ plans: unknown[] }>).economicBuilding).plans.length, 0);
+		const priority = (world.ai.queueManager as unknown as
+			{ getPriority(queue: string): number }).getPriority("economicBuilding");
+		assert.equal(priority, 700);
+	});
+
+	it("a wonder class books the wonder and scraps the major-tech price", () =>
+	{
+		// wonder victory worlds require their wonder before the last phase:
+		// the office steers the class-less requirement to the wonder queue
+		const { world, hq } = seat({
+			"phaseRequirements": { 2: [{ "class": "Wonder", "count": 1 }] }
+		});
+
+		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder",
+			{ "classes": ["Structure", "City", "Wonder"] });
+		builder(world, 17, ["structures/athen/wonder"]);
+		hq.buildManager.init(world.gameState);
+
+		hq.checkPhaseRequirements(world.gameState, world.ai.queues as never);
+
+		const wonder = (world.ai.queues as unknown as
+			Record<string, { plans: Array<Record<string, unknown>> }>).wonder;
+		assert.equal(wonder.plans.length, 1);
+		assert.equal(wonder.plans[0].type, "structures/athen/wonder");
+		assert.equal(wonder.plans[0].queueToReset, "majorTech");
+		// techs queue demoted to 400 so the wonder holds the cash
+		const priority = (world.ai.queueManager as unknown as
+			{ getPriority(queue: string): number }).getPriority("majorTech");
+		assert.equal(priority, 400);
+	});
+});
+
+describe("headquarters and the workforce: how many hands the village asks for", () => {
+	it("eight hands out, ten more on the books: the orders trim back to one", async () =>
+	{
+		// eight workers stand in the fields, two queued orders of ten hands
+		// each. With the standing workforce under a dozen, the training
+		// orders shrink to a single pair of hands, so a raid's losses heal
+		// cheaply and the town rebuilds from small bills
+		const { world, hq } = seat();
+		const { civicCentre, barracks } = trainerTown(world);
+		assert.ok(civicCentre && barracks);
+		for (let i = 0; i < 8; ++i)
+			hand(world, 500 + i, false);
+		await trainingOrder(world, "villager", "units/athen/support_civilian", 10,
+			{ "role": "worker", "base": 0, "support": true }, 2);
+
+		// the queued supports now stand far past the share the office
+		// wants, so the next order goes to the barracks; the office
+		// sprinkles one recruit class, and the suite pins the dice to the
+		// melee pick (["Ranged", "Melee", "Infantry"][1])
+		stubGlobal("pickRandom", (list: string[]) => list[1]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ number: number; type: string; metadata?: Record<string, unknown> }> }>;
+			assert.equal(queues.villager.plans[0].number, 1);
+			assert.equal(queues.villager.plans[1].number, 1);
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_spearman_b");
+			assert.deepEqual(queues.citizenSoldier.plans[0].metadata, { "role": "worker", "base": 0 });
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	// one census, two answers: the town holds 30 paid workers of which 13
+	// are support hands. The office's share formula reads
+	// supportNum(α) = 18 · (1 − e^−α·30/18) — 18 being supportRatio 0.3 ×
+	// targetNumWorkers 60 — so peace (α 0.85) books 13.6 supports and a
+	// rush getting ready (α 0.7) only 12.4. Thirteen supports stand above
+	// the ready-for-rush share but below the peaceful one: the two answers
+	// part exactly at this census.
+	it("a fresh town: thirteen supports stand below the peaceful share", async () =>
+	{
+		const { world, hq } = seat();
+		trainerTown(world);
+		for (let i = 0; i < 13; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 17; ++i)
+			hand(world, 600 + i, true);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ number: number; type: string; metadata?: Record<string, unknown> }> }>;
+		assert.equal(queues.villager.plans.length, 1);
+		assert.equal(queues.villager.plans[0].type, "units/athen/support_civilian");
+		// the batch reads ceil(30/10) = 3
+		assert.equal(queues.villager.plans[0].number, 3);
+		assert.deepEqual(queues.villager.plans[0].metadata,
+			{ "role": "worker", "base": 0, "support": true });
+		assert.equal(queues.citizenSoldier.plans.length, 0);
+	});
+
+	it("a second rush getting ready: the same town now reaches for spears", async () =>
+	{
+		// the attack manager (as setRushes books for a second wave) allows
+		// one more rush: alpha drops to 0.7, the share falls under the
+		// thirteen standing supports and the order goes to the barracks
+		const { world, hq } = seat();
+		trainerTown(world);
+		for (let i = 0; i < 13; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 17; ++i)
+			hand(world, 600 + i, true);
+		hq.attackManager.maxRushes = 1;
+
+		stubGlobal("pickRandom", (list: string[]) => list[1]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ number: number; type: string }> }>;
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_spearman_b");
+			// the villager line stands still
+			assert.equal(queues.villager.plans.length, 0);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("a truce day: the peace lobe books one hand more", async () =>
+	{
+		// arming the truce boost: with 14 supports of 30 the peaceful share
+		// (13.6) stays below them, while the boosted alpha reads
+		// α = 0.85 + (1 − 0.85) · min(max(600 − 120, 0), 180)/180 = 1.0 →
+		// 18 · (1 − e^−30/18) = 14.6 — one hand beyond the standing count,
+		// so the truce town trains a civilian where the open town would
+		// not
+		const { world, hq } = seat({
+			"ceasefire": true
+		});
+		trainerTown(world);
+		for (let i = 0; i < 14; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 16; ++i)
+			hand(world, 600 + i, true);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ type: string }> }>;
+		assert.equal(queues.villager.plans.length, 1);
+		assert.equal(queues.villager.plans[0].type, "units/athen/support_civilian");
+	});
+
+	it("the fields are lost: the town no longer leans on civilians", async () =>
+	{
+		// no field template is on offer (the fields under the walls fall),
+		// so the share supportRatio takes the 0.1 floor: supportMax 6 hands (0.1·60) and with 30 numberTotal
+		// the share reads 6·(1 − e^−0.85·30/6) ≈ 5.9 — the eight standing
+		// supports stand above it, and the next hands come from the barracks
+		const { world, hq } = seat();
+		trainerTown(world);
+		// the fields fall: the office sweeps for any field template and
+		// finds none
+		delete (world.templates as Record<string, unknown>)["structures/athen/field"];
+		for (let i = 0; i < 8; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 22; ++i)
+			hand(world, 600 + i, true);
+
+		// the office sprinkles the recruit class; the suite pins the dice
+		// to the melee pick
+		stubGlobal("pickRandom", (list: string[]) => list[1]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ type: string }> }>;
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_spearman_b");
+			assert.equal(queues.villager.plans.length, 0);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("fields under the walls: the same roster still asks for civilians", async () =>
+	{
+		// the same 8/22 census with a field template on offer: the full 0.3
+		// share applies and 8 supports stand below 18·(1 − e^−0.85·30/18) =
+		// 13.6, so the villager line books the next order
+		const { world, hq } = seat();
+		trainerTown(world);
+		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
+			{ "classes": ["Structure", "Economic", "Field"] });
+		for (let i = 0; i < 8; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 22; ++i)
+			hand(world, 600 + i, true);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ type: string }> }>;
+		assert.equal(queues.villager.plans.length, 1);
+		assert.equal(queues.villager.plans[0].type, "units/athen/support_civilian");
+	});
+
+	it("a dozen-plus on the books: the town books two at a time", async () =>
+	{
+		// thirteen standing workers: once the workforce crosses a dozen
+		// the batch doubles (ceil(13/10)), and the ordered bill reads two
+		const { world, hq } = seat();
+		trainerTown(world);
+		for (let i = 0; i < 13; ++i)
+			hand(world, 500 + i, false);
+		await trainingOrder(world, "villager", "units/athen/support_civilian", 9,
+			{ "role": "worker", "base": 0, "support": true });
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ number: number }> }>;
+		assert.equal(queues.villager.plans[0].number, 2);
+	});
+
+	it("a large city: the batch never tops five hands", async () =>
+	{
+		// seventy workers out: ceil(70/10) = 7, but the order never books
+		// more than five at once
+		const { world, hq } = seat();
+		trainerTown(world);
+		for (let i = 0; i < 70; ++i)
+			hand(world, 500 + i, false);
+		await trainingOrder(world, "villager", "units/athen/support_civilian", 9,
+			{ "role": "worker", "base": 0, "support": true });
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ number: number }> }>;
+		assert.equal(queues.villager.plans[0].number, 5);
+	});
+
+	it("purse saved past the phase-two budget: no new bill is booked", async () =>
+	{
+		// the pop budget for the phase-two day sits at popPhase2 (150 in
+		// the real economy; 1 here — an annotated shrink that keeps the
+		// census a village). Past budget + 10 hands the office orders
+		// nothing while its purse is in save mode
+		const { world, hq } = seat();
+		trainerTown(world);
+		(hq.Config.Economy as Record<string, number>).popPhase2 = 1;
+		for (let i = 0; i < 12; ++i)
+			hand(world, 500 + i, false);
+		hq.saveResources = true;
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: unknown[] }>;
+		assert.equal(queues.villager.plans.length, 0);
+		assert.equal(queues.citizenSoldier.plans.length, 0);
+	});
+
+	it("the same census with the purse open and phase two reached: it resumes", async () =>
+	{
+		// identical census, purse open, town phase done (currentPhase 2
+		// reads the phase-two stop): the halt was the saved purse alone,
+		// not the headcount — the office books again, and the twelve
+		// standing supports dwarf the no-field share (0.1·60 = 6 hands',
+		// share on 12 total ≈ 6·(1 − e^−1.7) ≈ 4.9), so the barracks answers
+		const { world, hq } = seat();
+		trainerTown(world);
+		(hq.Config.Economy as Record<string, number>).popPhase2 = 1;
+		for (let i = 0; i < 12; ++i)
+			hand(world, 500 + i, false);
+		hq.currentPhase = 2;
+
+		// pin the office's recruit-class dice to the melee pick
+		stubGlobal("pickRandom", (list: string[]) => list[1]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ type: string }> }>;
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_spearman_b");
+			assert.equal(queues.villager.plans.length, 0);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("phase two still in research: the halt relaxes for the research days", async () =>
+	{
+		// currentPhase 1 but the city tech is on the researchers' desks
+		// (the researching list): the popPhase2 stop applies only while no
+		// phase tech is being researched, so a town of 5 supports and 7
+		// soldiers keeps booking — 5 supports stand below the share
+		// 18·(1 − e^−0.85·12/18) ≈ 7.8 with a field on offer
+		const { world, hq } = seat({
+			"researching": ["phase_city"],
+			// the city tech exists, and sits being researched
+			"phaseName": "phase_city"
+		});
+		trainerTown(world);
+		(hq.Config.Economy as Record<string, number>).popPhase2 = 1;
+		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
+			{ "classes": ["Structure", "Economic", "Field"] });
+		for (let i = 0; i < 5; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 7; ++i)
+			hand(world, 600 + i, true);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: Array<{ number: number; type: string }> }>;
+		assert.equal(queues.villager.plans.length, 1);
+		assert.equal(queues.villager.plans[0].type, "units/athen/support_civilian");
+		// the batch reads ceil(12/10) = 2
+		assert.equal(queues.villager.plans[0].number, 2);
+	});
+
+	it("sixteen hands still on the training ground: any new order waits", async () =>
+	{
+		// sixteen hands mid-training at the civic centre: above fifteen
+		// anywhere in the train the office adds no more
+		const { world, hq } = seat();
+		const { civicCentre, barracks } = trainerTown(world);
+		assert.ok(civicCentre && barracks);
+		// one live sixteen-hand order, shaped as the engine lists it
+		// (entity.js: unitTemplate, count, metadata)
+		civicCentre.trainingQueue = () => [
+			{ "count": 16, "unitTemplate": "units/athen/support_civilian",
+				"metadata": { "role": "worker", "support": true } }
+		];
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: unknown[] }>;
+		assert.equal(queues.villager.plans.length, 0);
+		assert.equal(queues.citizenSoldier.plans.length, 0);
+	});
+
+	it("both lines hold orders above twenty: neither gets another", async () =>
+	{
+		// four ten-hand bills queued on each line (the first two of each
+		// trim to one, leaving 22 + 22 = 44, under the fifty cap but past
+		// twenty on both): neither line takes a further order
+		const { world, hq } = seat();
+		const { civicCentre, barracks } = trainerTown(world);
+		assert.ok(civicCentre && barracks);
+		await trainingOrder(world, "villager", "units/athen/support_civilian", 10,
+			{ "role": "worker", "base": 0, "support": true }, 4);
+		await trainingOrder(world, "citizenSoldier", "units/athen/infantry_spearman_b", 10,
+			{ "role": "worker", "base": 0 }, 4);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: unknown[] }>;
+		assert.equal(queues.villager.plans.length, 4);
+		assert.equal(queues.citizenSoldier.plans.length, 4);
+	});
+
+	it("a facility with no trainer cards: nobody gets hired", async () =>
+	{
+		// the town's only trainer keeps an empty card list (a barracks
+		// mid-foundations trains nothing): the office has no villager and
+		// no soldier to order, and both queues stand still
+		const { world, hq } = seat();
+		world.addEntity(makeHqEntity({
+			"id": 400, "owner": PLAYER, "position": [104, 140],
+			"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks",
+		}, { "trainingQueue": () => [] }));
+		for (let i = 0; i < 3; ++i)
+			hand(world, 500 + i, false);
+
+		hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+		const queues = world.ai.queues as unknown as
+			Record<string, { plans: unknown[] }>;
+		assert.equal(queues.villager.plans.length, 0);
+		assert.equal(queues.citizenSoldier.plans.length, 0);
+	});
+});
+
+describe("headquarters and the recruit choice: what the weights pick", () => {
+	// the comparator the office runs on its two recruit bills: value =
+	// 0.1 + Σ param·weight, then every resource the card costs multiplies
+	// that value by its costsResource weight, and the order divides by
+	// 1 + costSum. The bookkeeping appends the same costsResource weight
+	// for every resource the town can neither stock (available ≤ 800) nor
+	// still gather (remaining ≤ 400 books 0.2; remaining ≤ 800 books 0.6).
+	it("no trainer to house them: the choice returns nothing", () =>
+	{
+		const { world, hq } = seat();
+		// no facility anywhere on the plain — the camp answers no card
+		const best = hq.findBestTrainableUnit(world.gameState, ["Support+Worker"],
+			[["costsResource", 1, "food"]]);
+
+		assert.equal(best, undefined);
+	});
+
+	it("the honest speeds: at equal cost the quicker recruit leads", () =>
+	{
+		// the two first-line infantry cards of a real game: the melee
+		// hoplite walks 9.5 (template_unit_infantry_melee), the ranged
+		// archer 9 (the template_unit base). Costs equal at 50 food +
+		// 50 wood, so the [speed 0.5] sweep picks the hoplite —
+		// (0.1 + 0.5·9.5)/101 = 0.0480 stands above (0.1 + 0.5·9)/101 = 0.0455
+		const { world, hq } = seat({ "stock": { "food": 1000, "wood": 1000 } });
+		trainerTown(world);
+
+		const best = hq.findBestTrainableUnit(world.gameState,
+			[["CitizenSoldier", "Infantry", "Melee"]], [["speed", 0.5]]);
+
+		assert.equal(best, "units/athen/infantry_spearman_b");
+	});
+
+	it("a city of forty-five hands: the office judges recruits by their arms", async () =>
+	{
+		// past forty-five paid workers the recruit sweep swaps from the
+		// walk-speed and discount weights to the strength table:
+		// getMaxStrength weighs every Attack/<type>/Damage entry with the
+		// config's DamageTypeImportance (Hack .075, Pierce .085, Crush
+		// .045, Fire .001 — four types), adds range and timing at
+		// 0.0125·MaxRange and ±time/100000, adds the resistance Damage the
+		// same way, then multiplies by Health/Max / 100. The real cards:
+		// the spear strikes 4.5 Hack + 4 Pierce at range 4, rests
+		// 3/3, on 100 health — 0.1 + 0.344 = 0.444; the bow pierces 7.2 at
+		// range 60, rests 1/1, on 50 health — 0.1 + 0.474 = 0.574. At
+		// equal 50-food + 50-wood bills the bow's reach and damage out-
+		// weigh the spear's sturdier frame (the Slaughter all units carry
+		// is skipped by the sweep)
+		const { world, hq } = seat({ "stock": { "food": 1000, "wood": 1000 } });
+		trainerTown(world);
+		// the two recruit cards carry their real attack blocks
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
+			{
+				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
+					"Melee", "Spearman", "Worker", "Citizen"],
+				"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
+				"getPaths": { "Cost": { "Population": 1 } },
+				"attackTypes": ["Melee", "Slaughter"],
+				"attackStrengths": { "Melee": { "Hack": 4.5, "Pierce": 4 } },
+				"attackRanges": { "Melee": { "max": 4 } },
+				"attackTimes": { "Melee": { "prepare": 500, "repeat": 1000 } },
+				"resistanceStrengths": { "Hack": 3, "Pierce": 3 },
+				"maxHitpoints": 100
+			});
+		world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b",
+			{
+				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
+					"Ranged", "Archer", "Worker", "Citizen"],
+				"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9,
+				"getPaths": { "Cost": { "Population": 1 } },
+				"attackTypes": ["Ranged", "Slaughter"],
+				"attackStrengths": { "Ranged": { "Pierce": 7.2 } },
+				"attackRanges": { "Ranged": { "max": 60 } },
+				"attackTimes": { "Ranged": { "prepare": 800, "repeat": 1250 } },
+				"resistanceStrengths": { "Hack": 1, "Pierce": 1 },
+				"maxHitpoints": 50
+			});
+		// eighteen supports and twenty-seven hoplites on the payroll: the
+		// support share 18·(1 − e^−0.85·45/18) = 15.9 stands below the
+		// standing supports, so the barracks answers, and 45 in total
+		// pushes the sweep to the strength table
+		for (let i = 0; i < 18; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 27; ++i)
+			hand(world, 600 + i, true);
+
+		// pin the class dice to Infantry so both cards face the sweep
+		stubGlobal("pickRandom", (list: string[]) => list[2]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ number: number; type: string }> }>;
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_archer_b");
+			// the batch reads ceil(45/10), capped at five
+			assert.equal(queues.citizenSoldier.plans[0].number, 5);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	// the two swing cards for the weight stories: no real recruit card
+	// costs stone, so the suite hands a synthetic stone-flavoured one
+	// (annotate-facing stand-in) to face the real artisan (cost food 50)
+	// — what both worlds share: available food 1000 books the food slot
+	// over the sweep's 800 shelf, so the artisan pays no gathered-wealth
+	// discount at all
+	it("a card whose only cost rides above the shelf: it pays nothing", () =>
+	{
+		// a fresh town with food in hand (1000): the sweep skips food
+		// entirely (available > 800) and weights the rest at 0.2 — the
+		// artisan reads 0.1/51 = 0.00196 and the stone card
+		// 0.1·0.2/21 = 0.00095: the untouched card leads
+		const { world, hq } = seat({ "stock": { "food": 1000 } });
+		trainerTown(world);
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
+			{
+				"classes": ["Unit", "Infantry"], "cost": { "stone": 20 }, "walkSpeed": 9.5
+			});
+
+		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"],
+			[["costsResource", 1, "food"]]);
+
+		assert.equal(best, "units/athen/support_civilian");
+	});
+
+	it("a stone hill behind the walls: the stone-flavoured card wins instead", () =>
+	{
+		// the same pair, but the town's central dropsite bookkeeps 600
+		// gatherable stone: remaining > 400 books the 0.6 weight, and the
+		// stone card reads 0.1·0.6/21 = 0.00286 above the artisan's
+		// 0.00196 — the discount bookkeeping flips the choice
+		const { world, hq } = seat({ "stock": { "food": 1000, "stone": 200, "metal": 200 } });
+		const { civicCentre } = trainerTown(world);
+		assert.ok(civicCentre);
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
+			{
+				"classes": ["Unit", "Infantry"], "cost": { "stone": 20 }, "walkSpeed": 9.5
+			});
+		civicCentre.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
+		// two stone mines of 300 next to the civic centre; the ledger loop
+		// is the storehouse test's (it walks assignResourceToDropsite)
+		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100],
+			"generic": "stone", "specific": "stone", "classes": ["Stone"], "amount": 300 }));
+		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96],
+			"generic": "stone", "specific": "stone", "classes": ["Stone"], "amount": 300 }));
+		hq.updateTerritories(world.gameState);
+		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState,
+			civicCentre as never);
+
+		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"],
+			[["costsResource", 1, "food"]]);
+
+		assert.equal(best, "units/athen/infantry_spearman_b");
+	});
+
+	it("an unexpected parameter token is logged and refused, not crashed", () =>
+	{
+		// the requirement lists are data the callers build; a token the
+		// comparator does not carry must refuse the sweep (the value stays
+		// at its base) and log the surprise instead of throwing
+		const { world, hq } = seat();
+		trainerTown(world);
+		// unequal bills so the compared order stays deterministic
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
+			{
+				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
+					"Melee", "Worker", "Citizen"],
+				"cost": { "food": 50, "wood": 30 }, "walkSpeed": 9.5,
+				"getPaths": { "Cost": { "Population": 1 } }
+			});
+
+		resetRecorder();
+		const best = hq.findBestTrainableUnit(world.gameState,
+			[["CitizenSoldier", "Infantry"]], [["magnetism", 1]]);
+
+		assert.ok(logs.some((entry) => /trainMoreUnits avec non prevu/.test(entry)),
+			"the unexpected parameter was logged");
+		// both cards read the same 0.1 base, so the cheaper bill leads
+		assert.equal(best, "units/athen/infantry_spearman_b");
 	});
 });

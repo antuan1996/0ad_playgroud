@@ -485,16 +485,23 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	gs.hqKnobs = hqKnobs;
 	// as GameState.prototype.findTrainableUnits: every template our own
 	// facilities train, filtered by the class rules of the game
-	gs.findTrainableUnits = (classes: string[], anticlasses: string[]) =>
+	gs.findTrainableUnits = (classes: Array<string | string[]>, anticlasses: string[]) =>
 	{
 		const allTrainable: string[] = [];
-		for (const ent of world.structures.filter((s) => s.hasClass("Trainer")))
-		{
+		// as GameState.prototype.findTrainableUnits: the training facilities
+		// (an own entity whose trainingQueue is truthy), each list of cards
+		for (const ent of world.structures.filter((s) =>
+			((s as unknown as Record<string, (player: number) => unknown>).trainingQueue)(PLAYER)))
 			for (const trainable of (ent.trainableEntities as (civ: string) => string[] | undefined)("athen") ?? [])
 				if (!allTrainable.includes(trainable))
 					allTrainable.push(trainable);
-		}
-		const found: Array<{ name: string; template: FakeTemplateLike }> = [];
+		const found: Array<[string, FakeTemplateLike]> = [];
+		const limits = (gs.getEntityLimits as unknown as () =>
+			Record<string, number>)();
+		const current = (gs.getEntityCounts as unknown as () =>
+			Record<string, number>)();
+		const matchCounts = (gs.getEntityMatchCounts as unknown as () =>
+			Record<string, number> | undefined)();
 		for (const trainable of allTrainable)
 		{
 			if (world.gameState.isTemplateDisabled(trainable))
@@ -502,9 +509,18 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 			const template = world.templates[trainable];
 			if (!template || !template.available(world.gameState))
 				continue;
-			if (!template.hasClasses(classes) || template.hasClasses(anticlasses))
+			const limit = template.matchLimit();
+			if (matchCounts && limit && matchCounts[trainable] >= limit)
 				continue;
-			found.push({ "name": trainable, template });
+			// the class list may nest (a common-api class list carries
+			// AND-groups as sub-arrays); MatchesClassList reads both
+			if (!template.hasClasses(classes as string[]) || template.hasClasses(anticlasses))
+				continue;
+			// the TrainingRestrictions category, counted like the game counts it
+			const category = template.trainingCategory();
+			if (category && limits[category] && current[category] >= limits[category])
+				continue;
+			found.push([trainable, template]);
 		}
 		return found;
 	};

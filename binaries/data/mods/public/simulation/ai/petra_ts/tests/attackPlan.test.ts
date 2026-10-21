@@ -528,10 +528,13 @@ describe("siege units", () =>
 	it("skips trainers whose trainables are disabled or missing", () =>
 	{
 		const world = makeWorld();
+		// the game lists trainers by a truthy trainingQueue (gamestate
+		// .findTrainers runs filters.byTrainingQueue), so the fixture gives
+		// one (an idle camp answers a truthy empty array)
 		const barracks = world.addEntity(makeEntity({
 			id: 900, owner: PLAYER, position: [14, 14],
 			classes: ["Structure", "Trainer"]
-		}));
+		}, { trainingQueue: () => [] }));
 		barracks.trainableEntities = () => ["units/gone_siege"];
 		// the game says the template is disabled
 		const gameState = world.gameState as unknown as Record<string, unknown>;
@@ -545,10 +548,12 @@ describe("siege units", () =>
 	it("adds the kind of siege unit it has a trainer for", () =>
 	{
 		const world = makeWorld();
+		// the game lists trainers by a truthy trainingQueue (gamestate
+		// .findTrainers runs filters.byTrainingQueue); see the disabled camp
 		const barracks = world.addEntity(makeEntity({
 			id: 900, owner: PLAYER, position: [14, 14],
 			classes: ["Structure", "Trainer"]
-		}));
+		}, { trainingQueue: () => [] }));
 		barracks.trainableEntities = () => ["units/siege_ram"];
 		world.templates["units/siege_ram"] = makeTemplate("units/siege_ram", { classes: ["Siege", "Melee"] });
 
@@ -567,9 +572,10 @@ describe("siege units", () =>
 	it("starts at hard difficulty sizes and skips when the size is zero", () =>
 	{
 		const world = makeWorld({ difficulty: SANDBOX });
+		// the game lists trainers by a truthy trainingQueue (see above)
 		const barracks = world.addEntity(makeEntity({
 			id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Trainer"]
-		}));
+		}, { trainingQueue: () => [] }));
 		barracks.trainableEntities = () => ["units/siege_balista"];
 		world.templates["units/siege_balista"] = makeTemplate("units/siege_cloud", { classes: ["Siege", "Ranged"] });
 
