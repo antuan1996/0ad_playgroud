@@ -57,6 +57,8 @@ export interface FakePlanLike
 	category: string;
 	number: number;
 	metadata: Record<string, unknown> | undefined;
+	/** QueuePlan books 0 when no position was given; ConstructionPlan a couple */
+	position?: [number, number] | number | undefined;
 	template: FakeTemplateLike;
 }
 
@@ -497,6 +499,16 @@ export function makeEntity(spec: {
 		canAttackTarget: () => false,
 		canAttackClass: () => false,
 		counters: () => false,
+		// the builder list lives on the template: no Builder tag, nothing buildable
+		buildableEntities: () => [],
+		isGatherer: () => false,
+		// dropsites carry a template tag; a plain entity drops nowhere
+		resourceDropsiteTypes: () => undefined,
+		isResourceDropsite: () => false,
+		// a plain entity supplies no resource (the tag lives on gaia resources)
+		resourceSupplyType: () => undefined,
+		resourceSupplyMax: () => 0,
+		resourceSupplyAmount: () => 0,
 		garrisonRegenRate: () => 0,
 		defaultRegenRate: () => 0,
 		territoryDecayRate: () => 0,
@@ -841,7 +853,7 @@ export function makeWorld(options: WorldOptions = {}): World
 			isMutualAlly: [false, true, false, false],
 			isEnemy: [true, false, true, true]
 		},
-		applyCiv: (name: string) => name,
+		applyCiv: (name: string) => name.replace("{civ}", "athen"),
 		getTemplate: (name: string) => templates[name] ?? null,
 		isTemplateDisabled: () => false,
 		getPlayerCiv: () => "athen",
