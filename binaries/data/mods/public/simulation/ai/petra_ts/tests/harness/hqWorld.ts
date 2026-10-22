@@ -289,6 +289,13 @@ export function structureTemplate(name: string, detail: {
 		hasBuildTerritory: (territory: string) =>
 			(detail.territories ?? ["own"]).includes(territory),
 		territoryList: () => detail.territories,
+		// as the common-api Template.buildTerritories (entity.js 493): the raw
+		// BuildRestrictions/Territory list. The `territories` option is the
+		// template's declared leaf — every real structure inherits
+		// template_structure.xml's <Territory>own</Territory> when its own
+		// declares nothing — so the default mirrors that (canBuild's
+		// no-active-base branch reads this exact answer).
+		buildTerritories: (): string[] => detail.territories ? [...detail.territories] : ["own"],
 		buildDistance: () => detail.buildDistance,
 		obstructionRadius: () => detail.obstruction ?? { "min": 1, "max": 2 },
 		buildCategory: () => detail.buildCategory,
@@ -491,6 +498,14 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		mapOf([...world.ents.values()].filter((e) =>
 			e.owner() === PLAYER && e.foundationProgress() !== undefined && e.hasClass(cls))));
 	gs.isTemplateAvailable = (name: string) => !disabled.has(name) && world.templates[name] !== undefined;
+	// as GameState.prototype.isTemplateDisabled (gamestate.js 943) reads
+	// playerData.disabledTemplates: the per-civ disabled-template list the game
+	// ships, so a template name mapped to a truthy value is disabled
+	(world.gameState.playerData as Record<string, unknown>).disabledTemplates =
+		Object.fromEntries([...disabled].map((name: string) => [name, true]));
+	gs.isTemplateDisabled = (name: string) =>
+		!!((world.gameState.playerData as { disabledTemplates: Record<string, unknown> })
+			.disabledTemplates[name]);
 	gs.isCeasefireActive = () => options.ceasefire !== undefined && options.ceasefire !== false;
 	gs.ceasefireTimeRemaining = options.ceasefire === true ? 600 : (options.ceasefire ?? 0);
 	gs.resetOnDiplomacyChanged = () => diplomacyResets.push(world.ai.playedTurn);

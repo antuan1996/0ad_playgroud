@@ -132,6 +132,10 @@ export interface FakeTemplateLike
 	attackTimes(type: string): { prepare: number; repeat: number } | undefined;
 	resistanceStrengths(): Record<string, number> | undefined;
 	maxHitpoints(): number;
+	/** the EntityLimits category, from BuildRestrictions/Category; unit templates carry no block */
+	buildCategory?(): string | undefined;
+	/** the raw BuildRestrictions/Territory list, undefined with no BuildRestrictions block */
+	buildTerritories?(): string[] | undefined;
 }
 
 export interface UnitStatLike
@@ -620,21 +624,24 @@ export function makeTemplate(name: string, detail: {
 	const getPaths = detail.getPaths ? { ...detail.getPaths } : {};
 	const available = detail.available ?? true;
 	const gatherRates = detail.resourceGatherRates ? { ...detail.resourceGatherRates } : undefined;
+	// the template walk the `get` method below reads leaves from
+	const getTemplateValue = (path: string): unknown =>
+	{
+		let value: unknown = getPaths;
+		for (const part of path.split("/"))
+		{
+			value = (value as Record<string, unknown> | undefined)?.[part];
+			if (value == undefined)
+				break;
+		}
+		return value as unknown;
+	};
 	return {
 		// the raw serialized template, as the original reads it
 		"_template": { "Cost": { "Population": detail.popCost ?? 1 } },
 		cost: () => ({ ...cost }),
 		costSum: () => Object.values(cost).reduce((sum: number, amount: number) => sum + amount, 0),
-		get: (path: string) => {
-			let value: any = getPaths;
-			for (const part of path.split("/"))
-			{
-				value = value?.[part];
-				if (value == undefined)
-					break;
-			}
-			return value;
-		},
+		get: (path: string) => getTemplateValue(path),
 		hasClass: (cls: string) => classes.includes(cls),
 		hasClasses: (list: string[]) => MatchesClassList(classes, list),
 		classes: () => classes,
@@ -662,7 +669,26 @@ export function makeTemplate(name: string, detail: {
 				undefined,
 		// as common-api template.resistanceStrengths reads Resistance/Entity/Damage
 		resistanceStrengths: () => detail.resistanceStrengths ? { ...detail.resistanceStrengths } : undefined,
-		maxHitpoints: () => detail.maxHitpoints ?? 100
+		maxHitpoints: () => detail.maxHitpoints ?? 100,
+		// as the common-api Template.buildCategory (entity.js 479) reads
+		// BuildRestrictions/Category, the EntityLimits counter that template
+		// decrements when raised; unit templates carry no BuildRestrictions
+		buildCategory: () =>
+			getTemplateValue("BuildRestrictions/Category") as string | undefined,
+		// as the common-api Template.buildTerritories (entity.js 493) reads
+		// BuildRestrictions: undefined when the template carries no
+		// BuildRestrictions block at all (unit templates never do; structure
+		// templates inherit template_structure.xml's), the Territory leaf
+		// split on whitespace otherwise. canBuild's no-active-base branch and
+		// isNotWorthBuilding both test this answer's shape, so it stays the
+		// raw list — hasBuildTerritory is the masked membership view of it.
+		buildTerritories: (): string[] | undefined =>
+		{
+			if (getTemplateValue("BuildRestrictions") === undefined)
+				return undefined;
+			const territory = getTemplateValue("BuildRestrictions/Territory");
+			return territory === undefined ? undefined : String(territory).split(/\s+/);
+		}
 	} as unknown as FakeTemplateLike;
 }
 

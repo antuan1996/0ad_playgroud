@@ -2114,3 +2114,208 @@ describe("findDefensiveLocation: where the walls face", () =>
 	});
 });
 
+describe("canBuild: which stones the office will book", () =>
+{
+	// the questions canBuild answers in the order it asks them: the parked
+	// holds of the buildManager, the disabled-template list the game ships per
+	// civ, the engine's template store, the template's own requirements, the
+	// builders on the payroll, the room a baseless board has for gaia
+	// ground, and the census the EntityLimits keep
+
+	/** the house the canBuild matrix books: the game's own EntityLimits
+	 * category and the template's inherited own-only territory */
+	const houseTemplate = (overrides: {
+		available?: boolean;
+	} = {}) => structureTemplate("structures/athen/house", {
+		"classes": ["Structure", "House", "Economic", "City"],
+		"buildCategory": "House",
+		...overrides
+	});
+
+	/** a support builder on the payroll: one unit whose Builder/Entities
+	 * template names the structures it can raise, {civ} expanded as the
+	 * common-api does before the office sees the list */
+	function seatBuilder(world: HqWorld, buildables: string[]): void
+	{
+		world.addEntity(makeHqEntity({
+			"id": 2201, "owner": PLAYER, "position": [151, 151],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			buildableEntities: (civ: string) => buildables.map(name => name.replace("{civ}", civ))
+		}));
+	}
+
+	it("a house rises where a builder stands and the census allows", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true);
+		assert.equal(hq.buildManager.unbuildables.size, 0,
+			"a buildable template parks nothing");
+	});
+
+	it("the census caps the town at its counted houses and parks the attempt", () =>
+	{
+		const { world, hq } = seat({ "entityLimits": { "House": 5 }, "entityCounts": { "House": 5 } });
+		world.templates["structures/athen/house"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+		assert.deepEqual(
+			[...hq.buildManager.unbuildables.entries()],
+			[["structures/athen/house", { "reason": "limit", "time": 190 }]],
+			"a capped build parks for the default 90 seconds from the turn's time");
+	});
+
+	it("one room short of the census cap the office still books", () =>
+	{
+		const { world, hq } = seat({ "entityLimits": { "House": 5 }, "entityCounts": { "House": 4 } });
+		world.templates["structures/athen/house"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true);
+	});
+
+	it("a category the census does not count is capped by nobody", () =>
+	{
+		const { world, hq } = seat({ "entityCounts": { "House": 99 } });
+		world.templates["structures/athen/house"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true,
+			"no limit row for the category means the count is ignored");
+	});
+
+	it("a template the game disabled per civ parks forever", () =>
+	{
+		const { world, hq } = seat({ "disabledTemplates": ["structures/athen/storehouse"] });
+		world.templates["structures/athen/storehouse"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/storehouse"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/storehouse"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/storehouse"),
+			{ "reason": "disabled", "time": Infinity });
+	});
+
+	it("a template name disabled without a template still parks as disabled", () =>
+	{
+		// the disabled check runs ahead of the template store: the game ships
+		// the disabled list per civ, and Petra trusts it before ever asking
+		// the store
+		const { world, hq } = seat({ "disabledTemplates": ["structures/athen/dock"] });
+		world.templates["structures/athen/house"] = houseTemplate();
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/dock"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/dock"),
+			{ "reason": "disabled", "time": Infinity },
+			"a `notemplate` row would mean the disabled list was consulted second");
+	});
+
+	it("a template the engine never shipped parks forever", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate();
+
+		assert.equal(hq.canBuild(world.gameState, "structures/athen/missing"), false
+			, "no template in the store, no stone to book under it");
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/missing"),
+			{ "reason": "notemplate", "time": Infinity });
+	});
+
+	it("a template whose requirements are unmet parks one season", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate({ "available": false });
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
+			{ "reason": "requirements", "time": 130 }, "requirements park for 30 seconds");
+	});
+
+	it("nobody on the payroll to raise it parks for two seasons", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate();
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
+			{ "reason": "nobuilder", "time": 220 }, "no builder parks for 120 seconds");
+	});
+
+	it("the hold answers on the cache long after the site changed hands", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate();
+
+		// the first ask parks the house: no builder stood on the payroll
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+
+		// the season rolls on and a builder walks in with the template in hand
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+		world.ai.elapsedTime = 150;
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false,
+			"hold is on for 120 seconds, and the office trusts it");
+
+		// past the hold the office asks the site again — and now books
+		world.ai.elapsedTime = 221;
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true,
+			"the reopened ask re-walks the checks from the top");
+	});
+
+	it("the refused call answers the first refusal in ask order", () =>
+	{
+		// the ask order is the same as the branches: a template whose own
+		// requirements refuse parks first even when the census is full
+		const { world, hq } = seat({ "entityLimits": { "House": 5 }, "entityCounts": { "House": 5 } });
+		world.templates["structures/athen/house"] = houseTemplate({ "available": false });
+
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
+			{ "reason": "requirements", "time": 130 }, "requirements before the census");
+	});
+
+	it("a townless board cannot book a house in gaia ground", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/house"] = houseTemplate();
+		seatBuilder(world, ["structures/{civ}/house"]);
+		hq.buildManager.init(world.gameState);
+		// the town's civic centre still standing: a foundation is a potential
+		// base, not a working one (the territory board answers all the same,
+		// so the territorial walk in the office hears identical rows)
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
+			() => 0;
+		hq.basesManager.resetBaseCache();
+
+		assert.equal(hq.hasActiveBase(), false);
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
+			{ "reason": "room", "time": 280 }, "own-only territory parks for 180 seconds");
+	});
+
+	it("a townless board books beyond own ground where its charter reaches", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/civil_centre"] = ccTemplate();
+		seatBuilder(world, ["structures/{civ}/civil_centre"]);
+		hq.buildManager.init(world.gameState);
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
+			() => 0;
+		hq.basesManager.resetBaseCache();
+
+		assert.equal(hq.hasActiveBase(), false);
+		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/civil_centre"), true,
+			"the civ centre plants outside mere rows: neutral ground answers its charter");
+	});
+});
+
