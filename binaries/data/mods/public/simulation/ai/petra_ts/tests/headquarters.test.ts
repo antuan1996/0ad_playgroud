@@ -2462,7 +2462,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the call books a melee batch at the empty house straight away", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		// the wall has no garrison room at the default book: 0 max slots means
 		// the melee card wins the ranged roll whatever the coin says
 		stubGlobal("randBool", () => true);
@@ -2493,7 +2493,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("so long as the emergency queue still holds the batch, no second book", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
 
@@ -2506,7 +2506,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a victim beyond the rescue cut is nobody's", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 
 		// 390 cells out in both axes: ~304,200 square distance over the cut
@@ -2517,7 +2517,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("no road on the victim's land — the office holds", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		world.accessAt.set("60,60", 9);
 
@@ -2528,7 +2528,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a training house already brimming skips the call", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman"],
 			// 6 s of queued production, half under way, reads as a house at
@@ -2544,7 +2544,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the wall's garrison book counts batches, and the lone fill makes the call ranged", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
 			"queue": [
@@ -2581,7 +2581,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a wounded wall keeps the melee hand even on the ranged roll", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world);
+		seatCards(world, hq);
 		// 40 hitpoints against the 50 eject floor: no room for arrows
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
@@ -2609,7 +2609,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("an empty treasury calls the house off", () =>
 	{
 		const { world, hq } = seat();
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), false);
@@ -2620,7 +2620,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the disabled card is passed over and its teammate wins the call", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 }, "disabledTemplates": ["units/athen/infantry_spearman"] });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
 		});
@@ -2635,7 +2635,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("when the emergency account falls short, the neighbour queue lends", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 150 } });
-		seatCards(world);
+		seatCards(world, hq);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		// the villager queue held an account from a previous turn's distribution
 		(world.ai.queueManager as unknown as
@@ -3047,6 +3047,430 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 
 		assert.deepEqual(ledger(hq, 2601), { "strength": 1, "ents": new Set([2611]) });
 		assert.deepEqual(commands, [], "no anti-capture read against a shielded target");
+	});
+});
+
+describe("planting a new ground: buildNewBase's template cards", () =>
+{
+	/** the military colony, the outpost card smaller towns plant first */
+	function colonyTemplate(): FakeTemplateLike
+	{
+		return structureTemplate("structures/athen/military_colony", {
+			"classes": ["Structure", "Military"],
+			"territories": ["own", "neutral"],
+			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } }
+		});
+	}
+
+	/** both builders booked, so canBuild holds nothing but template choice */
+	function seatCards(world: HqWorld, hq: HqInstance): void
+	{
+		world.templates["structures/athen/military_colony"] = colonyTemplate();
+		world.templates["structures/athen/civil_centre"] = ccTemplate();
+		world.addEntity(makeHqEntity({
+			"id": 2202, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) =>
+				["structures/{civ}/military_colony", "structures/{civ}/civil_centre"]
+					.map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+	}
+
+	it("the office plants the colony card where its towns keep the cc ways", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		// our town hall: a built CC carrying the civ's own applied template,
+		// the walk `hasOwnCC` reads
+		world.addEntity(makeHqEntity({
+			"id": 1102, "owner": PLAYER, "position": [80, 80],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		seatCards(world, hq);
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), true);
+
+		const queue = world.ai.queues.civilCentre as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans.length, 1);
+		const plan = queue.plans[0] as { type?: string; metadata?: Record<string, unknown> };
+		assert.equal(plan.type, "structures/athen/military_colony");
+		assert.equal(plan.metadata?.base, -1, "base -1 marks the plan: no base yet, any ground may serve");
+	});
+
+	it("without the colony's own card, our civil centre rises again", () =>
+	{
+		const { world, hq } = seat({
+			"phase": 2,
+			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 },
+			"disabledTemplates": ["structures/athen/military_colony"]
+		});
+		seatCards(world, hq);
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), true);
+
+		const queue = world.ai.queues.civilCentre as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans[0]?.type, "structures/athen/civil_centre");
+	});
+
+	it("a first town awaiting its phase holds every second ground still", () =>
+	{
+		// phase 1 on the seat: the town hall waits for the phase's word and
+		// the office plants nothing new meanwhile
+		const { world, hq } = seat({
+			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
+		});
+		seatCards(world, hq);
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), false);
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: unknown[] }).plans.length, 0);
+	});
+
+	it("but the phase's research on the books frees the laying", () =>
+	{
+		const { world, hq } = seat({
+			"phase": 1,
+			"phaseName": "phaseTown",
+			"researching": ["phaseTown"],
+			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
+		});
+		seatCards(world, hq);
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), true);
+		const queue = world.ai.queues.civilCentre as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans.length, 1, "the laying goes up while the research walks");
+	});
+
+	it("a civil-centre foundation holds any second ground waiting", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		// the block next door is ours: a civil centre rising from the ground
+		world.addEntity(makeHqEntity({
+			id: 1220, "owner": PLAYER, "position": [220, 120],
+			"classes": ["Structure", "CivCentre"],
+			"templateName": "structures/athen/civil_centre"
+		}, { "foundationProgress": () => 0.5 }));
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), false,
+			"one town already rises; the office waits for it");
+	});
+
+	it("a civil-centre plan already queued holds the laying too", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		// the office already books one; a second call holds on its side
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), true);
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), false,
+			"one plan at a time holds the civil-centre queue");
+		const queue = world.ai.queues.civilCentre as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans.length, 1);
+	});
+});
+
+describe("asking for another ground: checkBaseExpansion's thinking", () =>
+{
+	/** the colony card registered and booked, as the office keeps its cards */
+	function seatCards(world: HqWorld, hq: HqInstance): void
+	{
+		world.templates["structures/athen/military_colony"] = structureTemplate(
+			"structures/athen/military_colony", {
+			"classes": ["Structure", "Military"],
+			"territories": ["own", "neutral"],
+			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } }
+		});
+		world.addEntity(makeHqEntity({
+			"id": 1102, "owner": PLAYER, "position": [80, 80],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 2202, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) =>
+				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+	}
+
+	/** our swelling town: `count` own worker-capable units standing idle */
+	function seatPopulation(world: HqWorld, count: number): void
+	{
+		for (let i = 0; i < count; ++i)
+			world.addEntity(makeHqEntity({
+				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
+				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
+			}));
+	}
+
+	it("the civil-centre queue's own batch holds every expansion hint", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		seatPopulation(world, 80);
+		// one ground already booked
+		hq.buildNewBase(world.gameState, world.ai.queues as never);
+
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.civilCentre as unknown as
+			{ plans: unknown[] }).plans;
+		assert.equal(plans.length, 1, "the queue's batch is the whole answer while it lasts");
+	});
+
+	it("a ground roomless twice over asks for its own base", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		// two buildable candidates turned away for want of room: the site
+		// walk's book (a barracks near the yard and a tower on the wall)
+		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/barracks", 90, "room");
+		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/watchtower", 90, "room");
+
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.civilCentre as unknown as
+			{ plans: Array<Record<string, unknown>> }).plans;
+		assert.equal(plans.length, 1, "the missing room asks a ground of its own");
+		assert.equal(plans[0]?.type, "structures/athen/military_colony");
+	});
+
+	it("a phasing office holds its swelling town", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		seatPopulation(world, 80);
+		hq.phasing = 1;
+
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: unknown[] }).plans.length, 0,
+			"while the town's phase is up in the air, no second ground is opened");
+	});
+
+	it("the swelling town asks past the aggressive threshold, not before it", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		// one town on the board over the default personality (0.5): the floor
+		// is 65 + 5 + 15 * 0 = 70 souls, so 70 callers hold, 71 ask
+		seatPopulation(world, 70);
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: unknown[] }).plans.length, 0, "exactly the threshold holds");
+
+		world.addEntity(makeHqEntity({
+			id: 4170, "owner": PLAYER, position: [250, 100],
+			"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
+		}));
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: Array<Record<string, unknown>> }).plans.length, 1,
+			"the caller over the floor breaks the wait");
+	});
+
+	it("the retiring manager asks from fewer callers when the funds stretch", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world, hq);
+		hq.saveResources = true;
+		seatPopulation(world, 55);
+
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.civilCentre as unknown as
+			{ plans: Array<Record<string, unknown>> }).plans;
+		assert.equal(plans.length, 1, "holding funds, fifty and one callers ask a ground");
+	});
+});
+
+describe("the office's turn on the clock: update's schedule", () =>
+{
+	it("the turn's books are wiped before any walk", () =>
+	{
+		const { world, hq } = seat();
+		// a stale cache from a previous turn's question
+		hq.turnCache.accountedPopulation = 999 as never;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		// the wipe may already have been recomputed by one of the update's
+		// own walks: the point is the stale 999 never rides again
+		assert.notEqual(hq.turnCache.accountedPopulation, 999,
+			"the headcount of yesterday is not the headcount of today");
+		assert.equal(hq.getAccountedPopulation(world.gameState), 0,
+			"the recount answers from today's town, not yesterday's book");
+	});
+
+	it("the town hall advancing marks the office's phase and clears the flag", () =>
+	{
+		const { world, hq } = seat({ "phase": 2 });
+		// the office still books itself at the earlier phase with a live flag
+		hq.currentPhase = 1;
+		hq.phasing = 1;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal(hq.currentPhase, 2, "the read of the town hall is the office's now");
+		assert.equal(hq.phasing, 0, "the advance closes the phasing question");
+	});
+
+	it("when the town hall has not moved, the office holds its own count", () =>
+	{
+		const { world, hq } = seat();
+		hq.currentPhase = 1;
+		hq.phasing = 0;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal(hq.currentPhase, 1);
+		assert.equal(hq.phasing, 0, "no advance recorded, no flag disturbed");
+	});
+
+	it("a market built turns the office's barter lantern on", () =>
+	{
+		const { world, hq } = seat();
+		world.addEntity(makeHqEntity({
+			id: 2501, "owner": PLAYER, "position": centerOfCell(30, 30),
+			"classes": ["Structure", "Market"], "templateName": "structures/athen/market"
+		}));
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal(hq.canBarter, true, "a built market of ours is the licence to buy and sell");
+	});
+
+	it("the stale capture ledger is re-walked after three seconds of silence", () =>
+	{
+		const { world, hq } = seat();
+		hq.capturableTargetsTime = 95;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal(hq.capturableTargetsTime, 100,
+			"the walk stamped itself again at the town's own clock");
+	});
+
+	it("but a ledger still fresh with the town's clock waits its turn", () =>
+	{
+		const { world, hq } = seat();
+		hq.capturableTargetsTime = 98;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal(hq.capturableTargetsTime, 98,
+			"under three seconds of silence, the book stays as it was");
+	});
+
+	it("the expansion hint rides the seventh turn of ten through the update", () =>
+	{
+		const { world, hq } = seat({
+			"phase": 2,
+			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
+		});
+		world.templates["structures/athen/military_colony"] = structureTemplate(
+			"structures/athen/military_colony", {
+			"classes": ["Structure", "Military"],
+			"territories": ["own", "neutral"]
+		});
+		world.addEntity(makeHqEntity({
+			id: 1102, "owner": PLAYER, position: [80, 80],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 2202, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) =>
+				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+		for (let i = 0; i < 71; ++i)
+			world.addEntity(makeHqEntity({
+				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
+				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
+			}));
+		world.ai.playedTurn = 7;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: Array<Record<string, unknown>> }).plans.length, 1,
+			"the seventh turn carries the expansion hint to the colony book");
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: Array<Record<string, unknown>> }).plans[0]?.type,
+			"structures/athen/military_colony");
+	});
+
+	it("but a turn off the seventh rides without the hint", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates["structures/athen/military_colony"] = structureTemplate(
+			"structures/athen/military_colony", {
+			"classes": ["Structure", "Military"],
+			"territories": ["own", "neutral"]
+		});
+		world.addEntity(makeHqEntity({
+			id: 1102, "owner": PLAYER, position: [80, 80],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 2202, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) =>
+				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+		for (let i = 0; i < 71; ++i)
+			world.addEntity(makeHqEntity({
+				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
+				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
+			}));
+		world.ai.playedTurn = 8;
+
+		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
+
+		assert.equal((world.ai.queues.civilCentre as unknown as
+			{ plans: unknown[] }).plans.length, 0,
+			"the eighth turn carries no expansion hint, the card unbooked");
+	});
+});
+
+describe("the first town's landing and the later ground: handleNewBase", () =>
+{
+	it("the first landing dresses the office for a tight start", () =>
+	{
+		const { world, hq } = seat();
+		// the office has not yet seen its first town's ground
+		hq.firstBaseConfig = false;
+
+		hq.handleNewBase(world.gameState);
+
+		assert.equal(hq.firstBaseConfig, true, "the landing is configured once");
+		assert.equal(hq.saveSpace, true,
+			"the small starting ground of a fresh town keeps the buildings packed");
+		assert.equal(hq.maxFields, 1, "and its fields stay few");
+	});
+
+	it("but a later ground clears the thrift of the early town", () =>
+	{
+		const { world, hq } = seat();
+		// stale thrift carried from the first town's landing
+		hq.firstBaseConfig = true;
+		hq.saveResources = true;
+		hq.saveSpace = true;
+		hq.maxFields = 1;
+
+		hq.handleNewBase(world.gameState);
+
+		assert.equal(hq.saveResources, undefined,
+			"the funds are spent freely again: the new ground may fix the shortage");
+		assert.equal(hq.saveSpace, undefined, "the buildings spread again");
+		assert.equal(hq.maxFields, false, "the fields are not numbered anymore");
 	});
 });
 

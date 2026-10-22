@@ -495,6 +495,9 @@ export function makeEntity(spec: {
 		getStance: () => "aggressive",
 		setStance: () => undefined,
 		isCapturable: () => false,
+		// needsRepair composes isHurt() && isRepairable(); the default fake
+		// stands at full hitpoints, so a built building reads never hurt
+		needsRepair: () => false,
 		isInvulnerable: () => false,
 		isGarrisonHolder: () => false,
 		isFull: () => false,
