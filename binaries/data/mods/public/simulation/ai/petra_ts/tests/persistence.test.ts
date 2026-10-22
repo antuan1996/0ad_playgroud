@@ -308,6 +308,44 @@ describe("save and reload", () =>
 		);
 	});
 
+	it("keeps a headquarters that has learnt its map and its losses", () =>
+	{
+		// The scalars are filled by populate(); the collections the office
+		// learns during a match are not, so this run names them itself.
+		const world = emptyWorldWithMap();
+		assertRoundTrip(
+			{
+				label: "Headquarters with learnt state",
+				original: () =>
+				{
+					const hq = new Headquarters(makeConfig(), false);
+					(hq["basesManager"] as { init(gameState: CommonGameState, deserialize: boolean): void })
+						.init(world, false);
+					return hq;
+				},
+				restored: () => new Headquarters(makeConfig(), false),
+				notSaved: {
+					"towerLapseTime": "derived from Config.Military at construction",
+					"fortressLapseTime": "derived from Config.Military at construction",
+					"extraTowers": "derived from Config difficulty and personality at construction",
+					"extraFortresses": "derived from Config difficulty and personality at construction"
+				},
+				// Regions the map reports as land and sea, a structure that
+				// decayed to gaia, a capture target with garrisoned defenders,
+				// and the gather that failed in each resource.
+				set: {
+					landRegions: { 2: true, 5: true },
+					navalRegions: { 9: true },
+					decayingStructures: new Set([301, 302]),
+					capturableTargets: new Map([[401, { strength: 3, ents: new Set([402, 403]) }]]),
+					lastFailedGather: { wood: 40, food: 12 }
+				},
+				prepare: hq => { (world as unknown as { ai: Record<string, unknown> }).ai["HQ"] = hq; }
+			},
+			world
+		);
+	});
+
 	describe("queue plans", () =>
 	{
 		/** Plans are built from templates, so the test says what things cost. */

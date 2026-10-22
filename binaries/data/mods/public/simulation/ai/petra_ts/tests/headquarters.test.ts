@@ -3474,3 +3474,249 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 	});
 });
 
+describe("a strait between two shores: getSeaBetweenIndices", () =>
+{
+	it("names the water region a crossing passes through", () =>
+	{
+		const { world, hq } = seat({
+			"trajectories": { "2,3": [2, 8, 3] },
+			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+		});
+
+		assert.equal(hq.getSeaBetweenIndices(world.gameState, 2, 3), 8);
+	});
+
+	it("a land bridge between the shores names no sea", () =>
+	{
+		const { world, hq } = seat({
+			"trajectories": { "2,3": [2, 3] },
+			"regionTypes": { 2: "land", 3: "land" }
+		});
+
+		assert.equal(hq.getSeaBetweenIndices(world.gameState, 2, 3), undefined);
+	});
+
+	it("a route through land in the middle is not a sea crossing", () =>
+	{
+		const { world, hq } = seat({
+			"trajectories": { "2,3": [2, 8, 3] },
+			"regionTypes": { 2: "land", 3: "land", 8: "land" }
+		});
+
+		assert.equal(hq.getSeaBetweenIndices(world.gameState, 2, 3), undefined);
+	});
+
+	it("no known route between the two regions names no sea", () =>
+	{
+		const { world, hq } = seat({
+			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+		});
+
+		assert.equal(hq.getSeaBetweenIndices(world.gameState, 2, 3), undefined,
+			"the engine answers no trajectory at all, so nothing to cross");
+	});
+});
+
+describe("the stock of gatherable resources: getTotalResourceLevel", () =>
+{
+	it("sums what the bases' dropsites can reach, counting each supply once", () =>
+	{
+		const { world, hq } = seat();
+		// two forest trees: one near the dropsite, one in the medium band.
+		// The near tree also appears in the medium band, and must not count twice.
+		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood",
+			"classes": ["Forest"], "amount": 300 }));
+		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood",
+			"classes": ["Forest"], "amount": 200 }));
+		// the scanner's book for the base, set directly; the scanner itself is
+		// pinned by the storehouse test above
+		const base = hq.basesManager.baseManagers[0] as unknown as
+			{ dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>> };
+		base.dropsiteSupplies.wood = {
+			"nearby": [{ "id": 2 }],
+			"medium": [{ "id": 2 }, { "id": 3 }],
+			"faraway": []
+		};
+
+		const total = hq.getTotalResourceLevel(world.gameState);
+
+		assert.equal(total.wood, 500, "the near tree and the medium tree, each once");
+		assert.equal(total.food, 0, "a resource with no supply on the books reads zero");
+	});
+
+	it("the proximity the caller asks for narrows the sum", () =>
+	{
+		const { world, hq } = seat();
+		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood",
+			"classes": ["Forest"], "amount": 300 }));
+		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood",
+			"classes": ["Forest"], "amount": 200 }));
+		const base = hq.basesManager.baseManagers[0] as unknown as
+			{ dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>> };
+		base.dropsiteSupplies.wood = {
+			"nearby": [{ "id": 2 }],
+			"medium": [{ "id": 2 }, { "id": 3 }],
+			"faraway": []
+		};
+
+		const total = hq.getTotalResourceLevel(world.gameState, ["wood"], ["nearby"]);
+
+		assert.equal(total.wood, 300, "only the tree within the nearby band counts");
+	});
+});
+
+describe("a pen for the herd: manageCorral", () =>
+{
+	/** an animal the pen can train: a template the engine marks huntable */
+	function huntable(name: string): FakeTemplateLike
+	{
+		return Object.assign(makeTemplate(name), { "isHuntable": () => true });
+	}
+
+	/** our builder, booking the pen card */
+	function seatPenBuilder(world: HqWorld, hq: HqInstance): void
+	{
+		world.addEntity(makeHqEntity({
+			"id": 2203, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) => ["structures/{civ}/corral"].map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+	}
+
+	it("the office plants a pen when the town keeps none", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral", {
+			"classes": ["Structure", "Corral"], "territories": ["own", "neutral"]
+		});
+		seatPenBuilder(world, hq);
+
+		hq.manageCorral(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.corral as unknown as { plans: Array<Record<string, unknown>> }).plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, "structures/athen/corral");
+	});
+
+	it("a standing pen trains the huntable animal it keeps, trainer named", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["gaia/fauna_deer"] = huntable("gaia/fauna_deer");
+		// a pen carries a production queue: its training list reads empty, not absent
+		world.addEntity(makeHqEntity({
+			"id": 2301, "owner": PLAYER, "position": [120, 120],
+			"classes": ["Structure", "Corral"], "templateName": "structures/athen/corral"
+		}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }));
+
+		hq.manageCorral(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.corral as unknown as
+			{ plans: Array<{ type?: string; metadata?: Record<string, unknown> }> }).plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, "gaia/fauna_deer");
+		assert.deepEqual(plans[0]?.metadata, { "trainer": 2301 });
+	});
+
+	it("a herd already at the pen's count holds the office", () =>
+	{
+		const { world, hq } = seat();
+		world.templates["gaia/fauna_deer"] = huntable("gaia/fauna_deer");
+		world.addEntity(makeHqEntity({
+			"id": 2301, "owner": PLAYER, "position": [120, 120],
+			"classes": ["Structure", "Corral"], "templateName": "structures/athen/corral"
+		}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }));
+		// two deer already walk the pen, more than its one place
+		for (const id of [2311, 2312])
+			world.addEntity(makeHqEntity({
+				"id": id, "owner": PLAYER, "position": [121, 121],
+				"classes": ["Unit", "Animal"], "templateName": "gaia/fauna_deer"
+			}));
+
+		hq.manageCorral(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.corral as unknown as { plans: unknown[] }).plans;
+		assert.equal(plans.length, 0, "the pen does not train past its count");
+	});
+});
+
+describe("the wonder for a rich town: buildWonder", () =>
+{
+	const WONDER_COST = { "food": 1000, "wood": 1000, "stone": 1000 };
+
+	/** the wonder card, its builder booked */
+	function seatWonder(world: HqWorld, hq: HqInstance): void
+	{
+		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder", {
+			"classes": ["Structure", "Wonder"], "cost": WONDER_COST
+		});
+		world.addEntity(makeHqEntity({
+			"id": 2204, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) => ["structures/{civ}/wonder"].map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+	}
+
+	it("the office lays the wonder when the stock is high in every need", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 800, "wood": 800, "stone": 800 } });
+		seatWonder(world, hq);
+
+		hq.buildWonder(world.gameState, world.ai.queues as never);
+
+		const plans = (world.ai.queues.wonder as unknown as { plans: Array<{ type?: string }> }).plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, "structures/athen/wonder");
+	});
+
+	it("a town with a lean need holds the wonder back, even with one high stock", () =>
+	{
+		// food rich, but wood and stone are low: two needs under thirty percent
+		const { world, hq } = seat({ "stock": { "food": 900, "wood": 100, "stone": 100 } });
+		seatWonder(world, hq);
+
+		hq.buildWonder(world.gameState, world.ai.queues as never);
+
+		assert.equal((world.ai.queues.wonder as unknown as { plans: unknown[] }).plans.length, 0,
+			"the wonder waits until no more than one need runs thin");
+	});
+
+	it("a town with nothing near the wonder's cost holds back as well", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 200, "wood": 200, "stone": 200 } });
+		seatWonder(world, hq);
+
+		hq.buildWonder(world.gameState, world.ai.queues as never);
+
+		assert.equal((world.ai.queues.wonder as unknown as { plans: unknown[] }).plans.length, 0);
+	});
+
+	it("forced, the office lays the wonder whatever the stock", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 200, "wood": 200, "stone": 200 } });
+		seatWonder(world, hq);
+
+		hq.buildWonder(world.gameState, world.ai.queues as never, true);
+
+		assert.equal((world.ai.queues.wonder as unknown as { plans: unknown[] }).plans.length, 1);
+	});
+
+	it("a wonder already standing ends the question", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 800, "wood": 800, "stone": 800 } });
+		seatWonder(world, hq);
+		world.addEntity(makeHqEntity({
+			"id": 2401, "owner": PLAYER, "position": [60, 60],
+			"classes": ["Structure", "Wonder"], "templateName": "structures/athen/wonder"
+		}));
+
+		hq.buildWonder(world.gameState, world.ai.queues as never, true);
+
+		assert.equal((world.ai.queues.wonder as unknown as { plans: unknown[] }).plans.length, 0,
+			"one wonder per town, forced or not");
+	});
+});
+
