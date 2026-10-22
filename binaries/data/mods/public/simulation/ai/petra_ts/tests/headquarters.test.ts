@@ -23,6 +23,10 @@ import { emptyEvents, makeTemplate, restoreEngine, stubGlobal, type World } from
 import type { FakeEnt } from "./harness/attackWorld.ts";
 import type { HqInstance, HqWorld } from "./harness/hqWorld.ts";
 
+// the two constants the emergency suite reads off the modules
+const { GarrisonManager } = await loadPetraModule<{ GarrisonManager: { TYPE_PROTECTION: string } }>("garrisonManager");
+const { Worker } = await loadPetraModule<{ Worker: { ROLE_WORKER: string } }>("worker");
+
 // the co-managers every suite in this file keeps outside its walls: naval,
 // trade, research, diplomacy, victory and defense all run their own campaigns
 const doorManagers = [
@@ -2316,6 +2320,733 @@ describe("canBuild: which stones the office will book", () =>
 		assert.equal(hq.hasActiveBase(), false);
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/civil_centre"), true,
 			"the civ centre plants outside mere rows: neutral ground answers its charter");
+	});
+});
+
+describe("findBestBaseForMilitary: where the army stands", () =>
+{
+	/** one of our towns: an own civ centre carrying the roster id of its base */
+	function ownTown(world: HqWorld, id: number, position: [number, number], baseId: number): void
+	{
+		world.addEntity(makeHqEntity({
+			id, "owner": PLAYER, position,
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}, {}, { "base": baseId }));
+	}
+
+	/** a hostile town on the plain */
+	function enemyTownAt(world: HqWorld, id: number, position: [number, number]): void
+	{
+		world.addEntity(makeHqEntity({
+			id, "owner": ENEMY, position,
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/spart/civil_centre"
+		}));
+	}
+
+	it("the town closest to the hostile one keeps the first call", () =>
+	{
+		// no base seating: the raw CC walk is all the function reads; the roster
+		// numbers wear the campaign's own base ids, starting at 2
+		const { world, hq } = seat({}, { "seatBases": false });
+		ownTown(world, 1102, [105, 200], 2);
+		ownTown(world, 1103, [155, 200], 3);
+		enemyTownAt(world, 2202, [200, 200]);
+
+		assert.equal(hq.findBestBaseForMilitary(world.gameState), 3);
+	});
+
+	it("a quiet board: with no hostile town in the walk, no post is named", () =>
+	{
+		// the walk hunts for the town our army should stand near, and the
+		// garrison of a player counts as its own ally in the outer round:
+		// our towns alone leave no target, and the call goes unanswered
+		const { world, hq } = seat({}, { "seatBases": false });
+		ownTown(world, 1102, [80, 80], 2);
+		ownTown(world, 1103, [240, 240], 3);
+
+		assert.equal(hq.findBestBaseForMilitary(world.gameState), undefined);
+	});
+
+	it("an allied town stands in the walk but never carries the answer", () =>
+	{
+		// the ally lies inside the collection but skips the target round; the
+		// own town beside it counts as its own ally all the same
+		const { world, hq } = seat({}, { "seatBases": false });
+		ownTown(world, 1102, [80, 80], 2);
+		world.addEntity(makeHqEntity({
+			"id": 1104, "owner": GAIA + 1, "position": [90, 80],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/other/civil_centre"
+		}));
+
+		assert.equal(hq.findBestBaseForMilitary(world.gameState), undefined);
+	});
+
+	it("a foe across the water raises no sound of the drum here", () =>
+	{
+		// the foe's town across the sea sits in an untouched land region,
+		// getAccessValue answers 9 — no booked road, no post
+		const { world, hq } = seat({}, { "seatBases": false });
+		world.accessAt.set("200,200", 9);
+		ownTown(world, 1102, [80, 80], 2);
+		enemyTownAt(world, 2202, [200, 200]);
+
+		assert.equal(hq.findBestBaseForMilitary(world.gameState), undefined);
+	});
+
+	it("a second foe numbers closer and revises the call", () =>
+	{
+		// the first foe at the east walls books the town near it; the second
+		// foe in the far field lands nearer the other town and moves the post
+		const { world, hq } = seat({}, { "seatBases": false });
+		enemyTownAt(world, 2202, [300, 300]);
+		ownTown(world, 1102, [260, 300], 2);
+		ownTown(world, 1103, [180, 180], 3);
+		enemyTownAt(world, 2203, [200, 200]);
+
+		assert.equal(hq.findBestBaseForMilitary(world.gameState), 3);
+	});
+});
+
+describe("trainEmergencyUnits: the last call for the wall", () =>
+{
+	/** the town's training cards, keyed by the template name the anchor lists */
+	function seatCards(world: HqWorld): void
+	{
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
+			{
+				"classes": ["Unit", "Infantry", "Melee", "CitizenSoldier"],
+				"getPaths": { "Cost": { "Population": 1 } },
+				"cost": { "food": 100 }
+			});
+		world.templates["units/athen/infantry_archer"] = makeTemplate("units/athen/infantry_archer",
+			{
+				"classes": ["Unit", "Infantry", "Ranged", "Archer", "CitizenSoldier"],
+				"getPaths": { "Cost": { "Population": 1 } },
+				"cost": { "wood": 100 }
+			});
+	}
+
+	/** the base anchor dressed for the alarm: both queue views (the entity
+	 * method the port's first pass reads and the raw sim view the counting
+	 * step reads on both implementations), the card list, and the wall's
+	 * garrison answers */
+	function emergencyAnchor(hq: HqInstance, world: HqWorld, options: {
+		trainables?: string[];
+		queue?: Array<Record<string, unknown>> | undefined;
+		garrisonMax?: number;
+		arrowClasses?: string[];
+		ejectedHealth?: number;
+	} = {})
+	{
+		const anchor = hq.baseManagers()[0].anchor as FakeEnt & Record<string, any>;
+		anchor.trainableEntities = () => options.trainables ?? [];
+		anchor.trainingQueue = () => options.queue ?? false;
+		(anchor as unknown as Record<string, unknown>)._entity =
+			{ "trainingQueue": options.queue ?? undefined };
+		if (options.garrisonMax !== undefined)
+			anchor.garrisonMax = () => options.garrisonMax;
+		if (options.arrowClasses !== undefined)
+			anchor.getGarrisonArrowClasses = () => options.arrowClasses;
+		if (options.ejectedHealth !== undefined)
+			anchor.garrisonEjectHealth = () => options.ejectedHealth;
+		return anchor;
+	}
+
+	/** the emergency account book after the call, peeked at its one resource */
+	function accountOf(world: HqWorld, queue: string): number
+	{
+		return (world.ai.queueManager as unknown as
+			{ accounts: Record<string, Record<string, number>> }).accounts[queue].food;
+	}
+
+	it("the call books a melee batch at the empty house straight away", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world);
+		// the wall has no garrison room at the default book: 0 max slots means
+		// the melee card wins the ranged roll whatever the coin says
+		stubGlobal("randBool", () => true);
+		try
+		{
+			const anchor = emergencyAnchor(hq, world, {
+				"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
+			});
+
+			assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+
+			const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+			assert.equal(queue.plans.length, 1);
+			const plan = queue.plans[0] as { type?: string; number?: number; metadata?: Record<string, unknown> };
+			assert.equal(plan.type, "units/athen/infantry_spearman");
+			assert.equal(plan.number, 1);
+			assert.equal(plan.metadata?.trainer, anchor.id());
+
+			assert.equal(accountOf(world, "emergency"), 100,
+				"the cost was booked against the emergency account from the town's available stock");
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("so long as the emergency queue still holds the batch, no second book", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), false,
+			"the queue's own batch is the answer while it lasts");
+		const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans.length, 1, "the second call books nothing");
+	});
+
+	it("a victim beyond the rescue cut is nobody's", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500 } });
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
+
+		// 390 cells out in both axes: ~304,200 square distance over the cut
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[400, 400]]), false,
+			"the town's guard cannot reach to respond in time");
+	});
+
+	it("no road on the victim's land — the office holds", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500 } });
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
+		world.accessAt.set("60,60", 9);
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[60, 60]]), false,
+			"the anchor on land 2 cannot reach the calls from land 9");
+	});
+
+	it("a training house already brimming skips the call", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500 } });
+		seatCards(world);
+		emergencyAnchor(hq, world, {
+			"trainables": ["units/athen/infantry_spearman"],
+			// 6 s of queued production, half under way, reads as a house at
+			// work: only batches in progress or bound for the wall count the
+			// wait, so this batch is what the clock looks at
+			"queue": [{ "metadata": {}, "progress": 0.5, "id": 1, "timeRemaining": 6000 }]
+		});
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), false,
+			"the only anchor is occupied at its queue");
+	});
+
+	it("the wall's garrison book counts batches, and the lone fill makes the call ranged", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 } });
+		seatCards(world);
+		const anchor = emergencyAnchor(hq, world, {
+			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
+			"queue": [
+				{ "metadata": { "garrisonType": "Tower" }, "count": 3, "progress": 0.2, "timeRemaining": 2000 },
+				{ "id": 5, "metadata": {}, "progress": 0, "timeRemaining": 1000 }
+			],
+			"garrisonMax": 10,
+			"arrowClasses": ["Archer"],
+			"ejectedHealth": 0.5
+		});
+		const stops: number[] = [];
+		anchor.stopProduction = (id: number) => { stops.push(id); return true; };
+		stubGlobal("randBool", () => true);
+		try
+		{
+			assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+
+			// the quiet drain from the batches: 3 in the wall's book, and the
+			// idle fill with no trainer attached is pulled from the queue
+			assert.deepEqual(stops, [5]);
+			const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+			const plan = queue.plans[0] as { type?: unknown; metadata?: Record<string, unknown> };
+			assert.equal(plan.type, "units/athen/infantry_archer",
+				"room in the wall means the ranged roll goes through");
+			assert.equal(plan.metadata?.garrisonType, GarrisonManager.TYPE_PROTECTION);
+			assert.equal(plan.metadata?.role, Worker.ROLE_WORKER);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("a wounded wall keeps the melee hand even on the ranged roll", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500 } });
+		seatCards(world);
+		// 40 hitpoints against the 50 eject floor: no room for arrows
+		const anchor = emergencyAnchor(hq, world, {
+			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
+			"garrisonMax": 10,
+			"ejectedHealth": 0.5
+		});
+		(anchor as unknown as { hitpoints: () => number }).hitpoints = () => 40;
+		stubGlobal("randBool", () => true);
+		try
+		{
+			assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+
+			const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+			const plan = queue.plans[0] as { type?: unknown; metadata?: Record<string, unknown> };
+			assert.equal(plan.type, "units/athen/infantry_spearman");
+			assert.equal(plan.metadata?.garrisonType, undefined,
+				"a wall with no room for men takes plain trash troops");
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("an empty treasury calls the house off", () =>
+	{
+		const { world, hq } = seat();
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), false);
+		const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+		assert.equal(queue.plans.length, 0, "no card was affordable, nothing booked");
+	});
+
+	it("the disabled card is passed over and its teammate wins the call", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 }, "disabledTemplates": ["units/athen/infantry_spearman"] });
+		seatCards(world);
+		emergencyAnchor(hq, world, {
+			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
+		});
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+		const queue = world.ai.queues.emergency as unknown as { plans: Array<Record<string, unknown>> };
+		const plan = queue.plans[0] as { type?: unknown };
+		assert.equal(plan.type, "units/athen/infantry_archer",
+			"the prohibition leaves the ranged answer standing in the melee roll");
+	});
+
+	it("when the emergency account falls short, the neighbour queue lends", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 150 } });
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
+		// the villager queue held an account from a previous turn's distribution
+		(world.ai.queueManager as unknown as
+			{ accounts: Record<string, Record<string, number>> }).accounts.villager.food = 100;
+
+		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
+
+		// the shortfall 50 came over the villager account, and the batch books
+		assert.equal(accountOf(world, "emergency"), 100);
+		assert.equal(accountOf(world, "villager"), 50);
+	});
+});
+
+describe("the headcount and the workforce: the queues' living tally", () =>
+{
+	/** a training house: an own structure whose queue carries a batch */
+	function trainingHouse(world: HqWorld, id: number, items: Array<Record<string, unknown>>): void
+	{
+		world.addEntity(makeHqEntity({
+			id, "owner": PLAYER, "position": centerOfCell(30, 30),
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}, { "trainingQueue": () => items }));
+	}
+
+	it("the queued batches join their population to the town's headcount", () =>
+	{
+		const { world, hq } = seat({ "population": 10 });
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
+			{ "classes": ["Unit", "Infantry"], "getPaths": { "Cost": { "Population": 2 } } });
+		trainingHouse(world, 1120, [{ "unitTemplate": "units/athen/infantry_spearman", "count": 3 }]);
+
+		assert.equal(hq.getAccountedPopulation(world.gameState), 16,
+			"10 townsfolk on the ground, plus a batch of 3 twos in the queue");
+		// the count is sealed per turn: the same question answers the same
+		assert.equal(hq.getAccountedPopulation(world.gameState), 16);
+	});
+
+	it("a batch without named unit cards is passed over in the tally", () =>
+	{
+		const { world, hq } = seat({ "population": 10 });
+		trainingHouse(world, 1120, [{ "count": 5 }]);
+
+		assert.equal(hq.getAccountedPopulation(world.gameState), 10);
+	});
+
+	it("a population card with no template leaf adds nothing", () =>
+	{
+		const { world, hq } = seat({ "population": 10 });
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
+			{ "classes": ["Unit", "Infantry"] });
+		trainingHouse(world, 1120, [{ "unitTemplate": "units/athen/infantry_spearman", "count": 3 }]);
+
+		// Cost/Population absent: the leaf is undefined in the walk
+		assert.equal(hq.getAccountedPopulation(world.gameState), 10);
+	});
+
+	it("the queued worker batches join the workforce rolls", () =>
+	{
+		const { world, hq } = seat();
+		world.addEntity(makeHqEntity({
+			"id": 1121, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Worker"]
+		}, {}, { "role": "worker" }));
+		world.addEntity(makeHqEntity({
+			"id": 1122, "owner": PLAYER, "position": [110, 100], "classes": ["Unit", "Soldier"]
+		}));
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
+			{ "classes": ["Unit", "Infantry"] });
+		trainingHouse(world, 1120, [
+			{ "unitTemplate": "units/athen/infantry_spearman", "count": 4, "metadata": { "role": "worker" } },
+			{ "unitTemplate": "units/athen/infantry_archer", "count": 2, "metadata": { "role": "soldier" } }
+		]);
+
+		assert.equal(hq.getAccountedWorkers(world.gameState), 5,
+			"one worker on the ground, and only the worker batch of four belongs");
+	});
+});
+
+describe("the danger lights: what keeps the office from building under fire", () =>
+{
+	/** an enemy tower with the ranged book of a watchtower: max range given */
+	function firingTower(world: HqWorld, id: number, position: [number, number], range = 80): FakeEnt
+	{
+		return world.addEntity(makeHqEntity({
+			id, "owner": ENEMY, position,
+			"classes": ["Structure", "Tower"], "templateName": "structures/spart/watchtower"
+		}, {
+			// the common-api's own read of a ranged attack with a default
+			// arrow (entity.js hasDefensiveFire): the tower shoots
+			"get": (path: string) => path === "Attack/Ranged" ? { "MaxRange": range } : undefined,
+			"getDefaultArrow": () => 1,
+			"hasDefensiveFire": () => true,
+			"attackRange": () => ({ "max": range, "min": 0 })
+		}));
+	}
+
+	it("an invading column keeps a field of ground where nothing may rise", () =>
+	{
+		const { hq } = seat();
+		(hq.defenseManager as unknown as { armies: Array<Record<string, unknown>> }).armies = [
+			// the column at its field camp east of the river
+			{ "foePosition": [100, 100] },
+			// an army of stragglers, no position to its name yet
+			{ "foePosition": undefined }
+		];
+
+		assert.equal(hq.isNearInvadingArmy([160, 100]), true,
+			"under 12 000 square units of the column, refuse the spot");
+		assert.equal(hq.isNearInvadingArmy([400, 400]), false,
+			"far enough from the camp to build");
+		assert.equal(hq.isNearInvadingArmy([100, 100]), true,
+			"the army's own ground is of course invaded");
+	});
+
+	it("an enemy tower's fire will not reach past its own range", () =>
+	{
+		const { world, hq } = seat();
+		firingTower(world, 2201, [100, 100]);
+
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [150, 100]), true,
+			"50 squares out, inside the 80 of the tower");
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [250, 100]), false,
+			"150 squares out, past the tower's reach");
+	});
+
+	it("the caller's own radius adds to the tower's reach", () =>
+	{
+		const { world, hq } = seat();
+		firingTower(world, 2201, [100, 100]);
+
+		// the radius stands for the ground a to-be structure occupies
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [230, 100], 60), true,
+			"the 140 of range and radius reaches the 130-square mark");
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [230, 100], 40), false,
+			"the 120 of the pair does not reach the 130-square mark");
+	});
+
+	it("a dangerous ground either sees a column or stands inside a tower's fire", () =>
+	{
+		const { world, hq } = seat();
+		firingTower(world, 2201, [100, 100]);
+
+		assert.equal(hq.isDangerousLocation(world.gameState, [250, 100], 0), false,
+			"no column, no fire: the meadow is free");
+		assert.equal(hq.isDangerousLocation(world.gameState, [150, 100], 0), true,
+			"no column, but the tower's fire reaches it");
+		(hq.defenseManager as unknown as { armies: Array<Record<string, unknown>> }).armies = [
+			{ "foePosition": [340, 150] }
+		];
+		assert.equal(hq.isDangerousLocation(world.gameState, [250, 100], 0), true,
+			"the column stands within reach of the field's edge");
+	});
+
+	it("the tower's book stays sealed for the whole turn", () =>
+	{
+		const { world, hq } = seat();
+		firingTower(world, 2201, [100, 100]);
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [150, 100]), true);
+
+		// the tower demolished after the question: the turn's sealed book
+		// still answers with what the map held when it was written
+		world.ents.delete(2201);
+		assert.equal(hq.isUnderEnemyFire(world.gameState, [150, 100]), true,
+			"the same turn answers the same firing book");
+	});
+});
+
+describe("the capture ledger: who may storm the tokens of ground", () =>
+{
+	// typing resiliency the port carries and the ref does not, all dead under
+	// this filter's reality (canCapture() gates the Attack/Capture leaf that
+	// captureStrength() reads, unitAIState is defined for any unit, and a
+	// target in the ledger cannot vanish mid-walk): the missing-template and
+	// undefined-strength guards here never flip an answer, so no test pins
+	// them — the same convention every batch follows
+	/** a capturable town building: the enemy civil centre over the hill */
+	function captureTarget(world: HqWorld, opts: {
+		id?: number;
+		owner?: number;
+		points?: number[];
+		garrisoned?: FakeEnt[];
+		decaying?: boolean;
+		invulnerable?: boolean;
+		defenseFire?: boolean;
+	} = {}): FakeEnt
+	{
+		const target = world.addEntity(makeHqEntity({
+			id: opts.id ?? 2601, "owner": opts.owner ?? ENEMY, "position": centerOfCell(50, 50),
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/spart/civil_centre"
+		}, {
+			"isCapturable": () => true,
+			"capturePoints": () => opts.points ?? [1000],
+			"healthLevel": () => 1,
+			"defaultRegenRate": () => 0,
+			"decaying": () => opts.decaying ?? false,
+			"isInvulnerable": () => opts.invulnerable ?? false,
+			"isGarrisonHolder": () => !!opts.garrisoned,
+			// garrisoned() lists entity ids, as the engine's queue does
+			"garrisoned": () => (opts.garrisoned ?? []).map((e) => e.id()),
+			"garrisonRegenRate": () => opts.garrisoned ? 1 : 0,
+			"hasDefensiveFire": () => opts.defenseFire ?? false
+		}, { "base": 2 }));
+		return target;
+	}
+
+	/** one of our capturers at grips with the target, or idling */
+	function capturer(world: HqWorld, id: number, opts: {
+		strength: number;
+		bonus?: Record<string, Record<string, unknown>>;
+		state?: string;
+		orderData?: Array<Record<string, unknown>>;
+	} = {}): FakeEnt
+	{
+		return world.addEntity(makeHqEntity({
+			id, "owner": PLAYER, "position": [150, 150],
+			"classes": ["Unit", "Infantry", "CitizenSoldier"],
+			"templateName": "units/athen/infantry_spearman_b"
+		}, {
+			// the Attack/Capture leaf, with optional keyed Bonuses: the
+			// bonus read walks the leaf again one step deeper
+			"get": (path: string) =>
+				path === "Attack/Capture" ? { "Capture": opts.strength, "Bonuses": opts.bonus } :
+				path === "Attack/Capture/Bonuses" ? opts.bonus : undefined,
+			// canCapture() without a target asks only for the Capture attack,
+			// which the template leaf answers; the target passed later stands
+			// for the restricted-classes read, unmodeled here
+			"canCapture": () => true,
+			"captureStrength": () => opts.strength,
+			"unitAIState": () => opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
+			"unitAIOrderData": () => opts.orderData ?? [{ "target": 2601, "attackType": "Capture" }]
+		}));
+	}
+
+	/** the ledger's entry for a target, peeked two ways */
+	function ledger(hq: HqInstance, targetId: number):
+		{ strength: number; ents: Set<number> } | undefined
+	{
+		return (hq as unknown as { capturableTargets: Map<number, { strength: number; ents: Set<number> }> })
+			.capturableTargets.get(targetId);
+	}
+
+	it("a batch at grips with a capturable target is let to carry it by capture", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world);
+		const unit = capturer(world, 2611, { "strength": 20 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// 20 capture strength against a thousand capture points: quietly out
+		// of the running, so the order that stands needs no correction
+		assert.deepEqual(ledger(hq, 2601), { "strength": 20, "ents": new Set([2611]) });
+		assert.equal((hq as unknown as { capturableTargetsTime: number }).capturableTargetsTime, 100,
+			"the ledger stamps the turn it was last raised");
+		assert.deepEqual(commands, [],
+			"the order already rides capture; nothing to correct");
+	});
+
+	it("a batch too thin outright becomes a plain assault", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world);
+		const unit = capturer(world, 2611, { "strength": 10 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// ten against the 1000/80 = 12.5 floor: the capture cannot carry, and
+		// the unit is ordered off capture to plain attack
+		assert.deepEqual(commands, [[2601, false]]);
+	});
+
+	it("two thin batches together still make the capture count", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world);
+		const first = capturer(world, 2611, { "strength": 8 });
+		const second = capturer(world, 2612, { "strength": 9 });
+		const commands: Array<[number, boolean]> = [];
+		first.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+		second.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		assert.deepEqual(ledger(hq, 2601), { "strength": 17, "ents": new Set([2611, 2612]) });
+		assert.deepEqual(commands, [], "seventeen over the floor carries; no correction");
+	});
+
+	it("a class bonus weights the book the floor reads", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world);
+		const unit = capturer(world, 2611, {
+			"strength": 5,
+			"bonus": { "siege": { "Classes": "Structure", "Multiplier": 2 } }
+		});
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// five strength doubled against a structure: ten booked, under floor
+		assert.deepEqual(ledger(hq, 2601), { "strength": 10, "ents": new Set([2611]) });
+		assert.deepEqual(commands, [[2601, false]]);
+	});
+
+	it("the ledger only books units truly at grips with a target", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world, { "id": 2601 });
+		// an idle capturer
+		capturer(world, 2611, { "strength": 30, "state": "INDIVIDUAL.IDLE" });
+		// a capturer with no order on record
+		capturer(world, 2612, { "strength": 30, "orderData": [] });
+		// a capturer aimed at ground nobody holds
+		capturer(world, 2613, { "strength": 30, "orderData": [{ "target": 2699, "attackType": "Capture" }] });
+		// a capturer whose order carries no target at all
+		capturer(world, 2614, { "strength": 30, "orderData": [{ "attackType": "Capture" }] });
+
+		hq.updateCaptureStrength(world.gameState);
+
+		assert.equal(ledger(hq, 2601), undefined,
+			"no unit among them faces the target in combat");
+		assert.equal((hq as unknown as { capturableTargetsTime: number }).capturableTargetsTime, 100,
+			"the walk still stamps its time even with an empty book");
+	});
+
+	it("a garrisoned wall buys time for its capture points", () =>
+	{
+		const { world, hq } = seat();
+		// the wall's regen of 1 times the crew's 6 capture strength holds it
+		const crew = world.addEntity(makeHqEntity({
+			"id": 2701, "owner": ENEMY, "position": centerOfCell(50, 50),
+			"classes": ["Unit", "Soldier"], "templateName": "units/spart/infantry_spearman_e"
+		}, { "captureStrength": () => 6 }));
+		captureTarget(world, { "garrisoned": [crew] });
+		const unit = capturer(world, 2611, { "strength": 17 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// 17 falls under the 6 regen + 12.5 floor, so the capture is dropped
+		assert.deepEqual(commands, [[2601, false]]);
+	});
+
+	it("a wall firing arrows demands a heavier batch still", () =>
+	{
+		const { world, hq } = seat();
+		const crew = world.addEntity(makeHqEntity({
+			"id": 2701, "owner": ENEMY, "position": centerOfCell(50, 50),
+			"classes": ["Unit", "Soldier"], "templateName": "units/spart/infantry_spearman_e"
+		}, { "captureStrength": () => 6 }));
+		captureTarget(world, { "garrisoned": [crew], "defenseFire": true });
+		const unit = capturer(world, 2611, { "strength": 25 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// firing walls halve the grace: 6 + 1000/50 = 26 over the 25
+		assert.deepEqual(commands, [[2601, false]]);
+	});
+
+	it("ground held by an ally is taken back whatever the numbers", () =>
+	{
+		const { world, hq } = seat();
+		const players = world.gameState.playerData as { isAlly: boolean[] };
+		// the seat's paper diplomacy: player 2 rides as our ally for this call
+		players.isAlly[2] = true;
+		captureTarget(world, { "owner": 2 });
+		const unit = capturer(world, 2611, { "strength": 1 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		assert.deepEqual(ledger(hq, 2601), { "strength": 1, "ents": new Set([2611]) });
+		assert.deepEqual(commands, [], "allied ground is always charged for recapture");
+	});
+
+	it("decaying allied ground is left to fall", () =>
+	{
+		const { world, hq } = seat();
+		const players = world.gameState.playerData as { isAlly: boolean[] };
+		players.isAlly[2] = true;
+		captureTarget(world, { "owner": 2, "decaying": true });
+		const unit = capturer(world, 2611, { "strength": 1 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		// recapture is the standing order, but decaying ground is not worth it
+		assert.deepEqual(commands, [[2601, false]]);
+	});
+
+	it("an invulnerable target is charged all the same", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world, { "invulnerable": true });
+		const unit = capturer(world, 2611, { "strength": 1 });
+		const commands: Array<[number, boolean]> = [];
+		unit.attack = (target: number, capture: boolean) => { commands.push([target, capture]); };
+
+		hq.updateCaptureStrength(world.gameState);
+
+		assert.deepEqual(ledger(hq, 2601), { "strength": 1, "ents": new Set([2611]) });
+		assert.deepEqual(commands, [], "no anti-capture read against a shielded target");
 	});
 });
 
