@@ -971,7 +971,7 @@ export class Headquarters
 	 * Returns the best position to build a new Civil Center
 	 * Whose primary function would be to assure territorial continuity with our allies
 	 */
-	findStrategicCCLocation(gameState: CommonGameState, template: CommonTemplate): false | CommonPosition
+	findStrategicCCLocation(gameState: CommonGameState, template: CommonTemplate): CommonPosition | undefined
 	{
 		// This builds a map. The procedure is fairly simple.
 		// We minimize the Sum((dist - 300)^2) where the sum is on the three nearest allied CC
@@ -1093,10 +1093,12 @@ export class Headquarters
 
 		Engine.ProfileStop();
 
-		if (bestVal === undefined)
-			return false;
-		if (bestIdx === undefined)
-			return false;
+		// Empty search: report it like the ref (petra/headquarters.js returns
+		// undefined), so the caller's truthiness check (queueplanBuilding.ts:165)
+		// falls through to the oversea-dock fallback instead of booking a civ
+		// centre at (-1, -1), outside the map.
+		if (bestIdx === -1)
+			return undefined;
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;

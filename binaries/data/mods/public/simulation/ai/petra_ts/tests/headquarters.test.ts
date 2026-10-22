@@ -1711,3 +1711,406 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		assert.equal(best, "units/athen/infantry_spearman_b");
 	});
 });
+
+/** The templates of this campaign carry the game's own sizes, so the
+ * obstruction radii, the half sizes and the territory lists are the real
+ * engine's numbers: the civic centre digs a 32x32 footprint over a 30x30
+ * static obstruction (radius max 21.2, min 15), the market a 33x29 footprint
+ * (max 21.96, min 13) and a Town trader card, the fortress 30x30 and the
+ * stone tower 13x13. Every footprint walk needs the "@"-prefixed attribute
+ * leaves the template walk reads, otherwise halfSize turns NaN and silently
+ * disables the enemy-fire checks. */
+const ccTemplate = () => structureTemplate("structures/athen/civil_centre", {
+	"classes": ["Structure", "CivCentre"],
+	"territories": ["own", "neutral"],
+	"getPaths": { "Footprint": { "Square": { "@width": 32, "@depth": 32 } } },
+	"obstruction": { "min": 15, "max": 21.2 }
+});
+const marketTemplate = () => structureTemplate("structures/athen/market", {
+	"classes": ["Structure", "Trade", "Town", "Market"],
+	"getPaths": { "Footprint": { "Square": { "@width": 33, "@depth": 29 } } },
+	"obstruction": { "min": 13, "max": 21.96 }
+});
+const fortressTemplate = () => structureTemplate("structures/athen/fortress", {
+	"classes": ["Structure", "Fortress", "Defensive"],
+	"getPaths": { "Footprint": { "Square": { "@width": 30, "@depth": 30 } } },
+	"obstruction": { "min": 15, "max": 21.2 }
+});
+const towerTemplate = () => structureTemplate("structures/athen/defense_tower", {
+	"classes": ["Structure", "Tower", "Defensive"],
+	"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
+	"obstruction": { "min": 6, "max": 9.2 }
+});
+
+/** the ally trade cards: getTraderTemplatesGains only quotes a gain when the
+ * trader templates exist (a real game always has them, so a market suite that
+ * wants a counted route must seat the two cards). */
+function seatTraders(world: HqWorld): void
+{
+	world.templates["units/{civ}/support_trader"] = makeTemplate("units/{civ}/support_trader",
+		{ "classes": ["Unit", "Support", "Trader"] });
+	world.templates["units/{civ}/ship_merchant"] = makeTemplate("units/{civ}/ship_merchant",
+		{ "classes": ["Unit", "Ship", "Trader"] });
+}
+
+describe("findStrategicCCLocation: the ground the next town claims", () =>
+{
+	// parity: on an empty search both implementations answer just `undefined`
+	// (the port used to answer the bogus position [-1, -1], which the caller's
+	// truthiness check at queueplanBuilding.ts:165 consumed as a real position;
+	// fixed to mirror petra/headquarters.js, which returns undefined)
+	it("ends without a claim when no ground can be reached", () =>
+	{
+		const { world, hq } = seat();
+		// the board is settled: a second allied town takes the far corner and
+		// every territory cell stayed ours, so no gaia ground is left to claim
+		world.addEntity(makeHqEntity({
+			"id": 2100, "owner": PLAYER, "position": [308, 308],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		const result = hq.findStrategicCCLocation(world.gameState, ccTemplate());
+		assert.equal(result, undefined, "no position is claimed");
+		// and the transport question was never asked of a positionless base
+		assert.ok(!hq.navalManagerCalls.some(([call]: [string, unknown[]]) =>
+			call === "setMinimalTransportShips"),
+			"no ships were budgeted for a positionless base");
+	});
+
+	it("a border town rises between two allied towns", () =>
+	{
+		// two scraps of unclaimed ground across the border line the towns
+		// straddle; the geometry (map 320 wide, both towns 298 apart) makes the
+		// north-west scrap the nearest-to-both legal claim
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) =>
+				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER
+		});
+		world.addEntity(makeHqEntity({
+			"id": 2100, "owner": PLAYER, "position": [308, 308],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [57, 257],
+			"the claim sits on the diagonal between the towns");
+	});
+
+	it("with one allied town the search becomes an economic one", () =>
+	{
+		// the single unclaimed lot sits 240+ units from the town: far enough to
+		// lose the ally-favouring term, so plain economics would refuse it at
+		// cut 60 - but a strategic expansion settles for cut 30
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => ix === 24 && iy === 20 ? 0 : PLAYER
+		});
+
+		// the plain economics call answers the ground not worth a town (cut 60)
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			false, "a town for its own sake is too dear there");
+		// the strategic call delegates with the cheaper cut and takes the lot
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [193, 161],
+			"expansion settles for the lot plain economics refused");
+	});
+});
+
+describe("findEconomicCCLocation: where the next village feeds", () =>
+{
+	it("the first settlement rises next to the launch party", () =>
+	{
+		// every cell of the board is unclaimed and the launch party stands at
+		// [100,100]: the proximity term dominates the flat resource sheets, so
+		// the village plants beside the party rather than in the far country
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", [100, 100], false),
+			[97, 97], "the first act of founding likes company");
+	});
+
+	it("the river bends the choice to the east bank", () =>
+	{
+		// a north-south river (passibility band 44..59) separates the west bank,
+		// where the launch party camps, from open country: the cc's clearance
+		// radius (21.2 + 8 proximity = 15 cells) keeps the party clear of the
+		// water and the first buildable ground past the current ...
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		for (let pz = 0; pz < 160; ++pz)
+			for (let px = 44; px <= 59; ++px)
+				world.map.setPassData(px, pz, 0xB);
+
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", [72, 72], false),
+			[151, 81], "the settlement stays on the water's edge");
+	});
+
+	it("no town grows in the yard of a storehouse", () =>
+	{
+		// two unclaimed scraps: one next to the storehouse at [196,148], one
+		// across the estate. Dropsites keep their working-yard radius of 80
+		// (and ban their own 60); near the storehouse the lot loses half its
+		// sheet and beyond 60 units the second lot stands
+		const gaia = new Set([24 + 20 * 40, 29 + 29 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		world.addEntity(makeHqEntity({
+			"id": 606, "owner": PLAYER, "position": [196, 148],
+			"classes": ["Structure", "Storehouse"], "templateName": "structures/athen/storehouse"
+		}, {
+			"resourceDropsiteTypes": () => ["wood"],
+			"isResourceDropsite": (resource: string) =>
+				resource === undefined || resource === "" || resource === "wood"
+		}));
+
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			[233, 233], "the yard is kept for the carts");
+	});
+
+	it("between two free lots the richer wood decides", () =>
+	{
+		// two unclaimed lots equal in every other respect; the wood sheet of
+		// (29,29) is lifted to 60 (the denser stand behind the hill) and the
+		// val formula 2*wood + wood + stone + metal reads the richer valley
+		const gaia = new Set([29 + 15 * 40, 29 + 29 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			[233, 233], "the denser stand pulls the village");
+		// and the sheet moved south, the village follows the wood
+		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 40;
+		world.map.ccResourceMaps.wood.map[29 + 15 * 40] = 60;
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			[233, 121], "the sheet moved, the village moved");
+	});
+
+	it("a raiding army pushes the new town across the map", () =>
+	{
+		// two unclaimed lots, one of which the raiding party camps on: the
+		// invading-army term (12000 = 110 units) strikes the west lot and the
+		// village plants on the far side
+		const gaia = new Set([15 + 28 * 40, 29 + 28 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		hq.defenseManager.armies.push({ "foePosition": [124, 228] } as never);
+
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			[233, 225], "the village plants beyond the raid");
+	});
+
+	it("towns are not built under an enemy tower's fire", () =>
+	{
+		// the enemy stone tower at [124,228] shoots 60; with the cc's half size
+		// (16) the danger band is 76 around the tower, so the west lot burns
+		// and the east lot stands
+		const gaia = new Set([15 + 28 * 40, 29 + 28 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		world.addEntity(makeHqEntity({
+			id: 2200, "owner": ENEMY, "position": [124, 228],
+			"classes": ["Structure", "Tower"],
+		}, {
+			"hasDefensiveFire": () => true,
+			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 60 } : undefined
+		}));
+
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			[233, 225], "the village keeps out of range");
+	});
+
+	it("ground too far from every town is refused", () =>
+	{
+		// only the far-border corner stayed unclaimed: 260+ units from town
+		// (the disfavour band halves the sheet) and inside the map's border
+		// ring (another half) drops the sheet under the 60 cut
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => ix >= 35 && iy >= 35 ? 0 : PLAYER
+		});
+
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+			false, "a town that far out never pays");
+		// (the oversea arm needs distances beyond 500, which a 320-wide board
+		// cannot produce, so its lift is not exercisable on this harness)
+	});
+});
+
+describe("findMarketLocation: where the trade route settles", () =>
+{
+	it("the first market is left to the construction plan", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+
+		assert.deepEqual(hq.findMarketLocation(world.gameState, marketTemplate()),
+			[-1, -1, -1, 0], "no partner, no geometry - the plan places it");
+	});
+
+	it("the second market opens the route as far from its partner as it can", () =>
+	{
+		// the town and its market stand at [244,76]; the trade cards are seated
+		// because a real game always trades and the route values gain*distSq {
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+		seatTraders(world);
+		world.addEntity(makeHqEntity({
+			"id": 3000, "owner": PLAYER, "position": [244, 76],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market"
+		}));
+		hq.updateTerritories(world.gameState);
+
+		const result = hq.findMarketLocation(world.gameState, marketTemplate()) as [number, number, number, number];
+		assert.deepEqual(result, [23, 297, 2, 56310],
+			"the new market clings to the far south-west corner");
+		// the trade record is booked under the town's base; base ids start at
+		// 2 because the anchorless manager consumes id 1 at territory time
+		assert.equal(result[2], 2);
+	});
+
+	// artificial fixture: minimalGain is raised to 10^9 so the route could
+	// never pay; in a real game the same refusal reads tradeManager's cut
+	it("a second market the route cannot pay for is refused", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+		seatTraders(world);
+		world.addEntity(makeHqEntity({
+			"id": 3000, "owner": PLAYER, "position": [244, 76],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market"
+		}));
+		hq.updateTerritories(world.gameState);
+		hq.tradeManager.minimalGain = 10 ** 9;
+
+		assert.equal(hq.findMarketLocation(world.gameState, marketTemplate()), false,
+			"the route is too poor, and one market already stands");
+	});
+
+	// a mod scenario: Resources.GetTradableCodes answers [] when the
+	// tradable property is stripped, which no vanilla data does
+	it("with nothing tradable the route stops with mods", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+		// the partner market belongs to the neighbouring empire, whose market
+		// makes the trade arithmetic certain but never our own
+		world.addEntity(makeHqEntity({
+			"id": 3001, "owner": ENEMY, "position": [100, 200],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market"
+		}));
+		(world.gameState.playerData as unknown as Record<string, boolean[]>).isMutualAlly[ENEMY] = true;
+		const engine = globalThis as Record<string, unknown>;
+		const realCodes = (engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes;
+		(engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes = () => [];
+		try
+		{
+			assert.equal(hq.findMarketLocation(world.gameState, marketTemplate()), false,
+				"no tradable goods, no second route");
+		}
+		finally
+		{
+			(engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes = realCodes;
+		}
+	});
+});
+
+describe("findDefensiveLocation: where the walls face", () =>
+{
+	/** the enemy's town over the southern march; the enemy strip keeps
+	 * territory rows 26+ so frontier rows 16..25 carry narrow (20..25) and
+	 * large (16..19) frontier bits alike */
+	function seatMarch(worldOptions: Partial<HqWorldOptions> = {})
+	{
+		const seatOut = seat({
+			"territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER,
+			...worldOptions
+		});
+		seatOut.hq.updateTerritories(seatOut.world.gameState);
+		return seatOut;
+	}
+	const enemyTown = (world: HqWorld, pos: [number, number] = [204, 220]) =>
+		world.addEntity(makeHqEntity({
+			"id": 4000, "owner": ENEMY, "position": pos,
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+	it("fortress and tower brace the frontier nearest the foe's town", () =>
+	{
+		const { world, hq } = seatMarch();
+		enemyTown(world);
+
+		// cell (33,21) is the frontier cell nearest the enemy town and 80 units
+		// from it (the not-under-80 rule's exact boundary is allowed)
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			[265, 169, 2], "the fortress presses the frontier");
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, towerTemplate()),
+			[265, 169, 2],
+			// row 21 is narrow, so the tower's large-frontier exclusion never
+			// bites and the stone tower takes the same post
+			"the tower takes the same post");
+	});
+
+	it("a fort in the way turns the walls to the far side", () =>
+	{
+		const { world, hq } = seatMarch();
+		enemyTown(world);
+		world.addEntity(makeHqEntity({
+			id: 4050, "owner": PLAYER, "position": [265, 169],
+			"classes": ["Structure", "Fortress", "Defensive"],
+			"templateName": "structures/athen/fortress"
+		}));
+
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			[137, 169, 2], "the walls spread out to the mirror post");
+	});
+
+	it("walls stand out of the enemy tower's reach", () =>
+	{
+		const { world, hq } = seatMarch();
+		enemyTown(world);
+		// the enemy tower by its town shoots 120; with the fortress half size
+		// (15) the danger band is 135, so the nearest posts fall inside and
+		// the walls retreat past 135
+		world.addEntity(makeHqEntity({
+			id: 4100, "owner": ENEMY, "position": [268, 172],
+			"classes": ["Structure", "Tower"],
+		}, {
+			"hasDefensiveFire": () => true,
+			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 120 } : undefined
+		}));
+
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			[129, 177, 2], "the walls stand clear of the fire");
+	});
+
+	it("at peace everywhere the walls wait — except facing a neutral", () =>
+	{
+		const { world, hq } = seatMarch();
+		// nobody is an enemy yet: no wall is worth raising
+		assert.equal(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			undefined, "no walls against everyone");
+		// ... unless a third empire is met but not war-declared — we may be in
+		// cease fire, and Petra still braces toward the neutral town
+		enemyTown(world);
+		(world.gameState.playerData as unknown as Record<string, boolean[]>).isEnemy[ENEMY] = false;
+		(world.gameState.playerData as unknown as Record<string, boolean[]>).isNeutral[ENEMY] = true;
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			[265, 169, 2], "the walls face the neutral town all the same");
+	});
+
+	it("a rising wonder draws the fortifications", () =>
+	{
+		// the wonder victor builds its forts around the wonder, not the frontier
+		const { world, hq } = seatMarch({ "victoryConditions": ["wonder"] });
+		enemyTown(world, [20, 300]);
+		world.addEntity(makeHqEntity({
+			id: 5000, "owner": PLAYER, "position": [160, 160],
+			"classes": ["Structure", "Wonder"],
+		}, { "footprintRadius": () => 22.6 }));
+
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+			[89, 129, 2], "the fort guards the wonder first");
+		// (the wonder-without-position arm the port guards differently is a
+		// resiliency note, not a counted deviation: the ref would crash on the
+		// missing position, the port skips the cell)
+	});
+});
+

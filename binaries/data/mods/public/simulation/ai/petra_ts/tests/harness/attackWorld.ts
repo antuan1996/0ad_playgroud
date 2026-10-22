@@ -46,6 +46,8 @@ export interface FakeEnt
 	capturePoints?(): number[] | undefined;
 	getDefaultArrow?(): number | undefined;
 	hasDefensiveFire?(): boolean;
+	/** whether the entity accepts a resource — with none named, any-resource */
+	isResourceDropsite?(resource?: string): boolean;
 	healthLevel?(): number;
 	resourceCarrying?(): Array<{ type: string; amount: number }> | undefined;
 	returnResources?(gameState: CommonGameState, queued?: boolean): boolean;

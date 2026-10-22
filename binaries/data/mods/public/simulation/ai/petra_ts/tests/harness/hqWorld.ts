@@ -442,10 +442,30 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		return mask;
 	};
 	gs.circularMap = options.circularMap ?? false;
+	// as GameState.prototype.getEnemyStructures (gamestate.js 538): with no
+	// owner, the structures of everyone this player's diplomacy calls an
+	// enemy; with one, that player's structures
+	gs.getEnemyStructures = (owner?: number) =>
+	{
+		void owner;
+		return new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
+			world.gameState.sharedScript,
+			mapOf(world.structures.filter((s) =>
+				(world.gameState.playerData as { isEnemy: boolean[] }).isEnemy[s.owner()])));
+	};
 	gs.getNeutralStructures = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
 		world.gameState.sharedScript,
 		mapOf(world.structures.filter((s) =>
 			(world.gameState.playerData as { isNeutral: boolean[] }).isNeutral[s.owner()])));
+	// as GameState.prototype.getOwnDropsites (gamestate.js 702): the own
+	// entities that accept the resource, or any resource when none is named
+	gs.getOwnDropsites = (resource?: string) =>
+	{
+		const owns = [...world.ents.values()].filter((e) => e.owner() === PLAYER &&
+			(e.isResourceDropsite ? e.isResourceDropsite(resource ?? "") : false));
+		return new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
+			world.gameState.sharedScript, mapOf(owns));
+	};
 	gs.getExclusiveAllyEntities = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
 		world.gameState.sharedScript,
 		mapOf([...world.ents.values()].filter((e) =>
@@ -688,7 +708,13 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): HqInstance
 
 	for (const name of options.stubs ?? [])
 	{
-		const stub = doorStub(name, doorFields[name] ?? {});
+		// copy the fresh-manager fields per seat: a test that pokes one door
+		// (an army raised, a transport fleet) must not leak over the shared
+		// record into another seat's fresh manager
+		const fields = doorFields[name] ?? {};
+		const extra = Object.fromEntries(Object.entries(fields).map(([field, value]) =>
+			[field, Array.isArray(value) ? [...(value as unknown[])] : value]));
+		const stub = doorStub(name, extra);
 		hq[name] = stub;
 		hq[name + "Calls"] = doorCalls(stub as never);
 	}
