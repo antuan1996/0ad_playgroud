@@ -971,7 +971,7 @@ export class Headquarters
 	 * Returns the best position to build a new Civil Center
 	 * Whose primary function would be to assure territorial continuity with our allies
 	 */
-	findStrategicCCLocation(gameState: CommonGameState, template: CommonTemplate): CommonPosition | undefined
+	findStrategicCCLocation(gameState: CommonGameState, template: CommonTemplate): false | CommonPosition | undefined
 	{
 		// This builds a map. The procedure is fairly simple.
 		// We minimize the Sum((dist - 300)^2) where the sum is on the three nearest allied CC

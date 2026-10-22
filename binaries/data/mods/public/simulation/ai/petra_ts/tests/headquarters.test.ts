@@ -20,7 +20,7 @@ import {
 	type HqSeatOptions, type HqWorldOptions
 } from "./harness/hqWorld.ts";
 import { emptyEvents, makeTemplate, restoreEngine, stubGlobal, type World } from "./harness/attackWorld.ts";
-import type { FakeEnt } from "./harness/attackWorld.ts";
+import type { FakeEnt, FakeTemplateLike } from "./harness/attackWorld.ts";
 import type { HqInstance, HqWorld } from "./harness/hqWorld.ts";
 
 // the two constants the emergency suite reads off the modules
@@ -2462,7 +2462,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the call books a melee batch at the empty house straight away", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		// the wall has no garrison room at the default book: 0 max slots means
 		// the melee card wins the ranged roll whatever the coin says
 		stubGlobal("randBool", () => true);
@@ -2493,7 +2493,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("so long as the emergency queue still holds the batch, no second book", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), true);
 
@@ -2506,7 +2506,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a victim beyond the rescue cut is nobody's", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 
 		// 390 cells out in both axes: ~304,200 square distance over the cut
@@ -2517,7 +2517,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("no road on the victim's land — the office holds", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		world.accessAt.set("60,60", 9);
 
@@ -2528,7 +2528,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a training house already brimming skips the call", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman"],
 			// 6 s of queued production, half under way, reads as a house at
@@ -2544,7 +2544,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the wall's garrison book counts batches, and the lone fill makes the call ranged", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
 			"queue": [
@@ -2581,7 +2581,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("a wounded wall keeps the melee hand even on the ranged roll", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500 } });
-		seatCards(world, hq);
+		seatCards(world);
 		// 40 hitpoints against the 50 eject floor: no room for arrows
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
@@ -2609,7 +2609,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("an empty treasury calls the house off", () =>
 	{
 		const { world, hq } = seat();
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [[50, 50]]), false);
@@ -2620,7 +2620,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("the disabled card is passed over and its teammate wins the call", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 }, "disabledTemplates": ["units/athen/infantry_spearman"] });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
 		});
@@ -2635,7 +2635,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	it("when the emergency account falls short, the neighbour queue lends", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 150 } });
-		seatCards(world, hq);
+		seatCards(world);
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		// the villager queue held an account from a previous turn's distribution
 		(world.ai.queueManager as unknown as
@@ -2842,7 +2842,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 
 	/** one of our capturers at grips with the target, or idling */
 	function capturer(world: HqWorld, id: number, opts: {
-		strength: number;
+		strength?: number;
 		bonus?: Record<string, Record<string, unknown>>;
 		state?: string;
 		orderData?: Array<Record<string, unknown>>;
@@ -3293,7 +3293,7 @@ describe("the office's turn on the clock: update's schedule", () =>
 	{
 		const { world, hq } = seat();
 		// a stale cache from a previous turn's question
-		hq.turnCache.accountedPopulation = 999 as never;
+		hq.turnCache.accountedPopulation = 999;
 
 		hq.update(world.gameState, world.ai.queues as never, eventsWith({}));
 
