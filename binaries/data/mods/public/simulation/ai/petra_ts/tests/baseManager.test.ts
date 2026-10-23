@@ -240,6 +240,34 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		assert.deepEqual(booked(base, "wood", "nearby"), []);
 		assert.equal(base.dropsites[2501], undefined, "the dropsite is off the town's list");
 	});
+
+	// port-only: the reference's removeSupply is guarded by a supply[i].ent
+	// field that nothing ever writes, so it always fires: removing one
+	// dropsite there splices every dropsite book of the player. The port keeps
+	// the entries booked by the surviving dropsites (see baseManager.ts).
+	it("a storehouse destroyed leaves the other dropsites' books untouched", () =>
+	{
+		const { world, base } = seat();
+		const store = storehouse(world, 3701, [40, 40]);
+		// the seed centre takes food and wood as well, and carries supplies of its own
+		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		centre.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
+		world.addEntity(makeGaiaSupply({
+			"id": 3702, "position": [10, 30], "generic": "food", "specific": "berry", "classes": ["Fruit"]
+		}));
+		world.addEntity(makeGaiaSupply({
+			"id": 3703, "position": [60, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"]
+		}));
+
+		base.assignResourceToDropsite(world.gameState, centre, false);
+		base.assignResourceToDropsite(world.gameState, store, false);
+
+		base.removeDropsite(world.gameState, 3701);
+
+		assert.deepEqual(booked(base, "food", "nearby"), [3702], "the centre keeps its berries");
+		assert.deepEqual(booked(base, "wood", "nearby"), [3703], "the centre keeps its own wood note");
+		assert.equal(base.dropsites[3701], undefined, "the destroyed storehouse is off the list");
+	});
 });
 
 

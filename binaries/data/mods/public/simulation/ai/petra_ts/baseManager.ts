@@ -328,11 +328,14 @@ export class BaseManager
 		{
 			for (let i = 0; i < supply.length; ++i)
 			{
-				// exhausted resource, remove it from this list
-				if (!supply[i].ent || !gameState.getEntityById(supply[i].id))
-					supply.splice(i--, 1);
-				// resource assigned to the removed dropsite, remove it
-				else if (supply[i].dropsite == entityID)
+				// resource assigned to the removed dropsite, or whose supply
+				// entity no longer stands in the game: remove it. Port-only
+				// deviation: the reference's first clause reads a supply[i].ent
+				// field that nothing ever writes, so it always fires and a
+				// single dropsite removal wiped every book of every dropsite;
+				// here the removal follows the intent the original comments
+				// describe (pinned port-only in tests/baseManager.test.ts).
+				if (supply[i].dropsite === entityID || !gameState.getEntityById(supply[i].id))
 					supply.splice(i--, 1);
 			}
 		};
