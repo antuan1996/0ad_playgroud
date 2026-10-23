@@ -17,6 +17,7 @@
 		"test:petra:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref",
 		"test:petra:coverage": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts src --coverage",
 		"test:petra:coverage:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref --coverage",
+		"coverage:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/coverage.ts",
 		"typecheck:petra:tests": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tests/tsconfig.json"
 	},
 	"dependencies": {

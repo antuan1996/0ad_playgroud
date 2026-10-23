@@ -17,6 +17,37 @@ Coverage counts the code under test only: the report takes the target's own
 modules and leaves `tests/` out, so a class that reads 0% is a class no test
 has loaded yet.
 
+### Coverage you can trust: `coverage.ts`
+
+Node's `--experimental-test-coverage` line figure overstates: a block V8
+reports as never run is counted as run once another test process hit the
+surrounding code, so whole untested branches read as covered (worker.ts showed
+100% lines while markers planted in such branches never fired). Use
+`coverage.ts` for the real figures:
+
+```sh
+npm run coverage:petra                      # the port, per module
+npm run coverage:petra -- ref               # the original
+npm run coverage:petra -- both              # the two side by side
+npm run coverage:petra -- src --file worker # one module: functions, lines and blocks never run
+npm run coverage:petra -- both --json c.json
+```
+
+It runs the suite once with `NODE_V8_COVERAGE`, resolves every character of a
+module to the innermost V8 range in each test process, keeps the highest count
+any process saw, and only then folds characters into lines. It reports:
+
+- **lines**: lines holding code, and of those the ones where any code ran.
+  Comments, blank lines, lone braces/`else` and TypeScript-only declarations
+  (interfaces, type aliases, `declare` members) are not code.
+- **blocks never run**: stretches of code no test reached — a branch, a
+  `continue;` never taken, a `?? -1` fallback never used. The port counts more
+  of these than the original for the same logic, because its `??` defaults are
+  extra blocks.
+- **functions**: bodies V8 saw called at least once.
+
+A module no test loads is marked `*`.
+
 `ref` is the game's own copy of Petra, the `petra` folder that sits next to the
 port's `petra_ts` folder in the mod, so the suite reads whatever the game would
 load today. `npm run build:petra:out` transpiles the port to
