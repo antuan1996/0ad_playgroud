@@ -537,6 +537,14 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	// them (by template; foundations carry their final template's name)
 	gs.countEntitiesByType = (type: string) =>
 		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.templateName() === type).length;
+	// the built form of a foundation: the template its name points at, as the
+	// game's foundation names carry the "foundation|" prefix
+	gs.getBuiltTemplate = (foundationName: string) =>
+		foundationName.startsWith("foundation|") ? world.templates[foundationName.slice("foundation|".length)] ?? null : null;
+	// the own entities carrying a metadata value, as the game gathers them for a
+	// task keyed by an entity id (a foundation's builders, a repair crew)
+	gs.getOwnEntitiesByMetadata = (key: string, value: unknown) =>
+		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.getMetadata(PLAYER, key) === value);
 	gs.countEntitiesAndQueuedByType = (type: string) => (gs.countEntitiesByType as (t: string) => number)(type) +
 		(hqKnobs.queuedTypes[type] ?? 0);
 	gs.hqKnobs = hqKnobs;

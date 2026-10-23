@@ -100,6 +100,8 @@ export interface FakeCollection
 	values(): IterableIterator<FakeEnt>;
 	filter(filter: unknown, thisp?: unknown): FakeCollection;
 	filterNearest(targetPos: [number, number], n: number): FakeCollection;
+	/** drops an entity from the collection, as the game does when it leaves the world */
+	removeEnt(ent: FakeEnt): boolean;
 	toEntityArray(): FakeEnt[];
 	toIdArray(): number[];
 	addEnt(ent: FakeEnt): boolean;
@@ -841,6 +843,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		},
 		removeEntity(id: number)
 		{
+			// a destroyed entity leaves every entity collection that follows the world
+			const gone = ents.get(id);
+			if (gone)
+				for (const collection of collections.registered)
+					collection.removeEnt(gone);
 			ents.delete(id);
 			for (const list of [units, structures])
 				for (let i = list.length - 1; i >= 0; --i)
