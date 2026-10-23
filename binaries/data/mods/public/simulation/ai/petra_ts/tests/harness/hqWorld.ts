@@ -219,6 +219,7 @@ const ResourcesManager = (await loadCommonModule<{
 const apiFilters = await loadCommonModule<{
 	byResource(resourceType: string): { func: (ent: FakeEnt) => boolean };
 	isHuntable(): { func: (ent: FakeEnt) => boolean };
+	isFishable(): { func: (ent: FakeEnt) => boolean };
 }>("filters");
 
 export type HqConfig = Record<string, any>;
@@ -281,6 +282,8 @@ export function structureTemplate(name: string, detail: {
 	trainable?: string[];
 	/** whether the building fires arrows at enemies; default no */
 	defensiveFire?: boolean;
+	/** the gatherers a supply-building feeds (ResourceSupply/MaxGatherers); default 0 */
+	maxGatherers?: number;
 } = {}): FakeTemplateLike
 {
 	const base = makeTemplate(name, detail);
@@ -512,6 +515,11 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	gs.getHuntableSupplies = () =>
 		(gs.updatingGlobalCollection as (key?: string, filter?: unknown, collection?: unknown) => unknown)(
 			"resource-hunt", apiFilters.isHuntable(), (gs.getEntities as () => unknown)());
+	// as GameState.prototype.getFishableSupplies (gamestate.js 730): the world's
+	// cached "resource-fish" collection — the still sea-creatures (filters.js 226)
+	gs.getFishableSupplies = () =>
+		(gs.updatingGlobalCollection as (key?: string, filter?: unknown, collection?: unknown) => unknown)(
+			"resource-fish", apiFilters.isFishable(), (gs.getEntities as () => unknown)());
 	// the cap our houses give; a town's matching ceiling (populationMax) is a
 	// different figure, which the census compares it against
 	gs.getPopulationLimit = () => options.populationLimit ?? options.populationMax ?? 400;

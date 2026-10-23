@@ -622,6 +622,8 @@ export function makeTemplate(name: string, detail: {
 	resistanceStrengths?: Record<string, number>;
 	/** the Health/Max; template_unit gives 100, infantry 80, ranged 50 */
 	maxHitpoints?: number;
+	/** the gatherers a supply feeds, as ResourceSupply/MaxGatherers reads; default 0 */
+	maxGatherers?: number;
 } = {}): FakeTemplateLike
 {
 	const cost = detail.cost ?? {};
@@ -675,6 +677,7 @@ export function makeTemplate(name: string, detail: {
 		// as common-api template.resistanceStrengths reads Resistance/Entity/Damage
 		resistanceStrengths: () => detail.resistanceStrengths ? { ...detail.resistanceStrengths } : undefined,
 		maxHitpoints: () => detail.maxHitpoints ?? 100,
+		maxGatherers: () => detail.maxGatherers ?? 0,
 		// as the common-api Template.buildCategory (entity.js 479) reads
 		// BuildRestrictions/Category, the EntityLimits counter that template
 		// decrements when raised; unit templates carry no BuildRestrictions
