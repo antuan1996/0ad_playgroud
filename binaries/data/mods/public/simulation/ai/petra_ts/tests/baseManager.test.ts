@@ -54,7 +54,6 @@ interface Base
 	anchorLost(gs: unknown): void;
 	assignEntity(gs: unknown, ent: unknown): void;
 	assignResourceToDropsite(gs: unknown, ent: unknown, deserialized: boolean): void;
-	removeFromAssignedDropsite(id: number): void;
 	removeDropsite(gs: unknown, id: number): void;
 	findBestDropsiteAndLocation(gs: unknown, resource: string): { quality: number; pos: number[]; templateName: string };
 	findBestDropsiteLocation(gs: unknown, resource: string, templateName: string): { quality: number; pos: number[] };
@@ -211,21 +210,6 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		base.assignResourceToDropsite(world.gameState, dropsite, false);
 
 		assert.deepEqual(booked(base, "wood", "nearby"), [], "the island's tree is not this town's to cut");
-	});
-
-	it("a tree felled is removed from every band it was booked in", () =>
-	{
-		const { world, base } = seat();
-		const dropsite = storehouse(world, 2501, [40, 40]);
-		world.addEntity(makeGaiaSupply({ "id": 2641, "position": [60, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
-		world.addEntity(makeGaiaSupply({ "id": 2642, "position": [160, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
-		base.assignResourceToDropsite(world.gameState, dropsite, false);
-
-		base.removeFromAssignedDropsite(2641);
-		base.removeFromAssignedDropsite(2642);
-
-		assert.deepEqual(booked(base, "wood", "nearby"), []);
-		assert.deepEqual(booked(base, "wood", "medium"), []);
 	});
 
 	it("a storehouse destroyed clears its own books, and the office no longer counts it", () =>

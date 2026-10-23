@@ -159,12 +159,6 @@ export class BasesManager
 			// Let's check we haven't lost an important building here.
 			if (evt && !evt.SuccessfulFoundation && evt.metadata?.[PlayerID]?.base)
 			{
-				if (evt?.metadata?.[PlayerID]?.assignedResource)
-				{
-					const assignedBase = this.getBaseByID(evt.metadata[PlayerID].base);
-					if (assignedBase)
-						assignedBase.removeFromAssignedDropsite(evt.entity);
-				}
 				// A new base foundation was created and destroyed on the same (AI) turn
 				if (evt.metadata[PlayerID].base == -1 || evt.metadata[PlayerID].base == -2)
 					continue;
@@ -746,49 +740,6 @@ export class BasesManager
 		return true;
 	}
 
-	/** Reassign territories when a base is going to be deleted */
-	reassignTerritories(deletedBase: BaseManager, territoryMap: import("./headquarters.ts").Headquarters["territoryMap"]): void
-	{
-		const cellSize = territoryMap.cellSize;
-		const width = territoryMap.width;
-		for (let j = 0; j < territoryMap.length; ++j)
-		{
-			if (this.basesMap.map[j] != deletedBase.ID)
-				continue;
-			if (territoryMap.getOwnerIndex(j) != PlayerID)
-			{
-				aiWarn("Petra reassignTerritories: should never happen");
-				this.basesMap.map[j] = 0;
-				continue;
-			}
-
-			let distmin = Math.min();
-			let baseID;
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
-			for (const base of this.baseManagers)
-			{
-				if (!base.anchor || !base.anchor.position())
-					continue;
-				if (base.accessIndex != deletedBase.accessIndex)
-					continue;
-				const dist = SquareVectorDistance(base.anchor.position(), pos);
-				if (dist >= distmin)
-					continue;
-				distmin = dist;
-				baseID = base.ID;
-			}
-			if (baseID)
-			{
-				const territoryBase = this.getBaseByID(baseID);
-				if (territoryBase)
-					territoryBase.territoryIndices.push(j);
-				this.basesMap.map[j] = baseID;
-			}
-			else
-				this.basesMap.map[j] = 0;
-		}
-	}
-
 	/**
 	 * We will loop only on one active base per turn.
 	 */
@@ -805,7 +756,6 @@ export class BasesManager
 			this.currentBase %= this.baseManagers.length;
 			activeBase = this.baseManagers[this.currentBase++].update(gameState, queues, events);
 			--nbBases;
-			// TODO what to do with this.reassignTerritories(this.baseManagers[this.currentBase]);
 		}
 
 		Engine.ProfileStop();

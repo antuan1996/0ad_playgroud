@@ -82,7 +82,6 @@ type CommonTechnology = import("simulation/ai/common-api/technology.js").Technol
 interface PetraEntityMetadata
 {
 	[key: string]: unknown;
-	assignedResource: boolean;
 	plan: number;
 	base: number;
 	transport: number;

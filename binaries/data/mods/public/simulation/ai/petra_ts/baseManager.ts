@@ -304,20 +304,6 @@ export class BaseManager
 		});
 	}
 
-	removeFromAssignedDropsite(entityID: number): void
-	{
-		for (const type in this.dropsiteSupplies)
-			for (const proxim in this.dropsiteSupplies[type])
-			{
-				const resourcesList = this.dropsiteSupplies[type][proxim];
-				for (let i = 0; i < resourcesList.length; ++i)
-				{
-					if (resourcesList[i].id === entityID)
-						resourcesList.splice(i--, 1);
-				}
-			}
-	}
-
 	// completely remove the dropsite resources from our list.
 	removeDropsite(gameState: CommonGameState, entityID: number): void
 	{
