@@ -139,9 +139,7 @@ export class ConstructionPlan extends QueuePlan
 		if (template.hasClass("Storehouse") && this.metadata && this.metadata.base)
 		{
 			// recompute the best dropsite location in case some conditions have changed
-			const base = HQ.getBaseByID(this.metadata.base);
-			if (!base)
-				return false;
+			const base = requireValue(HQ.getBaseByID(this.metadata.base));
 			const type = this.metadata.type ? this.metadata.type : "wood";
 			const newpos = base.findBestDropsiteLocation(gameState, type, template.templateName());
 			if (newpos && newpos.quality > 0)
@@ -369,9 +367,7 @@ export class ConstructionPlan extends QueuePlan
 		if (!bestTile.val)
 			return false;
 
-		const bestIdx = bestTile.idx;
-		if (bestIdx === undefined)
-			return false;
+		const bestIdx = requireValue(bestTile.idx);
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
@@ -553,8 +549,9 @@ export class ConstructionPlan extends QueuePlan
 		}
 		if (bestVal < 0)
 			return false;
-		if (bestIdx === undefined || bestJdx === undefined || bestAngle === undefined)
-			return false;
+		bestIdx = requireValue(bestIdx);
+		bestJdx = requireValue(bestJdx);
+		bestAngle = requireValue(bestAngle);
 
 		// if no good place with enough water around and still in first phase, wait for expansion at the next phase
 		if (!dockProximity && bestWater !== undefined && bestWater < 10 && gameState.currentPhase() == 1)
@@ -633,12 +630,11 @@ export class ConstructionPlan extends QueuePlan
 		this.template = template;
 		this.metadata = { "land": land, "oversea": true };
 		const pos = this.findDockPosition(gameState);
-		if (pos)
+		const type = template.templateName();
+		// the builder registry may still list a builder whose last unit died this turn
+		const builder = pos ? gameState.findBuilder(type) : undefined;
+		if (pos && builder)
 		{
-			const type = template.templateName();
-			const builder = gameState.findBuilder(type);
-			if (!builder)
-				return;
 			this.metadata.base = pos.base;
 			// Adjust a bit the position if needed
 			const cosa = Math.cos(pos.angle);
