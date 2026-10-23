@@ -274,12 +274,26 @@ export function structureTemplate(name: string, detail: {
 	buildCategory?: string | undefined;
 	/** the resources a dropsite template accepts; default no dropsite tag */
 	dropsiteTypes?: string[];
+	/** the population a house adds to the cap (Population/Bonus); default 0, no bonus */
+	popBonus?: number;
+	/** the units a building trains, with {civ} left for the civ; default none (a non-trainer) */
+	trainable?: string[];
+	/** whether the building fires arrows at enemies; default no */
+	defensiveFire?: boolean;
 } = {}): FakeTemplateLike
 {
 	const base = makeTemplate(name, detail);
 	return {
 		...base,
 		buildPlacementType: () => detail.placement === undefined ? "land" : detail.placement,
+		// as common-api Template.getPopulationBonus: zero for a template with no
+		// Population node, the declared bonus otherwise
+		getPopulationBonus: () => detail.popBonus ?? 0,
+		// as common-api Template.trainableEntities: undefined for a building with
+		// no Trainer node, the list otherwise
+		trainableEntities: (civ: string) => detail.trainable?.map((unit) => unit.replace("{civ}", civ)),
+		// as common-api Template.hasDefensiveFire: false without a ranged attack
+		hasDefensiveFire: () => detail.defensiveFire ?? false,
 		// hasBuildTerritory is the common-api read of BuildRestrictions/Territory
 		// (entity.js 501): undefined when the node is missing, otherwise a
 		// membership test on the declared list. Every buildable structure
@@ -367,6 +381,8 @@ export interface HqWorldOptions extends MapOptions, WorldOptions
 {
 	/** resources on hand, as playersData.resourceCounts carries them */
 	stock?: Record<string, number>;
+	/** the population cap our houses give; default follows populationMax */
+	populationLimit?: number;
 	/** the class-threshold tables canBuild consults */
 	entityLimits?: Record<string, number>;
 	entityCounts?: Record<string, number>;
@@ -427,6 +443,10 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	Object.assign(world.ai.accessibility, {
 		landPassMap: map.landPassMap,
 		navalPassMap: map.landPassMap,
+		// the passability grid: its width, and the map-module cell of a map position
+		width: MAP_CELLS * PASS_RATIO,
+		gamePosToMapPos: (p: [number, number]) =>
+			[Math.floor(p[0] / (TERRITORY_CELL / PASS_RATIO)), Math.floor(p[1] / (TERRITORY_CELL / PASS_RATIO))],
 		regionLinks: options.regionLinks ?? { 2: [2], 3: [3] },
 		regionType: options.regionTypes ?? { 2: "land", 3: "land" },
 		"getTrajectToIndex": (from: number, to: number) => trajectories[`${from},${to}`] ?? null
@@ -485,7 +505,9 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	gs.getResourceSupplies = (resource: string) =>
 		(gs.updatingGlobalCollection as (key: string, filter: unknown, collection: unknown) => unknown)(
 			`resource-${resource}`, apiFilters.byResource(resource), (gs.getEntities as () => unknown)());
-	gs.getPopulationLimit = () => options.populationMax ?? 400;
+	// the cap our houses give; a town's matching ceiling (populationMax) is a
+	// different figure, which the census compares it against
+	gs.getPopulationLimit = () => options.populationLimit ?? options.populationMax ?? 400;
 	gs.getEntityLimits = () => options.entityLimits ?? {};
 	gs.getEntityCounts = () => options.entityCounts ?? {};
 	gs.getEntityMatchCounts = () => options.matchCounts ?? {};

@@ -3720,3 +3720,1165 @@ describe("the wonder for a rich town: buildWonder", () =>
 	});
 });
 
+
+describe("the houses the census asks for: buildMoreHouses", () =>
+{
+	/** the house card and a builder who knows it, as the town keeps them */
+	function houseCards(world: HqWorld, hq: HqInstance, buildable: string[] = ["structures/{civ}/house"]): void
+	{
+		world.templates["structures/athen/house"] = structureTemplate("structures/athen/house", {
+			"classes": ["Structure", "House", "Village"], "popBonus": 10
+		});
+		world.addEntity(makeHqEntity({
+			"id": 2205, "owner": PLAYER, "position": [152, 152],
+			"classes": ["Unit", "Support", "Worker"]
+		}, {
+			"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
+		}));
+		hq.buildManager.init(world.gameState);
+	}
+
+	function queuedPlans(world: HqWorld, queue: string): Array<Record<string, unknown>>
+	{
+		return (world.ai.queues[queue] as unknown as { plans: Array<Record<string, unknown>> }).plans;
+	}
+
+	it("a census with cap room to spare plans no house", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 300, "population": 120 });
+		houseCards(world, hq);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queuedPlans(world, "house").length, 0,
+			"a town whose cap is its ceiling has nothing to build toward");
+	});
+
+	it("a town at its cap, with no houses waiting, plans one marked as needed", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 60, "population": 55 });
+		houseCards(world, hq);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		const plans = queuedPlans(world, "house");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, "structures/athen/house");
+		assert.equal(plans[0]?.goRequirement, "houseNeeded");
+	});
+
+	it("the house queue fills to three in calm times and to five when the town is crowded", () =>
+	{
+		const calm = seat({ "populationMax": 300, "populationLimit": 90, "population": 70 });
+		houseCards(calm.world, calm.hq);
+		for (let turn = 0; turn < 6; ++turn)
+			calm.hq.buildMoreHouses(calm.world.gameState, calm.world.ai.queues as never);
+		assert.equal(queuedPlans(calm.world, "house").length, 3, "three houses wait on a quiet town");
+
+		const crowded = seat({ "populationMax": 300, "populationLimit": 100, "population": 85 });
+		houseCards(crowded.world, crowded.hq);
+		for (let turn = 0; turn < 6; ++turn)
+			crowded.hq.buildMoreHouses(crowded.world.gameState, crowded.world.ai.queues as never);
+		assert.equal(queuedPlans(crowded.world, "house").length, 5, "a crowd over eighty keeps five waiting");
+	});
+
+	it("the apartment is the house of choice where the civ has it", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 90, "population": 70 });
+		houseCards(world, hq, ["structures/{civ}/house", "structures/{civ}/apartment"]);
+		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
+			"classes": ["Structure", "House", "Village"], "popBonus": 20
+		});
+		hq.buildManager.init(world.gameState);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queuedPlans(world, "house")[0]?.type, "structures/athen/apartment");
+	});
+
+	it("while the apartment is locked behind its tech, the house is planned", () =>
+	{
+		// the apartment needs a later phase: the game reports it disabled
+		const { world, hq } = seat({
+			"populationMax": 300, "populationLimit": 90, "population": 70,
+			"disabledTemplates": ["structures/athen/apartment"]
+		});
+		houseCards(world, hq, ["structures/{civ}/house", "structures/{civ}/apartment"]);
+		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
+			"classes": ["Structure", "House", "Village"], "popBonus": 20
+		});
+		hq.buildManager.init(world.gameState);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queuedPlans(world, "house")[0]?.type, "structures/athen/house");
+	});
+
+	it("a phase that wants village buildings reopens a house spot the census had shut", () =>
+	{
+		const { world, hq } = seat({
+			"populationMax": 300, "populationLimit": 90, "population": 70,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+		});
+		houseCards(world, hq);
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+		// the spot was turned away for room, then the phase's wants arrive
+		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/house", 90, "room");
+		hq.phasing = 2;
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(hq.requireHouses, true, "the house is required until the phase's villages stand");
+		assert.equal(hq.buildManager.isUnbuildable(world.gameState, "structures/athen/house"), false,
+			"the shut spot is reopened for the phase");
+	});
+
+	it("the phase's villages standing lift the house requirement", () =>
+	{
+		const { world, hq } = seat({
+			"populationMax": 300, "populationLimit": 90, "population": 70,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+		});
+		houseCards(world, hq);
+		for (const id of [2601, 2602, 2603])
+			world.addEntity(makeHqEntity({
+				"id": id, "owner": PLAYER, "position": [40 + id - 2601, 40],
+				"classes": ["Structure", "House", "Village"], "templateName": "structures/athen/house"
+			}));
+		hq.phasing = 2;
+		hq.requireHouses = true;
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(hq.requireHouses, undefined, "three houses stand: the phase has its villages");
+	});
+
+	it("a phase that has ended drops the house requirement", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 90, "population": 70 });
+		houseCards(world, hq);
+		hq.requireHouses = true;
+		hq.phasing = 0;
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(hq.requireHouses, undefined);
+	});
+
+	it("a town with no room for houses turns to a population tech", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 60, "population": 58 });
+		houseCards(world, hq);
+		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/house", 90, "room");
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.ok(hq.researchManagerCalls.some(([name]: [string, unknown[]]) => name === "researchPopulationBonus"),
+			"two souls of room left and no spot to build: the research office is asked");
+	});
+
+	it("a tight census with room to build raises the house queue's priority", () =>
+	{
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 60, "population": 58 });
+		houseCards(world, hq);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(world.ai.queueManager.getPriority("house"), 2 * hq.Config.priorities.house);
+	});
+
+	it("a roomy census restores the house queue to its ordinary priority", () =>
+	{
+		// the cap still sits below the ceiling, with a hundred free souls of room
+		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 200, "population": 100 });
+		houseCards(world, hq);
+		(world.ai.queueManager as unknown as { changePriority(q: string, p: number): void })
+			.changePriority("house", 2 * hq.Config.priorities.house);
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		assert.equal(world.ai.queueManager.getPriority("house"), hq.Config.priorities.house);
+	});
+});
+
+/** a builder of ours who knows the named cards, as the town's workers do */
+function bookBuilder(world: HqWorld, hq: HqInstance, buildable: string[]): void
+{
+	world.addEntity(makeHqEntity({
+		"id": 2206, "owner": PLAYER, "position": [152, 152],
+		"classes": ["Unit", "Support", "Worker"]
+	}, {
+		"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
+	}));
+	hq.buildManager.init(world.gameState);
+}
+
+/** a building of ours already standing */
+function standing(world: HqWorld, id: number, classes: string[], templateName: string,
+	position: [number, number] = [60, 60]): void
+{
+	world.addEntity(makeHqEntity({ id, "owner": PLAYER, position, classes, templateName }));
+}
+
+/** a queue's wood account, as the queue manager keeps it */
+function woodOf(world: HqWorld, queue: string): number
+{
+	return (world.ai.queueManager.accounts[queue] as unknown as { wood: number }).wood;
+}
+
+function setWood(world: HqWorld, queue: string, amount: number): void
+{
+	(world.ai.queueManager.accounts[queue] as unknown as { wood: number }).wood = amount;
+}
+
+/** the plans a queue holds, as the queue's own record */
+function queued(world: HqWorld, queue: string): Array<Record<string, unknown>>
+{
+	return (world.ai.queues[queue] as unknown as { plans: Array<Record<string, unknown>> }).plans;
+}
+
+describe("the frontier's defences: buildDefenses", () =>
+{
+	const SENTRY = "structures/athen/sentry_tower";
+	const TOWER = "structures/athen/defense_tower";
+	const FORTRESS = "structures/athen/fortress";
+
+	it("a town saving its goods builds no walls while it cannot barter", () =>
+	{
+		const { world, hq } = seat({ "population": 100 });
+		hq.Config.Military.numSentryTowers = 1;
+		world.templates[SENTRY] = structureTemplate(SENTRY, { "classes": ["Structure", "Tower"] });
+		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
+		hq.saveResources = true;
+		hq.canBarter = false;
+		world.ai.elapsedTime = 10000;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "defenseBuilding").length, 0);
+	});
+
+	it("a defensive town posts its sentry tower once the early lapse has run", () =>
+	{
+		// a defensive personality gets one sentry tower (Config.Military.numSentryTowers)
+		const { world, hq } = seat();
+		hq.Config.Military.numSentryTowers = 1;
+		world.templates[SENTRY] = structureTemplate(SENTRY, { "classes": ["Structure", "Tower"] });
+		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
+		world.ai.elapsedTime = hq.towerLapseTime + hq.fortStartTime + 1;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "defenseBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, SENTRY);
+	});
+
+	it("before the early lapse has run, the sentry tower waits", () =>
+	{
+		const { world, hq } = seat();
+		hq.Config.Military.numSentryTowers = 1;
+		world.templates[SENTRY] = structureTemplate(SENTRY, { "classes": ["Structure", "Tower"] });
+		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
+		world.ai.elapsedTime = hq.towerLapseTime + hq.fortStartTime - 1;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "defenseBuilding").length, 0);
+	});
+
+	it("a standing sentry tower answers the defensive personality's one", () =>
+	{
+		const { world, hq } = seat();
+		hq.Config.Military.numSentryTowers = 1;
+		world.templates[SENTRY] = structureTemplate(SENTRY, { "classes": ["Structure", "Tower"] });
+		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
+		standing(world, 2701, ["Structure", "Tower"], SENTRY);
+		world.ai.elapsedTime = 10000;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "defenseBuilding").length, 0);
+	});
+
+	it("in the third phase a fortress is raised, and its queue doubled", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 100 });
+		world.templates[FORTRESS] = structureTemplate(FORTRESS, {
+			"classes": ["Structure", "Fortress", "Defensive"]
+		});
+		bookBuilder(world, hq, ["structures/{civ}/fortress"]);
+		world.ai.elapsedTime = hq.fortressLapseTime + hq.fortressStartTime + 1;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "defenseBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, FORTRESS);
+		assert.equal(world.ai.queueManager.getPriority("defenseBuilding"),
+			2 * hq.Config.priorities.defenseBuilding);
+	});
+
+	it("in the second phase, a stone defence tower goes up for the first time", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "population": 70 });
+		world.templates[TOWER] = structureTemplate(TOWER, {
+			"classes": ["Structure", "StoneTower", "Defensive", "Tower"]
+		});
+		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "defenseBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, TOWER);
+	});
+
+	it("a town with its tower quota standing plans no more towers", () =>
+	{
+		const { world, hq } = seat({ "phase": 2, "population": 70 });
+		world.templates[TOWER] = structureTemplate(TOWER, {
+			"classes": ["Structure", "StoneTower", "Defensive", "Tower"]
+		});
+		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
+		// the quota is two towers per base, three more, and the difficulty's extras
+		const quota = 2 * hq.numActiveBases() + 3 + hq.extraTowers;
+		for (let i = 0; i < quota; ++i)
+			standing(world, 2710 + i, ["Structure", "StoneTower", "Defensive", "Tower"], TOWER,
+				[30 + 4 * i, 30]);
+		world.ai.elapsedTime = 10000;
+
+		hq.buildDefenses(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "defenseBuilding").length, 0);
+	});
+});
+
+describe("the forge after the market: buildForge", () =>
+{
+	const FORGE = "structures/athen/forge";
+
+	it("a town past sixty-five souls with a market standing lays its forge", () =>
+	{
+		const { world, hq } = seat({ "population": 70 });
+		standing(world, 2720, ["Structure", "Market"], "structures/athen/market");
+		world.templates[FORGE] = structureTemplate(FORGE, { "classes": ["Structure", "Forge"] });
+		bookBuilder(world, hq, ["structures/{civ}/forge"]);
+
+		hq.buildForge(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "militaryBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, FORGE);
+	});
+
+	it("without a market standing, the forge waits", () =>
+	{
+		const { world, hq } = seat({ "population": 70 });
+		world.templates[FORGE] = structureTemplate(FORGE, { "classes": ["Structure", "Forge"] });
+		bookBuilder(world, hq, ["structures/{civ}/forge"]);
+
+		hq.buildForge(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding").length, 0);
+	});
+
+	it("a forge standing ends the question", () =>
+	{
+		const { world, hq } = seat({ "population": 70 });
+		standing(world, 2720, ["Structure", "Market"], "structures/athen/market");
+		standing(world, 2721, ["Structure", "Forge"], FORGE);
+		world.templates[FORGE] = structureTemplate(FORGE, { "classes": ["Structure", "Forge"] });
+		bookBuilder(world, hq, ["structures/{civ}/forge"]);
+
+		hq.buildForge(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding").length, 0);
+	});
+});
+
+describe("the army's houses: constructTrainingBuildings", () =>
+{
+	const BARRACKS = "structures/athen/barracks";
+	const STABLE = "structures/athen/stable";
+	const RANGE = "structures/athen/range";
+	const ELEPHANT = "structures/athen/elephant_stable";
+	const ARSENAL = "structures/athen/arsenal";
+	const GYMNASIUM = "structures/athen/gymnasium";
+
+	/** a military card the town knows, its class as the game files it */
+	function card(world: HqWorld, name: string, classes: string[], trainable?: string[]): void
+	{
+		world.templates[name] = structureTemplate(name, { classes, trainable });
+	}
+
+	/** our own military houses, each with the class its card carries */
+	function armed(world: HqWorld, barracks: number, ranges: number, stables: number): void
+	{
+		let id = 2730;
+		for (let i = 0; i < barracks; ++i)
+			standing(world, id++, ["Structure", "Barracks"], BARRACKS, [40 + i, 40]);
+		for (let i = 0; i < ranges; ++i)
+			standing(world, id++, ["Structure", "Range"], RANGE, [50 + i, 40]);
+		for (let i = 0; i < stables; ++i)
+			standing(world, id++, ["Structure", "Stable"], STABLE, [60 + i, 40]);
+	}
+
+	it("the first barracks rises past twenty-five souls, and its queue is raised", () =>
+	{
+		const { world, hq } = seat({ "population": 40 });
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "militaryBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, BARRACKS);
+		assert.equal((plans[0]?.metadata as Record<string, unknown>)?.militaryBase, true);
+		assert.equal(world.ai.queueManager.getPriority("militaryBuilding"),
+			2 * hq.Config.priorities.militaryBuilding);
+	});
+
+	it("a town of twenty souls builds no military house yet", () =>
+	{
+		const { world, hq } = seat({ "population": 20 });
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding").length, 0);
+	});
+
+	it("a barracks standing, the stable is the next house", () =>
+	{
+		const { world, hq } = seat({ "population": 40 });
+		card(world, STABLE, ["Structure", "Stable"]);
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		bookBuilder(world, hq, ["structures/{civ}/stable", "structures/{civ}/barracks"]);
+		armed(world, 1, 0, 0);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding")[0]?.type, STABLE);
+	});
+
+	it("past fifty-five souls a second military house is a range, where the town has a barracks", () =>
+	{
+		const { world, hq } = seat({ "population": 60 });
+		card(world, RANGE, ["Structure", "Range"]);
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		bookBuilder(world, hq, ["structures/{civ}/range", "structures/{civ}/barracks"]);
+		armed(world, 1, 0, 1);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding")[0]?.type, RANGE);
+	});
+
+	it("a saving town with a barracks standing lays no second one while it cannot barter", () =>
+	{
+		const { world, hq } = seat({ "population": 60 });
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
+		armed(world, 1, 0, 0);
+		hq.saveResources = true;
+		// a built market licences the barter; update() books it each turn
+		hq.canBarter = true;
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding").length, 0,
+			"the saving town keeps its goods for the one barracks it has");
+	});
+
+	it("in the third phase, the elephant stable goes up once the three houses stand", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 120 });
+		card(world, ELEPHANT, ["Structure", "ElephantStable"]);
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		card(world, RANGE, ["Structure", "Range"]);
+		card(world, STABLE, ["Structure", "Stable"]);
+		bookBuilder(world, hq, ["structures/{civ}/elephant_stable", "structures/{civ}/barracks",
+			"structures/{civ}/range", "structures/{civ}/stable"]);
+		armed(world, 1, 1, 2);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding")[0]?.type, ELEPHANT);
+	});
+
+	it("without the elephant stable, the third phase's arsenal goes up", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 120 });
+		card(world, ARSENAL, ["Structure", "Arsenal"]);
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		card(world, RANGE, ["Structure", "Range"]);
+		card(world, STABLE, ["Structure", "Stable"]);
+		bookBuilder(world, hq, ["structures/{civ}/arsenal", "structures/{civ}/barracks",
+			"structures/{civ}/range", "structures/{civ}/stable"]);
+		armed(world, 1, 1, 2);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding")[0]?.type, ARSENAL);
+	});
+
+	it("a crowded third-phase town raises the advanced house its civ knows", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 90 });
+		card(world, GYMNASIUM, ["Structure", "Gymnasium"], ["units/{civ}/champion_infantry"]);
+		card(world, BARRACKS, ["Structure", "Barracks"]);
+		card(world, RANGE, ["Structure", "Range"]);
+		card(world, STABLE, ["Structure", "Stable"]);
+		bookBuilder(world, hq, ["structures/{civ}/gymnasium", "structures/{civ}/barracks",
+			"structures/{civ}/range", "structures/{civ}/stable"]);
+		armed(world, 1, 1, 2);
+		standing(world, 2740, ["Structure", "ElephantStable"], ELEPHANT);
+		standing(world, 2741, ["Structure", "Arsenal"], ARSENAL);
+		// the advanced list the game's start-up analysis books from the civ's config
+		hq.bAdvanced = [GYMNASIUM];
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "militaryBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, GYMNASIUM);
+	});
+
+	it("one advanced house standing, a town under a hundred and ten asks for no second", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 100 });
+		card(world, GYMNASIUM, ["Structure", "Gymnasium"], ["units/{civ}/champion_infantry"]);
+		card(world, "structures/athen/prytaneion", ["Structure", "Prytaneion"]);
+		bookBuilder(world, hq, ["structures/{civ}/gymnasium", "structures/{civ}/prytaneion"]);
+		armed(world, 1, 1, 2);
+		standing(world, 2740, ["Structure", "ElephantStable"], ELEPHANT);
+		standing(world, 2741, ["Structure", "Arsenal"], ARSENAL);
+		standing(world, 2742, ["Structure", "Gymnasium"], GYMNASIUM);
+		hq.bAdvanced = [GYMNASIUM, "structures/athen/prytaneion"];
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding").length, 0);
+	});
+});
+
+describe("the temple, the market and the farmstead", () =>
+{
+	const TEMPLE = "structures/athen/temple";
+	const VESTA = "structures/athen/temple_vesta";
+	const MARKET = "structures/athen/market";
+	const FARMSTEAD = "structures/athen/farmstead";
+
+	it("no temple before the third phase, unless the victory is by regicide", () =>
+	{
+		const { world, hq } = seat({ "phase": 2 });
+		standing(world, 2750, ["Structure", "Market"], MARKET);
+		world.templates[TEMPLE] = structureTemplate(TEMPLE, { "classes": ["Structure", "Temple"] });
+		bookBuilder(world, hq, ["structures/{civ}/temple"]);
+
+		hq.buildTemple(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 0);
+	});
+
+	it("in the third phase, with a market standing, the temple is laid", () =>
+	{
+		const { world, hq } = seat({ "phase": 3 });
+		standing(world, 2750, ["Structure", "Market"], MARKET);
+		world.templates[TEMPLE] = structureTemplate(TEMPLE, { "classes": ["Structure", "Temple"] });
+		bookBuilder(world, hq, ["structures/{civ}/temple"]);
+
+		hq.buildTemple(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding")[0]?.type, TEMPLE);
+	});
+
+	it("where the civ has the temple of Vesta, that one is laid", () =>
+	{
+		const { world, hq } = seat({ "phase": 3 });
+		standing(world, 2750, ["Structure", "Market"], MARKET);
+		world.templates[TEMPLE] = structureTemplate(TEMPLE, { "classes": ["Structure", "Temple"] });
+		world.templates[VESTA] = structureTemplate(VESTA, { "classes": ["Structure", "Temple"] });
+		bookBuilder(world, hq, ["structures/{civ}/temple", "structures/{civ}/temple_vesta"]);
+
+		hq.buildTemple(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding")[0]?.type, VESTA);
+	});
+
+	it("a temple needs a market standing before it", () =>
+	{
+		const { world, hq } = seat({ "phase": 3 });
+		world.templates[TEMPLE] = structureTemplate(TEMPLE, { "classes": ["Structure", "Temple"] });
+		bookBuilder(world, hq, ["structures/{civ}/temple"]);
+
+		hq.buildTemple(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 0);
+	});
+
+	it("without a market, the office lays one at triple the economic priority", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		bookBuilder(world, hq, ["structures/{civ}/market"]);
+
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding")[0]?.type, MARKET);
+		assert.equal(world.ai.queueManager.getPriority("economicBuilding"),
+			3 * hq.Config.priorities.economicBuilding);
+	});
+
+	it("a market already queued is not queued a second time", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		bookBuilder(world, hq, ["structures/{civ}/market"]);
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 1);
+	});
+
+	it("a standing market ends the office's question", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		standing(world, 2750, ["Structure", "Market"], MARKET);
+		world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		bookBuilder(world, hq, ["structures/{civ}/market"]);
+
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 0);
+	});
+
+	it("a farmstead waits for a storehouse and a house standing", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates[FARMSTEAD] = structureTemplate(FARMSTEAD, { "classes": ["Structure", "Farmstead"] });
+		bookBuilder(world, hq, ["structures/{civ}/farmstead"]);
+		standing(world, 2760, ["Structure", "House", "Village"], "structures/athen/house");
+
+		hq.buildFarmstead(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 0, "no storehouse yet to tie the farms to");
+	});
+
+	it("with a storehouse and a house standing, the farmstead is laid; one only", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates[FARMSTEAD] = structureTemplate(FARMSTEAD, { "classes": ["Structure", "Farmstead"] });
+		bookBuilder(world, hq, ["structures/{civ}/farmstead"]);
+		standing(world, 2760, ["Structure", "House", "Village"], "structures/athen/house");
+		standing(world, 2761, ["Structure", "Storehouse"], "structures/athen/storehouse");
+
+		hq.buildFarmstead(world.gameState, world.ai.queues as never);
+		assert.equal(queued(world, "economicBuilding")[0]?.type, FARMSTEAD);
+
+		standing(world, 2762, ["Structure", "Farmstead"], FARMSTEAD);
+		const before = queued(world, "economicBuilding").length;
+		hq.buildFarmstead(world.gameState, world.ai.queues as never);
+		assert.equal(queued(world, "economicBuilding").length, before, "one farmstead is enough");
+	});
+});
+
+describe("a herd without a pen card: manageCorral", () =>
+{
+	it("a town whose civ has no pen plants nothing for its herd", () =>
+	{
+		const { world, hq } = seat();
+
+		hq.manageCorral(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "corral").length, 0);
+	});
+});
+
+describe("the last civil centre gone: checkBaseExpansion with no base", () =>
+{
+	it("a town with no centre left lays the first one where its workers stand", () =>
+	{
+		// every base has been lost: the board keeps its ground, no base on it
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } },
+			{ "seatBases": false });
+		world.templates["structures/athen/civil_centre"] = ccTemplate();
+		bookBuilder(world, hq, ["structures/{civ}/civil_centre"]);
+		world.addEntity(makeHqEntity({
+			"id": 2207, "owner": PLAYER, "position": [50, 50],
+			"classes": ["Unit", "Support", "Worker"]
+		}));
+
+		hq.checkBaseExpansion(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "civilCentre");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, "structures/athen/civil_centre");
+		assert.equal((plans[0]?.metadata as Record<string, unknown>)?.base, -1);
+	});
+});
+
+describe("the second and third military houses, and the advanced houses' trainers", () =>
+{
+	const BARRACKS = "structures/athen/barracks";
+	const STABLE = "structures/athen/stable";
+	const RANGE = "structures/athen/range";
+	const PRYTANEION = "structures/athen/prytaneion";
+
+	it("past fifty-five souls, a town with one stable asks for a second", () =>
+	{
+		const { world, hq } = seat({ "population": 60 });
+		world.templates[STABLE] = structureTemplate(STABLE, { "classes": ["Structure", "Stable"] });
+		world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"] });
+		world.templates[RANGE] = structureTemplate(RANGE, { "classes": ["Structure", "Range"] });
+		bookBuilder(world, hq, ["structures/{civ}/stable", "structures/{civ}/barracks", "structures/{civ}/range"]);
+		standing(world, 2770, ["Structure", "Barracks"], BARRACKS, [40, 40]);
+		standing(world, 2771, ["Structure", "Range"], RANGE, [50, 40]);
+		standing(world, 2772, ["Structure", "Stable"], STABLE, [60, 40]);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "militaryBuilding")[0]?.type, STABLE);
+	});
+
+	it("a civ with no stable card, past eighty-five souls, asks a third house once it has two", () =>
+	{
+		// barracks and range stand, and the civ has no stable to build: the two
+		// houses it has make the third one the barracks it can still raise
+		const { world, hq } = seat({ "population": 100 });
+		world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"] });
+		world.templates[RANGE] = structureTemplate(RANGE, { "classes": ["Structure", "Range"] });
+		bookBuilder(world, hq, ["structures/{civ}/barracks", "structures/{civ}/range"]);
+		standing(world, 2770, ["Structure", "Barracks"], BARRACKS, [40, 40]);
+		standing(world, 2771, ["Structure", "Range"], RANGE, [50, 40]);
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "militaryBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, BARRACKS);
+	});
+
+	it("an advanced house with no trainer and no ranged fire is planned as a plain building", () =>
+	{
+		const { world, hq } = seat({ "phase": 3, "population": 100 });
+		world.templates[PRYTANEION] = structureTemplate(PRYTANEION, { "classes": ["Structure", "Prytaneion"] });
+		bookBuilder(world, hq, ["structures/{civ}/prytaneion"]);
+		standing(world, 2770, ["Structure", "Barracks"], BARRACKS, [40, 40]);
+		standing(world, 2771, ["Structure", "Range"], RANGE, [50, 40]);
+		standing(world, 2772, ["Structure", "Stable"], STABLE, [60, 40]);
+		standing(world, 2773, ["Structure", "Stable"], STABLE, [70, 40]);
+		standing(world, 2774, ["Structure", "ElephantStable"], "structures/athen/elephant_stable");
+		standing(world, 2775, ["Structure", "Arsenal"], "structures/athen/arsenal");
+		hq.bAdvanced = [PRYTANEION];
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues as never);
+
+		const plans = queued(world, "militaryBuilding");
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, PRYTANEION);
+		assert.equal(plans[0]?.metadata, undefined, "not a military house: no militaryBase tag");
+	});
+
+	it("a civ with neither a centre card nor a colony card plans no new base", () =>
+	{
+		// past the first phase, and a board with nothing for the civ to plant
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		bookBuilder(world, hq, ["structures/{civ}/civil_centre", "structures/{civ}/military_colony"]);
+
+		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues as never), false);
+		assert.equal(queued(world, "civilCentre").length, 0);
+	});
+});
+
+describe("placing a town: the rivals and allies around the lot", () =>
+{
+	/** a town of ours or of a rival, as the world files it */
+	function town(world: HqWorld, id: number, owner: number, position: [number, number]): void
+	{
+		world.addEntity(makeHqEntity({
+			id, owner, position, "classes": ["Structure", "CivCentre"],
+			"templateName": "structures/athen/civil_centre"
+		}));
+	}
+
+	it("a lot a rival's town would crowd is passed over for one clear of it", () =>
+	{
+		// the rival's centre sits on the open lot; no lot within a hundred and
+		// twenty units of it is claimable, however good the ground
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		town(world, 2400, ENEMY, [100, 100]);
+
+		const spot = hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false) as
+			[number, number];
+		assert.ok(Array.isArray(spot), "a clear lot is still found");
+		assert.ok(Math.hypot(spot[0] - 100, spot[1] - 100) >= 120,
+			"no town is planted within a hundred and twenty units of a rival");
+	});
+
+	it("the only lot a hundred and twenty to two hundred units from an allied town is refused", () =>
+	{
+		// our own town is an ally to itself in the engine's diplomacy row; the
+		// lot at [220,100] sits 120 units from it, inside the ally's no-go ring
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => ix === 27 && iy === 12 ? 0 : PLAYER
+		});
+		town(world, 2401, PLAYER, [100, 100]);
+
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false), false,
+			"no lot is taken inside an allied town's two-hundred-unit ring");
+	});
+
+	it("a lot next to an allied town is refused by the strategic search, and the far lot taken", () =>
+	{
+		// two towns of ours make the allied pair the strategic search needs; a
+		// lot a hundred and twenty-seven units from the first is too near it
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) =>
+				(ix === 12 && iy === 12) || (ix === 7 && iy === 32) ? 0 : PLAYER
+		});
+		town(world, 2402, PLAYER, [308, 308]);
+
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [57, 257],
+			"the lot by the first town is refused; the lot on the diagonal is taken");
+	});
+
+	it("three allied towns weigh the lot against the nearest three", () =>
+	{
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER
+		});
+		town(world, 2402, PLAYER, [308, 308]);
+		// the third town is placed between the other two in distance from the
+		// lot, and so is weighed as the middle one of the three
+		town(world, 2403, PLAYER, [280, 133]);
+
+		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate()) as [number, number];
+		for (const ally of [[10, 10], [308, 308], [280, 133]])
+			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
+				"every allied town keeps its distance from the new one");
+	});
+
+	it("a lot across a strait is settled by sea, and the navy is told to ferry one ship", () =>
+	{
+		// our landmass is region 2; the island east of it is region 3, the water
+		// between them region 8, and the strait's trajectory runs through it
+		const { world, hq } = seat({
+			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
+			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER,
+			"trajectories": { "2,3": [2, 8, 3] },
+			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+		}, { "landRegions": { 2: true, 3: true } });
+
+		const spot = hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false) as
+			[number, number];
+		assert.ok(Array.isArray(spot));
+		assert.ok(spot[0] >= 160, "the lot is on the island across the water");
+		assert.ok(hq.navalManagerCalls.some(([name, args]: [string, unknown[]]) =>
+			name === "setMinimalTransportShips" && args[1] === 8 && args[2] === 1),
+			"the strait's water gets one transport ship kept for the crossing");
+	});
+
+	it("a round-footprint structure is placed by its radius, as a square one is by its sides", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		const round = structureTemplate("structures/athen/round_centre", {
+			"classes": ["Structure", "CivCentre"],
+			"territories": ["own", "neutral"],
+			"getPaths": { "Footprint": { "Circle": { "@radius": 16 } } },
+			"obstruction": { "min": 15, "max": 21.2 }
+		});
+
+		const spot = hq.findEconomicCCLocation(world.gameState, round, "wood", undefined, false);
+		assert.ok(Array.isArray(spot), "the round centre finds its lot like a square one");
+	});
+});
+
+describe("the rest of the placing and the training: round sites, sea and speed", () =>
+{
+	const ROUND_CENTRE = "structures/athen/round_centre";
+
+	/** a round-footprint centre, placed as the square one is */
+	function roundCentre(): FakeTemplateLike
+	{
+		return structureTemplate(ROUND_CENTRE, {
+			"classes": ["Structure", "CivCentre"],
+			"territories": ["own", "neutral"],
+			"getPaths": { "Footprint": { "Circle": { "@radius": 16 } } },
+			"obstruction": { "min": 15, "max": 21.2 }
+		});
+	}
+
+	it("a round centre reaches for the allied pair's claim as a square one does", () =>
+	{
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) =>
+				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER
+		});
+		world.addEntity(makeHqEntity({
+			"id": 2100, "owner": PLAYER, "position": [308, 308],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		const spot = hq.findStrategicCCLocation(world.gameState, roundCentre());
+		assert.ok(Array.isArray(spot), "the round centre's claim is found too");
+	});
+
+	it("a lot across the strait, reached by a strategic search, gets the same one transport ship", () =>
+	{
+		// two towns of ours on the home landmass make the allied pair; the
+		// island east of the water is the only unclaimed ground
+		const { world, hq } = seat({
+			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
+			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER,
+			"trajectories": { "2,3": [2, 8, 3] },
+			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+		}, { "landRegions": { 2: true, 3: true } });
+		world.addEntity(makeHqEntity({
+			"id": 2101, "owner": PLAYER, "position": [40, 120],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate()) as [number, number];
+		assert.ok(Array.isArray(spot));
+		assert.ok(spot[0] >= 160, "the strategic lot is across the water");
+		assert.ok(hq.navalManagerCalls.some(([name, args]: [string, unknown[]]) =>
+			name === "setMinimalTransportShips" && args[1] === 8),
+			"the same strait's water is kept for one ship");
+	});
+
+	it("a round fortress braces the frontier as a square one does", () =>
+	{
+		// our ground to the north, the foe's frontier to the south, as the
+		// frontier suites lay it out
+		const { world, hq } = seat({ "territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER });
+		hq.updateTerritories(world.gameState);
+		world.addEntity(makeHqEntity({
+			"id": 4000, "owner": ENEMY, "position": [204, 220],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		const round = structureTemplate("structures/athen/round_fortress", {
+			"classes": ["Structure", "Fortress", "Defensive"],
+			"getPaths": { "Footprint": { "Circle": { "@radius": 15 } } },
+			"obstruction": { "min": 15, "max": 21.2 }
+		});
+
+		const spot = hq.findDefensiveLocation(world.gameState, round);
+		assert.ok(Array.isArray(spot) && spot.length === 3, "the round fortress finds its frontier cell");
+	});
+
+	it("a young town's workers are the faster soldiers among the eligible ones", () =>
+	{
+		// twenty-five supports on the payroll and no soldiers: the share of
+		// supports is full, so the next hands come from the barracks, and the
+		// fast spearman (walk 9.5) beats the archer (walk 9) for the speed term
+		const { world, hq } = seat();
+		trainerTown(world);
+		for (let i = 0; i < 25; ++i)
+			hand(world, 500 + i, false);
+		// both infantry classes qualify: the office's recruit draw picks "Infantry"
+		stubGlobal("pickRandom", (list: string[]) => list[2]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues as never);
+
+			const queues = world.ai.queues as unknown as
+				Record<string, { plans: Array<{ type: string }> }>;
+			assert.equal(queues.citizenSoldier.plans.length, 1);
+			assert.equal(queues.citizenSoldier.plans[0]?.type, "units/athen/infantry_spearman_b");
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("a decaying building under a force of more than eight is defended; eight are not", () =>
+	{
+		const { world, hq } = seat();
+		const building = world.addEntity(makeHqEntity({
+			"id": 2801, "owner": PLAYER, "position": [100, 100],
+			"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks"
+		}));
+		// a raid's army near the building, as the attack office books it
+		const raid = (size: number) => ({ "position": [110, 100], "unitCollection": { "length": size } });
+		const started = hq.attackManager.startedAttacks as Record<string, unknown[]>;
+
+		started["Raid"] = [raid(8)];
+		hq.turnCache.numAround = undefined;
+		assert.equal(hq.isDefendable(building), false, "eight raiders are not yet a threat to defend against");
+
+		started["Raid"] = [raid(9)];
+		hq.turnCache.numAround = undefined;
+		assert.equal(hq.isDefendable(building), true, "nine raiders make the building worth defending");
+	});
+
+	it("a base is found by its own number, and an unknown number finds none", () =>
+	{
+		const { hq } = seat();
+		const base = hq.baseManagers()[0];
+
+		assert.equal(hq.getBaseByID(base.ID), base);
+		assert.equal(hq.getBaseByID(999), undefined);
+	});
+
+	it("after a reload, the bases' territory map is rebuilt from the bases' own ground", () =>
+	{
+		const { world, hq } = seat();
+		const base = hq.baseManagers()[0];
+		// the map is what a reloaded game starts from: its entries carry no base yet
+		hq.basesManager.basesMap.map.fill(0);
+
+		hq.postinit(world.gameState);
+
+		for (const j of base.territoryIndices)
+			assert.equal(hq.basesManager.basesMap.map[j], base.ID,
+				"every cell of the base's ground answers its base again");
+	});
+
+	it("a queued market waiting on funds draws what the other queues hold", () =>
+	{
+		// four hundred wood in stock, all of it set aside on the house queue: the
+		// market has no free wood of its own, so it draws what the houses hold
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 400, "stone": 500, "metal": 500 } });
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
+			"classes": ["Structure", "Market"], "cost": { "wood": 300 }
+		});
+		bookBuilder(world, hq, ["structures/{civ}/market"]);
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+		setWood(world, "house", 400);
+
+		hq.buildMarket(world.gameState, world.ai.queues as never);
+
+		assert.equal(queued(world, "economicBuilding").length, 1, "the market is still the one plan");
+		assert.equal(woodOf(world, "economicBuilding"), 300,
+			"the market's wood is drawn from the house queue, up to its cost");
+		assert.equal(woodOf(world, "house"), 100);
+	});
+
+	it("a phase that wants villages marks the house plans it can use, and clears the rest", () =>
+	{
+		// a quiet town of twenty-five: its houses are not needed yet, so the
+		// phase's three villages release the two planned houses from their need
+		const { world, hq } = seat({
+			"populationMax": 300, "populationLimit": 90, "population": 25,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+		});
+		world.templates["structures/athen/house"] = structureTemplate("structures/athen/house", {
+			"classes": ["Structure", "House", "Village"], "popBonus": 10
+		});
+		bookBuilder(world, hq, ["structures/{civ}/house"]);
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+		hq.phasing = 2;
+
+		hq.buildMoreHouses(world.gameState, world.ai.queues as never);
+
+		// the house this turn adds is counted after the release, so it keeps its need
+		const plans = queued(world, "house");
+		assert.equal(plans.length, 3);
+		assert.equal(plans[0]?.goRequirement, undefined,
+			"the phase wants three villages: the planned houses are not held back by need");
+		assert.equal(plans[1]?.goRequirement, undefined);
+		assert.equal(plans[2]?.goRequirement, "houseNeeded", "the newest house still waits for its need");
+	});
+});
+
+describe("the last rarely-read answers: potential bases, far allies, round markets, islands", () =>
+{
+	it("a centre still being raised counts as a potential base, not an active one", () =>
+	{
+		const { world, hq } = seat();
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
+			() => 0.5;
+		hq.basesManager.resetBaseCache();
+
+		assert.equal(hq.numActiveBases(), 0, "no built centre yet");
+		assert.equal(hq.numPotentialBases(), 1, "the centre in the works still holds the ground");
+		assert.equal(hq.hasPotentialBase(), true);
+	});
+
+	it("a third allied town farther than the other two is weighed as the far one", () =>
+	{
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER
+		});
+		world.addEntity(makeHqEntity({
+			"id": 2402, "owner": PLAYER, "position": [308, 308],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+		world.addEntity(makeHqEntity({
+			"id": 2404, "owner": PLAYER, "position": [300, 10],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate()) as [number, number];
+		for (const ally of [[10, 10], [308, 308], [300, 10]])
+			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
+				"every allied town keeps its distance from the new one");
+	});
+
+	it("a round market is placed by its trade route as a square one is", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+		seatTraders(world);
+		world.addEntity(makeHqEntity({
+			"id": 3000, "owner": PLAYER, "position": [244, 76],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market"
+		}));
+		hq.updateTerritories(world.gameState);
+		const round = structureTemplate("structures/athen/round_market", {
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"getPaths": { "Footprint": { "Circle": { "@radius": 15 } } },
+			"obstruction": { "min": 13, "max": 21.96 }
+		});
+
+		const result = hq.findMarketLocation(world.gameState, round) as [number, number, number, number];
+		assert.ok(Array.isArray(result) && result.length === 4, "the round market finds its route");
+		assert.equal(result[2], 2, "the route is booked under the town's base, as for a square market");
+	});
+
+	it("a second market reaches our first by land only, so the island across the water is no partner", () =>
+	{
+		// our market stands on the home landmass (region 2); the island lots
+		// (region 3) have no land route to it, so the route lands at home
+		const { world, hq } = seat({
+			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
+			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER
+		}, { "landRegions": { 2: true, 3: true } });
+		seatTraders(world);
+		world.addEntity(makeHqEntity({
+			"id": 3001, "owner": PLAYER, "position": [60, 60],
+			"classes": ["Structure", "Trade", "Town", "Market"],
+			"templateName": "structures/athen/market"
+		}));
+		hq.updateTerritories(world.gameState);
+
+		const result = hq.findMarketLocation(world.gameState, marketTemplate()) as [number, number, number, number];
+		assert.ok(Array.isArray(result) && result[0] < 160,
+			"the second market is placed on the home side of the water, reachable by land");
+	});
+
+	it("a gatherer soldier, asked for by a raid, is a soldier of the barracks' own order", () =>
+	{
+		// the raid's interests weigh gatherers; equal terms keep the barracks' order
+		const { world, hq } = seat();
+		trainerTown(world);
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Spearman", "Worker", "Citizen"],
+			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
+			"resourceGatherRates": { "wood.tree": 0.75 },
+			"getPaths": { "Cost": { "Population": 1 } }
+		});
+
+		const pick = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry"]],
+			[["canGather", 1]]);
+
+		assert.equal(pick, "units/athen/infantry_spearman_b");
+	});
+});
