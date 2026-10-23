@@ -218,6 +218,7 @@ const ResourcesManager = (await loadCommonModule<{
 }>("resources")).ResourcesManager;
 const apiFilters = await loadCommonModule<{
 	byResource(resourceType: string): { func: (ent: FakeEnt) => boolean };
+	isHuntable(): { func: (ent: FakeEnt) => boolean };
 }>("filters");
 
 export type HqConfig = Record<string, any>;
@@ -505,6 +506,12 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	gs.getResourceSupplies = (resource: string) =>
 		(gs.updatingGlobalCollection as (key: string, filter: unknown, collection: unknown) => unknown)(
 			`resource-${resource}`, apiFilters.byResource(resource), (gs.getEntities as () => unknown)());
+	// as GameState.prototype.getHuntableSupplies (gamestate.js 725): the world's
+	// cached "resource-hunt" collection — the huntable animals' supplies, with
+	// fish and sea-creatures left out (filters.js 217)
+	gs.getHuntableSupplies = () =>
+		(gs.updatingGlobalCollection as (key?: string, filter?: unknown, collection?: unknown) => unknown)(
+			"resource-hunt", apiFilters.isHuntable(), (gs.getEntities as () => unknown)());
 	// the cap our houses give; a town's matching ceiling (populationMax) is a
 	// different figure, which the census compares it against
 	gs.getPopulationLimit = () => options.populationLimit ?? options.populationMax ?? 400;
