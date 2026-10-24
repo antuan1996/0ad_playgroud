@@ -267,7 +267,7 @@ export class NavalManager
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) != region)
 				return;
-			const i = seas.indexOf(getSeaAccess(gameState, dock) ?? NaN);
+			const i = seas.indexOf(requireValue(getSeaAccess(gameState, dock)));
 			if (i != -1)
 				seas.splice(i, 1);
 		});
@@ -331,8 +331,8 @@ export class NavalManager
 				{
 					if (!ent.position())  // unit from another ship of this plan ... do nothing
 						continue;
-					const access = getLandAccess(gameState, ent);
-					const endPos = ent.getMetadata(PlayerID, "endPos");
+					const access = requireValue(getLandAccess(gameState, ent));
+					const endPos = requireMetadata(ent, "endPos");
 					ent.setMetadata(PlayerID, "transport", undefined);
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 					ent.setMetadata(PlayerID, "endPos", undefined);
@@ -340,7 +340,7 @@ export class NavalManager
 					// otherwise, we should require another transport
 					// TODO if attacking and no more ships available, remove the units from the attack
 					// to avoid delaying it too much
-					if (access != endIndex && access !== undefined && endPos !== undefined)
+					if (access != endIndex)
 						this.requireTransport(gameState, ent, access, endIndex, endPos);
 				}
 			}
@@ -359,14 +359,13 @@ export class NavalManager
 
 	getPlan(ID: number | undefined): TransportPlan | undefined
 	{
-		if (ID === undefined)
-			return undefined;
 		for (const plan of this.transportPlans)
 			if (plan.ID === ID)
 				return plan;
 		return undefined;
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	addPlan(plan: TransportPlan): void
 	{
 		this.transportPlans.push(plan);
@@ -409,7 +408,8 @@ export class NavalManager
 
 		if (plans.length)
 		{
-			plans.sort((plan: TransportPlan): number => plan.units.length);
+			// join the plan with the fewest units
+			plans.sort((a: TransportPlan, b: TransportPlan): number => a.units.length - b.units.length);
 			plans[0].addUnit(ent, endPos);
 			return true;
 		}
@@ -444,10 +444,7 @@ export class NavalManager
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
-			const endPosMeta = ent.getMetadata(PlayerID, "endPos");
-			if (!endPosMeta)
-				continue;
-			newplan.addUnit(ent, endPosMeta);
+			newplan.addUnit(ent, requireMetadata(ent, "endPos"));
 			plan.units.updateEnt(ent);
 		}
 
@@ -461,12 +458,12 @@ export class NavalManager
 	 * needed at start game when starting with a garrisoned ship
 	 */
 	createTransportIfNeeded(gameState: CommonGameState, fromPos: CommonPosition, toPos: CommonPosition,
-		toAccess: number | undefined): void
+		toAccess: number): void
 	{
 		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
 		if (fromAccess !== 1)
 			return;
-		if (toAccess === undefined || toAccess < 2)
+		if (toAccess < 2)
 			return;
 
 		for (const ship of this.ships.values())
@@ -475,13 +472,7 @@ export class NavalManager
 				continue;
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined)
 				continue;
-			const units: CommonEntity[] = [];
-			for (const entId of ship.garrisoned())
-			{
-				const unit = gameState.getEntityById(entId);
-				if (unit)
-					units.push(unit);
-			}
+			const units = ship.garrisoned().map((entId: number): CommonEntity => requireValue(gameState.getEntityById(entId)));
 			// TODO check that the garrisoned units have not another purpose
 			const plan = new TransportPlan(gameState, units, fromAccess, toAccess, toPos, ship);
 			if (plan.failed)
@@ -514,13 +505,11 @@ export class NavalManager
 			if (!plan.needTransportShips || plan.units.length < 2)
 				continue;
 			const sea = plan.sea;
-			if (sea === undefined)
-				continue;
-			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 ||
-				(this.seaTransportShips[sea]?.length ?? 0) < this.wantedTransportShips[sea])
+			const seaTransports = requireValue(this.seaTransportShips[sea]).length;
+			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 || seaTransports < this.wantedTransportShips[sea])
 				continue;
 			++this.neededTransportShips[sea];
-			if (this.wantedTransportShips[sea] === 0 || (this.seaTransportShips[sea]?.length ?? 0) < plan.transportShips.length + 2)
+			if (this.wantedTransportShips[sea] === 0 || seaTransports < plan.transportShips.length + 2)
 			{
 				++this.wantedTransportShips[sea];
 				return;
@@ -541,12 +530,15 @@ export class NavalManager
 		// check if we have enough transport ships per region.
 		for (let sea = 0; sea < this.seaShips.length; ++sea)
 		{
-			if (this.seaShips[sea] === undefined)
+			const transports = this.seaTransportShips[sea];
+			const fishers = this.seaFishShips[sea];
+			// the sea collections are created together, for naval regions only
+			if (!transports || !fishers)
 				continue;
 			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0)
 				continue;
 
-			if ((this.seaTransportShips[sea]?.length ?? 0) < this.wantedTransportShips[sea])
+			if (transports.length < this.wantedTransportShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "transport");
 				if (template)
@@ -557,7 +549,7 @@ export class NavalManager
 			}
 
 
-			if ((this.seaFishShips[sea]?.length ?? 0) < this.wantedFishShips[sea])
+			if (fishers.length < this.wantedFishShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "fishing");
 				if (template)
@@ -584,10 +576,8 @@ export class NavalManager
 		if (!ship.position())
 			return false;
 		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
-		if (!plan || !plan.boardingPos[ship.id()])
-			return false;
-		const bp = plan.boardingPos[ship.id()];
-		if (!bp)
+		const bp = plan?.boardingPos[ship.id()];
+		if (!plan || !bp)
 			return false;
 		return SquareVectorDistance(bp, ship.position()) < plan.boardingRange;
 	}
@@ -723,11 +713,9 @@ export class NavalManager
 		for (const ship of blockedShips)
 		{
 			const shipPosition = ship.position();
-			if (!shipPosition)
-				continue;
 			// our transport ships always have their sea set (see init and checkEvents)
 			const sea = requireMetadata(ship, "sea");
-			for (const blockingShip of this.seaShips[sea]?.values() ?? [])
+			for (const blockingShip of requireValue(this.seaShips[sea]).values())
 			{
 				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
 					continue;
@@ -786,9 +774,8 @@ export class NavalManager
 						break;
 					if (!base.anchor || base.constructing)
 						continue;
-					const baseAccessIndex = base.accessIndex;
-					if (baseAccessIndex === undefined)
-						continue;
+					// set with the anchor
+					const baseAccessIndex = requireValue(base.accessIndex);
 					const remaining = this.getUnconnectedSeas(gameState, baseAccessIndex);
 					for (const sea of remaining)
 					{
@@ -826,8 +813,8 @@ export class NavalManager
 			return;
 		const wantedLand: Record<number, boolean> = {};
 		for (const base of gameState.ai.HQ.baseManagers())
-			if (base.anchor && base.accessIndex !== undefined)
-				wantedLand[base.accessIndex] = true;
+			if (base.anchor)
+				wantedLand[requireValue(base.accessIndex)] = true;
 		// our docks always have their sea set (see init and checkEvents)
 		const sea = requireMetadata(this.docks.toEntityArray()[0], "sea");
 		queues.militaryBuilding.addPlan(
@@ -838,18 +825,18 @@ export class NavalManager
 	getBestShip(gameState: CommonGameState, sea: number, goal: "attack" | "transport" | "fishing"): string | undefined
 	{
 		const civ = gameState.getPlayerCiv();
-		const trainableShips: string[] = [];
+		const trainableShips = new Map<string, CommonTemplate>();
 		gameState.getOwnTrainingFacilities().filter(filters.byMetadata(PlayerID, "sea", sea)).forEach(
 			function(ent: CommonEntity): void
 			{
-				const trainables = ent.trainableEntities(civ);
-				for (const trainable of trainables ?? [])
+				// the facilities with a sea are our docks and shipyards, which all train ships
+				for (const trainable of requireValue(ent.trainableEntities(civ)))
 				{
 					if (gameState.isTemplateDisabled(trainable))
 						continue;
 					const template = gameState.getTemplate(trainable);
-					if (template && template.hasClass("Ship") && trainableShips.indexOf(trainable) === -1)
-						trainableShips.push(trainable);
+					if (template && template.hasClass("Ship") && !trainableShips.has(trainable))
+						trainableShips.set(trainable, template);
 				}
 			});
 
@@ -857,11 +844,8 @@ export class NavalManager
 		let bestShip;
 		const limits = gameState.getEntityLimits();
 		const current = gameState.getEntityCounts();
-		for (const trainable of trainableShips)
+		for (const [trainable, template] of trainableShips)
 		{
-			const template = gameState.getTemplate(trainable);
-			if (!template)
-				continue;
 			if (!template.available(gameState))
 				continue;
 

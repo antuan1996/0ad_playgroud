@@ -95,10 +95,9 @@ export class ConstructionPlan extends QueuePlan
 		else if (this.metadata.base === undefined)
 			this.metadata.base = pos.base;
 
-		if (pos.access)
-			this.metadata.access = pos.access;   // needed for Docks whose position is on water
-		else
-			this.metadata.access = gameState.ai.accessibility.getAccessValue([pos.x, pos.z]);
+		// needed for Docks whose position is on water
+		const access = pos.access ? pos.access : gameState.ai.accessibility.getAccessValue([pos.x, pos.z]);
+		this.metadata.access = access;
 
 		if (this.template.buildPlacementType() == "shore")
 		{
@@ -125,7 +124,7 @@ export class ConstructionPlan extends QueuePlan
 		Engine.ProfileStop();
 
 		if (this.metadata && this.metadata.proximity)
-			gameState.ai.HQ.navalManager.createTransportIfNeeded(gameState, this.metadata.proximity, [pos.x, pos.z], this.metadata.access);
+			gameState.ai.HQ.navalManager.createTransportIfNeeded(gameState, this.metadata.proximity, [pos.x, pos.z], access);
 	}
 
 	findGoodPosition(gameState: CommonGameState): BuildingPosition
