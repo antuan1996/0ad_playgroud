@@ -1,0 +1,98 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository
+
+0 A.D. (engine "Pyrogenesis"): a C++ engine in `source/` and the game itself as
+JavaScript/XML/JSON mod data in `binaries/data/mods/` (`mod` = engine-level
+GUI/global scripts, `public` = the game). Upstream docs live on the Gitea wiki
+(BuildInstructions, GettingStartedProgrammers).
+
+The work on this branch (`petra_behaviour_tests`) is a **TypeScript port of the
+Petra AI** and its behaviour-test suite, under
+`binaries/data/mods/public/simulation/ai/`.
+
+## Commands
+
+### Engine (C++)
+```sh
+libraries/build-source-libs.sh            # bundled third-party libs (once)
+build/workspaces/update-workspaces.sh     # premake -> build/workspaces/gcc/ (options: --without-tests, --without-atlas, ...)
+make -C build/workspaces/gcc -j$(nproc)   # binaries land in binaries/system/
+binaries/system/test                      # cxxtest runner (also runs the JS component tests)
+binaries/system/test --suite <Suite> [--test <name>]   # one suite / one test; --list to enumerate
+```
+
+### Linting
+- `npm run lint` / `npm run lint:fix` — ESLint for the game's **JS** (tabs, see `.editorconfig`). It does not lint `.ts` files.
+- `pre-commit run --all-files` — the CI hooks (ruff, shellcheck/shfmt, markdownlint, yamllint, eslint, the non-breaking space in "0 A.D." under `binaries/`).
+
+### Petra TS port
+```sh
+npm run build:petra                 # strict typecheck of the port (noEmit); clean
+npm run typecheck:petra:tests       # typecheck tests + harness (also re-checks the port); clean
+npm run build:petra:out             # transpile the port to simulation/ai/petra_out/ (gitignored)
+npm run test:petra                  # all tests against the port (petra_ts/*.ts)
+npm run test:petra -- ref           # same tests against the original petra/*.js
+npm run coverage:petra -- [src|ref|both] [--file <module>]   # real per-module coverage
+# one file / one test:
+PETRA_TARGET=src node --test binaries/data/mods/public/simulation/ai/petra_ts/tests/<name>.test.ts
+PETRA_TARGET=ref node --test --test-name-pattern="<regex>" <same path>
+```
+Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
+built-in line figure counts never-run branches as covered.
+
+## Petra architecture (`simulation/ai/`)
+
+- `common-api/` — shared, engine-facing JS (not part of the port): `SharedScript`
+  (entities, templates, terrain/accessibility, resource maps), `GameState`,
+  `Entity`/`Template`, `EntityCollection`, `filters`, `BaseAI`.
+- `petra/` — the original JS bot, the reference (`ref`). The game loads the bot named
+  by a folder's `data.json` (`constructor`, `filename`, `useShared`).
+- `petra_ts/` — the port, one `.ts` per original `.js`, meant to stay 1:1 with it.
+  Imports use VFS paths (`simulation/ai/common-api/...`); the engine-facing
+  shapes are declared in `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`
+  and `petra-runtime.d.ts` (port-wide metadata/config types).
+
+Control flow: `_petrabot.ts` (`PetraBot extends BaseAI`) → on the first turn
+`startingStrategy.gameAnalysis` reads the map and sets up `Headquarters`; then
+one turn in eight (offset by player id) `Headquarters.update` drives the
+managers (bases/base, build, attack + attack/transport plans, defense +
+defense armies, naval, trade, research, diplomacy, garrison, victory,
+emergency) and `QueueManager` funds `queues` of plans
+(`queueplanBuilding`/`Training`/`Research`) by priority. Workers are steered
+by `worker.ts` through entity metadata (`role`, `subrole`, `base`, `plan`,
+`transport`, …). Every manager has `Serialize`/`Deserialize` for save games.
+
+## Petra tests (`petra_ts/tests/`)
+
+Read `tests/README.md` before writing tests; `tests/FINDINGS.md` records the
+known bugs, port/original differences, shared quirks, unreachable code and
+untested branches.
+
+- The harness (`tests/harness/`) recreates the engine: `hooks.ts` resolves VFS
+  specifiers, `engine.ts` evaluates the real `globalscripts` and records
+  `Engine.PostCommand`/warnings (`commands`, `logs`), `target.ts` loads a module
+  from the selected target (`PETRA_TARGET`).
+- Fake worlds: `attackWorld.ts` (`makeWorld`, `makeEntity`, `makeTemplate`, a stub HQ),
+  `hqWorld.ts` (`makeHqWorld`/`seatHQ`: a real Headquarters on real InfoMaps,
+  with out-of-scope managers swapped for recording `doorStub`s), `navalWorld.ts`,
+  `diplomacy.ts` (`setPlayers`), `world.ts`, `persistence.ts` (save/reload round trips).
+- Fake entities and stubs **throw on any undeclared method**: declare what the
+  code under test asks for in the test itself.
+- Harness answers must match what the common-api really returns (e.g. parsed
+  template leaves are strings; `resistanceStrengths()` is `{ Damage: {...} }`).
+
+### Conventions for this work
+- Tests assert behaviour in realistic game situations, not implementation.
+  Check new tests actually reach the branch they name (run `coverage:petra --file`).
+- Every test runs on both targets. A test only the port passes carries a
+  `// only the port passes: ...` comment explaining the original's bug; the
+  original currently fails exactly 24 tests, all of that kind.
+- Port code must not silence the compiler with `as X` casts or `!`; use
+  `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
+  where the context guarantees a value, and remove guards that cannot fire.
+- Methods never called (in port and original) are marked `/** TODO never called ... */`.
+- Port fixes go in a commit separate from tests. Commit messages end with
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

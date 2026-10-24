@@ -67,14 +67,8 @@ npm run typecheck:petra:tests
 
 Note that this also re-checks the port itself: `common-api.d.ts` reaches into
 the sources with `import("./baseManager.ts")`, so the sources join the program.
-The port currently has pre-existing strict-mode errors, so this is not yet a
-clean gate — filter for `petra_ts/tests/` to see whether a change here added any:
-
-```sh
-npm run --silent typecheck:petra:tests 2>&1 | grep 'petra_ts/tests/'
-```
-
-An empty result means the tests and harness are clean. The suite needs
+Both this and the port's own check (`npm run build:petra`) are clean, so any
+error either reports was introduced by a change. The suite needs
 `@types/node` (declared in `package.json`, and what `tests/tsconfig.json` asks
 for with `"types": ["node"]`); without it `tsc` reports one fatal
 `TS2688: Cannot find type definition file for 'node'` and checks nothing.
