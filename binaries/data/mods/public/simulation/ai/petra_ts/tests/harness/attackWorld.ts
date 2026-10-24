@@ -976,7 +976,11 @@ export function makeWorld(options: WorldOptions = {}): World
 			mapOf(units.filter((u) => u.owner() === PLAYER))),
 		getOwnEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf([...units, ...structures.filter((s) => s.owner() === PLAYER)])),
-		getEnemyStructures: (owner?: number) => structuresOf(owner === undefined ? undefined : owner),
+		// as GameState.prototype.getEnemyStructures: with no owner, the
+		// structures of every player the diplomacy row calls an enemy
+		getEnemyStructures: (owner?: number) => owner !== undefined ? structuresOf(owner) :
+			new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf(structures.filter((s) =>
+				(state.playerData as { isEnemy: boolean[] }).isEnemy[s.owner()]))),
 		// every entity of a player the diplomacy row calls an enemy, as the
 		// common-api byOwners(getEnemies()) does
 		getEnemyEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
