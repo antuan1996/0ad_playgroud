@@ -187,6 +187,18 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		assert.deepEqual(booked(base, "wood", "nearby"), [2612, 2611]);
 	});
 
+	it("the far band is ordered too", () =>
+	{
+		const { world, base } = seat();
+		const dropsite = storehouse(world, 2501, [40, 40]);
+		world.addEntity(makeGaiaSupply({ "id": 2631, "position": [260, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+		world.addEntity(makeGaiaSupply({ "id": 2632, "position": [240, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+
+		base.assignResourceToDropsite(world.gameState, dropsite, false);
+
+		assert.deepEqual(booked(base, "wood", "faraway"), [2632, 2631]);
+	});
+
 	it("animals roam past the dropsites and are not booked as a fixed supply", () =>
 	{
 		const { world, base } = seat();
@@ -329,6 +341,55 @@ describe("finding where a new dropsite should stand", () =>
 		assert.ok(dx * dx + dz * dz >= 3600, "a new storehouse does not crowd the one already standing");
 	});
 
+	it("a spot sixty to eighty units from a storehouse is worth less, in proportion", () =>
+	{
+		const quality = (withStorehouse: boolean) =>
+		{
+			const { world, hq, base } = seat();
+			storehouseCard(world, hq);
+			// one rich cell, whose centre is [148, 148]
+			resourceMap(world, "wood")[cellOf(world, [150, 150])] = 100;
+			if (withStorehouse)
+				storehouse(world, 2502, [220, 148]);
+			return base.findBestDropsiteAndLocation(world.gameState, "wood").quality;
+		};
+		const alone = quality(false);
+		// 72 units away: (72 - 60) / 20 of the value
+		assert.ok(Math.abs(quality(true) - alone * 0.6) < 1e-6);
+	});
+
+	it("a stand under an enemy tower's arrows is passed over; a bigger storehouse feels the arrows from farther", () =>
+	{
+		const best = (footprint: Record<string, unknown> | undefined) =>
+		{
+			const { world, hq, base } = seat();
+			world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
+				"classes": ["Structure", "Storehouse"], "dropsiteTypes": ["wood", "stone", "metal"],
+				"getPaths": footprint ? { "Footprint": footprint } : {}
+			});
+			bookBuilder(world, hq, ["structures/{civ}/storehouse"]);
+			// an enemy tower shooting 60 far over the richest stand
+			world.addEntity(makeHqEntity({ "id": 2510, "owner": ENEMY, "position": [148, 148],
+				"classes": ["Structure", "Tower"] }, {
+				"hasDefensiveFire": () => true, "attackRange": () => ({ "max": 60, "min": 0 })
+			}));
+			const map = resourceMap(world, "wood");
+			map[cellOf(world, [150, 150])] = 100;			// under the tower
+			map[cellOf(world, [214, 150])] = 90;			// 64 from the tower
+			map[cellOf(world, [150, 246])] = 50;			// 96 from the tower
+			const { pos } = base.findBestDropsiteAndLocation(world.gameState, "wood");
+			// the stand the chosen spot belongs to
+			const stands: Record<string, [number, number]> = { "under": [148, 148], "near": [212, 148], "far": [148, 244] };
+			return Object.keys(stands).find((name) =>
+				Math.abs(stands[name][0] - pos[0]) <= 8 && Math.abs(stands[name][1] - pos[1]) <= 8);
+		};
+		// a point-sized storehouse is safe 64 away
+		assert.equal(best(undefined), "near");
+		// a 12-wide one (half-size 6) is not: it goes to the far stand
+		assert.equal(best({ "Square": { "@depth": "12", "@width": "10" } }), "far");
+		assert.equal(best({ "Circle": { "@radius": "6" } }), "far");
+	});
+
 	it("a map without trees offers no dropsite worth building", () =>
 	{
 		const { world, hq, base } = seat();
@@ -444,6 +505,32 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		base.checkResourceLevels(world.gameState, world.ai.queues as never);
 
 		assert.equal(queuedPlans(world, "field").length, 0);
+	});
+
+	it("a town saving its resources makes do with one field foundation fewer", () =>
+	{
+		for (const saving of [false, true])
+		{
+			const { world, hq, base } = seat();
+			farmCards(world, hq);
+			berries(world, base, 0);
+			hq.maxFields = false;
+			hq.saveResources = saving || undefined;
+			world.addEntity(makeHqEntity({
+				"id": 2702, "owner": PLAYER, "position": [60, 60],
+				"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
+			}));
+			// one field already being laid out
+			world.addEntity(makeHqEntity({
+				"id": 2703, "owner": PLAYER, "position": [70, 70],
+				"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
+			}, { "foundationProgress": () => 0.2 }));
+
+			base.checkResourceLevels(world.gameState, world.ai.queues as never);
+
+			// provisionFields is 2: one more while not saving, none when saving
+			assert.equal(queuedPlans(world, "field").length, saving ? 0 : 1, `saving ${saving}`);
+		}
 	});
 
 	it("at the town's field cap, a pen is planted for the herd it needs", () =>
@@ -741,6 +828,33 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		assert.equal(base.workers.length, 5, "the town's own roll is unchanged; the hands are only set aside");
 	});
 
+	it("a neighbour borrows the idle hands of a plan first; among the town's own hands, idle or busy, no preference", () =>
+	{
+		const { world, base } = seat();
+		const worker = (id: number, metadata: Record<string, unknown>) =>
+			hand(world, base, id, SOLDIER, { "role": Worker.ROLE_WORKER, ...metadata }, { "isBuilder": () => true });
+		// out of reach: gone inside a building, defending, boarding a ship
+		(worker(2921, { "subrole": Worker.SUBROLE_GATHERER }) as unknown as Record<string, unknown>).position = () => undefined;
+		worker(2922, { "subrole": Worker.SUBROLE_GATHERER, "plan": -2 });
+		worker(2923, { "subrole": Worker.SUBROLE_GATHERER, "transport": 4 });
+		// the town's own: a gatherer, then an idle hand
+		worker(2924, { "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" });
+		worker(2925, { "subrole": Worker.SUBROLE_IDLE });
+		// hands kept for an attack plan: a builder, a gatherer, an idle one
+		worker(2926, { "subrole": Worker.SUBROLE_BUILDER, "plan": 5 });
+		worker(2927, { "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood", "plan": 5 });
+		worker(2928, { "subrole": Worker.SUBROLE_IDLE, "plan": 5 });
+		const lent = new EntityCollection(world.gameState.sharedScript as never) as unknown as
+			{ length: number; values(): Iterable<{ id(): number }> };
+
+		base.pickBuilders(world.gameState, lent as never, 2);
+
+		// five available hands, three stay: two lent. The plan's idle hand
+		// first (-50), then the town's first hand (every hand without a plan
+		// scores -20, which overrides its idle score), never the plan's builder
+		assert.deepEqual([...lent.values()].map((e) => e.id()).sort(), [2924, 2928]);
+	});
+
 	it("a town of three builders lends none", () =>
 	{
 		const { world, base } = seat();
@@ -892,6 +1006,153 @@ describe("the builders: who raises and mends the town's ground", () =>
 
 		assert.equal(builders(world, 3100), 0, "the barracks waits for the hold to lift");
 		assert.equal(builders(world, 1000), 5, "the centre is mended regardless");
+	});
+});
+
+describe("the builders: crews by kind of building, and what holds them back", () =>
+{
+	/** a woodcutter of ours at a position */
+	function woodcutter(world: HqWorld, base: Base, id: number, position: [number, number], metadata: Record<string, unknown> = {},
+		classes = SOLDIER): ReturnType<typeof makeHqEntity>
+	{
+		return hand(world, base, id, classes,
+			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood", ...metadata },
+			{ "isBuilder": () => true }, position);
+	}
+
+	it("a fortress or a phase-up building takes seven, a barracks four, a wood storehouse three, a smithy two", () =>
+	{
+		const { world, base } = seat({ "stock": RICH });
+		for (let i = 0; i < 30; ++i)
+			woodcutter(world, base, 3601 + i, [60 + i, 60]);
+		foundation(world, base, 3650, [80, 80], ["Fortress"]);
+		foundation(world, base, 3651, [90, 80], ["Temple"], { "phaseUp": true });
+		foundation(world, base, 3652, [100, 80], ["Barracks"]);
+		foundation(world, base, 3653, [110, 80], ["Storehouse", "DropsiteWood"]);
+		foundation(world, base, 3654, [120, 80], ["Blacksmith"]);
+
+		base.assignToFoundations(world.gameState);
+
+		assert.deepEqual([3650, 3651, 3652, 3653, 3654].map((id) => builders(world, id)), [7, 7, 4, 3, 2]);
+	});
+
+	it("short of a resource, a town lends a fifth of its hands, never fewer than two; a house needed for room takes two more", () =>
+	{
+		for (const [population, expected] of [[5, 2], [18, 3]])
+		{
+			const { world, base } = seat({ "stock": { ...RICH, "food": 100 }, population, "populationLimit": 20, "populationMax": 300 });
+			for (let i = 0; i < 5; ++i)
+				woodcutter(world, base, 3661 + i, [60 + i, 60]);
+			foundation(world, base, 3670, [70, 60], ["House"]);
+
+			base.assignToFoundations(world.gameState);
+
+			assert.equal(builders(world, 3670), expected, `population ${population}`);
+		}
+	});
+
+	it("with only 500 wood in stock, half the hands at most: a fortress gets five of ten", () =>
+	{
+		const { world, base } = seat({ "stock": { ...RICH, "wood": 500 } });
+		for (let i = 0; i < 10; ++i)
+			woodcutter(world, base, 3681 + i, [60 + i, 60]);
+		foundation(world, base, 3695, [70, 60], ["Fortress"]);
+
+		base.assignToFoundations(world.gameState);
+
+		assert.equal(builders(world, 3695), 5);
+	});
+
+	it("a foundation beside an invading army waits, unless it is a wall", () =>
+	{
+		const { world, hq, base } = seat({ "stock": RICH });
+		hq.defenseManager.armies = [{ "foePosition": [75, 60] }];
+		for (let i = 0; i < 6; ++i)
+			woodcutter(world, base, 3701 + i, [60 + i, 60]);
+		foundation(world, base, 3710, [70, 60], ["House"]);
+		foundation(world, base, 3711, [72, 64], ["Wall"]);
+
+		base.assignToFoundations(world.gameState);
+
+		assert.equal(builders(world, 3710), 0);
+		assert.equal(builders(world, 3711), 2);
+	});
+
+	it("a house foundation on ground we no longer hold is left unfinished", () =>
+	{
+		const { world, hq, base } = seat({ "stock": RICH });
+		for (let i = 0; i < 6; ++i)
+			woodcutter(world, base, 3721 + i, [60 + i, 60]);
+		foundation(world, base, 3730, [100, 100], ["House"], {}, { "buildTerritories": () => ["own"] });
+		world.map.setTerritoryOwner(12, 12, 0);
+		void hq;
+
+		base.assignToFoundations(world.gameState);
+
+		assert.equal(builders(world, 3730), 0);
+	});
+
+	it("the nearest hands build, a farmer counting three times as far, an elephant less the longer the work", () =>
+	{
+		const { world, base } = seat({ "stock": RICH });
+		woodcutter(world, base, 3741, [80, 70], { "gather-type": "food" });		// 10 away, a farmer
+		woodcutter(world, base, 3742, [80, 75]);									// 15 away
+		woodcutter(world, base, 3743, [80, 76]);									// 16 away
+		woodcutter(world, base, 3744, [80, 72], {}, ["Unit", "Support", "Elephant", "Worker"]);	// 12 away
+		foundation(world, base, 3750, [80, 60], ["Blacksmith"]);
+
+		base.assignToFoundations(world.gameState);
+
+		const crew = [3741, 3742, 3743, 3744].filter((id) =>
+			world.ents.get(id)!.getMetadata(PlayerID, "target-foundation") === 3750);
+		assert.deepEqual(crew, [3742, 3744]);
+	});
+
+	it("a damaged fortress takes three menders; a damaged barracks by an invading army waits", () =>
+	{
+		const { world, hq, base } = seat({ "stock": RICH });
+		for (let i = 0; i < 8; ++i)
+			woodcutter(world, base, 3761 + i, [60 + i, 60]);
+		const damaged = (id: number, position: [number, number], classes: string[]) =>
+		{
+			const ent = world.addEntity(makeHqEntity({ id, "owner": PLAYER, position, "classes": ["Structure", ...classes] },
+				{ "needsRepair": () => true, "healthLevel": () => 0.8 }));
+			base.assignEntity(world.gameState, ent);
+		};
+		damaged(3770, [80, 60], ["Fortress"]);
+		damaged(3771, [200, 200], ["Barracks"]);
+		hq.defenseManager.armies = [{ "foePosition": [205, 200] }];
+
+		base.assignToFoundations(world.gameState);
+
+		assert.equal(builders(world, 3770), 3);
+		assert.equal(builders(world, 3771), 0);
+	});
+
+	it("menders already at work are enough; hands defending, boarding or inside a building are not called", () =>
+	{
+		const { world, base } = seat({ "stock": RICH });
+		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		centre.needsRepair = () => true;
+		centre.healthLevel = () => 0.9;
+		// four hands out of reach, and one already mending the barracks
+		woodcutter(world, base, 3781, [20, 20], { "plan": -2 });
+		woodcutter(world, base, 3782, [20, 21], { "transport": 3 });
+		(woodcutter(world, base, 3783, [20, 22]) as unknown as Record<string, unknown>).position = () => undefined;
+		woodcutter(world, base, 3784, [21, 20], { "plan": -3 });
+		woodcutter(world, base, 3785, [60, 60]);
+		woodcutter(world, base, 3786, [61, 60], { "subrole": Worker.SUBROLE_BUILDER });
+		const barracks = world.addEntity(makeHqEntity({ "id": 3790, "owner": PLAYER, "position": [62, 60],
+			"classes": ["Structure", "Barracks"] }, { "needsRepair": () => true, "healthLevel": () => 0.8 }));
+		base.assignEntity(world.gameState, barracks);
+		world.ents.get(3786)!.setMetadata(PlayerID, "target-foundation", 3790);
+
+		base.assignToFoundations(world.gameState);
+
+		// the barracks keeps its one mender; the centre gets the one free hand
+		assert.equal(builders(world, 3790), 1);
+		assert.equal(builders(world, 1000), 1);
+		assert.equal(world.ents.get(3785)!.getMetadata(PlayerID, "target-foundation"), 1000);
 	});
 });
 
