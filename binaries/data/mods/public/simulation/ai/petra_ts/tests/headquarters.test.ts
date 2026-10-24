@@ -796,6 +796,35 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		assert.equal((account as unknown as Record<string, number>).wood, 0);
 	});
 
+	it("over the population cap at start: the first storehouse is paid for up front", () =>
+	{
+		// a scenario start with more people than houses: 40 over a cap of 15
+		const world = makeHqWorld({ "stock": { "food": 1000, "wood": 9000 }, "population": 40, "populationLimit": 15 });
+		(world.ai.accessibility as Record<string, unknown>).regionSize = { 2: 20000, 3: 400 };
+		const hq = seatHQ(world, { stubs: doorManagers });
+		const seedCC = world.ents.get(1000) as unknown as Record<string, (...args: any[]) => unknown>;
+		seedCC.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
+		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+		const { width } = world.map.territory;
+		const woodMap = (world.gameState.sharedScript as unknown as
+			Record<string, Record<string, { map: Float32Array }>>).resourceMaps.wood.map;
+		woodMap[(140 / 8 | 0) + width * (100 / 8 | 0)] = 100;
+		hq.updateTerritories(world.gameState);
+		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
+			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"], "cost": { "wood": 100 } });
+		builder(world, 17, ["structures/athen/storehouse"]);
+		hq.buildManager.init(world.gameState);
+		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, seedCC);
+
+		hq.handleNewBase(world.gameState);
+
+		assert.equal(world.ai.queues.dropsites.plans.length, 1);
+		// the houses will need the wood: the storehouse's price is set aside now
+		const account = world.ai.queueManager.accounts.dropsites;
+		assert.equal((account as unknown as Record<string, number>).wood, 100);
+	});
+
 	it("no wood to book on the map: no depot is planned", () =>
 	{
 		const world = makeHqWorld({ "stock": { "food": 1000, "wood": 9000 } });
