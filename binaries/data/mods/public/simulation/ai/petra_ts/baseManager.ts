@@ -1107,9 +1107,8 @@ export class BaseManager
 			{
 				for (const ent of this.units.values())
 				{
-					const bestBase = getBestBase(gameState, ent);
-					if (!bestBase)
-						continue;
+					// a unit always finds a base while one is active
+					const bestBase = requireValue(getBestBase(gameState, ent));
 					if (bestBase.ID != this.ID)
 						bestBase.assignEntity(gameState, ent);
 				}

@@ -356,8 +356,7 @@ export class AttackManager
 								attack.getName());
 						}
 						if (this.Config.chat)
-							if (attack.targetPlayer !== undefined)
-								chat.launchAttack(gameState, attack.targetPlayer, attack.getType());
+							chat.launchAttack(gameState, requireValue(attack.targetPlayer), attack.getType());
 						this.startedAttacks[attackType].push(attack);
 					}
 					else

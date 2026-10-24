@@ -302,7 +302,7 @@ export class GarrisonManager
 	{
 		ent.stopMoving();
 		// The booking must be read before the release below wipes the record;
-		// the release also has to happen whether or not he was still booked.
+		// the release also has to happen whether or not it was still booked.
 		const holderId = ent.getMetadata(PlayerID, "garrisonHolder");
 		const holderData = holderId !== undefined ? this.holders.get(holderId) : undefined;
 		this.leaveGarrison(ent);

@@ -1370,12 +1370,8 @@ export class AttackPlan
 
 	getPathToTarget(gameState: CommonGameState, fixedRallyPoint: boolean = false): boolean
 	{
-		const target = this.target;
-		if (!target)
-			return false;
-		const targetPos = this.targetPos;
-		if (!targetPos)
-			return false;
+		const target = requireValue(this.target);
+		const targetPos = requireValue(this.targetPos);
 		const startAccess = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		const endAccess = getLandAccess(gameState, target);
 		if (startAccess != endAccess)
@@ -1543,10 +1539,8 @@ export class AttackPlan
 				return false;
 			}
 
-			const target = this.target;
-			const targetPos = this.targetPos;
-			if (!target || !targetPos)
-				return false;
+			const target = requireValue(this.target);
+			const targetPos = requireValue(this.targetPos);
 
 			const time = gameState.ai.elapsedTime;
 			const attackedByStructure: Record<number, boolean> = {};
@@ -2280,14 +2274,13 @@ export class AttackPlan
 	Abort(gameState: CommonGameState): void
 	{
 		const pos = this.position;
-		if (!pos)
-			return;
 		this.unitCollection.unregister();
 		if (this.unitCollection.hasEntities())
 		{
 			// If the attack was started, look for a good rallyPoint to withdraw
+			// (an army with no position is aboard ships: it gets no rallyPoint)
 			let rallyPoint;
-			if (this.isStarted())
+			if (this.isStarted() && pos)
 			{
 				const access = this.getAttackAccess(gameState);
 				let dist = Math.min();
@@ -2434,9 +2427,10 @@ export class AttackPlan
 	 */
 	getAttackAccess(gameState: CommonGameState): number
 	{
+		// no position: no unit of the army has one (all aboard ships)
 		const pos = this.position;
 		if (!pos)
-			return -1;
+			return 0;
 		for (const ent of this.unitCollection.filterNearest(pos, 1).values())
 			return getLandAccess(gameState, ent) ?? -1;
 
@@ -2508,12 +2502,7 @@ export class AttackPlan
 		this.unitCollUpdateArray = data.properties.unitCollUpdateArray;
 
 		const targetId = data.properties.target;
-		if (typeof targetId === "number")
-			this.target = gameState.getEntityById(targetId);
-		else if (targetId === undefined)
-			this.target = undefined;
-		else
-			throw new TypeError("Invalid serialized attack target");
+		this.target = typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined;
 
 		this.failed = undefined;
 	}
