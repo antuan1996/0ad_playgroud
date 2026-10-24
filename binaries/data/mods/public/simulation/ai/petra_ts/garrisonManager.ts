@@ -234,7 +234,10 @@ export class GarrisonManager
 		}
 	}
 
-	/** TODO should add the units garrisoned inside garrisoned units */
+	/**
+	 * TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used.
+	 * TODO should add the units garrisoned inside garrisoned units
+	 */
 	numberOfGarrisonedUnits(holder: CommonEntity): number
 	{
 		const holderData = this.holders.get(holder.id());

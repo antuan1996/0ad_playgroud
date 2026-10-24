@@ -101,6 +101,7 @@ export class Queue
 		return cost;
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	queueCost(): ResourcesManager
 	{
 		const cost = new ResourcesManager();

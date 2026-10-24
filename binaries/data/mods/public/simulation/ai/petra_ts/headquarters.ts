@@ -2205,6 +2205,7 @@ export class Headquarters
 		return this.basesManager.hasActiveBase();
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	numPotentialBases(): number
 	{
 		return this.basesManager.numPotentialBases();

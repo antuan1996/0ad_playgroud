@@ -76,6 +76,7 @@ export class QueueManager
 		return resources;
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	getTotalAccountedResources(): ResourcesManager
 	{
 		const resources = new ResourcesManager();
@@ -223,6 +224,7 @@ export class QueueManager
 		aiWarn("------------------------------------");
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	clear(): void
 	{
 		for (const i in this.queues)
@@ -522,6 +524,7 @@ export class QueueManager
 		return this.accounts[queue].canAfford(cost);
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pauseQueue(queue: string, scrapAccounts: boolean): void
 	{
 		if (!this.queues[queue])
@@ -531,12 +534,14 @@ export class QueueManager
 			this.accounts[queue].reset();
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpauseQueue(queue: string): void
 	{
 		if (this.queues[queue])
 			this.queues[queue].paused = false;
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pauseAll(scrapAccounts: boolean, but: string | undefined): void
 	{
 		for (const q in this.queues)
@@ -549,6 +554,7 @@ export class QueueManager
 		}
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpauseAll(but: string | undefined): void
 	{
 		for (const q in this.queues)

@@ -489,6 +489,7 @@ export class AttackManager
 		return undefined;
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pausePlan(planName: number): void
 	{
 		const attack = this.getPlan(planName);
@@ -496,6 +497,7 @@ export class AttackManager
 			attack.setPaused(true);
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpausePlan(planName: number): void
 	{
 		const attack = this.getPlan(planName);
@@ -503,6 +505,7 @@ export class AttackManager
 			attack.setPaused(false);
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pauseAllPlans(): void
 	{
 		for (const attackType in this.upcomingAttacks)
@@ -514,6 +517,7 @@ export class AttackManager
 				attack.setPaused(true);
 	}
 
+	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpauseAllPlans(): void
 	{
 		for (const attackType in this.upcomingAttacks)
