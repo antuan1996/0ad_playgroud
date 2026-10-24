@@ -50,3 +50,7 @@ patch -p1 <"${PATCHES}"/FixPython3_14.diff
 
 # Cherry-pick an upstream commit to allow passing custom flags to ar
 patch -p1 <"${PATCHES}"/UpstreamCustomARFlags.patch
+
+# Fix rust target detection with newer rustc, which lists vendor and
+# sanitizer variants of the host target (x86_64-oe-linux-gnu, ...gnuasan)
+patch -p1 <"${PATCHES}"/FixRustTargetDetection.diff

@@ -1,0 +1,23 @@
+Newer rustc (seen with 1.99) lists vendor and sanitizer variants of the
+host target, e.g. x86_64-oe-linux-gnu and x86_64-unknown-linux-gnuasan, so
+configure finds several candidates for x86_64-pc-linux-gnu and dies with
+"Don't know how to translate x86_64-pc-linux-gnu for rustc". Fall back to
+the generic "unknown" vendor target.
+
+--- a/build/moz.configure/rust.configure	2026-10-24 20:32:11.391715047 +0300
++++ b/build/moz.configure/rust.configure	2026-10-24 20:32:11.392714995 +0300
+@@ -409,6 +409,14 @@
+         if len(narrowed) == 1:
+             return narrowed[0].rust_target
+ 
++        # Newer rustc lists vendor and sanitizer variants of a target (e.g.
++        # x86_64-oe-linux-gnu, x86_64-unknown-linux-gnuasan), so a "pc" host
++        # matches several: take the generic "unknown" vendor one.
++        generic = "-".join((host_or_target.raw_cpu, "unknown", host_or_target.raw_os))
++        narrowed = [c for c in candidates if c.rust_target == generic]
++        if len(narrowed) == 1:
++            return narrowed[0].rust_target
++
+         return None
+ 
+     rustc_target = find_candidate(candidates)
