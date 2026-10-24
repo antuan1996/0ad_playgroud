@@ -2257,8 +2257,8 @@ export class Headquarters
 		{
 			if (!ent.canCapture())
 				continue;
-			const state = requireValue(ent.unitAIState());
-			if (state.split(".")[1] != "COMBAT")
+			const state = ent.unitAIState();
+			if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
 				continue;
 			const orderData = ent.unitAIOrderData();
 			if (!orderData || !orderData.length || !orderData[0].target)

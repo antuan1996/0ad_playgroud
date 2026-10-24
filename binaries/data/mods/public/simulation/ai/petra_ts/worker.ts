@@ -114,7 +114,7 @@ export class Worker
 
 		this.ent = ent;
 
-		const unitAIState = requireValue(ent.unitAIState());
+		const unitAIState = ent.unitAIState();
 		if ((subrole === Worker.SUBROLE_HUNTER || subrole === Worker.SUBROLE_GATHERER) &&
 		    (unitAIState == "INDIVIDUAL.GATHER.GATHERING" || unitAIState == "INDIVIDUAL.GATHER.APPROACHING" ||
 		     unitAIState == "INDIVIDUAL.COMBAT.APPROACHING"))
@@ -185,7 +185,7 @@ export class Worker
 			ent.setMetadata(PlayerID, "alreadyTried", undefined);
 		}
 
-		const unitAIStateOrder = unitAIState.split(".")[1];
+		const unitAIStateOrder = requireValue(unitAIState).split(".")[1];
 		// If we're fighting or hunting, let's not start gathering except if inaccessible target
 		// but for fishers where UnitAI must have made us target a moving whale.
 		// Also, if we are attacking, do not capture

@@ -164,9 +164,12 @@ export class GarrisonManager
 					}
 					else if (ent.hasClass("Unit"))
 					{
-						const unitAIState = requireValue(ent.unitAIState());
-						if (ent.owner() == 0 && unitAIState.split(".")[1] != "COMBAT")
-							continue;
+						if (ent.owner() == 0)
+						{
+							const unitAIState = ent.unitAIState();
+							if (!unitAIState || unitAIState.split(".")[1] != "COMBAT")
+								continue;
+						}
 					}
 					else
 						continue;

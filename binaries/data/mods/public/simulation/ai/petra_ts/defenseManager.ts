@@ -277,8 +277,8 @@ export class DefenseManager
 			// Keep animals attacking us or our allies.
 			if (ent.hasClass("Animal"))
 			{
-				const state = requireValue(ent.unitAIState());
-				if (state.split(".")[1] != "COMBAT")
+				const state = ent.unitAIState();
+				if (!state || state.split(".")[1] != "COMBAT")
 					continue;
 				const orders = ent.unitAIOrderData();
 				if (!orders || !orders.length || !orders[0].target)
@@ -779,8 +779,8 @@ export class DefenseManager
 								continue;
 							}
 							// Check that the unit is still attacking the structure (since the last played turn).
-							const state = requireValue(ent.unitAIState());
-							if (state.split(".")[1] != "COMBAT")
+							const state = ent.unitAIState();
+							if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
 								continue;
 							const entOrderData = ent.unitAIOrderData();
 							if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||
