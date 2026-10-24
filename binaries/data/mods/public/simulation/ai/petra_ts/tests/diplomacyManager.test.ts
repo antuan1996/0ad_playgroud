@@ -281,6 +281,15 @@ describe("tributes to and from our allies: tributes", () =>
 		assert.equal(of("aichat").length, 1, "not again so soon");
 	});
 
+	it("sends nothing to an ally stronger than us", () =>
+	{
+		const { world, manager } = seat(allied({ "resourceCounts": { "wood": 100 } }), { "stock": { "wood": 1000 } });
+		army(world, 1, 3);
+		army(world, 2, 50);
+		manager.tributes(world.gameState);
+		assert.deepEqual(of("tribute"), []);
+	});
+
 	it("sends nothing to a defeated ally", () =>
 	{
 		const beaten = seat(allied({ "resourceCounts": { "wood": 100 } }), { "stock": { "wood": 1000 } });

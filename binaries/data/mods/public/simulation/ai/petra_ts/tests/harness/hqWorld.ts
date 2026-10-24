@@ -523,6 +523,13 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	gs.getEntityLimits = () => options.entityLimits ?? {};
 	gs.getEntityCounts = () => options.entityCounts ?? {};
 	gs.getEntityMatchCounts = () => options.matchCounts ?? {};
+	// as GameState.getOwnEntities and getOwnEntitiesByClass (gamestate.js 488, 583):
+	// every entity of ours, units and structures, foundations included
+	const ownEntities = () => [...world.ents.values()].filter((e) => e.owner() === PLAYER);
+	gs.getOwnEntities = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
+		world.gameState.sharedScript, mapOf(ownEntities()));
+	gs.getOwnEntitiesByClass = (cls: string) => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
+		world.gameState.sharedScript, mapOf(ownEntities().filter((e) => e.hasClass(cls))));
 	gs.getOwnFoundations = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
 		world.gameState.sharedScript,
 		mapOf([...world.ents.values()].filter((e) =>
