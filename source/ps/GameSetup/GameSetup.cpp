@@ -715,6 +715,8 @@ CStr8 LoadSettingsOfScenarioMap(const VfsPath &mapPath)
  * -autostart-client=IP	to enable 'MP client' autostart.
  * -autostart-host		to enable 'MP host' autostart.
  * -autostart-nonvisual	to start in non-visual mode.
+ * -autostart-stop-on-end	to run no turn after the one a player won in (CGame::Update),
+ *							the turn non-visual mode quits on.
  *  TODO: it might be nice to move these to JS too.
  */
 bool Autostart(const CmdLineArgs& args)

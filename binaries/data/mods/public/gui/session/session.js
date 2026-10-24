@@ -29,6 +29,7 @@ var g_PauseControl;
 var g_PauseOverlay;
 var g_PlayerViewControl;
 var g_QuitConfirmationDefeat;
+var g_QuitConfirmationObserver;
 var g_QuitConfirmationReplay;
 var g_RangeOverlayManager;
 var g_ResearchProgress;
@@ -343,6 +344,7 @@ async function init(initData, hotloadData)
 		g_Menu = new Menu(g_PauseControl, g_PlayerViewControl, g_Chat, closeSession);
 		g_NetworkStatusOverlay = new NetworkStatusOverlay(closeSession);
 		g_QuitConfirmationDefeat = new QuitConfirmationDefeat(closeSession);
+		g_QuitConfirmationObserver = new QuitConfirmationObserver(closeSession);
 		g_QuitConfirmationReplay = new QuitConfirmationReplay(closeSession);
 		g_TutorialManager = new TutorialManager(closeSession, hotloadData?.tutorial);
 	})]);

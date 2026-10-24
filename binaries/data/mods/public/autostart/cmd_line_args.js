@@ -38,6 +38,8 @@
  *                                 which prints every player's statistics when the game ends)
  * -autostart-nonvisual            (partly handled in C++) disable any graphics and sounds
  * -autostart-disable-replay       disable saving of replays (handled in autostart*.js files)
+ * -autostart-stop-on-end          (handled in C++) run no turn after the one a player won in,
+ *                                 the turn -autostart-nonvisual quits on
  * -autostart-player=NUMBER        sets the playerID in non-networked games (default 1, use -1 for observer)
  *
  * Multiplayer (handled in specific autostart*.js files):

@@ -30,6 +30,7 @@
 #include "network/NetClient.h"
 #include "ps/CLogger.h"
 #include "ps/CStr.h"
+#include "ps/GameSetup/CmdLineArgs.h"
 #include "ps/GameSetup/GameSetup.h"
 #include "ps/Loader.h"
 #include "ps/Profile.h"
@@ -88,6 +89,7 @@ CGame::CGame(bool replayLog, const SimulationDebugOptions debugOptions):
 	m_CheatsEnabled(false),
 	m_Paused(false),
 	m_SimRate(1.0f),
+	m_StopOnEnd(g_CmdLineArgs.Has("autostart-stop-on-end")),
 	m_PlayerID(-1),
 	m_ViewedPlayerID(-1),
 	m_IsVisualReplay(false),
@@ -436,10 +438,25 @@ void CGame::Update(const double deltaRealTime, bool doInterpolate)
 		// frame per simulation turn, so let maxTurns be 1. But for fast-forward
 		// sim rates we want to allow more, so it's not bounded by framerate,
 		// so just use the sim rate itself as the number of turns per frame.
-		size_t maxTurns = (size_t)m_SimRate;
+		const size_t maxTurns = std::max((size_t)1, (size_t)m_SimRate);
 
-		if (m_TurnManager->Update(deltaSimTime, maxTurns,
-			std::bind_front(&CGUIManager::SendEventToAll, g_GUI)))
+		// With -autostart-stop-on-end, run the turns one at a time and none
+		// after the one a player won in, the turn NonVisualFrame quits on: the
+		// game ends on the same turn in visual and non-visual mode, and the
+		// session GUI shows the result (QuitConfirmationObserver.js).
+		const size_t turnsPerUpdate = m_StopOnEnd ? 1 : maxTurns;
+		bool updated = false;
+		for (size_t turns = 0; turns < maxTurns; turns += turnsPerUpdate)
+		{
+			if (m_StopOnEnd && IsGameFinished())
+				break;
+			if (!m_TurnManager->Update(turns ? 0 : deltaSimTime, turnsPerUpdate,
+				std::bind_front(&CGUIManager::SendEventToAll, g_GUI)))
+				break;
+			updated = true;
+		}
+
+		if (updated)
 		{
 			{
 				PROFILE3("gui sim update");

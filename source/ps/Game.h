@@ -75,6 +75,11 @@ class CGame
 	float m_SimRate;
 
 	/**
+	 * -autostart-stop-on-end: run no turn after the one a player won in.
+	 **/
+	bool m_StopOnEnd;
+
+	/**
 	 * Index assigned to the current player.
 	 * 1-8 to control players, 0 for gaia, -1 for observer.
 	 */
