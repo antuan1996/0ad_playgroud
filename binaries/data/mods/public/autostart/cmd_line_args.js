@@ -5,7 +5,10 @@
  *
  * -autostart="TYPEDIR/MAPNAME"    enables autostart and sets MAPNAME;
  *                                 TYPEDIR is skirmishes, scenarios, or random
- * -autostart-seed=SEED            sets randomization seed value (default 0, use -1 for random)
+ * -autostart-seed=SEED            sets randomization seed value (default 0, use -1 for random);
+ *                                 unless -1, it also picks the settings left random (biome,
+ *                                 player placement, daytime, random civs, ...), so that the
+ *                                 same arguments start the same game
  * -autostart-ai=PLAYER:AI         sets the AI for PLAYER (e.g. 2:petra)
  * -autostart-aidiff=PLAYER:DIFF   sets the DIFFiculty of PLAYER's AI
  *                                 (default 3, 0: sandbox, 5: very hard)
@@ -206,5 +209,36 @@ function parseCmdLineArgs(settings, cmdLineArgs)
 	settings.relic.setDuration(+(cmdLineArgs['autostart-relicduration'] ?? 10));
 	settings.relic.setCount(+(cmdLineArgs['autostart-reliccount'] ?? 2));
 
+	if (cmdLineArgs['autostart-seed'] != -1)
+		pickRandomItemsFromSeed(settings, settings.seeds.seed);
+
 	return settings;
+}
+
+/**
+ * Resolve the settings left "random" with a generator seeded by SEED instead of
+ * Math.random, so that they do not change from one start to the next.
+ * A random AI seed (-autostart-aiseed=-1) stays random.
+ */
+function pickRandomItemsFromSeed(settings, seed)
+{
+	settings.seeds.pickRandomItems();
+	const random = Math.random;
+	// mulberry32
+	let state = seed >>> 0;
+	Math.random = function()
+	{
+		state = (state + 0x6D2B79F5) | 0;
+		let t = Math.imul(state ^ (state >>> 15), 1 | state);
+		t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+	try
+	{
+		settings.pickRandomItems();
+	}
+	finally
+	{
+		Math.random = random;
+	}
 }

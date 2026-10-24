@@ -8,7 +8,10 @@ Basic gameplay:
 
 Autostart:
 -autostart="TYPEDIR/MAPNAME"    enables autostart and sets MAPNAME; TYPEDIR is skirmishes, scenarios, or random
--autostart-seed=SEED            sets randomization seed value (default 0, use -1 for random)
+-autostart-seed=SEED            sets randomization seed value (default 0, use -1 for random);
+                                unless -1, it also picks the settings left random (biome,
+                                player placement, daytime, random civs, ...), so that the
+                                same arguments start the same game
 -autostart-ai=PLAYER:AI         sets the AI for PLAYER (e.g. 2:petra)
 -autostart-aidiff=PLAYER:DIFF   sets the DIFFiculty of PLAYER's AI (default 3, 0: sandbox, 5: very hard)
 -autostart-aiseed=AISEED        sets the seed used for the AI random generator (default 0, use -1 for random)
