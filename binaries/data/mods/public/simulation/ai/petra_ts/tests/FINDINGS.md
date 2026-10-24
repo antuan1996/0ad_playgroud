@@ -28,7 +28,7 @@ original fails exactly these). Each row says whether a game can reach it.
 | `victoryManager.captureGaiaRelic` | adds `captureStrength() × bonus` for every unit; a unit that cannot capture gives `undefined` → total **NaN** → every comparison false → the "already enough" exit never fires and the AI sends every nearby capturer each time | skips units with no capture strength | victoryManager: "a ram in a raid strong enough does not make it look weak" |
 | `navalManager` waiting passages | sorts with a one-argument comparator, which orders nothing | joins the passage with the fewest units | navalManager: "joins the emptier of two passages" |
 | `transportPlan` reloading failed | destroys the unit wherever it stands, though its comment says it keeps it on a land we use | keeps it there and cancels the garrison order | transportPlan: "a unit that could not be taken back aboard…" |
-| `baseManager.removeSupply` | guarded by `supply[i].ent`, a field nothing writes: removing one dropsite wipes **every** dropsite's supply book | removes only that dropsite's entries | baseManager: "a storehouse destroyed leaves the other dropsites' books untouched" |
+| `baseManager.removeSupply` | guarded by `supply[i].ent`, a field nothing writes: removing one dropsite wipes **every** dropsite's supply book. Reached in **every game**: `basesManager` calls `removeDropsite` for any destroyed entity with `base` metadata, units included, so the first unit lost wipes the base's resource lists; it decides the games against the port (§10) | removes only that dropsite's entries | baseManager: "a storehouse destroyed leaves the other dropsites' books untouched" |
 | `garrisonManager` cancel | reads the booking after releasing it, so the ledger strike is dead; the cancelled marcher stays on the holder's list until the next garrison update drops it (one turn of over-counting, plus a debug warning) | reads first, strikes it | garrisonManager: "strikes the cancelled marcher…" |
 | `attackPlan` walls | `filters.byClass(["Palisade","Wall"])` never matches an array: walls are never found | `byClasses` | attackPlan: wall-breaking crew (4 tests) |
 | `worker` supply check | treats the dropsite UnitAI walks to as an unbooked supply; a woodcutter carrying its load home is idled when every booked tree is crowded | leaves the order alone while UnitAI targets a dropsite | worker: "a woodcutter carrying its load home…" |
@@ -171,3 +171,27 @@ cannot reach, or a port bug:
 - made target-neutral: the ranged hunter's avoid list (§3); the dock outside any town (§8).
 
 One test was added: the `captureGaiaRelic` NaN (§1), which had none.
+
+## 10. In-game matches (2026-10-25)
+
+Ten headless conquest matches of Petra TS against the original (`match.sh -n
+-t`, random seeds, slots swapped every other match, mainland, very hard,
+Athenians), commit 70827cf769:
+
+- The port won 9 of 10; no script error or warning in any. The port reached
+  town phase at minutes 13–31 and mined metal; units idle 2–17% on average.
+- In each of the 9 losses the original never reached town phase and gathered
+  no metal: workers stay idle for good (21–35% on average), wood stops, food
+  piles up. A mirror match of the original against itself on the same seed was
+  still in village phase at game minute 1899, both sides with millions of food.
+- Cause: the `removeSupply` bug (§1). A mirror of the port against itself
+  played the same game as the original's mirror until 5:08 (the first units
+  killed); with only the port's `removeSupply` put into the original, the
+  original's commands were identical to the port's for the whole run compared
+  (10313 commands, logged by wrapping `g_Commands` in a trigger script).
+- The port's one loss was an ordinary defeat: its army and citizen-soldier
+  workers died in the fight of minutes 9–13, leaving 16 food, too little to
+  train a unit, and pop 0 until the end.
+
+So a match against the original does not show whether the port plays like it:
+a fair comparison needs an opponent with that one fix.
