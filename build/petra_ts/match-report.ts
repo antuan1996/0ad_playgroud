@@ -8,8 +8,9 @@
  * a fingerprint) and writes the statistics NonVisualTrigger.js printed to
  * <match dir>/statistics.json.
  *
- * The fingerprint hashes the last turn and the statistics: two runs with the
- * same seeds and code play the same game and give the same fingerprint.
+ * The fingerprint hashes the game time of the decision and the statistics: two
+ * runs with the same seeds and code play the same game and give the same
+ * fingerprint, in visual and non-visual mode alike.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -53,14 +54,17 @@ players.sort((a, b) => a.playerID - b.playerID);
 if (players.length)
 	writeFileSync(join(dir, "statistics.json"), JSON.stringify(players, null, "\t") + "\n");
 
-// The engine prints "Turn N (length in ms)..." before each simulation turn.
-let lastTurn = 0;
-let gameTime = 0;
-for (const match of log.matchAll(/^Turn (\d+) \((\d+)\)\.\.\.$/gm))
-{
-	lastTurn = Number(match[1]);
-	gameTime += Number(match[2]);
-}
+// MatchEnd.js prints the game time of each win and defeat. Failing those (the
+// window was closed first), the non-visual engine prints "Turn N (length in
+// ms)..." before each turn; the visual one prints nothing.
+let decided: number | undefined;
+for (const match of log.matchAll(/^MATCHEND (.*)$/gm))
+	decided = Math.max(decided ?? 0, JSON.parse(match[1]).time);
+let played = 0;
+for (const match of log.matchAll(/^Turn \d+ \((\d+)\)\.\.\.$/gm))
+	played += Number(match[1]);
+const clock = (ms: number): string =>
+	`${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 const replay = /^Replay written to '(.*)'$/m.exec(log)?.[1];
 const commands = replay && join(replay, "commands.txt");
@@ -76,9 +80,10 @@ if (commands && existsSync(commands))
 		console.log(`picked by the game setup: ${picked.join(", ")}`);
 }
 
-const minutes = Math.floor(gameTime / 60000);
-const seconds = Math.floor(gameTime / 1000) % 60;
-console.log(`game time ${minutes}:${String(seconds).padStart(2, "0")} (${lastTurn} turns)`);
+if (decided !== undefined)
+	console.log(`decided at ${clock(decided)} game time`);
+else if (played)
+	console.log(`played ${clock(played)} game time`);
 
 if (players.length)
 {
@@ -141,5 +146,5 @@ for (const level of ["ERROR", "WARNING"])
 }
 
 console.log(`replay: ${replay ?? "none written"}`);
-const fingerprint = createHash("sha256").update(`${lastTurn}\n${JSON.stringify(players)}`).digest("hex").slice(0, 16);
+const fingerprint = createHash("sha256").update(`${decided}\n${JSON.stringify(players)}`).digest("hex").slice(0, 16);
 console.log(`fingerprint: ${fingerprint} (the same seeds and code give the same fingerprint)`);

@@ -59,15 +59,17 @@ the bot id is `petra_out`.
 
 `npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
 options: map, seeds, difficulty, civ, `-x` swap slots, `-v` speed, `-n`
-headless) builds the bot and starts an observed conquest match, Petra JS
+headless, `-k` how many match folders to keep, default 5) builds the bot and starts an observed conquest match, Petra JS
 (blue, `petra`) against Petra TS (red, `petra_out`); it needs the engine
 built from this repo. Each match is recorded in `build/petra_ts/matches/<time>/`
 (`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
-commit SHA, command, a line to rerun it; then the result, a statistics table,
-the distinct errors/warnings, the replay path and a fingerprint, written by
-`build/petra_ts/match-report.ts`), `statistics.json`, `game.log` (stdout/stderr:
-script errors and the end-of-game statistics), `uncommitted.diff` if the tree
-was dirty, `timeline.txt` with `-t`, and the engine's `mainlog.html`/`interestinglog.html`.
+commit SHA, a sha256 of the `petra_out` build, command, a line to rerun it;
+then the result, a statistics table, the distinct errors/warnings, the replay
+path and a fingerprint, written by `build/petra_ts/match-report.ts`),
+`statistics.json`, `timeline.txt` with `-t`, the replay's `metadata.json` (each
+statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
+(stdout/stderr: script errors and the end-of-game statistics) and the engine's
+`mainlog.html`/`interestinglog.html`.
 Matches are deterministic: an explicit `-autostart-seed` also picks the
 settings the game setup leaves random (biome, placement, ...), so the same
 seeds and code replay the same game and print the same fingerprint.
@@ -75,7 +77,10 @@ After a port change, a headless match (`-n`) is a quick smoke test: the unit
 tests once missed a `requireValue` that threw every turn in a real game.
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see
-`autostart/cmd_line_args.js`).
+`autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
+runs no turn after the one the game is decided in, the turn a non-visual game
+quits on, so both leave the same files; a visual game then shows the result
+(`gui/session/message_box/QuitConfirmationObserver.js`) until you leave it.
 
 ## Petra architecture (`simulation/ai/`)
 

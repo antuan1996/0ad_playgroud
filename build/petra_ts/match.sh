@@ -3,18 +3,23 @@
 # TypeScript port ("Petra TS", simulation/ai/petra_out) in the game, as an
 # observer. Builds the port first, then records the match under
 # build/petra_ts/matches/<time>/ (and matches/latest):
-#   match.txt          who is who, the settings, the commit, the command and how
-#                      to rerun the match; then the result, a table of both
-#                      bots' statistics, the errors and warnings, the replay and
-#                      a fingerprint of the game (match-report.ts)
-#   game.log           the game's stdout/stderr: script errors, warnings, the
-#                      statistics printed when the game ends
-#   statistics.json    those statistics, one entry per player
-#   mainlog.html, interestinglog.html   the engine's own logs of the run
-#   uncommitted.diff   with uncommitted changes: git diff HEAD at the start,
-#                      so the code that played can be restored exactly
+#   match.txt          who is who, the settings, the commit, a hash of the
+#                      Petra TS build, the command and how to rerun the match;
+#                      then the result, a table of both bots' statistics, the
+#                      errors and warnings, the replay and a fingerprint of the
+#                      game (match-report.ts)
+#   statistics.json    the statistics printed when the game ends, one entry per
+#                      player
 #   timeline.txt       with -t: each player's state every two game minutes
-# The game ends on conquest: once one bot has defeated the other.
+#   metadata.json      the replay's metadata: the final state of each player and
+#                      every statistic sampled each 30 game seconds ("sequences")
+#   logs.tar.gz        game.log, the game's stdout/stderr (script errors,
+#                      warnings, the statistics), and the engine's own
+#                      mainlog.html and interestinglog.html
+# The game ends on conquest: once one bot has defeated the other. In visual
+# mode the game then stops on that turn (-autostart-stop-on-end) and shows the
+# result; the record is finished once you close the game (Alt+F4, or Quit and
+# then Exit in the main menu).
 # Matches are deterministic: the same seeds, options and code play the same
 # game (the map seed also picks the settings the game setup leaves random, like
 # the biome; see -autostart-seed), and match.txt has the line to rerun one.
@@ -33,6 +38,8 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
+  -k KEEP    keep the last KEEP match folders, this one included, and delete
+             older ones (default 5; 0 keeps them all)
   -h         this help
 Petra JS is always blue and Petra TS always red, whichever slot they play.
 EOF
@@ -47,7 +54,8 @@ swap=false
 speed=1
 nonvisual=false
 timeline=false
-while getopts "m:s:a:d:c:xv:nth" option; do
+keep=5
+while getopts "m:s:a:d:c:xv:ntk:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -58,6 +66,7 @@ while getopts "m:s:a:d:c:xv:nth" option; do
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
 		t) timeline=true ;;
+		k) keep="$OPTARG" ;;
 		h)
 			usage
 			exit 0
@@ -69,6 +78,10 @@ while getopts "m:s:a:d:c:xv:nth" option; do
 	esac
 done
 shift $((OPTIND - 1))
+if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
+	echo "-k takes a number of matches, not '$keep'" >&2
+	exit 2
+fi
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 game="$repo/binaries/system/pyrogenesis"
@@ -101,8 +114,10 @@ args=(
 	-autostart-players=2
 	-autostart-player=-1
 	-autostart-victory=conquest
+	-autostart-stop-on-end
 	-autostart-speed="$speed"
 	-autostart-script=scripts/NonVisualTrigger.js
+	-autostart-script=scripts/MatchEnd.js
 	-autostart-ai="$js:petra"
 	-autostart-ai="$ts:petra_out"
 	-autostart-aidiff="$js:$difficulty"
@@ -135,23 +150,32 @@ out="$matches/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$out"
 ln -sfn "$(basename "$out")" "$matches/latest"
 
+# Rotation: the folder names are timestamps, so they sort oldest first.
+if [ "$keep" -gt 0 ]; then
+	old=()
+	while IFS= read -r dir; do
+		old+=("$matches/$dir")
+	done < <(find "$matches" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*-[0-9]*' -printf '%f\n' |
+		sort | head -n -"$keep")
+	if [ ${#old[@]} -gt 0 ]; then
+		rm -rf -- "${old[@]}"
+	fi
+fi
+
 {
 	echo "player $js: Petra JS (simulation/ai/petra), blue"
 	echo "player $ts: Petra TS (simulation/ai/petra_out), red"
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
 	echo "branch $(git -C "$repo" rev-parse --abbrev-ref HEAD)"
-	echo "commit $(git -C "$repo" log -1 --format='%H %cs "%s"')"
-	echo "engine built $(date -r "$game" '+%Y-%m-%d %H:%M:%S')"
-	untracked="$(git -C "$repo" ls-files --others --exclude-standard)"
-	if ! git -C "$repo" diff --quiet HEAD || [ -n "$untracked" ]; then
-		{
-			git -C "$repo" diff HEAD
-			while IFS= read -r file; do
-				[ -n "$file" ] && (cd "$repo" && git diff --no-index -- /dev/null "$file" || true)
-			done <<<"$untracked"
-		} >"$out/uncommitted.diff"
-		echo "uncommitted changes: uncommitted.diff (git apply it on that commit)"
+	dirty=""
+	if ! git -C "$repo" diff --quiet HEAD || [ -n "$(git -C "$repo" ls-files --others --exclude-standard)" ]; then
+		dirty=" (with uncommitted changes)"
 	fi
+	echo "commit $(git -C "$repo" log -1 --format='%H %cs "%s"')$dirty"
+	# sha256 of the sorted list of "sha256  ./path" of every file of the build.
+	echo "petra_out sha256 $(cd "$repo/binaries/data/mods/public/simulation/ai/petra_out" &&
+		find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+	echo "engine built $(date -r "$game" '+%Y-%m-%d %H:%M:%S')"
 	echo "started $(date '+%Y-%m-%d %H:%M:%S')"
 	printf 'command:'
 	printf ' %q' "$game" "${args[@]}"
@@ -182,4 +206,18 @@ wall=$(($(date +%s) - $(date -r "$out/match.txt" +%s)))
 	echo "ended $(date '+%Y-%m-%d %H:%M:%S') after $((wall / 60))m$((wall % 60))s, game exit status $status"
 	node "$repo/build/petra_ts/match-report.ts" "$out" "$js"
 } | tee -a "$out/match.txt"
+
+replay="$(sed -n "s/^Replay written to '\(.*\)'$/\1/p" "$out/game.log")"
+if [ -n "$replay" ] && [ -e "$replay/metadata.json" ]; then
+	cp "$replay/metadata.json" "$out/"
+fi
+
+archived=()
+for log in game.log mainlog.html interestinglog.html; do
+	if [ -e "$out/$log" ]; then
+		archived+=("$log")
+	fi
+done
+tar -czf "$out/logs.tar.gz" -C "$out" "${archived[@]}"
+(cd "$out" && rm -- "${archived[@]}")
 echo "logs: $out"
