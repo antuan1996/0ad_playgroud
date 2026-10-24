@@ -379,9 +379,9 @@ describe("garrisonManager", () =>
 			world.addEntity(archer);
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 			world.ai.elapsedTime = 104;	// the patrol runs three wall-seconds later
-			world.addEntity(foeUnit(2000, [40, 30], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
-			// a grazing gaia animal is no threat
+			// a grazing gaia animal is no threat (listed first: the patrol stops at the first plain foe)
 			world.addEntity(foeUnit(2010, [35, 31], { "owner": GAIA, "classes": ["Animal"], "attackTypes": [], "combat": false }));
+			world.addEntity(foeUnit(2000, [40, 30], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
 
 			manager.update(world.gameState, emptyEvents());
 
@@ -413,6 +413,59 @@ describe("garrisonManager", () =>
 			assert.deepEqual(unloadCalls, [3021], "with no foe left, the archer went back to the field");
 			assert.equal(manager.allowMelee(tower), false, "scenery grants neither threat nor melee verdict");
 			assert.equal(tower.getMetadata(PLAYER, "holderTimeUpdate"), 104, "the patrol walked its round");
+		});
+
+		it("a soldier riding in a ram and a raider out of bowshot are no threat at the gate", () =>
+		{
+			const unloadCalls: number[] = [];
+			const { world, manager, tower } = towerWorld({
+				garrisoned: () => [3021],
+				garrisonedSlots: () => 1,
+				unload: (id: unknown) => { unloadCalls.push(id as number); }
+			});
+			const archer = residentArm(3021, ["Ranged"]);
+			world.addEntity(archer);
+			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+			world.addEntity(foeUnit(2001, undefined as unknown as [number, number], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
+			world.addEntity(foeUnit(2002, [200, 200], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
+			world.ai.elapsedTime = 104;
+
+			manager.update(world.gameState, emptyEvents());
+
+			assert.deepEqual(unloadCalls, [3021]);
+		});
+
+		it("a holder carried inside a ship skips the patrol", () =>
+		{
+			const unloadCalls: number[] = [];
+			const { world, manager, tower } = towerWorld({
+				position: () => undefined,
+				garrisoned: () => [3021],
+				garrisonedSlots: () => 1,
+				unload: (id: unknown) => { unloadCalls.push(id as number); }
+			});
+			const archer = residentArm(3021, ["Ranged"]);
+			world.addEntity(archer);
+			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+			world.ai.elapsedTime = 104;
+
+			manager.update(world.gameState, emptyEvents());
+
+			assert.deepEqual(unloadCalls, []);
+		});
+
+		it("a marcher promoted on the way keeps his place in the book under his new name", () =>
+		{
+			const { world, manager, tower } = towerWorld();
+			const archer = walker(3000, tower.id());
+			world.addEntity(archer);
+			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+			world.removeEntity(3000);
+			world.addEntity(walker(3100, tower.id(), {}, { "garrisonHolder": tower.id() }));
+
+			manager.update(world.gameState, eventsWith({ "EntityRenamed": [{ "entity": 3000, "newentity": 3100 }] }));
+
+			assert.deepEqual(leaf(manager, 5000).list, [3100]);
 		});
 
 		it("hears the shots of an enemy tower and keeps its men too", () =>
@@ -642,6 +695,36 @@ describe("garrisonManager", () =>
 			assert.equal(manager.holders.size, 0, "the ruin left the book");
 		});
 
+		it("a marcher re-booked elsewhere before the tower fell, or was rebuilt as no holder, is left to his new booking", () =>
+		{
+			for (const fall of ["destroyed", "renamed"])
+			{
+				const { world, manager, tower } = towerWorld();
+				const stopCalls: number[] = [];
+				const archer = walker(3000, tower.id(), { stopMoving: () => { stopCalls.push(3000); } });
+				world.addEntity(archer);
+				manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+				// the worker's office reseated him on another structure
+				archer.setMetadata(PLAYER, "garrisonHolder", 5001);
+				archer.unitAIOrderData = () => [{ "target": 5001 }];
+				let events = emptyEvents();
+				if (fall === "destroyed")
+					world.removeEntity(5000);
+				else
+				{
+					// the tower was turned into something no one can enter
+					world.addEntity(makeEntity({ id: 5050, owner: PLAYER, position: [30, 30], classes: ["Structure"] }));
+					events = eventsWith({ "EntityRenamed": [{ "entity": 5000, "newentity": 5050 }] });
+				}
+
+				manager.update(world.gameState, events);
+
+				assert.deepEqual(stopCalls, [], fall);
+				assert.equal(archer.getMetadata(PLAYER, "garrisonHolder"), 5001, fall);
+				assert.equal(manager.holders.has(5000), false, fall);
+			}
+		});
+
 		it("frees the marchers of a tower the enemy overran", () =>
 		{
 			const { world, manager, tower } = towerWorld();
@@ -785,6 +868,15 @@ describe("garrisonManager", () =>
 			assert.equal(manager.addDecayingStructure(world.gameState, 5000), true);
 			assert.equal(manager.decayingStructures.get(5000), 2,
 				"the wall asks ceil((6-2)/2) = 2 men to hold its ground");
+		});
+
+		it("a keep already watched is watched once", () =>
+		{
+			const { world, manager } = towerWorld();
+			world.addEntity(decayedTower(5100));
+			assert.equal(manager.addDecayingStructure(world.gameState, 5100), true);
+			assert.equal(manager.addDecayingStructure(world.gameState, 5100), true);
+			assert.equal(manager.decayingStructures.size, 1);
 		});
 
 		it("watches a barracks we won even without arrows", () =>
@@ -990,6 +1082,59 @@ describe("garrisonManager", () =>
 			// both empty truth for every caller
 			assert.ok(!manager.keepGarrisoned(hero, entOf(world, 5000), noFoe),
 				"the gates were opened once the foes walked away");
+		});
+
+		it("a healing house keeps a hurt soldier until he is well", () =>
+		{
+			const { world, manager } = towerWorld();
+			const temple = makeEntity({ id: 5100, owner: PLAYER, position: [30, 30], classes: ["Structure", "Temple"] },
+				{ isGarrisonHolder: () => true, buffHeal: () => 3, getGarrisonArrowClasses: () => [] });
+			world.addEntity(temple);
+			const hurt = residentArm(3021, ["Melee"], { isHealable: () => true, healthLevel: () => 0.5 });
+			const well = residentArm(3022, ["Melee"], { isHealable: () => true, healthLevel: () => 0.95, needsHeal: () => false });
+			world.addEntity(hurt);
+			world.addEntity(well);
+			assert.equal(manager.keepGarrisoned(hurt, temple, quiet), true);
+			assert.equal(manager.keepGarrisoned(well, temple, quiet), false);
+		});
+
+		it("a hero in an emergency heals in a temple while hurt", () =>
+		{
+			const { world, manager } = towerWorld();
+			const temple = makeEntity({ id: 5100, owner: PLAYER, position: [30, 30], classes: ["Structure", "Temple"] },
+				{ isGarrisonHolder: () => true, buffHeal: () => 3 });
+			world.addEntity(temple);
+			const hero = residentArm(3021, ["Melee"], { isHealable: () => true, healthLevel: () => 0.5 },
+				{ "garrisonType": GarrisonManager.TYPE_EMERGENCY });
+			world.addEntity(hero);
+			assert.equal(manager.keepGarrisoned(hero, temple, quiet), true);
+		});
+
+		it("in a fortress, a ram is let out at once; a catapult or a villager stays while foes are around", () =>
+		{
+			const { world, manager } = towerWorld();
+			const fortress = makeEntity({ id: 5200, owner: PLAYER, position: [30, 30], classes: ["Structure", "Fortress"] },
+				{ isGarrisonHolder: () => true, buffHeal: () => 0, getGarrisonArrowClasses: () => ["Infantry"] });
+			world.addEntity(fortress);
+			const machine = (id: number, classes: string[], attackTypes: string[] | undefined) =>
+				world.addEntity(makeEntity({ id, owner: PLAYER, position: [30, 31], classes: ["Unit", ...classes] },
+					{ attackTypes: () => attackTypes, needsHeal: () => false },
+					{ "garrisonType": GarrisonManager.TYPE_PROTECTION }));
+			const ram = machine(3031, ["Siege", "Ram"], ["Melee"]);
+			const catapult = machine(3032, ["Siege", "StoneThrower"], ["Ranged"]);
+			const villager = machine(3033, ["Support", "Worker"], undefined);
+			const soldiers = { ...quiet, "unit": true };
+			const rams = { ...quiet, "meleeSiege": true };
+
+			assert.equal(manager.keepGarrisoned(ram, fortress, soldiers), false);
+			assert.equal(manager.keepGarrisoned(catapult, fortress, soldiers), true);
+			assert.equal(manager.keepGarrisoned(villager, fortress, soldiers), true);
+			// enemy rams around: the catapult stays, out of their reach
+			assert.equal(manager.keepGarrisoned(catapult, fortress, rams), true);
+			// with no one around they go back out (the original answers the fortress's
+			// heal rate 0 here, the port false: both empty truth for every caller)
+			assert.ok(!manager.keepGarrisoned(catapult, fortress, quiet));
+			assert.ok(!manager.keepGarrisoned(villager, fortress, quiet));
 		});
 
 		it("an on-board soldier is the transports' business, never ours", () =>
