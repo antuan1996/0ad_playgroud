@@ -11,6 +11,8 @@ repos:
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
+        # tsc reads its configs as JSON with comments
+        exclude: (^tsconfig\.json$|^build/petra_ts/tsconfig.*\.json$)
       - id: check-merge-conflict
       - id: check-shebang-scripts-are-executable
       - id: check-symlinks

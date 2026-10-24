@@ -32,9 +32,10 @@ binaries/system/test --suite <Suite> [--test <name>]   # one suite / one test; -
 ```sh
 npm run build:petra                 # strict typecheck of the port (noEmit); clean
 npm run typecheck:petra:tests       # typecheck tests + harness (also re-checks the port); clean
-npm run build:petra:out             # transpile the port to simulation/ai/petra_out/ (gitignored)
+npm run build:petra:out             # build the "Petra TS" in-game bot into simulation/ai/petra_out/ (gitignored)
 npm run test:petra                  # all tests against the port (petra_ts/*.ts)
 npm run test:petra -- ref           # same tests against the original petra/*.js
+npm run test:petra:out              # build the bot, then the same tests against petra_out/*.js
 npm run coverage:petra -- [src|ref|both] [--file <module>]   # real per-module coverage
 # one file / one test:
 PETRA_TARGET=src node --test binaries/data/mods/public/simulation/ai/petra_ts/tests/<name>.test.ts
@@ -42,6 +43,25 @@ PETRA_TARGET=ref node --test --test-name-pattern="<regex>" <same path>
 ```
 Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
 built-in line figure counts never-run branches as covered.
+
+The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
+`tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only
+points editors at the tests one). **Never put a `.json` file under
+`simulation/ai/`** other than a bot's `data.json`: the engine
+(`ICmpAIManager.cpp` GetAIs) lists every `*.json` there as a bot, and the game
+setup's AI list breaks on one without a `name`.
+
+`build:petra:out` = clean, `tsc`, then `build/petra_ts/prepare-bot.ts`, which
+rewrites the output's relative imports to VFS paths
+(`simulation/ai/petra_out/x.js`: the engine's module loader does not resolve
+`./x.js`) and writes `data.json` ("Petra TS", constructor `PetraBot`). In game
+the bot id is `petra_out`, e.g. an observed match against the original
+(needs the engine built from this repo):
+```sh
+binaries/system/pyrogenesis -autostart="random/mainland" -autostart-seed=-1 -autostart-players=2 \
+  -autostart-civ=1:athen -autostart-civ=2:athen -autostart-ai=1:petra -autostart-ai=2:petra_out \
+  -autostart-aidiff=1:5 -autostart-aidiff=2:5 -autostart-player=-1
+```
 
 ## Petra architecture (`simulation/ai/`)
 
@@ -51,6 +71,7 @@ built-in line figure counts never-run branches as covered.
 - `petra/` — the original JS bot, the reference (`ref`). The game loads the bot named
   by a folder's `data.json` (`constructor`, `filename`, `useShared`).
 - `petra_ts/` — the port, one `.ts` per original `.js`, meant to stay 1:1 with it.
+- `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
   Imports use VFS paths (`simulation/ai/common-api/...`); the engine-facing
   shapes are declared in `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`
   and `petra-runtime.d.ts` (port-wide metadata/config types).

@@ -1,0 +1,19 @@
+{
+	// Tests are TypeScript that runs on Node, not on the engine, so they get
+	// Node's types and are kept out of the mod's own build and type check.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": ["node"],
+		"skipLibCheck": true,
+		// prepare-bot.ts sits outside the port; nothing is emitted anyway
+		"rootDir": "../..",
+		"noEmit": true
+	},
+	"include": [
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/tests/**/*.ts",
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/**/*.d.ts",
+		"./prepare-bot.ts"
+	],
+	// The inherited exclude would drop the tests directory.
+	"exclude": []
+}

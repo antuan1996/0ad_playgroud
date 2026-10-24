@@ -10,10 +10,10 @@
  *   ref  simulation/ai/petra/*.js     the original hand-written AI the port
  *                                     was derived from, and what the game
  *                                     loads today
- *
- * `petra_ts` also transpiles to `simulation/ai/petra_out/*.js` (npm run
- * build:petra:out), but that is just tsc's output for the port rather than a
- * separate implementation, so it is not a target of its own.
+ *   out  simulation/ai/petra_out/*.js the port as the game loads it, the
+ *                                     "Petra TS" bot (npm run build:petra:out):
+ *                                     not another implementation, a check
+ *                                     that the build output still works
  *
  * `ref` is the game's own copy. The harness only ever imports it, so running
  * the suite cannot change it — but nothing here should either.
@@ -22,9 +22,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type PetraTarget = "src" | "ref";
+export type PetraTarget = "src" | "ref" | "out";
 
-const VALID: PetraTarget[] = ["src", "ref"];
+const VALID: PetraTarget[] = ["src", "ref", "out"];
 
 function findRepoRoot(): string
 {
@@ -78,5 +78,7 @@ export function petraModuleDir(target = petraTarget()): { dir: string; ext: stri
 		return { dir: path.join(aiRoot, "petra_ts"), ext: ".ts" };
 	case "ref":
 		return { dir: path.join(aiRoot, "petra"), ext: ".js" };
+	case "out":
+		return { dir: path.join(aiRoot, "petra_out"), ext: ".js" };
 	}
 }

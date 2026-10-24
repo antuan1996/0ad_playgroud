@@ -9,6 +9,7 @@ can be pointed at different builds of it.
 ```sh
 npm run test:petra                 # the port: simulation/ai/petra_ts/*.ts
 npm run test:petra -- ref          # the original: simulation/ai/petra/*.js
+npm run test:petra:out             # builds the "Petra TS" bot, then runs on simulation/ai/petra_out/*.js
 npm run test:petra:coverage        # the port, plus a coverage report
 npm run test:petra:coverage:ref    # the original, plus a coverage report
 ```
@@ -50,9 +51,10 @@ A module no test loads is marked `*`.
 
 `ref` is the game's own copy of Petra, the `petra` folder that sits next to the
 port's `petra_ts` folder in the mod, so the suite reads whatever the game would
-load today. `npm run build:petra:out` transpiles the port to
-`simulation/ai/petra_out/*.js` — that is just tsc's output for the port, not a
-third implementation to test.
+load today. `npm run build:petra:out` builds the port into the game's "Petra
+TS" bot in `simulation/ai/petra_out/` (see the root `CLAUDE.md`). The `out`
+target runs the suite on that output: it is the port again, not a third
+implementation, and checks that the build the game loads still works.
 
 Running against `ref` is expected to fail wherever the port deliberately
 behaves differently from the original — that failure is the record of the
@@ -68,9 +70,12 @@ npm run typecheck:petra:tests
 Note that this also re-checks the port itself: `common-api.d.ts` reaches into
 the sources with `import("./baseManager.ts")`, so the sources join the program.
 Both this and the port's own check (`npm run build:petra`) are clean, so any
-error either reports was introduced by a change. The suite needs
-`@types/node` (declared in `package.json`, and what `tests/tsconfig.json` asks
-for with `"types": ["node"]`); without it `tsc` reports one fatal
+error either reports was introduced by a change. The configs live in
+`build/petra_ts/`, outside the mod: the engine takes every `*.json` under
+`simulation/ai/` for a bot's description, and the game setup cannot list a
+tsconfig. The suite needs `@types/node` (declared in `package.json`, and what
+`build/petra_ts/tsconfig.tests.json` asks for with `"types": ["node"]`);
+without it `tsc` reports one fatal
 `TS2688: Cannot find type definition file for 'node'` and checks nothing.
 
 ## How it works

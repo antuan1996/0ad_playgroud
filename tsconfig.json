@@ -1,0 +1,6 @@
+{
+	// For editors only: they look for a tsconfig.json above the file. This is
+	// the Petra tests program, which also takes in the port's sources.
+	// The npm scripts use the configs in build/petra_ts/ directly.
+	"extends": "./build/petra_ts/tsconfig.tests.json"
+}

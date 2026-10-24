@@ -1,0 +1,29 @@
+{
+	// Strict type check of the Petra port (simulation/ai/petra_ts). The configs
+	// live here, not in the mod: the engine lists every *.json under
+	// simulation/ai/ as an AI bot, and the game setup cannot read these.
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"baseUrl": "../../binaries/data/mods/public",
+		"ignoreDeprecations": "6.0",
+		"rewriteRelativeImportExtensions": true,
+		"outDir": "../../binaries/data/mods/public/simulation/ai/petra_generated",
+		"rootDir": "../../binaries/data/mods/public/simulation/ai/petra_ts",
+		"strict": true,
+		"noCheck": false,
+		"noEmit": true,
+		// The port must not see Node's globals: it runs in the engine. Tests
+		// opt back in through tsconfig.tests.json.
+		"types": [],
+	},
+	"include": [
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/**/*.ts",
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/*.d.ts"
+	],
+	"exclude": [
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/**/*.js",
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/tests/**"
+	]
+}

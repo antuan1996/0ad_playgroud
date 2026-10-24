@@ -11,14 +11,15 @@
 	"scripts": {
 		"lint": "eslint",
 		"lint:fix": "eslint --fix",
-		"build:petra": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.json",
-		"build:petra:out": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tsconfig.build.json",
+		"build:petra": "tsc -p build/petra_ts/tsconfig.json",
+		"build:petra:out": "node build/petra_ts/prepare-bot.ts clean && tsc -p build/petra_ts/tsconfig.build.json && node build/petra_ts/prepare-bot.ts",
 		"test:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts",
 		"test:petra:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref",
+		"test:petra:out": "npm run build:petra:out && node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts out",
 		"test:petra:coverage": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts src --coverage",
 		"test:petra:coverage:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref --coverage",
 		"coverage:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/coverage.ts",
-		"typecheck:petra:tests": "tsc -p binaries/data/mods/public/simulation/ai/petra_ts/tests/tsconfig.json"
+		"typecheck:petra:tests": "tsc -p build/petra_ts/tsconfig.tests.json"
 	},
 	"dependencies": {
 		"@types/node": "^26.6.5"

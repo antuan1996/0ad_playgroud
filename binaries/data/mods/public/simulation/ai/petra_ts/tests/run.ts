@@ -3,6 +3,7 @@
  *
  *   node tests/run.ts              # the port: simulation/ai/petra_ts/*.ts
  *   node tests/run.ts ref          # the original: simulation/ai/petra/*.js
+ *   node tests/run.ts out          # the built "Petra TS" bot: simulation/ai/petra_out/*.js
  *   node tests/run.ts --coverage   # the port, plus a coverage report
  *   node tests/run.ts ref --coverage
  *
@@ -14,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const targets = ["src", "ref"];
+const targets = ["src", "ref", "out"];
 const [target = "src", ...flags] = process.argv.slice(2);
 
 if (!targets.includes(target) || flags.some((flag) => flag !== "--coverage"))
@@ -36,7 +37,7 @@ const pattern = `${here.split(path.sep).join("/")}/**/*.test.ts`;
 const coverageFlags = flags.includes("--coverage")
 	? [
 		"--experimental-test-coverage",
-		`--test-coverage-include=${target === "ref" ? "**/petra/**" : "**/petra_ts/**"}`,
+		`--test-coverage-include=${target === "ref" ? "**/petra/**" : target === "out" ? "**/petra_out/**" : "**/petra_ts/**"}`,
 		"--test-coverage-exclude=**/tests/**"
 	]
 	: [];
