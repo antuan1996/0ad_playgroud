@@ -109,6 +109,14 @@ describe("obstruction map: the territories a structure may be built in", () =>
 		assert.deepEqual(bands(map, 20), { "neutral": true, "own": false, "ally": false, "enemy": true });
 	});
 
+	it("a modded structure without BuildRestrictions may stand in no territory, as in the original", () =>
+	{
+		const world = board();
+		const bare = { ...structureTemplate("structures/mod/statue"), "hasBuildTerritory": () => undefined };
+		const map = createObstructionMap(world.gameState, 2, bare);
+		assert.deepEqual(bands(map, 20), { "neutral": false, "own": false, "ally": false, "enemy": false });
+	});
+
 	it("with no template the defaults hold: anywhere but enemy land, land placement", () =>
 	{
 		const world = board();

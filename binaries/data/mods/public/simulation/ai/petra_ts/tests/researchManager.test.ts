@@ -217,6 +217,16 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 		assert.equal(wanted(["gather_lumbering_sharpaxes"])?.increasePriority, false, "900 resources: not cheap");
 	});
 
+	it("a gathering tech with no cost at all counts as cheap, as in the original", () =>
+	{
+		const s = seat({ "phase": 2 }, ["gather_lumbering_ironaxes"]);
+		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		// the same tech, as a civ bonus that costs nothing would be written
+		delete techs[0][1]._template.cost;
+		assert.deepEqual(s.manager.researchWantedTechs(s.world.gameState, techs),
+			{ "name": "gather_lumbering_ironaxes", "increasePriority": true });
+	});
+
 	it("techs of no use now, or with no modification at all, are not wanted", () =>
 	{
 		assert.equal(wanted(["hoplite_tradition", "barracks_batch_training", "phase_town_generic", "equine_transports"]), null);
