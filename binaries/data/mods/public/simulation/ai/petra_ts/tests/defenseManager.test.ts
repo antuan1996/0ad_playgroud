@@ -634,6 +634,27 @@ describe("the turn rota", () =>
 		assert.equal(manager.armies.length, 0, "an idle beast is left to graze");
 	});
 
+	// the engine can report no UnitAI state (AIProxy passes on UnitAI.GetCurrentState(), undefined until the state machine has one; a real game showed it for gaia animals)
+	it("leaves a beast with no UnitAI state reported yet in peace", () =>
+	{
+		const world = makeWorld();
+		world.ai.playedTurn = 0;
+		world.addEntity(makeEntity({
+			id: 3000, owner: PLAYER, position: [31, 30], classes: ["Unit", "Support", "Worker"]
+		}));
+		world.addEntity(makeSoldier(2000, [30, 30], {
+			owner: GAIA, classes: ["Animal"], methods: {
+				unitAIState: () => undefined,
+				unitAIOrderData: () => [{ "target": 3000 }]
+			}
+		}));
+		const manager = makeDefenseManager(world);
+
+		manager.update(world.gameState, emptyEvents());
+
+		assert.equal(manager.armies.length, 0, "a beast in no known state is no threat");
+	});
+
 	it("leaves the beast fighting an enemy's hunter, or fighting nobody in particular", () =>
 	{
 		for (const orders of [[{ "target": 3000 }], []])
@@ -1277,6 +1298,38 @@ describe("when our own are hit", () =>
 		assert.equal(targets.ents.has(3001), false,
 			"so did the free mate who took his post at the raider");
 		assert.deepEqual(mateCalls, [2000], "the mate was thrown at the raider");
+	});
+
+	// the engine can report no UnitAI state (AIProxy passes on UnitAI.GetCurrentState(), undefined until the state machine has one; a real game showed it for gaia animals)
+	it("passes over a capture mate with no UnitAI state reported yet", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const citadel = makeStructure(5000, [60, 60], PLAYER, ["Structure"]);
+		world.addEntity(citadel);
+		world.ai.HQ.capturableTargets.set(5000, { "ents": new Set([3000, 3001, 3002]) });
+		const calls: Array<[number, number]> = [];
+		world.addEntity(makeDefender(3000, [70, 60], {
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => [{ "target": 5000 }]
+		}));
+		// the nearer mate is in no known state, the farther one still fights
+		world.addEntity(makeDefender(3001, [71, 60], {
+			attack: (target) => { calls.push([3001, target]); },
+			unitAIState: () => undefined,
+			unitAIOrderData: () => [{ "target": 5000 }]
+		}));
+		world.addEntity(makeDefender(3002, [74, 60], {
+			attack: (target) => { calls.push([3002, target]); },
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => [{ "target": 5000 }]
+		}));
+		world.addEntity(makeSoldier(2000, [72, 60]));
+
+		manager.checkEvents(world.gameState, eventsWith({
+			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+		}));
+
+		assert.deepEqual(calls, [[3002, 2000]], "the fighting mate was sent, the stateless one passed over");
 	});
 
 	it("burns the poisoned tower on blinking ground we cannot hold", () =>

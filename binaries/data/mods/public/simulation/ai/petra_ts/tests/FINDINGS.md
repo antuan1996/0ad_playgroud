@@ -12,7 +12,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 | | Port | Original |
 |---|---|---|
-| Tests | 1525, all pass | 1524, 16 fail (all listed below) |
+| Tests | 1529, all pass | 1528, 16 fail (all listed below) |
 | Real line coverage | 95.6% | ≈95% |
 
 ---
@@ -48,6 +48,7 @@ original fails exactly these). Each row says whether a game can reach it.
 | `attackPlan.Abort` | returned at once when the army had no position, i.e. when all its units are aboard ships: an attack aborted at sea (target player defeated, relic raid called off) left its units with `role: attack`/`plan: N` for good, its collections registered and its queues alive | no early return; only the withdrawal rally point needs a position |
 | `attackPlan.Deserialize` | threw on a saved target that is not a number (the original restores no target and re-targets) | aligned with the original |
 | `attackPlan.update` | aborted the whole attack (and skipped `Engine.ProfileStop`) if `UpdateTarget` left no target or position, which it cannot | `requireValue` |
+| `defenseManager.checkEnemyUnits`, `defenseManager.checkEvents`, `headquarters.updateCaptureStrength`, `garrisonManager.update` | turned the original's `!state ||` guards on `unitAIState()` into `requireValue`, but the engine can report no state (AIProxy passes on `UnitAI.GetCurrentState()`). Found by the first in-game match: the throw stopped the HQ update every turn | the original's guards back; `worker.update` now fails at the original's unguarded `.split`, not earlier |
 
 ## 3. Remaining differences between port and original
 

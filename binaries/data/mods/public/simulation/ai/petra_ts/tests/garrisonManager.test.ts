@@ -390,6 +390,25 @@ describe("garrisonManager", () =>
 			assert.deepEqual(leaf(manager, 5000).list, [3000], "the archer remains on his leaf");
 		});
 
+		// the engine can report no UnitAI state (AIProxy passes on UnitAI.GetCurrentState(), undefined until the state machine has one; a real game showed it for gaia animals)
+		it("a beast in no known state is no threat at the gate, a raider in no known state is", () =>
+		{
+			const { world, manager, tower } = towerWorld();
+			const archer = walker(3000, tower.id());
+			world.addEntity(archer);
+			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+			world.ai.elapsedTime = 104;
+			world.addEntity(foeUnit(2010, [35, 31], { "owner": GAIA, "classes": ["Animal"], "attackTypes": [],
+				"methods": { "unitAIState": () => undefined } }));
+			world.addEntity(foeUnit(2000, [40, 30], { "classes": ["Infantry"], "attackTypes": ["Melee"],
+				"methods": { "unitAIState": () => undefined } }));
+
+			manager.update(world.gameState, emptyEvents());
+
+			assert.equal(manager.allowMelee(tower), true, "the raider, whatever its state, allows melee");
+			assert.deepEqual(leaf(manager, 5000).list, [3000], "the archer remains on his leaf");
+		});
+
 		it("counts no threat in the woods standing by the wall", () =>
 		{
 			const unloadCalls: number[] = [];

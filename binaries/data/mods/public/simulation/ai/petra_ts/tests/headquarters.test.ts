@@ -2874,7 +2874,8 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 	function capturer(world: HqWorld, id: number, opts: {
 		strength?: number;
 		bonus?: Record<string, Record<string, unknown>>;
-		state?: string;
+		/** null: the engine reports no UnitAI state */
+		state?: string | null;
 		orderData?: Array<Record<string, unknown>>;
 	} = {}): FakeEnt
 	{
@@ -2893,7 +2894,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			// for the restricted-classes read, unmodeled here
 			"canCapture": () => true,
 			"captureStrength": () => opts.strength,
-			"unitAIState": () => opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
+			"unitAIState": () => opts.state === null ? undefined : opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
 			"unitAIOrderData": () => opts.orderData ?? [{ "target": 2601, "attackType": "Capture" }]
 		}));
 	}
@@ -2954,6 +2955,20 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 
 		assert.deepEqual(ledger(hq, 2601), { "strength": 17, "ents": new Set([2611, 2612]) });
 		assert.deepEqual(commands, [], "seventeen over the floor carries; no correction");
+	});
+
+	// the engine can report no UnitAI state (AIProxy passes on UnitAI.GetCurrentState(), undefined until the state machine has one; a real game showed it for gaia animals)
+	it("a capturer with no UnitAI state reported yet is left out of the book", () =>
+	{
+		const { world, hq } = seat();
+		captureTarget(world);
+		capturer(world, 2611, { "strength": 8, "state": null });
+		const fighter = capturer(world, 2612, { "strength": 9 });
+		fighter.attack = () => undefined;
+
+		hq.updateCaptureStrength(world.gameState);
+
+		assert.deepEqual(ledger(hq, 2601)?.ents, new Set([2612]), "only the fighting capturer is booked");
 	});
 
 	it("a class bonus weights the book the floor reads", () =>
