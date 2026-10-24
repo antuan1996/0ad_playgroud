@@ -221,6 +221,7 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	return map;
 }
 
+/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 {
 	const width = map.width;
