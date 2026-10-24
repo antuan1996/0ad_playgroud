@@ -477,13 +477,10 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	// owner, the structures of everyone this player's diplomacy calls an
 	// enemy; with one, that player's structures
 	gs.getEnemyStructures = (owner?: number) =>
-	{
-		void owner;
-		return new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
+		new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
 			world.gameState.sharedScript,
-			mapOf(world.structures.filter((s) =>
-				(world.gameState.playerData as { isEnemy: boolean[] }).isEnemy[s.owner()])));
-	};
+			mapOf(world.structures.filter((s) => owner === undefined ?
+				(world.gameState.playerData as { isEnemy: boolean[] }).isEnemy[s.owner()] : s.owner() === owner)));
 	gs.getNeutralStructures = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
 		world.gameState.sharedScript,
 		mapOf(world.structures.filter((s) =>
