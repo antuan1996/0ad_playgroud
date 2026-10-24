@@ -759,13 +759,11 @@ export class DefenseManager
 						continue;
 					if (unitAIStateOrder === "REPAIR" && currentTarget.hasDefensiveFire())
 						continue;
-					if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) &&
-					    orderId !== undefined && gameState.ai.HQ.capturableTargets.has(orderId))
+					const capturableTarget = orderId === undefined ? undefined :
+						gameState.ai.HQ.capturableTargets.get(orderId);
+					if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
 					{
 						// Take the nearest unit also attacking this structure to help us.
-						const capturableTarget = gameState.ai.HQ.capturableTargets.get(orderId);
-						if (!capturableTarget)
-							continue;
 						capturableTarget.ents.delete(target.id());
 						let minDist = Infinity;
 						let minEnt;

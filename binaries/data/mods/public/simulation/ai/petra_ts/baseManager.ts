@@ -450,9 +450,8 @@ export class BaseManager
 		if (this.Config.debug > 2)
 			warn(" for dropsite best is " + bestVal);
 
-		if (bestVal <= 0)
-			return { "quality": bestVal, "pos": [0, 0] };
-		if (bestIdx === undefined)
+		// bestIdx is set together with a positive bestVal
+		if (bestVal <= 0 || bestIdx === undefined)
 			return { "quality": bestVal, "pos": [0, 0] };
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;

@@ -247,16 +247,14 @@ export function allowCapture(gameState: CommonGameState, ent: CommonEntity, targ
 
 	let capture;
 	const capturableTargets = gameState.ai.HQ.capturableTargets;
-	if (!capturableTargets.has(target.id()))
+	const capturable = capturableTargets.get(target.id());
+	if (!capturable)
 	{
 		capture = (ent.captureStrength() ?? NaN) * getAttackBonus(ent, target, "Capture");
 		capturableTargets.set(target.id(), { "strength": capture, "ents": new Set([ent.id()]) });
 	}
 	else
 	{
-		const capturable = capturableTargets.get(target.id());
-		if (!capturable)
-			return false;
 		if (!capturable.ents.has(ent.id()))
 		{
 			capturable.strength += (ent.captureStrength() ?? NaN) * getAttackBonus(ent, target, "Capture");

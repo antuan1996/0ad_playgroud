@@ -114,13 +114,13 @@ export class ResearchManager
 			for (const i in template.modifications)
 			{
 				if (gameState.ai.HQ.navalMap && template.modifications[i].value === "ResourceGatherer/Rates/food.fish")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/food.fruit")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/food.grain")
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/wood.tree")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value.startsWith("ResourceGatherer/Capacities"))
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "Attack/Ranged/MaxRange")
@@ -153,11 +153,11 @@ export class ResearchManager
 			for (const i in template.modifications)
 			{
 				if (template.modifications[i].value === "ResourceGatherer/Rates/stone.rock")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/metal.ore")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "BuildingAI/DefaultArrowCount")
-					return { "name": tech[0], "increasePriority": template.cost !== undefined && this.CostSum(template.cost) < 400 };
+					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "Health/RegenRate")
 					return { "name": tech[0], "increasePriority": false };
 				else if (template.modifications[i].value === "Health/IdleRegenRate")
@@ -239,9 +239,12 @@ export class ResearchManager
 		queues.minorTech.addPlan(new ResearchPlan(gameState, pickedTech[0]));
 	}
 
-	CostSum(cost: CommonResourceAmounts): number
+	/** A tech without a cost (the civ bonuses researched automatically) sums to 0, as in the original. */
+	CostSum(cost: CommonResourceAmounts | undefined): number
 	{
 		let costSum = 0;
+		if (cost === undefined)
+			return costSum;
 		for (const res in cost)
 			costSum += cost[res];
 		return costSum;

@@ -28,10 +28,12 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 	if (template)
 	{
 		placementType = template.buildPlacementType() ?? placementType;
-		buildOwn = template.hasBuildTerritory("own") ?? buildOwn;
-		buildAlly = template.hasBuildTerritory("ally") ?? buildAlly;
-		buildNeutral = template.hasBuildTerritory("neutral") ?? buildNeutral;
-		buildEnemy = template.hasBuildTerritory("enemy") ?? buildEnemy;
+		// as in the original: a template without BuildRestrictions answers
+		// undefined, which allows no territory at all
+		buildOwn = template.hasBuildTerritory("own") === true;
+		buildAlly = template.hasBuildTerritory("ally") === true;
+		buildNeutral = template.hasBuildTerritory("neutral") === true;
+		buildEnemy = template.hasBuildTerritory("enemy") === true;
 	}
 	const obstructionTiles = new Uint8Array(passabilityMap.data.length);
 
