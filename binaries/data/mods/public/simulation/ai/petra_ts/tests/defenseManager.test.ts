@@ -58,7 +58,7 @@ type DefenseManagerLike = Record<string, any> & {
 	assignDefenders(gameState: CommonGameState): void;
 	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void;
 	garrisonUnitsInside(gameState: CommonGameState, target: FakeEnt,
-		data: { attacker: FakeEnt; min?: number; type?: string }): boolean;
+		data: { attacker?: FakeEnt; min?: number; type?: string }): boolean;
 	garrisonSiegeUnit(gameState: CommonGameState, unit: FakeEnt): boolean;
 	garrisonAttackedUnit(gameState: CommonGameState, unit: FakeEnt, emergency?: boolean): boolean;
 	GetCooperationLevel(ally: number): number;
@@ -241,11 +241,137 @@ describe("watching the field", () =>
 		const { world, manager } = assembledWorld();
 		world.addEntity(makeWatchedBase());
 		manager.targetList.push(4000);
-		userAddSoldier(world, 2000, [44, 40],
-			{ classes: ["Ranged"], methods: { attackRange: () => ({ "max": 6 }) } });
-		const archer = userEnt(world, 2000);
+		// 85 map units from the base: past the 6000 (about 77²) a swordsman is
+		// watched at, inside the (60 + 30)² of an archer shooting 60 far
+		const archer = userAddSoldier(world, 2000, [135, 50], { classes: ["Ranged"], methods: {
+			attackTypes: () => ["Ranged"], attackRange: () => ({ "max": 60, "min": 0 })
+		} });
+		const swordsman = userAddSoldier(world, 2001, [135, 50]);
+		world.territory.set("135,50", 0);
 		assert.equal(manager.isDangerous(world.gameState, archer), true,
-			"the archer is inside (6+30)² of the base we watch");
+			"the archer can shoot at the base we watch");
+		assert.equal(manager.isDangerous(world.gameState, swordsman), false,
+			"a swordsman as far is no threat to it yet");
+	});
+
+	it("an enemy raising a tower inside our land goes on the watch list", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeStructure(4000, [62, 60], ENEMY, ["Structure", "Tower"], { foundationProgress: () => 0 }));
+		const builder = makeSoldier(2000, [60, 60], {
+			methods: {
+				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
+				unitAIOrderData: () => [{ "target": 4000 }]
+			}
+		});
+		world.addEntity(builder);
+
+		assert.equal(manager.isDangerous(world.gameState, builder), true);
+		assert.deepEqual(manager.targetList, [4000]);
+	});
+
+	it("an enemy repairing his ram in our land is a threat, but the ram is no base to watch", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeEntity({ id: 4000, owner: ENEMY, position: [62, 60], classes: ["Unit", "Siege", "Ram"] }));
+		const mechanic = makeSoldier(2000, [60, 60], {
+			methods: {
+				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
+				unitAIOrderData: () => [{ "target": 4000 }]
+			}
+		});
+		world.addEntity(mechanic);
+
+		assert.equal(manager.isDangerous(world.gameState, mechanic), true);
+		assert.deepEqual(manager.targetList, []);
+	});
+
+	it("a foe raising a civil centre far from our buildings is left alone; our own fresh foundation does not count", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeStructure(4000, [205, 205], ENEMY, ["Structure", "CivCentre"],
+			{ foundationProgress: () => 0 }));
+		// a foundation of ours just placed beside it: nothing built there yet
+		world.addEntity(makeStructure(4001, [210, 200], PLAYER, ["Structure", "House"],
+			{ foundationProgress: () => 0 }));
+		const builder = makeSoldier(2000, [200, 200], {
+			methods: {
+				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
+				unitAIOrderData: () => [{ "target": 4000 }]
+			}
+		});
+		world.addEntity(builder);
+		world.territory.set("200,200", 0);
+
+		assert.equal(manager.isDangerous(world.gameState, builder), false);
+		assert.deepEqual(manager.targetList, []);
+	});
+
+	it("an enemy riding inside a ram or a ship is not seen", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const passenger = makeSoldier(2000, undefined as unknown as [number, number]);
+		world.addEntity(passenger);
+		assert.equal(manager.isDangerous(world.gameState, passenger), false);
+	});
+
+	it("tracked targets that fell or changed hands leave the watch list", () =>
+	{
+		const { world, manager } = assembledWorld();
+		// one destroyed, one we captured, one still the enemy's
+		world.addEntity(makeStructure(4001, [60, 60], PLAYER, ["Structure", "CivCentre"]));
+		world.addEntity(makeStructure(4002, [260, 260], ENEMY, ["Structure", "CivCentre"]));
+		manager.targetList.push(4000, 4001, 4002);
+		world.ai.playedTurn = 1;
+		manager.update(world.gameState, emptyEvents());
+		assert.deepEqual(manager.targetList, [4002]);
+	});
+
+	it("eight raiders of one enemy loose in an ally's land are an attack on him; a second such enemy has us guard his houses too", () =>
+	{
+		const world = makeWorld();
+		// five players: we ally 3, players 2 and 4 are enemies
+		const rows = world.gameState.sharedScript.playersData as unknown as Array<Record<string, unknown>>;
+		rows.push({ "state": "active", "isAlly": [false, false, false, true, false] },
+			{ "state": "active", "isAlly": [false, false, false, false, true] });
+		allyRow(world).isAlly[3] = true;
+		allyRow(world).isMutualAlly[3] = true;
+		allyRow(world).isEnemy[3] = false;
+		allyRow(world).isEnemy[4] = true;
+		world.ai.Config.personality.cooperative = 0.6;
+		world.addEntity(makeStructure(4000, [300, 300], 3, ["Structure", "House"]));
+		const inAllyLand = (id: number, owner: number, pos: [number, number]) =>
+		{
+			world.addEntity(makeSoldier(id, pos, { owner }));
+			world.territory.set(`${pos[0]},${pos[1]}`, 3);
+		};
+		for (let k = 0; k < 8; ++k)
+		{
+			inAllyLand(2100 + k, ENEMY, [200, 200 + k]);
+			inAllyLand(4100 + k, 4, [220, 200 + k]);
+		}
+		// one more of player 4, right by the ally's house
+		inAllyLand(4108, 4, [305, 300]);
+		const manager = makeDefenseManager(world);
+
+		// the scouting rota looks at one player a turn (turn % 5)
+		for (const turn of [2, 4])
+		{
+			world.ai.playedTurn = turn;
+			manager.update(world.gameState, emptyEvents());
+		}
+		// one enemy counted in the ally's land so far: his houses are his business
+		assert.equal(manager.armies.length, 0);
+
+		for (const turn of [7, 9])
+		{
+			world.ai.playedTurn = turn;
+			manager.update(world.gameState, emptyEvents());
+		}
+		assert.equal(manager.attackedAllies[3], 2);
+		assert.equal(Math.round(manager.GetCooperationLevel(3) * 10) / 10, 0.8);
+		assert.equal(manager.armies.length, 1);
+		assert.deepEqual(manager.armies[0].foeEntities, [4108]);
 	});
 
 	it("denies the raider deep in enemy country", () =>
@@ -508,6 +634,42 @@ describe("the turn rota", () =>
 		assert.equal(manager.armies.length, 0, "an idle beast is left to graze");
 	});
 
+	it("leaves the beast fighting an enemy's hunter, or fighting nobody in particular", () =>
+	{
+		for (const orders of [[{ "target": 3000 }], []])
+		{
+			const world = makeWorld();
+			world.ai.playedTurn = 0;
+			// an enemy hunter in our land, mauled by a boar
+			world.addEntity(makeSoldier(3000, [31, 30]));
+			world.addEntity(makeSoldier(2000, [30, 30], {
+				owner: GAIA, classes: ["Animal"], methods: {
+					unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+					unitAIOrderData: () => orders
+				}
+			}));
+			const manager = makeDefenseManager(world);
+			manager.update(world.gameState, emptyEvents());
+			assert.equal(manager.armies.length, 0, `orders ${JSON.stringify(orders)}`);
+		}
+	});
+
+	it("an ally's turn in the scouting rota looks at nobody", () =>
+	{
+		const world = makeWorld();
+		const rows = world.gameState.sharedScript.playersData as unknown as Array<Record<string, unknown>>;
+		rows.push({ "state": "active", "isAlly": [false, true, false, true] });
+		allyRow(world).isAlly[3] = true;
+		allyRow(world).isMutualAlly[3] = true;
+		allyRow(world).isEnemy[3] = false;
+		world.addEntity(makeSoldier(2000, [30, 30], { owner: 3 }));
+		const manager = makeDefenseManager(world);
+		world.ai.playedTurn = 3;
+		manager.update(world.gameState, emptyEvents());
+		assert.equal(manager.armies.length, 0);
+		assert.equal(manager.attackingUnits[3], undefined);
+	});
+
 	it("raises a capture army against the gaia ruin that shoots back", () =>
 	{
 		const world = makeWorld();
@@ -660,17 +822,56 @@ describe("keeping the roster", () =>
 
 	it("keeps the army one of our oversea docks watches", () =>
 	{
+		// far beyond the civil centre's 200-unit watch: only the dock sees it
+		for (const withDock of [true, false])
+		{
+			const world = makeWorld();
+			world.addEntity(makeSoldier(2000, [300, 5]));
+			// our dock is by the raid, or on the far coast
+			world.addEntity(makeStructure(4000, withDock ? [305, 5] : [305, 300], PLAYER, ["Structure", "Dock"]));
+			const manager = makeDefenseManager(world);
+			manager.makeIntoArmy(world.gameState, 2000);
+			world.territory.set("300,5", 0);
+			world.ai.playedTurn = 5;
+			manager.update(world.gameState, emptyEvents());
+
+			assert.equal(manager.armies.length, withDock ? 1 : 0,
+				withDock ? "the dock watch keeps the raid in reach of the oversea base" :
+					"with the dock far away, a raid out on unclaimed ground is let go");
+		}
+	});
+
+	it("an enemy civil centre near a raid on unclaimed ground is no reason to keep watching it", () =>
+	{
 		const world = makeWorld();
-		world.addEntity(makeSoldier(2000, [200, 5]));
-		world.addEntity(makeStructure(4000, [205, 5], PLAYER, ["Structure", "Dock"]));
+		world.addEntity(makeStructure(4000, [300, 300], ENEMY, ["Structure", "CivCentre"]));
+		world.addEntity(makeSoldier(2000, [320, 300]));
 		const manager = makeDefenseManager(world);
 		manager.makeIntoArmy(world.gameState, 2000);
-		world.territory.set("200,5", 0);
+		world.territory.set("320,300", 0);
 		world.ai.playedTurn = 5;
 		manager.update(world.gameState, emptyEvents());
+		assert.equal(manager.armies.length, 0);
+	});
 
-		assert.equal(manager.armies.length, 1,
-			"the dock watch keeps the raid in reach of the oversea base");
+	it("a raid by an ally's civil centre on unclaimed ground is watched only if we care enough for him", () =>
+	{
+		for (const [cooperative, kept] of [[0.5, 1], [0.2, 0]] as const)
+		{
+			const world = makeWorld();
+			allyRow(world).isAlly[3] = true;
+			allyRow(world).isMutualAlly[3] = true;
+			allyRow(world).isEnemy[3] = false;
+			world.ai.Config.personality.cooperative = cooperative;
+			world.addEntity(makeStructure(4000, [300, 300], 3, ["Structure", "CivCentre"]));
+			world.addEntity(makeSoldier(2000, [320, 300]));
+			const manager = makeDefenseManager(world);
+			manager.makeIntoArmy(world.gameState, 2000);
+			world.territory.set("320,300", 0);
+			world.ai.playedTurn = 5;
+			manager.update(world.gameState, emptyEvents());
+			assert.equal(manager.armies.length, kept, `cooperative ${cooperative}`);
+		}
 	});
 
 	it("merges the armies once the raid camps converge", () =>
@@ -1712,5 +1913,202 @@ describe("the office itself", () =>
 		assert.deepEqual(fresh.attackedAllies, { "3": 2 },
 			"the cooperation memory returned");
 		assert.deepEqual(fresh.targetList, [], "the target list returned");
+	});
+});
+
+describe("rarer turns of the defence", () =>
+{
+	/** one of ours in combat with the enemy house 4000 we are capturing */
+	function capturerOf(world: World, id: number, position: [number, number], methods: Methods = {}): FakeEnt
+	{
+		return world.addEntity(makeDefender(id, position, {
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => [{ "target": 4000 }],
+			attack: () => undefined,
+			...methods
+		}));
+	}
+
+	it("a capturer under attack fights back, and the nearest free capturer of the same building comes to help", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeStructure(4000, [80, 80], ENEMY, ["Structure", "House"], { isCapturable: () => true }));
+		const raider = makeSoldier(2000, [70, 70]);
+		world.addEntity(raider);
+		const attacks: Array<[number, number]> = [];
+		const fighter = (id: number) => ({ attack: (target: number) => attacks.push([id, target]) });
+		const hit = capturerOf(world, 3000, [72, 72], fighter(3000));
+		// fellow capturers: hit too this turn; unable to strike the raider;
+		// gone back to gathering; now fighting something else; and two good ones
+		capturerOf(world, 3001, [71, 71], fighter(3001));
+		capturerOf(world, 3002, [71, 72], { canAttackTarget: () => false, ...fighter(3002) });
+		capturerOf(world, 3003, [72, 71], { unitAIState: () => "INDIVIDUAL.GATHER.GATHERING", ...fighter(3003) });
+		capturerOf(world, 3004, [73, 72], { unitAIOrderData: () => [{ "target": 2000 }], ...fighter(3004) });
+		capturerOf(world, 3005, [75, 75], fighter(3005));
+		capturerOf(world, 3006, [90, 90], fighter(3006));
+		world.ai.HQ.capturableTargets.set(4000, { "strength": 10, "ents": new Set([3000, 3001, 3002, 3003, 3004, 3005, 3006]) });
+
+		manager.checkEvents(world.gameState, eventsWith({
+			"Attacked": [{ "target": 3000, "attacker": 2000 }, { "target": 3001, "attacker": 2000 }]
+		}));
+
+		// each hit capturer answers and pulls the nearest capturer free to help:
+		// 3005 for the first blow, then 3006 for the second
+		assert.deepEqual(attacks.filter(([id]) => id !== 3000 && id !== 3001), [[3005, 2000], [3006, 2000]]);
+		assert.ok(attacks.some(([id]) => id === 3000));
+		assert.ok(attacks.some(([id]) => id === 3001));
+		// the ones that left the building are struck off its capture book
+		const book = world.ai.HQ.capturableTargets.get(4000) as { ents: Set<number> };
+		assert.deepEqual([...book.ents].sort(), [3002, 3003, 3004]);
+		void hit;
+	});
+
+	it("a blow from an ally (taking back capture points) is not answered", () =>
+	{
+		const { world, manager } = assembledWorld();
+		allyRow(world).isAlly[3] = true;
+		allyRow(world).isMutualAlly[3] = true;
+		allyRow(world).isEnemy[3] = false;
+		world.addEntity(makeDefender(3000, [20, 20], { attack: () => assert.fail("no fight with an ally") }));
+		world.addEntity(makeSoldier(2000, [22, 20], { owner: 3 }));
+
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		assert.equal(manager.armies.length, 0);
+	});
+
+	it("a warship of ours under fire is left to its own devices", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Ship", "Warship"] }));
+		world.addEntity(makeSoldier(2000, [22, 20]));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		assert.equal(manager.armies.length, 0);
+	});
+
+	it("a field on ground we lost, hit by raiders: nothing to recapture, nothing to burn", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const field = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Field"], {
+			destroy: () => assert.fail("a field is not burnt")
+		});
+		field.setMetadata(PLAYER, "base", 1);
+		world.addEntity(field);
+		world.blinking.set("30,30", true);
+		world.addEntity(makeSoldier(2000, [32, 30]));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 5000, "attacker": 2000 }] }));
+		assert.equal(manager.armies.length, 0);
+	});
+
+	it("a unit killed by the blow, or a blow from an attacker already dead, raises nothing", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeSoldier(2000, [22, 20]));
+		world.addEntity(makeDefender(3001, [20, 20], { attack: () => assert.fail("no one to answer") }));
+		manager.checkEvents(world.gameState, eventsWith({
+			"Attacked": [{ "target": 3000, "attacker": 2000 }, { "target": 3001, "attacker": 2999 }]
+		}));
+		assert.equal(manager.armies.length, 0);
+	});
+
+	it("a villager in good health struck by a raider keeps working; the raider is still hunted", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Worker"] },
+			{ healthLevel: () => 0.9, attackTypes: () => ["Melee"] }));
+		world.addEntity(makeSoldier(2000, [22, 20]));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		assert.equal(world.garrisonCalls.length, 0);
+		assert.equal(manager.armies.length, 1);
+	});
+
+	it("filling a decaying building: the nearest available infantry go in, melee included, until it is full", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const fort = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Fortress"], {
+			isGarrisonHolder: () => true, garrisonMax: () => 20
+		});
+		world.addEntity(fort);
+		world.accessAt.set("38,30", 4);
+		const infantry = (id: number, position: [number, number] | undefined, metadata: Record<string, unknown> = {}, classes = ["Unit", "Infantry"]) =>
+			world.addEntity(makeEntity({ id, owner: PLAYER, position, classes }, { attackTypes: () => ["Melee"] }, metadata));
+		infantry(3000, undefined);								// already inside something
+		infantry(3001, [31, 30], {}, ["Unit", "Cavalry"]);		// no arrows from horsemen
+		infantry(3002, [31, 31], { "transport": 7 });				// boarding a ship
+		infantry(3003, [32, 31], { "plan": -2 });					// defender of an army that is gone
+		infantry(3004, [38, 30]);								// across the water
+		infantry(3005, [34, 30]);
+		infantry(3006, [36, 30]);
+		infantry(3007, [37, 30]);
+		// a defender of the army hunting a raider
+		world.addEntity(makeSoldier(2000, [40, 40]));
+		manager.makeIntoArmy(world.gameState, 2000);
+		const army = manager.armies[0];
+		army.addOwn(world.gameState, 3005);
+
+		const ret = manager.garrisonUnitsInside(world.gameState, fort, { "min": 2, "type": GarrisonManager.TYPE_DECAY });
+
+		assert.equal(ret, true);
+		assert.deepEqual(world.garrisonCalls.map(([unit, , type]) => [unit.id(), type]),
+			[[3005, GarrisonManager.TYPE_DECAY], [3006, GarrisonManager.TYPE_DECAY]]);
+		assert.equal(army.ownEntities.includes(3005), false);
+	});
+
+	it("a stone thrower under fire goes to the nearest fortress that can take it", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.accessAt.set("60,60", 4);
+		const fort = (id: number, position: [number, number], methods: Methods) =>
+			world.addEntity(makeStructure(id, position, PLAYER, ["Structure", "Fortress"], {
+				isGarrisonHolder: () => true, garrisonableClasses: () => ["Siege"], garrisonMax: () => 5, ...methods
+			}));
+		fort(5000, [21, 20], { isGarrisonHolder: () => false });				// a ruin that holds no one
+		fort(5001, [22, 20], { garrisonableClasses: () => ["Infantry"] });	// a barracks
+		fort(5002, [23, 20], { garrisonMax: () => 0 });						// full
+		fort(5003, [24, 20], { hitpoints: () => 10 });						// about to fall
+		fort(5004, [60, 60], {});											// across the water
+		fort(5005, [40, 20], {});
+		fort(5006, [80, 20], {});
+		const catapult = world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20],
+			classes: ["Unit", "Siege", "StoneThrower"] }));
+
+		assert.equal(manager.garrisonSiegeUnit(world.gameState, catapult), true);
+		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
+	});
+
+	it("a hurt villager goes to the nearest healing house that can take her", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.accessAt.set("60,60", 4);
+		const house = (id: number, position: [number, number], methods: Methods) =>
+			world.addEntity(makeStructure(id, position, PLAYER, ["Structure", "Temple"], {
+				isGarrisonHolder: () => true, buffHeal: () => 3, garrisonableClasses: () => ["Support"], garrisonMax: () => 5,
+				...methods
+			}));
+		house(5001, [22, 20], { garrisonableClasses: () => ["Infantry"] });
+		house(5003, [24, 20], { hitpoints: () => 10 });
+		house(5004, [60, 60], {});
+		house(5005, [40, 20], {});
+		house(5006, [80, 20], {});
+		const villager = world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20],
+			classes: ["Unit", "Support", "Worker"] }));
+
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, villager), true);
+		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
+	});
+
+	it("freed defenders turn on a watched enemy base only on their own land", () =>
+	{
+		const { world, manager } = assembledWorld();
+		world.addEntity(makeStructure(4000, [50, 50], ENEMY, ["Structure", "CivCentre"]));
+		world.accessAt.set("50,50", 4);
+		manager.targetList.push(3999, 4000);		// one already destroyed
+		const raider = makeSoldier(2000, [40, 40]);
+		world.addEntity(raider);
+		manager.makeIntoArmy(world.gameState, 2000);
+		world.addEntity(makeDefender(3000, [45, 45]));
+		manager.armies[0].addOwn(world.gameState, 3000);
+
+		manager.switchToAttack(world.gameState, manager.armies[0]);
+		assert.equal(world.switchCalls.length, 0);
 	});
 });
