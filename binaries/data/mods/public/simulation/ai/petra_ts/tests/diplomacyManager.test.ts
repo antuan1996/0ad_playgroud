@@ -482,8 +482,10 @@ describe("the last man standing: lastManStandingCheck", () =>
 		assert.equal(close.manager.waitingToBetray, false);
 	});
 
-	// only the port passes: the original reads the wonder as a collection's
-	// [0], which an EntityCollection never answers, so it never sees one
+	// only the port passes: the original diplomacyManager.js never imports
+	// `filters`, so this check throws a ReferenceError in a wonder game; and
+	// even with the import it reads the wonder as a collection's [0], which an
+	// EntityCollection never answers, so it would never see one
 	it("in a wonder game, turns at once against a player with a finished wonder", () =>
 	{
 		const { world, manager } = endgame({ "victoryConditions": ["wonder"] });
@@ -497,6 +499,8 @@ describe("the last man standing: lastManStandingCheck", () =>
 		assert.deepEqual(of("diplomacy"), [{ "type": "diplomacy", "player": 3, "to": "enemy" }]);
 	});
 
+	// only the port passes: the original never imports `filters` (see above),
+	// so this check throws a ReferenceError in a relic game
 	it("in a relic game, counts each relic a player holds", () =>
 	{
 		const { world, manager } = endgame({ "victoryConditions": ["capture_the_relic"] },
