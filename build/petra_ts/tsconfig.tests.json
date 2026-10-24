@@ -5,14 +5,15 @@
 	"compilerOptions": {
 		"types": ["node"],
 		"skipLibCheck": true,
-		// prepare-bot.ts sits outside the port; nothing is emitted anyway
+		// prepare-bot.ts and match-report.ts sit outside the port; nothing is emitted anyway
 		"rootDir": "../..",
 		"noEmit": true
 	},
 	"include": [
 		"../../binaries/data/mods/public/simulation/ai/petra_ts/tests/**/*.ts",
 		"../../binaries/data/mods/public/simulation/ai/petra_ts/**/*.d.ts",
-		"./prepare-bot.ts"
+		"./prepare-bot.ts",
+		"./match-report.ts"
 	],
 	// The inherited exclude would drop the tests directory.
 	"exclude": []

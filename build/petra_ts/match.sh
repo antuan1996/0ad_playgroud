@@ -3,11 +3,21 @@
 # TypeScript port ("Petra TS", simulation/ai/petra_out) in the game, as an
 # observer. Builds the port first, then records the match under
 # build/petra_ts/matches/<time>/ (and matches/latest):
-#   match.txt          who is who, the settings, the command and the result
+#   match.txt          who is who, the settings, the commit, the command and how
+#                      to rerun the match; then the result, a table of both
+#                      bots' statistics, the errors and warnings, the replay and
+#                      a fingerprint of the game (match-report.ts)
 #   game.log           the game's stdout/stderr: script errors, warnings, the
 #                      statistics printed when the game ends
+#   statistics.json    those statistics, one entry per player
 #   mainlog.html, interestinglog.html   the engine's own logs of the run
+#   uncommitted.diff   with uncommitted changes: git diff HEAD at the start,
+#                      so the code that played can be restored exactly
+#   timeline.txt       with -t: each player's state every two game minutes
 # The game ends on conquest: once one bot has defeated the other.
+# Matches are deterministic: the same seeds, options and code play the same
+# game (the map seed also picks the settings the game setup leaves random, like
+# the biome; see -autostart-seed), and match.txt has the line to rerun one.
 set -euo pipefail
 
 usage()
@@ -22,6 +32,7 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -x         swap slots: Petra TS plays player 1, Petra JS player 2
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
+  -t         timeline: each player's state every two game minutes (timeline.txt)
   -h         this help
 Petra JS is always blue and Petra TS always red, whichever slot they play.
 EOF
@@ -35,7 +46,8 @@ civ="athen"
 swap=false
 speed=1
 nonvisual=false
-while getopts "m:s:a:d:c:xv:nh" option; do
+timeline=false
+while getopts "m:s:a:d:c:xv:nth" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -45,6 +57,7 @@ while getopts "m:s:a:d:c:xv:nh" option; do
 		x) swap=true ;;
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
+		t) timeline=true ;;
 		h)
 			usage
 			exit 0
@@ -104,7 +117,18 @@ args=(
 if [ "$nonvisual" = true ]; then
 	args+=(-autostart-nonvisual)
 fi
+if [ "$timeline" = true ]; then
+	args+=(-autostart-script=scripts/MatchTimeline.js)
+fi
 args+=("$@")
+
+rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -v "$speed")
+[ "$swap" = true ] && rerun+=(-x)
+[ "$nonvisual" = true ] && rerun+=(-n)
+[ "$timeline" = true ] && rerun+=(-t)
+if [ $# -gt 0 ]; then
+	rerun+=(--)
+fi
 
 matches="$repo/build/petra_ts/matches"
 out="$matches/$(date +%Y%m%d-%H%M%S)"
@@ -115,10 +139,25 @@ ln -sfn "$(basename "$out")" "$matches/latest"
 	echo "player $js: Petra JS (simulation/ai/petra), blue"
 	echo "player $ts: Petra TS (simulation/ai/petra_out), red"
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
-	echo "branch $(git -C "$repo" rev-parse --abbrev-ref HEAD) at $(git -C "$repo" rev-parse --short HEAD)$(git -C "$repo" diff --quiet HEAD || echo ' (with uncommitted changes)')"
+	echo "branch $(git -C "$repo" rev-parse --abbrev-ref HEAD)"
+	echo "commit $(git -C "$repo" log -1 --format='%H %cs "%s"')"
+	echo "engine built $(date -r "$game" '+%Y-%m-%d %H:%M:%S')"
+	untracked="$(git -C "$repo" ls-files --others --exclude-standard)"
+	if ! git -C "$repo" diff --quiet HEAD || [ -n "$untracked" ]; then
+		{
+			git -C "$repo" diff HEAD
+			while IFS= read -r file; do
+				[ -n "$file" ] && (cd "$repo" && git diff --no-index -- /dev/null "$file" || true)
+			done <<<"$untracked"
+		} >"$out/uncommitted.diff"
+		echo "uncommitted changes: uncommitted.diff (git apply it on that commit)"
+	fi
 	echo "started $(date '+%Y-%m-%d %H:%M:%S')"
 	printf 'command:'
 	printf ' %q' "$game" "${args[@]}"
+	echo
+	printf 'rerun (on that commit):'
+	printf ' %q' "${rerun[@]}" "$@"
 	echo
 } >"$out/match.txt"
 cat "$out/match.txt"
@@ -128,23 +167,19 @@ set +e
 status=${PIPESTATUS[0]}
 set -e
 
+if [ "$timeline" = true ]; then
+	grep '^TIMELINE ' "$out/game.log" | cut -d' ' -f2- >"$out/timeline.txt" || true
+fi
+
 for log in mainlog.html interestinglog.html; do
 	if [ -e "$logs/$log" ]; then
 		cp "$logs/$log" "$out/"
 	fi
 done
 
-# NonVisualTrigger.js prints each player's statistics once the game is decided.
-result="$(awk '/"playerID":/ { id = $2 + 0 }
-	/"playerState":/ { gsub(/[",]/, "", $2); printf "%s player %d: %s\n", (id == js ? "Petra JS" : "Petra TS"), id, $2 }' \
-	js="$js" "$out/game.log")"
-errors="$(grep -c 'ERROR' "$out/game.log" || true)"
-replay="$(find "$replays" -mindepth 2 -maxdepth 2 -type d -newer "$out/match.txt" 2>/dev/null | sort | tail -n 1)"
-
+wall=$(($(date +%s) - $(date -r "$out/match.txt" +%s)))
 {
-	echo "ended $(date '+%Y-%m-%d %H:%M:%S'), game exit status $status"
-	echo "result: ${result:-undecided (the game was closed before one bot defeated the other)}"
-	echo "lines with ERROR in game.log: $errors"
-	echo "replay: ${replay:-none found}"
+	echo "ended $(date '+%Y-%m-%d %H:%M:%S') after $((wall / 60))m$((wall % 60))s, game exit status $status"
+	node "$repo/build/petra_ts/match-report.ts" "$out" "$js"
 } | tee -a "$out/match.txt"
 echo "logs: $out"

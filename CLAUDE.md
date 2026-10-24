@@ -63,8 +63,14 @@ headless) builds the bot and starts an observed conquest match, Petra JS
 (blue, `petra`) against Petra TS (red, `petra_out`); it needs the engine
 built from this repo. Each match is recorded in `build/petra_ts/matches/<time>/`
 (`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
-command, result, replay path), `game.log` (stdout/stderr: script errors and
-the end-of-game statistics), and the engine's `mainlog.html`/`interestinglog.html`.
+commit SHA, command, a line to rerun it; then the result, a statistics table,
+the distinct errors/warnings, the replay path and a fingerprint, written by
+`build/petra_ts/match-report.ts`), `statistics.json`, `game.log` (stdout/stderr:
+script errors and the end-of-game statistics), `uncommitted.diff` if the tree
+was dirty, `timeline.txt` with `-t`, and the engine's `mainlog.html`/`interestinglog.html`.
+Matches are deterministic: an explicit `-autostart-seed` also picks the
+settings the game setup leaves random (biome, placement, ...), so the same
+seeds and code replay the same game and print the same fingerprint.
 After a port change, a headless match (`-n`) is a quick smoke test: the unit
 tests once missed a `requireValue` that threw every turn in a real game.
 The names and colors use autostart options added on this branch
