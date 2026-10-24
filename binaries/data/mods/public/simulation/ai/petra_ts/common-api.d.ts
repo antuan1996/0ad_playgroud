@@ -930,7 +930,7 @@ declare module "simulation/ai/common-api/entity.js"
  * overloads: the typed ones exist for the paths where a return type is
  * statically known; the generic overload returns whatever the template holds.
  */
-		get(path: "Cost/Population"): number | undefined;
+		get(path: "Cost/Population"): string | undefined;
 		get(path: "UnitAI/DefaultStance"): string | undefined;
 		get(path: "ResourceSupply/Type"): string | undefined;
 /** Bonus modifiers of the attack type's bonus list (Civ/Classes filters with Multiplier). */

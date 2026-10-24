@@ -2663,8 +2663,9 @@ describe("the headcount and the workforce: the queues' living tally", () =>
 	it("the queued batches join their population to the town's headcount", () =>
 	{
 		const { world, hq } = seat({ "population": 10 });
+		// the engine hands template leaves over as strings (parsed XML)
 		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
-			{ "classes": ["Unit", "Infantry"], "getPaths": { "Cost": { "Population": 2 } } });
+			{ "classes": ["Unit", "Infantry"], "getPaths": { "Cost": { "Population": "2" } } });
 		trainingHouse(world, 1120, [{ "unitTemplate": "units/athen/infantry_spearman", "count": 3 }]);
 
 		assert.equal(hq.getAccountedPopulation(world.gameState), 16,

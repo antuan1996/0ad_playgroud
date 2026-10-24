@@ -2338,8 +2338,9 @@ export class Headquarters
 					const unitTemplate = gameState.getTemplate(item.unitTemplate);
 					if (!unitTemplate)
 						continue;
-					const unitPop = unitTemplate.get("Cost/Population");
-					if (typeof unitPop === "number")
+					// template leaves are strings (parsed XML)
+					const unitPop = Number(unitTemplate.get("Cost/Population"));
+					if (unitPop)
 						pop += item.count * unitPop;
 				}
 			}

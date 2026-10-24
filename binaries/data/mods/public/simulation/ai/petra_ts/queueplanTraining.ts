@@ -19,7 +19,7 @@ export class TrainingPlan extends QueuePlan
 		const template = this.template;
 		const trainers = this.getBestTrainers(gameState);
 		const trainer = trainers ? trainers[0] : undefined;
-		this.cost = new ResourcesManager(template.cost(trainer), (template.get("Cost/Population") ?? NaN));
+		this.cost = new ResourcesManager(template.cost(trainer), Number(template.get("Cost/Population")));
 
 		this.category = "unit";
 		this.number = number;
@@ -32,7 +32,7 @@ export class TrainingPlan extends QueuePlan
 		if (!this.trainers)
 			return false;
 		const template = this.template;
-		this.cost = new ResourcesManager(template.cost(this.trainers[0]), (template.get("Cost/Population") ?? NaN));
+		this.cost = new ResourcesManager(template.cost(this.trainers[0]), Number(template.get("Cost/Population")));
 		return true;
 	}
 
