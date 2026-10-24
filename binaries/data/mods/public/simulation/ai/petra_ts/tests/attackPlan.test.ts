@@ -1603,20 +1603,6 @@ describe("obstructions along the path", () =>
 		assert.equal(plan.getPathToTarget(world.gameState), false, "no path across water");
 		assert.ok(plan.path === undefined || plan.path.length === 0, "nothing was built");
 	});
-
-	// only the port passes: it guards getPathToTarget's missing target
-	// (the original dereferences target and targetPos unguarded and throws)
-	it("needs a target and its position", () =>
-	{
-		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
-		assert.equal(plan.getPathToTarget(world.gameState), false, "no target, no path");
-
-		const target = makeTarget(world, {}, 2005);
-		plan.target = target;
-		plan.targetPos = undefined;
-		assert.equal(plan.getPathToTarget(world.gameState), false, "no position, no path");
-	});
 });
 
 describe("starting the attack", () =>
@@ -2213,15 +2199,27 @@ describe("chasing a target during execution", () =>
 
 describe("wrapping up a plan", () =>
 {
-	// only the port passes: it guards Abort's missing position (the
-	// original would unregister the unit collection on undefined)
-	it("keeps the queues if the plan has never moved", () =>
+	// the army is at sea, so it has no position (getCentrePosition finds no
+	// unit with one), when the attack manager aborts it because its target
+	// player was defeated: the troops are still released and the queues go
+	it("releases an army aboard ships, with no place to withdraw to", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "transporting";
 		plan.position = undefined;
+		const sailor = world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, {}, { "plan": 1, "role": "attack", "transport": 3 }));
+		plan.unitCollection.updateEnt(sailor);
+		const marches: unknown[] = [];
+		sailor.moveToRange = (x: unknown) => marches.push(x);
+
 		plan.Abort(world.gameState);
-		assert.ok(world.ai.queues["plan_1"], "the queue stayed for other plans");
+		assert.deepEqual(marches, [], "no withdrawal march from the ship");
+		assert.equal(sailor.getMetadata(PLAYER, "plan"), -1, "the sailor left the plan");
+		assert.equal(sailor.getMetadata(PLAYER, "role"), "worker", "and went back to work");
+		assert.equal(world.ai.queues["plan_1"], undefined, "the queues went away");
 	});
 
 	it("withdraws the troops to the nearest anchor", () =>
@@ -2277,10 +2275,18 @@ describe("wrapping up a plan", () =>
 		plan.position = [40, 45];
 
 		assert.equal(plan.getAttackAccess(world.gameState), 3, "the island the troops stand on");
-			plan.position = undefined;
-		// only the port passes: it guards getAttackAccess's missing position
-		// (the original SquareVectorDistance would dereference undefined)
-		assert.equal(plan.getAttackAccess(world.gameState), -1, "no position, no access");
+	});
+
+	it("reads no access for an army with no unit ashore", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, classes: ["Unit", "Melee"]
+		}, {}, { "plan": 1, "transport": 3 }));
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.position = undefined;
+
+		assert.equal(plan.getAttackAccess(world.gameState), 0, "no unit ashore, no land");
 	});
 
 	it("reports the marching numbers for debugging", () =>
@@ -2320,12 +2326,6 @@ describe("wrapping up a plan", () =>
 		assert.deepEqual(revived.targetPos, [30, 40], "at its place");
 		assert.deepEqual(revived.failed, undefined, "a fresh failure record");
 		assert.equal(revived.type, "Attack", "the plan type came back too");
-
-		// only the port passes: bogus targets are refused (the original
-		// would store an undefined target for them)
-		const corrupt = { "properties": { ...data.properties, "target": "bogus" } };
-		assert.throws(() => revived.Deserialize(world.gameState, corrupt as never), TypeError,
-			"bogus targets are refused");
 	});
 });
 
@@ -2576,23 +2576,6 @@ describe("attacking miscellany", () =>
 		});
 		assert.equal(plan.target, house, "the house nearer to the fighters was chosen");
 		assert.deepEqual(plan.targetPos, [25, 25], "at the house");
-	});
-
-	it("quits as soon as the target loses its place", () =>
-	{
-		const world = makeWorld();
-		const civilian = makeTarget(world);
-		world.addEntity(makeEntity({
-			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
-		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: civilian } });
-		plan.state = "";
-		plan.targetPos = undefined;
-
-		// only the port passes: it bails out of UpdateTarget when a living
-		// target has no position; the original would march on with targetPos
-		// undefined and hand NaN coordinates to its next orders
-		assert.equal(plan.update(world.gameState, emptyEvents()), false, "the update bailed out");
 	});
 
 	it("picks up a fresh enemy after its target player went missing", () =>
@@ -3258,10 +3241,10 @@ describe("directing the swarm", () =>
 			sweeps.push([x, y, classes]);
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the hunter is kept");
-		// only the port passes: approach-hunters with a weapon at range get an
-		// explicit empty avoid list here; the original leaves it undefined
-		assert.deepEqual((sweeps[0][2] as { avoid: string[] }).avoid, [],
-			"the ranged hunter needed no avoid list");
+		// the port sends an empty avoid list, the original none: UnitAI reads
+		// both alike (it checks `targetClasses.avoid &&` before matching)
+		const avoid = (sweeps[0][2] as { avoid?: string[] }).avoid;
+		assert.ok(avoid === undefined || avoid.length === 0, "the ranged hunter needed no avoid list");
 	});
 
 	it("lets a fleeing farmer slip past its hunter", () =>

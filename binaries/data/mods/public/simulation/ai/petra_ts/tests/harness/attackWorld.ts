@@ -709,8 +709,10 @@ const { QueueManager } = await loadPetraModule<{
 }>("queueManager");
 
 const EntityCollection = (await loadCommonModule<{
-	EntityCollection: new (sharedAI: CommonSharedScript, entities?: Map<number, FakeEnt>) => FakeCollection;
+	EntityCollection: new (sharedAI: CommonSharedScript, entities?: Map<number, FakeEnt>, filters?: unknown[]) => FakeCollection;
 }>("entitycollection")).EntityCollection;
+
+const { byClass } = await loadCommonModule<{ byClass: (cls: string) => unknown }>("filters");
 
 /** Build the Map a real EntityCollection expects. */
 export function mapOf(items: FakeEnt[]): Map<number, FakeEnt>
@@ -972,8 +974,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		getEntities: (owner?: number) => new EntityCollection(
 			sharedAI as unknown as CommonSharedScript,
 			mapOf([...ents.values()].filter((e) => owner === undefined || e.owner() === owner))),
+		// as GameState.prototype.getOwnUnits/getOwnStructures, the collections
+		// carry their class filter, so a later .filter() keeps it and updateEnt
+		// never lets a structure into a units collection (or the reverse)
 		getOwnUnits: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
-			mapOf(units.filter((u) => u.owner() === PLAYER))),
+			mapOf(units.filter((u) => u.owner() === PLAYER)), [byClass("Unit")]),
 		getOwnEntities: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
 			mapOf([...units, ...structures.filter((s) => s.owner() === PLAYER)])),
 		// as GameState.prototype.getEnemyStructures: with no owner, the
@@ -987,7 +992,7 @@ export function makeWorld(options: WorldOptions = {}): World
 			mapOf([...ents.values()].filter((e) =>
 				(state.playerData as { isEnemy: boolean[] }).isEnemy[e.owner()]))),
 		getOwnStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript,
-			mapOf(structures.filter((s) => s.owner() === PLAYER))),
+			mapOf(structures.filter((s) => s.owner() === PLAYER)), [byClass("Structure")]),
 		getEnemyUnits: (owner?: number) => unitsOf(owner),
 		getStructures: () => new EntityCollection(sharedAI as unknown as CommonSharedScript, mapOf(structures)),
 		getOwnEntitiesByRole: (role: string | undefined) =>

@@ -89,7 +89,7 @@ untested branches.
   Check new tests actually reach the branch they name (run `coverage:petra --file`).
 - Every test runs on both targets. A test only the port passes carries a
   `// only the port passes: ...` comment explaining the original's bug; the
-  original currently fails exactly 24 tests, all of that kind.
+  original currently fails exactly 16 tests, all of that kind.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

@@ -332,26 +332,6 @@ describe("Queue", () =>
 		assert.equal(queue.getNext(), keeper);
 	});
 
-	// The reference takes its plan by shifting and then reads queueToReset off
-	// the shift result, so a queue emptied during isInvalid makes check throw
-	// on an undefined plan; the port captures the head before removing it, so
-	// the plan it just judged is also the one whose queueToReset hands the
-	// priority back.
-	it("keeps walking when the queue emptied itself mid-check", () =>
-	{
-		const { gameState } = makeFakeGameState();
-		const queue = new Queue();
-		queue.addPlan(makePlan({ type: "self-clearing", isInvalid: () =>
-		{
-			queue.empty();
-			return true;
-		} }));
-
-		queue.check(gameState);
-
-		assert.equal(queue.length(), 0, "the queue emptied itself and nothing was left to take");
-	});
-
 	it("serializes its plans and its flags", () =>
 	{
 		const queue = new Queue();

@@ -5,40 +5,37 @@ with the original `petra/*.js`: bugs, differences between port and original,
 behaviour both share that looks unintended, code that cannot run, and the
 branches no test reaches yet.
 
-State: commit `57de78722b` (branch `petra_behaviour_tests`). Line numbers
-refer to the port's files at that commit unless marked `petra/…js`.
+State: branch `petra_behaviour_tests`, 2026-10-24, after the review of the
+port-only tests (§9). Line numbers refer to the port's files at that point
+unless marked `petra/…js`.
 Coverage is the real figure from `npm run coverage:petra` (see README).
 
 | | Port | Original |
 |---|---|---|
-| Tests | 1526, all pass | 1525, 24 fail (all listed below) |
+| Tests | 1525, all pass | 1524, 16 fail (all listed below) |
 | Real line coverage | 95.6% | ≈95% |
 
 ---
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (24 tests in all; the
-original fails exactly these).
+Each is pinned by a test that only the port passes (16 tests in all; the
+original fails exactly these). Each row says whether a game can reach it.
 
 | Where | Original behaviour | Port | Test |
 |---|---|---|---|
 | `diplomacyManager` last-man-standing | uses `filters` without importing it: **ReferenceError** in every wonder or relic game; even with the import, reads a collection's `[0]`, which an EntityCollection never answers | imports and reads correctly | diplomacyManager: wonder game, relic game |
-| `victoryManager.captureGaiaRelic` | adds `captureStrength() × bonus` for every unit; a unit that cannot capture gives `undefined` → total **NaN** → every comparison false → the "already enough" exit never fires and the AI sends every nearby capturer each time | skips units with no capture strength | victoryManager suite |
+| `victoryManager.captureGaiaRelic` | adds `captureStrength() × bonus` for every unit; a unit that cannot capture gives `undefined` → total **NaN** → every comparison false → the "already enough" exit never fires and the AI sends every nearby capturer each time | skips units with no capture strength | victoryManager: "a ram in a raid strong enough does not make it look weak" |
 | `navalManager` waiting passages | sorts with a one-argument comparator, which orders nothing | joins the passage with the fewest units | navalManager: "joins the emptier of two passages" |
 | `transportPlan` reloading failed | destroys the unit wherever it stands, though its comment says it keeps it on a land we use | keeps it there and cancels the garrison order | transportPlan: "a unit that could not be taken back aboard…" |
 | `baseManager.removeSupply` | guarded by `supply[i].ent`, a field nothing writes: removing one dropsite wipes **every** dropsite's supply book | removes only that dropsite's entries | baseManager: "a storehouse destroyed leaves the other dropsites' books untouched" |
-| `garrisonManager` cancel | reads the booking after releasing it, so the ledger strike is dead and a cancelled marcher stays on the holder's list for good | reads first, strikes it | garrisonManager: "strikes the cancelled marcher…" |
+| `garrisonManager` cancel | reads the booking after releasing it, so the ledger strike is dead; the cancelled marcher stays on the holder's list until the next garrison update drops it (one turn of over-counting, plus a debug warning) | reads first, strikes it | garrisonManager: "strikes the cancelled marcher…" |
 | `attackPlan` walls | `filters.byClass(["Palisade","Wall"])` never matches an array: walls are never found | `byClasses` | attackPlan: wall-breaking crew (4 tests) |
 | `worker` supply check | treats the dropsite UnitAI walks to as an unbooked supply; a woodcutter carrying its load home is idled when every booked tree is crowded | leaves the order alone while UnitAI targets a dropsite | worker: "a woodcutter carrying its load home…" |
-| `queue.check` | shifts the plan, then reads `queueToReset` off the shift result: throws when the queue emptied itself during `isInvalid` | captures the head first | queue: "keeps walking when the queue emptied itself mid-check" |
-| `attackManager` launch chat | announces an attack against "undefined" when the aim is unknown | skips the announcement | attackManager |
-| `attackManager` defenders | dereferences a unit that left the world mid-drain and throws | skips it | attackManager: "enlists only joinable defenders" |
-| `basesManager` TrainingFinished | dereferences a missing base for a worker whose plan has no ground yet | leaves it for next turn | basesManager |
-| `basesManager`/`baseManager` dock outside any town | dereferences the missing best base and throws | leaves the dock out and notes it | baseManager: "a dock built outside any town…" |
+| `basesManager` TrainingFinished | dereferences a missing base for a worker whose plan has no ground yet. Practically unreachable: only construction plans use base -1 and bases are never removed | leaves it for next turn | basesManager |
 | `queueplanBuilding.buildOverseaDock` | with the last dock builder dead, calls construct on no builder and throws, the plan keeping the dock template | restores the civic-centre plan | queueplanBuilding |
-| `worker` gatherer plan lookup | reads `.state` off a missing transport plan | guarded as the builder's lookup already is | worker: "a gatherer whose boat is gone…" |
-| `attackPlan` misc guards | `getPathToTarget`, `Abort`, `getAttackAccess`, `UpdateTarget` dereference a missing target/position; `Deserialize` stores an undefined target for a bogus id | guarded / refused | attackPlan (6 tests) |
+| `worker` gatherer plan lookup | reads `.state` off a missing transport plan. Unreachable: the naval manager clears `transport` before dropping a plan; kept as a guard matching the builder's | guarded as the builder's lookup already is | worker: "a gatherer whose boat is gone…" |
+| `attackManager` defenders | reads the unit before its own `if (unit && …)` check | checks first | attackManager: "enlists only joinable defenders" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -48,6 +45,9 @@ original fails exactly these).
 | `headquarters.getAccountedPopulation`, `queueplanTraining` | used the template's `Cost/Population` string unconverted: units in training did not count | `Number(…)` |
 | `researchManager.CostSum` | a tech with no cost got no priority (original: cost 0, cheap) | aligned with the original |
 | `mapModule.createObstructionMap` | a template without BuildRestrictions fell back to own/ally/neutral (original: no territory) | aligned with the original (`=== true`) |
+| `attackPlan.Abort` | returned at once when the army had no position, i.e. when all its units are aboard ships: an attack aborted at sea (target player defeated, relic raid called off) left its units with `role: attack`/`plan: N` for good, its collections registered and its queues alive | no early return; only the withdrawal rally point needs a position |
+| `attackPlan.Deserialize` | threw on a saved target that is not a number (the original restores no target and re-targets) | aligned with the original |
+| `attackPlan.update` | aborted the whole attack (and skipped `Engine.ProfileStop`) if `UpdateTarget` left no target or position, which it cannot | `requireValue` |
 
 ## 3. Remaining differences between port and original
 
@@ -56,7 +56,8 @@ All are harmless or never reached in a game; kept on purpose.
 - `tradeManager.updateTrader`: the port only asks a passage when `route.land !== undefined`. A land trader only ever gets routes with a land (`checkRoutes(gs, access)`), so equivalent; the check is needed for the types.
 - `_petrabot`: the port keeps the 21 event buckets fixed, so a save also carries `AIMetadata: []`. Loading ignores it.
 - `garrisonManager.keepGarrisoned`: answers `false` where the original answers `0` (the holder's heal rate). Callers only test truthiness.
-- `attackPlan`: a ranged hunter approaching gets an explicit empty avoid list; the original leaves it undefined.
+- `attackPlan`: a ranged hunter approaching gets an explicit empty avoid list; the original leaves it undefined. UnitAI checks `targetClasses.avoid &&` first, so both behave alike.
+- `queue.check`: the port reads the head before shifting it, the original reads the shift result. Same in a game: no `isInvalid` has side effects.
 - `attackPlan.reassignFastUnit`: the port returns when no raid is in preparation; the original would crash, but its only caller requires a raid, so unreachable.
 - Many port-added `=== undefined` checks needed by the types (listed under §5).
 
@@ -156,3 +157,16 @@ Harness answers that differed from the common-api:
 - `makeTemplate.resistanceStrengths` returned a flat map instead of `{ Damage: {…} }`: armour was never weighed for test templates.
 - the attack world's `getEnemyStructures()` without an owner returned our own buildings too.
 - the HQ world's `getEnemyStructures(owner)` ignored `owner`; `getOwnEntities`/`getOwnEntitiesByClass` left out units.
+- the attack world's `getOwnUnits()`/`getOwnStructures()` had no class filter, so `.filter(byMetadata(…))` collections let a dock into a base's `units`. The original then threw in the baseless pool's units loop ("a dock built outside any town…"), which a game cannot do. With the filters that test passes on both.
+
+## 9. Review of the port-only tests (2026-10-24)
+
+Of the 24 tests the original used to fail, eight pinned port guards a game
+cannot reach, or a port bug:
+
+- removed, the port's guard replaced by `requireValue`: `getPathToTarget` with no target, `update` with no target position, the launch chat with no target player (`StartAttack` succeeding guarantees one), the baseless pool's units loop;
+- removed: `queue.check` on a queue that empties itself (equivalent, see §3), `Deserialize` refusing a bogus target (now aligned with the original);
+- rewritten: "keeps the queues if the plan has never moved" pinned the `Abort` regression (§2); it is now "releases an army aboard ships, with no place to withdraw to". `getAttackAccess` with no position returns 0 like the original, tested with an army all aboard;
+- made target-neutral: the ranged hunter's avoid list (§3); the dock outside any town (§8).
+
+One test was added: the `captureGaiaRelic` NaN (§1), which had none.

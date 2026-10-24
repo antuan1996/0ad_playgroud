@@ -652,6 +652,24 @@ describe("the relic game: raids on gaia relics", () =>
 		assert.deepEqual(busy.forced, []);
 	});
 
+	// only the port passes: the original adds captureStrength() for every unit
+	// of the raid, and a ram's is undefined, so the total is NaN, the "already
+	// enough" exit never fires and every nearby capturer is sent again
+	it("a ram in a raid strong enough does not make it look weak", () =>
+	{
+		const { world, hq, manager, units, forced } = relicGame([60, 60]);
+		const ram = unit(world, 1410, ["Siege", "Ram"], [100, 110], { "plan": 5 }, {
+			"canCapture": () => false, "captureStrength": () => undefined, "get": () => undefined
+		});
+		hq.attackManager.getPlan = (id: number) => id === 5 ?
+			{ "unitCollection": { "values": () => [...units.map((u) => u.ent), ram.ent] }, "state": "arrived", "type": "Raid" } : undefined;
+		manager.targetedGaiaRelics.set(701, [5]);
+		(manager_relic(world) as unknown as { capturePoints: () => number[] }).capturePoints = () => [200, 0, 0];
+
+		manager.captureGaiaRelic(world.gameState, manager_relic(world));
+		assert.deepEqual(forced, [], "the three capturers alone are enough");
+	});
+
 	it("a raid on a relic no longer gaia's is called off; a raid still needed is reinforced", () =>
 	{
 		const { world, hq, manager } = relicGame([60, 60]);

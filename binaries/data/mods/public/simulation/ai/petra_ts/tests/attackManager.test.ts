@@ -737,27 +737,15 @@ describe("attack manager", () =>
 			assert.equal(manager.upcomingAttacks["Attack"].length, 0, "and left the preparation roster");
 		});
 
-	// only the port passes: it guards the launch chat with "targetPlayer !== undefined"
-	// (the original announces an attack against "%(_player_)s undefined")
-	it("skips the announcement when the aim is unknown or chatter is off", () =>
+	it("skips the announcement when chatter is off", () =>
 		{
 			resetRecorder();
-			{
-				const world = makeWorld({ debug: 1 });
-				const manager = makeManager(world, worldConfig(world));
-				manager.upcomingAttacks["Attack"].push(planStub({ name: 3, preparation: START }));
-				manager.update(world.gameState, undefined as never, emptyEvents());
-				assert.deepEqual(chatMessages(), [], "no aim, no announcement");
-				assert.equal(manager.startedAttacks["Attack"].length, 1, "but the plan still marched");
-			}
-			{
-				const world = makeWorld({ debug: 1 });
-				const manager = makeManager(world, worldConfig(world, { "chat": false }));
-				manager.upcomingAttacks["Attack"].push(planStub({ name: 3, preparation: START, targetPlayer: ENEMY }));
-				manager.update(world.gameState, undefined as never, emptyEvents());
-				assert.deepEqual(chatMessages(), [], "chatter off, no announcement");
-				assert.equal(manager.startedAttacks["Attack"].length, 1, "but the plan still marched");
-			}
+			const world = makeWorld({ debug: 1 });
+			const manager = makeManager(world, worldConfig(world, { "chat": false }));
+			manager.upcomingAttacks["Attack"].push(planStub({ name: 3, preparation: START, targetPlayer: ENEMY }));
+			manager.update(world.gameState, undefined as never, emptyEvents());
+			assert.deepEqual(chatMessages(), [], "chatter off, no announcement");
+			assert.equal(manager.startedAttacks["Attack"].length, 1, "but the plan still marched");
 		});
 
 		it("aborts an attack whose start attempt failed", () =>
