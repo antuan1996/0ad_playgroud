@@ -15,6 +15,9 @@ Autostart:
 -autostart-player=NUMBER        sets the playerID in non-networked games (default 1, use -1 for observer)
 -autostart-civ=PLAYER:CIV       sets PLAYER's civilisation to CIV (skirmish and random maps only). Use random for a random civ.
 -autostart-team=PLAYER:TEAM     sets the team for PLAYER (e.g. 2:2).
+-autostart-name=PLAYER:NAME     sets the in-game name of PLAYER (e.g. "2:Petra TS")
+-autostart-color=PLAYER:R,G,B   sets the color of PLAYER, or the closest one available (e.g. 2:230,10,10)
+-autostart-script=SCRIPT        adds the trigger SCRIPT located in maps/ (e.g. scripts/NonVisualTrigger.js)
 -autostart-ceasefire=NUM        sets a ceasefire duration NUM (default 0 minutes)
 -autostart-nonvisual            disable any graphics and sounds
 -autostart-visibility=TYPE      sets the map visibility (explored, hidden, revealed, allied, allied-explored)

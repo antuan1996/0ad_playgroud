@@ -55,13 +55,21 @@ setup's AI list breaks on one without a `name`.
 rewrites the output's relative imports to VFS paths
 (`simulation/ai/petra_out/x.js`: the engine's module loader does not resolve
 `./x.js`) and writes `data.json` ("Petra TS", constructor `PetraBot`). In game
-the bot id is `petra_out`, e.g. an observed match against the original
-(needs the engine built from this repo):
-```sh
-binaries/system/pyrogenesis -autostart="random/mainland" -autostart-seed=-1 -autostart-players=2 \
-  -autostart-civ=1:athen -autostart-civ=2:athen -autostart-ai=1:petra -autostart-ai=2:petra_out \
-  -autostart-aidiff=1:5 -autostart-aidiff=2:5 -autostart-player=-1
-```
+the bot id is `petra_out`.
+
+`npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
+options: map, seeds, difficulty, civ, `-x` swap slots, `-v` speed, `-n`
+headless) builds the bot and starts an observed conquest match, Petra JS
+(blue, `petra`) against Petra TS (red, `petra_out`); it needs the engine
+built from this repo. Each match is recorded in `build/petra_ts/matches/<time>/`
+(`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
+command, result, replay path), `game.log` (stdout/stderr: script errors and
+the end-of-game statistics), and the engine's `mainlog.html`/`interestinglog.html`.
+After a port change, a headless match (`-n`) is a quick smoke test: the unit
+tests once missed a `requireValue` that threw every turn in a real game.
+The names and colors use autostart options added on this branch
+(`-autostart-name`, `-autostart-color`, `-autostart-script`; see
+`autostart/cmd_line_args.js`).
 
 ## Petra architecture (`simulation/ai/`)
 

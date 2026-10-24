@@ -111,3 +111,4 @@ Thumbs.db
 # Petra AI: the TypeScript port's transpiled output
 binaries/data/mods/public/simulation/ai/petra_out
 binaries/data/mods/public/simulation/ai/petra_generated
+build/petra_ts/matches

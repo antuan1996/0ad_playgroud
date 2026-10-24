@@ -14,6 +14,8 @@
  * -autostart-civ=PLAYER:CIV       sets PLAYER's civilisation to CIV (skirmish and random maps only).
  *                                 Use random for a random civ.
  * -autostart-team=PLAYER:TEAM     sets the team for PLAYER (e.g. 2:2).
+ * -autostart-name=PLAYER:NAME     sets the in-game name of PLAYER (e.g. "2:Petra TS")
+ * -autostart-color=PLAYER:R,G,B   sets the color of PLAYER, or the closest one available (e.g. 2:230,10,10)
  * -autostart-ceasefire=NUM        sets a ceasefire duration NUM
  *                                 (default 0 minutes)
  * -autostart-victory=SCRIPTNAME   sets the victory conditions with SCRIPTNAME
@@ -29,6 +31,8 @@
  * -autostart-visibility=TYPE      sets the map visibility (explored, hidden, revealed, allied, allied-explored)
  * -autostart-speed=SPEED          sets the sim rate speed (default 1, max 2 in normal mode, 20 in observer mode)
  *
+ * -autostart-script=SCRIPT        adds the trigger SCRIPT located in maps/ (e.g. scripts/NonVisualTrigger.js,
+ *                                 which prints every player's statistics when the game ends)
  * -autostart-nonvisual            (partly handled in C++) disable any graphics and sounds
  * -autostart-disable-replay       disable saving of replays (handled in autostart*.js files)
  * -autostart-player=NUMBER        sets the playerID in non-networked games (default 1, use -1 for observer)
@@ -150,6 +154,16 @@ function parseCmdLineArgs(settings, cmdLineArgs)
 		if (team)
 			settings.playerTeam.setValue(i - 1, team - 1);
 
+		const name = getPlayer("name", i);
+		if (name)
+			settings.playerName.values[i - 1] = name;
+
+		const color = getPlayer("color", i)?.split(",").map(Number);
+		if (color?.length == 3 && color.every(c => Number.isInteger(c) && c >= 0 && c <= 255))
+			settings.playerColor.setColor(i - 1, { "r": color[0], "g": color[1], "b": color[2] });
+		else if (color)
+			warn("Unknown argument for option 'autostart-color': " + getPlayer("color", i));
+
 		const ai = getPlayer("ai", i);
 		if (ai)
 			settings.playerAI.set(i - 1, {
@@ -174,6 +188,10 @@ function parseCmdLineArgs(settings, cmdLineArgs)
 
 	if ('autostart-nonvisual' in cmdLineArgs && cmdLineArgs['autostart-nonvisual'] !== "false")
 		settings.triggerScripts.customScripts.add("scripts/NonVisualTrigger.js");
+
+	const scripts = cmdLineArgs['autostart-script'];
+	for (const script of Array.isArray(scripts) ? scripts : scripts ? [scripts] : [])
+		settings.triggerScripts.customScripts.add(script);
 
 	const victoryConditions = cmdLineArgs["autostart-victory"];
 	if (Array.isArray(victoryConditions))

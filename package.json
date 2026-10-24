@@ -13,6 +13,7 @@
 		"lint:fix": "eslint --fix",
 		"build:petra": "tsc -p build/petra_ts/tsconfig.json",
 		"build:petra:out": "node build/petra_ts/prepare-bot.ts clean && tsc -p build/petra_ts/tsconfig.build.json && node build/petra_ts/prepare-bot.ts",
+		"match:petra": "build/petra_ts/match.sh",
 		"test:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts",
 		"test:petra:ref": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts ref",
 		"test:petra:out": "npm run build:petra:out && node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts out",
