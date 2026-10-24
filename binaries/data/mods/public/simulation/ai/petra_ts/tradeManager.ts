@@ -161,7 +161,7 @@ export class TradeManager
 	updateTrader(gameState: CommonGameState, ent: CommonEntity): void
 	{
 		if (ent.hasClass("Ship") && gameState.ai.playedTurn % 5 == 0 &&
-			requireValue(ent.unitAIState()).startsWith("INDIVIDUAL.COLLECTTREASURE") &&
+			!requireValue(ent.unitAIState()).startsWith("INDIVIDUAL.COLLECTTREASURE") &&
 			gatherTreasure(gameState, ent, true))
 		{
 			return;
