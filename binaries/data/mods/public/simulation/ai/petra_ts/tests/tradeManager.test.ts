@@ -234,6 +234,25 @@ describe("the best trade route: checkRoutes", () =>
 		assert.equal((manager.checkRoutes(world.gameState, 3) as Route).land, 2, "land 3 has no route of its own");
 		assert.equal(manager.checkRoutes(world.gameState, 5), false, "a sea with no route");
 	});
+
+	it("among several markets the farthest pair wins, whatever order they were built in; markets on two lands make no pair", () =>
+	{
+		const { world, manager } = seat({ "regionTypes": { 2: "land", 3: "land" } });
+		market(world, 400, [40, 40]);
+		market(world, 401, [280, 40]);
+		market(world, 402, [160, 40]);
+		// a market on another land, across the water
+		world.accessAt.set("40,200", 3);
+		market(world, 403, [40, 200]);
+
+		manager.checkRoutes(world.gameState);
+		assert.deepEqual([manager.tradeRoute?.source, manager.tradeRoute?.target], [400, 401]);
+		const land2 = manager.checkRoutes(world.gameState, 2) as Route;
+		assert.deepEqual([land2.source, land2.target], [400, 401]);
+		// land 3 has a single market: the best land route anywhere
+		const land3 = manager.checkRoutes(world.gameState, 3) as Route;
+		assert.deepEqual([land3.source, land3.target], [400, 401]);
+	});
 });
 
 describe("traders trained: trainMoreTraders", () =>
@@ -296,6 +315,33 @@ describe("traders trained: trainMoreTraders", () =>
 			[["units/athen/ship_merchant", { "role": "trader", "sea": 5 }]]);
 	});
 
+	it("a sea route with enough merchant ships, counting those being built, trains no more", () =>
+	{
+		const { world, manager, queues } = seat();
+		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "sea": 5 };
+		manager.targetNumTraders = 4;
+		for (let i = 0; i < 2; ++i)
+			manager.assignTrader(trader(world, 320 + i, [200, 200], { "ship": true }).ent);
+		world.addEntity(makeHqEntity({ "id": 451, "owner": PLAYER, "position": [40, 40], "classes": ["Structure", "Dock"] }, {
+			"trainingQueue": () => [{ "count": 2, "metadata": { "role": "trader", "sea": 5 } }]
+		}));
+		manager.trainMoreTraders(world.gameState, queues);
+		assert.equal(queues.trader.plans.length, 0);
+	});
+
+	it("a warship in the transport fleet is passed over; the merchant ship beside it is taken", () =>
+	{
+		const { world, hq, manager, queues } = seat();
+		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "sea": 5 };
+		const warship = world.addEntity(makeHqEntity({ "id": 312, "owner": PLAYER, "position": [200, 200], "classes": ["Unit", "Ship", "Warship"] }));
+		const merchant = world.addEntity(makeHqEntity({ "id": 313, "owner": PLAYER, "position": [200, 210], "classes": ["Unit", "Ship", "Trader"] }));
+		hq.navalManager.seaTransportShips = { 5: { "forEach": (f: (s: FakeEnt) => void) => [warship, merchant].forEach(f) } };
+		manager.trainMoreTraders(world.gameState, queues);
+		assert.equal(warship.getMetadata(PlayerID, "role"), undefined);
+		assert.equal(merchant.getMetadata(PlayerID, "role"), "trader");
+		assert.equal(queues.trader.plans.length, 0);
+	});
+
 	it("a civ without the trader card trains none", () =>
 	{
 		const { world, manager, queues } = seat({}, { "sea": true });
@@ -343,6 +389,19 @@ describe("a trader sent on its way: updateTrader", () =>
 
 		const call = doorCalls(hq.navalManager as never).find(([m]) => m === "requireTransport");
 		assert.deepEqual(call?.[1].slice(2), [3, 2, [280, 40]]);
+	});
+
+	it("a trader on another land nearer the first market asks for a passage to that one", () =>
+	{
+		const { world, hq, manager } = routed();
+		world.accessAt.set("60,200", 3);
+		(world.ai.accessibility as unknown as { regionType: Record<number, string> }).regionType[3] = "land";
+		const far = trader(world, 300, [60, 200]);
+
+		manager.updateTrader(world.gameState, far.ent);
+
+		const call = doorCalls(hq.navalManager as never).find(([m]) => m === "requireTransport");
+		assert.deepEqual(call?.[1].slice(2), [3, 2, [40, 40]]);
 	});
 
 	it("a busy trader, one waiting for a boat, or one with no route for its land is left be", () =>
@@ -412,6 +471,18 @@ describe("what traders carry and what the market barters", () =>
 		assert.deepEqual(of("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 0, "stone": 0, "metal": 100 });
 	});
 
+	it("a resource of which we hold 500 to 1000 is carried a little, and wants one more trader", () =>
+	{
+		const { world, hq, manager } = seat();
+		hq.getTotalResourceLevel = () => ({ "food": 5000, "wood": 700, "stone": 5000, "metal": 5000 });
+		hq.GetWantedGatherRates = () => ({ "food": 0, "wood": 0, "stone": 0, "metal": 0 });
+		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10 }, { "type": "food", "wanted": 0 }];
+		const base = hq.Config.Economy.targetNumTraders;
+		manager.setTradingGoods(world.gameState);
+		assert.deepEqual(of("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 10, "stone": 0, "metal": 90 });
+		assert.equal(manager.targetNumTraders, Math.round(hq.Config.popScaling * (base + 1)));
+	});
+
 	/** a market that barters, and what the town has, needs and gathers */
 	function barter(available: Record<string, number>, needs: Record<string, number>, prices = { "buy": {}, "sell": {} } as {
 		buy: Record<string, number>; sell: Record<string, number> })
@@ -458,6 +529,37 @@ describe("what traders carry and what the market barters", () =>
 		const { world, manager, done } = barter({ "food": 20000 }, { "metal": 300 }, { "buy": { "metal": 1500 }, "sell": {} });
 		assert.equal(manager.performBarter(world.gameState), true, "a rate of 7 is enough with 20000 food");
 		assert.deepEqual(done, [["metal", "food", 500]]);
+	});
+
+	it("with a huge food pile, food is sold at any rate; with a modest one, above a rate of 10", () =>
+	{
+		const huge = barter({ "food": 50000 }, { "metal": 300 }, { "buy": { "metal": 5000 }, "sell": {} });
+		assert.equal(huge.manager.performBarter(huge.world.gameState), true, "a rate of 2 with 50000 food");
+		assert.deepEqual(huge.done, [["metal", "food", 500]]);
+
+		const modest = barter({ "food": 2000 }, { "metal": 300 }, { "buy": { "metal": 800 }, "sell": {} });
+		assert.equal(modest.manager.performBarter(modest.world.gameState), true, "a rate of 13 with 2000 food");
+		assert.deepEqual(modest.done, [["metal", "food", 100]]);
+	});
+
+	it("a modest wood pile sells above a rate of 50, and 20 more to buy food", () =>
+	{
+		const stone = barter({ "wood": 2000 }, { "stone": 300 }, { "buy": { "stone": 180 }, "sell": {} });
+		assert.equal(stone.manager.performBarter(stone.world.gameState), true, "a rate of 56 over 50");
+
+		const food = barter({ "wood": 2000 }, { "food": 300 }, { "buy": { "food": 130 }, "sell": {} });
+		assert.equal(food.manager.performBarter(food.world.gameState), true, "a rate of 77 over 70");
+		assert.deepEqual(food.done, [["food", "wood", 100]]);
+		const dear = barter({ "wood": 2000 }, { "food": 300 }, { "buy": { "food": 150 }, "sell": {} });
+		assert.equal(dear.manager.performBarter(dear.world.gameState), false, "a rate of 67 under 70");
+	});
+
+	it("food to spare, but every price too poor: nothing is bought", () =>
+	{
+		const { world, manager, done } = barter({ "food": 3000, "wood": 6000, "stone": 6000, "metal": 6000 }, {},
+			{ "buy": { "wood": 200, "stone": 200, "metal": 200 }, "sell": {} });
+		assert.equal(manager.performBarter(world.gameState), false);
+		assert.deepEqual(done, []);
 	});
 
 	it("no market that barters, or little food, barters nothing", () =>
@@ -515,6 +617,16 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 			assert.equal(manager.routeProspection, true);
 			assert.equal(hq.buildManager.isUnbuildable(world.gameState, "structures/athen/market"), false);
 		}
+	});
+
+	it("a house upgraded is no market: the routes are left as they are", () =>
+	{
+		const { world, manager } = routed();
+		world.addEntity(makeHqEntity({ "id": 470, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "House"] }));
+		const a = trader(world, 300, [60, 40], { "metadata": { "route": { "source": 400, "target": 401 } } });
+		manager.assignTrader(a.ent);
+		assert.equal(manager.checkEvents(world.gameState, { ...emptyEvents(), "EntityRenamed": [{ "entity": 469, "newentity": 470 }] }), false);
+		assert.deepEqual(a.ent.getMetadata(PlayerID, "route"), { "source": 400, "target": 401 });
 	});
 
 	it("events about others' buildings change nothing", () =>
