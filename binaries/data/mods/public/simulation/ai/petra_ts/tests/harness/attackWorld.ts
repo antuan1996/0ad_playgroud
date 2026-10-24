@@ -674,8 +674,9 @@ export function makeTemplate(name: string, detail: {
 				{ "prepare": detail.attackTimes[type].prepare ?? 0,
 					"repeat": detail.attackTimes[type].repeat ?? 1000 } :
 				undefined,
-		// as common-api template.resistanceStrengths reads Resistance/Entity/Damage
-		resistanceStrengths: () => detail.resistanceStrengths ? { ...detail.resistanceStrengths } : undefined,
+		// as common-api template.resistanceStrengths reads Resistance/Entity: the
+		// damage resistances under its Damage key
+		resistanceStrengths: () => detail.resistanceStrengths ? { "Damage": { ...detail.resistanceStrengths } } : undefined,
 		maxHitpoints: () => detail.maxHitpoints ?? 100,
 		maxGatherers: () => detail.maxGatherers ?? 0,
 		// as the common-api Template.buildCategory (entity.js 479) reads
