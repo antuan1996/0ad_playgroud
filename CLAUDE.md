@@ -45,6 +45,9 @@ npm run test:petra                  # all tests against the port (petra_ts/*.ts)
 npm run test:petra -- ref           # same tests against the original petra/*.js
 npm run test:petra:out              # build the bot, then the same tests against petra_out/*.js
 npm run test:petra:match            # integration: a fixed headless mirror match in the game, checked for anomalies
+npm run build:petra:baselines       # the baseline bots petra_parity and petra_fixed (gitignored)
+npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
+npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
 npm run coverage:petra -- [src|ref|both] [--file <module>]   # real per-module coverage
 # one file / one test:
 PETRA_TARGET=src node --test binaries/data/mods/public/simulation/ai/petra_ts/tests/<name>.test.ts
@@ -69,13 +72,14 @@ the bot id is `petra_out`.
 `npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
 options: map, seeds, difficulty, civ, `-w` victory conditions (default
 conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` minutes a wonder or the relics must be
-held (default 20), `-o` the blue bot, `-x` swap slots,
+held (default 20), `-o` the blue bot, `-p` the red bot (each `petra_out`,
+`petra`, `petra_parity` or `petra_fixed`), `-x` swap slots, `-B` do not build,
 `-v` speed, `-n` headless, `-t` timeline, `-l` command log and notices, `-b`
 the bot's own state (both for debugging),
-`-k` how many match folders to keep, default 5) builds the bot and starts an
-observed match of Petra TS (red, `petra_out`) against itself, or with
-`-o petra` against the original, Petra JS (blue, `petra`); it needs the engine
-built from this repo. Petra TS against itself is the default: the original
+`-k` how many match folders to keep, default 5) builds the bots and starts an
+observed match of Petra TS (`petra_out`) against itself, or with
+`-o`/`-p` against the original, Petra JS (`petra`), or a baseline; it needs the
+engine built from this repo. Petra TS against itself is the default: the original
 loses most games to its `removeSupply` bug (`tests/FINDINGS.md` §10). Each match is recorded in `build/petra_ts/matches/<time>/`
 (`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
 commit SHA, a sha256 of the `petra_out` build, command, a line to rerun it;
@@ -113,6 +117,40 @@ the bot's internal structure changes with its code, so `-b` is for reading
 while debugging (a section of the dump that no longer fits the code prints as
 `{"error": ...}` rather than breaking the bot's turn). It does not assert the
 fingerprint, which any change to the bot moves; it prints it.
+Baselines (`PLAN.md` §2; `build/petra_ts/baselines.ts`, gitignored outputs):
+`petra_parity` ("Petra TS parity") is the port compiled from the tag
+`petra-ts-parity` (git archive of that tag's `petra_ts/` and tsconfigs, tsc,
+`prepare-bot.ts --bot=petra_parity`), so it stays fixed while `petra_ts`
+changes; `petra_fixed` ("Petra fixed") is `petra/*.js` with
+`upstream/petra-fixes.patch` applied and its imports pointed at
+`simulation/ai/petra_fixed/`. With the patch's 15 fixes the two play the same
+games command for command (stage 1, `FINDINGS.md` §14: a game with the slots
+swapped is the same game, the same command log).
+Parity tools: `node build/petra_ts/command-diff.ts <dir> <dir>` (where two
+command logs part, with context) or `<batch dir>` (each seed pair's two games
+from a `--slots both` batch played with `-- -l`; `batch.ts --pairs M/A,...`
+replays chosen seeds); `node build/petra_ts/baselines.ts hybrid <petra_hybrid_*
+id> <module>...` (`petra_fixed` with those modules from the port; the port's
+extra helper exports are appended); `node build/petra_ts/parity-bisect.ts
+--pair M/A --player P [--with m]` (plays the reference games to the end, then
+one hybrid per module to 2 minutes past the divergence, `match.sh -L`, and
+names the module whose hybrid plays as `petra_parity`; about 1.5 minutes).
+`match.sh -L MIN` is `-T` at game minute MIN (`-autostart-timelimit`, the
+`MatchTimeLimit` game setting read by `maps/scripts/MatchTimeLimit.js`).
+`build/petra_ts/batch.ts` (`--blue`, `--red`, `--games` seed pairs, `--slots
+one|both`, `--seed` of the pool, `--jobs`, `--twice N`, `--out`; header for
+the rest) builds the bots once, then runs `match.sh -n -T -B -r` per game,
+`--jobs` at a time, each job with its own `XDG_DATA_HOME`/`CONFIG`/`CACHE`/
+`STATE` under `build/petra_ts/workers/<job>/` (the engine's replays, logs,
+config and cache; checked per game), into `build/petra_ts/batches/<name>/`:
+`batch.txt`, `games/<n>/` (match records; replays are deleted, the rerun line
+replays), `results.jsonl`/`results.tsv` (one row per game, from each record's
+`result.json`, written by `match-report.ts`) and `summary.txt`
+(`batch-stats.ts`, also a CLI: win-rate over decided games with a 95% Wilson
+interval, an SPRT of 50% against `--h1` (0.55), slot advantage, seed pairs won
+from both slots, errors, game lengths, mean statistics, and determinism: games
+played twice by `--twice` must share a fingerprint). Time-limit games are
+draws, outside the win-rate. An existing `--out` resumes the batch.
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see
 `autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
@@ -170,7 +208,7 @@ untested branches.
   Check new tests actually reach the branch they name (run `coverage:petra --file`).
 - Every test runs on both targets. A test only the port passes carries a
   `// only the port passes: ...` comment explaining the original's bug; the
-  original currently fails exactly 16 tests, all of that kind.
+  original currently fails exactly 19 tests, all of that kind.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

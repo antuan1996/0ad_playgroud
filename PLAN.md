@@ -12,11 +12,14 @@ project are referenced to the files that hold them.
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
 | Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId` are plain `number` aliases; commands are a union by `type` |
-| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1529 tests on both targets; 95.6% real line coverage; the original fails 16, each a bug the port fixes |
+| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1532 tests on both targets; 95.6% real line coverage; the original fails 19, each a bug the port fixes |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
+| Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |
+| Parity tools | `command-diff.ts`, `parity-bisect.ts`, `baselines.ts hybrid` | Where two command logs part; which module makes a difference |
+| Batches | `build/petra_ts/batch.ts`, `batch-stats.ts` | Parallel headless games with isolated `XDG_*` folders; `results.tsv`; win-rate with Wilson CI, SPRT, slot advantage, determinism |
 | Integration test | `npm run test:petra:match` | One fixed mirror match, 13 anomaly checks on engine data only (`match-checks.ts`) |
-| Upstream notes | `build/petra_ts/upstream/` | A patch of 12 fixes for the original; shared quirks; a `Commands.js` bug |
+| Upstream notes | `build/petra_ts/upstream/` | A patch of 15 fixes for the original, with which it plays as the port (stage 1); shared quirks; a `Commands.js` bug |
 
 Known weaknesses, all shared with the original (`FINDINGS.md` §4, §11, §12):
 the first field waits for fruit to run low (starvation on fruit-rich maps); a
@@ -189,6 +192,13 @@ execution/  plans with typestates (3.1): turns decisions into commands,
   port's for the whole run compared (§10).
 - Target: identical command logs on a set of seeds (say 10, mainland, very
   hard), or every difference explained in `FINDINGS.md` §3.
+- **Done (stage 1, `FINDINGS.md` §14):** identical logs on 26 seed pairs from
+  both slots. Every difference found was a bug of the original the port had
+  fixed, now in the patch (15 fixes). Tools: `batch.ts -- -l` with
+  `--slots both`, `command-diff.ts <batch>` (each pair's two logs must be
+  the same), `parity-bisect.ts` (hybrids of `petra_fixed` with one port module
+  find the module that makes a difference). Rerun the batch when the patch or
+  the tag changes; a new difference is a stage-1 item again.
 
 ### 5.2 Every change
 
@@ -218,12 +228,16 @@ execution/  plans with typestates (3.1): turns decisions into commands,
   killed (and in value, `unitsLostValue`); peak and mean map control; idle
   workers (timeline); commands per minute (commands log). They explain a
   result; the win-rate decides.
-- **Throughput:** about 75 s per headless match today, run one at a time
-  because matches share the engine's log and replay paths. Give each run its
-  own `XDG_*` directories (the engine takes its data and log paths from them
-  on Linux; `match.sh` already reads them) and run N in parallel: at 8, about
-  1000 games in 2–3 hours. Results go to one table (seed, slot, bots,
-  result, decision time, metrics) for the statistics.
+- **Throughput:** `batch.ts` runs games in parallel, each job with its own
+  `XDG_*` folders: at 12 at a time, 50–60 s of wall time per game, about 100
+  games in 8 minutes (1000 games in under 1.5 hours). Results go to one table
+  (`results.tsv`: seeds, slot, bots, outcome, decision time, metrics).
+- **Slots:** player 2 wins more mirror games (42.2% for player 1, CI
+  35.6–49.0%, §13). Compare two bots only from both slots (`--slots both`,
+  the default for two bots), never from fixed ones.
+- **Crashes:** the engine aborts in about 1 game in 150 (a futex error, not
+  reproducible); `batch.ts` books it as failed and a resumed batch replays it.
+  If it gets more frequent with more jobs, look into the engine.
 
 ### 5.4 Property-based tests
 
@@ -243,8 +257,8 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 
 | Stage | Work | Exit criterion |
 |---|---|---|
-| 0. Baselines | Tag the port; build `petra_parity` and `petra_fixed` as bots; parallel headless runs (5.3); a results table | 100 mirror games of each baseline run in parallel without a path clash; `petra_parity` vs `petra_fixed` ~50% (no significant difference) |
-| 1. Parity proof | Command-log diffs on a seed set (5.1); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3 |
+| 0. Baselines (**done** 2026-10-25, `FINDINGS.md` §13) | Tag the port; build `petra_parity` and `petra_fixed` as bots; parallel headless runs (5.3); a results table | 100 mirror games of each baseline run in parallel without a path clash; `petra_parity` vs `petra_fixed` ~50% (no significant difference). Met: 315 games at 12 at a time, no clash, 15/15 repeats with the same fingerprint; 51.0% (CI 41.5–60.4%) |
+| 1. Parity proof (**done** 2026-10-25, `FINDINGS.md` §14) | Command-log diffs on a seed set (5.1), starting with the 6 seed pairs where the baselines differ (`FINDINGS.md` §13); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3. Met: identical in 26 of 26 pairs (52 games) once three more original bugs went into the patch |
 | 2. Types in place | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor) |
 | 3. Layers | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4) |
 | 4. Fix the known weaknesses | Withdrawal to a reachable point; idle workers re-homed to bases with resources; first field by food income, not fruit left; attacks that cannot fill are cancelled or merged; reconsider the town-phase population | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
@@ -259,8 +273,10 @@ original's or the game's (`build/petra_ts/upstream/`).
 
 - Reading the engine profiler in a headless run, or which clock the AI context
   offers for a debug-only timer (4).
-- Whether `XDG_*` per run is enough to isolate parallel engines (user config,
-  caches), or whether `-writableRoot` with separate copies is needed (5.3).
+- Answered in stage 0: `XDG_*` per run is enough to isolate parallel engines
+  (config, cache, replays and logs all follow it); `-writableRoot` is not
+  needed (5.3, `FINDINGS.md` §13).
+- Why player 2 wins more mirror games (5.3).
 - Which civilisations and maps make the pool, given the time per game.
 - Whether to keep testing against the original (`ref`) once the bot
   diverges, or only against `petra_parity` (2).

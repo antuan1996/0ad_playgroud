@@ -1,7 +1,9 @@
 #!/bin/bash
 # Watch the TypeScript port of Petra ("Petra TS", simulation/ai/petra_out) play
-# itself, or with -o petra the original ("Petra JS", simulation/ai/petra), in
-# the game, as an observer. Builds the port first, then records the match under
+# itself, or with -o/-p another bot: the original ("Petra JS",
+# simulation/ai/petra) or a baseline (baselines.ts: "Petra TS parity",
+# petra_parity; "Petra fixed", petra_fixed), in the game, as an observer.
+# Builds the bots first (not with -B), then records the match under
 # build/petra_ts/matches/<time>/ (and matches/latest):
 #   match.txt          who is who, the settings, the commit, a hash of the
 #                      Petra TS build, the command and how to rerun the match;
@@ -47,7 +49,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              simulation/data/settings/victory_conditions/ (default
              conquest; e.g. conquest,wonder,capture_the_relic)
   -W MINUTES how long a wonder or all relics must be held to win (default 20)
-  -o BOT     the blue bot: petra_out, Petra TS (default), or petra, Petra JS
+  -o BOT     the blue bot: petra_out, Petra TS (default); petra, Petra JS;
+             petra_parity, Petra TS parity; petra_fixed, Petra fixed
+  -p BOT     the red bot, the same choice (default petra_out), or a
+             petra_hybrid* bot of baselines.ts hybrid (never built here)
   -x         swap slots: the red bot plays player 1, the blue one player 2
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
@@ -58,14 +63,17 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              roles, base resource lists, queues, plans), for debugging
   -T         end the game at 90 game minutes if undecided: the larger
              population wins with the reason "time limit" (MatchTimeLimit.js)
+  -L MIN     as -T, but at game minute MIN (parity-bisect.ts stops its games
+             shortly after the divergence it looks into)
   -r DIR     record into DIR (emptied first) instead of matches/<time>;
              no rotation, and matches/latest is left alone
   -k KEEP    keep the last KEEP match folders, this one included, and delete
              older ones (default 5; 0 keeps them all)
+  -B         do not build: play the bots as they are (batch.ts builds them
+             once for all its games)
   -h         this help
-The red bot is always Petra TS. Blue is the -o bot, red the port, whichever
-slot they play; against itself the port is named "Petra TS (blue)" and
-"Petra TS (red)".
+Blue is the -o bot, red the -p one, whichever slot they play; a bot against
+itself is named with its color, like "Petra TS (blue)" and "Petra TS (red)".
 EOF
 }
 
@@ -77,6 +85,8 @@ civ="athen"
 victory="conquest"
 holdMinutes=20
 opponent=petra_out
+redBot=petra_out
+build=true
 swap=false
 speed=1
 nonvisual=false
@@ -84,9 +94,10 @@ timeline=false
 commands=false
 keep=5
 timeLimit=false
+limitMinutes=""
 botState=false
 record=""
-while getopts "m:s:a:d:c:w:W:o:xv:ntlbTr:k:h" option; do
+while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbTL:r:k:Bh" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -96,12 +107,18 @@ while getopts "m:s:a:d:c:w:W:o:xv:ntlbTr:k:h" option; do
 		w) victory="$OPTARG" ;;
 		W) holdMinutes="$OPTARG" ;;
 		o) opponent="$OPTARG" ;;
+		p) redBot="$OPTARG" ;;
+		B) build=false ;;
 		x) swap=true ;;
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
 		t) timeline=true ;;
 		l) commands=true ;;
 		T) timeLimit=true ;;
+		L)
+			timeLimit=true
+			limitMinutes="$OPTARG"
+			;;
 		b) botState=true ;;
 		r) record="$OPTARG" ;;
 		k) keep="$OPTARG" ;;
@@ -116,20 +133,30 @@ while getopts "m:s:a:d:c:w:W:o:xv:ntlbTr:k:h" option; do
 	esac
 done
 shift $((OPTIND - 1))
-case "$opponent" in
-	petra)
-		blueName="Petra JS"
-		redName="Petra TS"
-		;;
-	petra_out)
-		blueName="Petra TS (blue)"
-		redName="Petra TS (red)"
-		;;
-	*)
-		echo "-o takes petra or petra_out, not '$opponent'" >&2
-		exit 2
-		;;
-esac
+botName()
+{
+	case "$1" in
+		petra) echo "Petra JS" ;;
+		petra_out) echo "Petra TS" ;;
+		petra_parity) echo "Petra TS parity" ;;
+		petra_fixed) echo "Petra fixed" ;;
+		petra_hybrid*) echo "Petra hybrid ${1#petra_hybrid}" ;;
+		*)
+			echo "-$2 takes petra_out, petra, petra_parity or petra_fixed, not '$1'" >&2
+			return 1
+			;;
+	esac
+}
+blueName="$(botName "$opponent" o)" || exit 2
+redName="$(botName "$redBot" p)" || exit 2
+if [ "$opponent" = "$redBot" ]; then
+	blueName="$blueName (blue)"
+	redName="$redName (red)"
+fi
+if [ "$botState" = true ] && [ "$opponent" != petra_out ] && [ "$redBot" != petra_out ]; then
+	echo "-b: only petra_out dumps its state, and neither bot is petra_out" >&2
+	exit 2
+fi
 conditions="$(dirname "$0")/../../binaries/data/mods/public/simulation/data/settings/victory_conditions"
 IFS=, read -r -a victories <<<"$victory"
 for condition in "${victories[@]}"; do
@@ -142,12 +169,19 @@ if ! [[ "$holdMinutes" =~ ^[0-9]+$ ]]; then
 	echo "-W takes a number of minutes, not '$holdMinutes'" >&2
 	exit 2
 fi
+if [ -n "$limitMinutes" ] && ! [[ "$limitMinutes" =~ ^[1-9][0-9]*$ ]]; then
+	echo "-L takes a number of game minutes, not '$limitMinutes'" >&2
+	exit 2
+fi
 if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
 	echo "-k takes a number of matches, not '$keep'" >&2
 	exit 2
 fi
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
+ai="$repo/binaries/data/mods/public/simulation/ai"
+# match.sh runs in parallel under batch.ts: git must not take the index lock.
+export GIT_OPTIONAL_LOCKS=0
 game="$repo/binaries/system/pyrogenesis"
 logs="${XDG_STATE_HOME:-$HOME/.local/state}/0ad/log"
 replays="${XDG_DATA_HOME:-$HOME/.local/share}/0ad/replays"
@@ -161,10 +195,30 @@ fi
 seed="${seed:-$((RANDOM * 32768 + RANDOM))}"
 aiseed="${aiseed:-$((RANDOM * 32768 + RANDOM))}"
 
-(cd "$repo" && npm run --silent build:petra:out)
-if [ "$botState" = true ]; then
-	node "$repo/build/petra_ts/prepare-bot.ts" state
+bots=("$opponent")
+[ "$redBot" != "$opponent" ] && bots+=("$redBot")
+if [ "$build" = true ]; then
+	(cd "$repo" && npm run --silent build:petra:out)
+	baselines=()
+	for bot in "${bots[@]}"; do
+		case "$bot" in
+			petra_parity) baselines+=(parity) ;;
+			petra_fixed) baselines+=(fixed) ;;
+		esac
+	done
+	if [ ${#baselines[@]} -gt 0 ]; then
+		node "$repo/build/petra_ts/baselines.ts" "${baselines[@]}"
+	fi
+	if [ "$botState" = true ]; then
+		node "$repo/build/petra_ts/prepare-bot.ts" state
+	fi
 fi
+for bot in "${bots[@]}"; do
+	if [ ! -e "$ai/$bot/data.json" ]; then
+		echo "simulation/ai/$bot is not built (run without -B, or npm run build:petra:baselines)" >&2
+		exit 1
+	fi
+done
 
 # Slots of the blue (-o) bot and of the red one, the port.
 if [ "$swap" = true ]; then
@@ -186,7 +240,7 @@ args=(
 	-autostart-script=scripts/NonVisualTrigger.js
 	-autostart-script=scripts/MatchEnd.js
 	-autostart-ai="$blue:$opponent"
-	-autostart-ai="$red:petra_out"
+	-autostart-ai="$red:$redBot"
 	-autostart-aidiff="$blue:$difficulty"
 	-autostart-aidiff="$red:$difficulty"
 	-autostart-civ="$blue:$civ"
@@ -207,6 +261,9 @@ if [ "$commands" = true ]; then
 fi
 if [ "$timeLimit" = true ]; then
 	args+=(-autostart-script=scripts/MatchTimeLimit.js)
+	if [ -n "$limitMinutes" ]; then
+		args+=(-autostart-timelimit="$limitMinutes")
+	fi
 fi
 for condition in "${victories[@]}"; do
 	args+=(-autostart-victory="$condition")
@@ -214,12 +271,16 @@ done
 args+=(-autostart-wonderduration="$holdMinutes" -autostart-relicduration="$holdMinutes")
 args+=("$@")
 
-rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -w "$victory" -W "$holdMinutes" -o "$opponent" -v "$speed")
+rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -w "$victory" -W "$holdMinutes" -o "$opponent" -p "$redBot" -v "$speed")
 [ "$swap" = true ] && rerun+=(-x)
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
 [ "$commands" = true ] && rerun+=(-l)
-[ "$timeLimit" = true ] && rerun+=(-T)
+if [ -n "$limitMinutes" ]; then
+	rerun+=(-L "$limitMinutes")
+elif [ "$timeLimit" = true ]; then
+	rerun+=(-T)
+fi
 [ "$botState" = true ] && rerun+=(-b)
 if [ $# -gt 0 ]; then
 	rerun+=(--)
@@ -255,7 +316,7 @@ fi
 
 {
 	echo "player $blue: $blueName (simulation/ai/$opponent), blue"
-	echo "player $red: $redName (simulation/ai/petra_out), red"
+	echo "player $red: $redName (simulation/ai/$redBot), red"
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
 	hold=""
 	if [[ ",$victory," =~ ,(wonder|capture_the_relic), ]]; then
@@ -268,9 +329,16 @@ fi
 		dirty=" (with uncommitted changes)"
 	fi
 	echo "commit $(git -C "$repo" log -1 --format='%H %cs "%s"')$dirty"
-	# sha256 of the sorted list of "sha256  ./path" of every file of the build.
-	echo "petra_out sha256 $(cd "$repo/binaries/data/mods/public/simulation/ai/petra_out" &&
-		find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+	# sha256 of the sorted list of "sha256  ./path" of every file of a build.
+	for bot in "${bots[@]}"; do
+		if [ "$bot" != petra ]; then
+			echo "$bot sha256 $(cd "$ai/$bot" &&
+				find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+		fi
+	done
+	if [[ " ${bots[*]} " == *" petra_parity "* ]]; then
+		echo "petra_parity from tag petra-ts-parity $(git -C "$repo" rev-parse --short=10 'petra-ts-parity^{commit}' 2>/dev/null || echo "(missing)")"
+	fi
 	echo "engine built $(date -r "$game" '+%Y-%m-%d %H:%M:%S')"
 	echo "started $(date '+%Y-%m-%d %H:%M:%S')"
 	printf 'command:'

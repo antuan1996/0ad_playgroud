@@ -12,14 +12,14 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 | | Port | Original |
 |---|---|---|
-| Tests | 1529, all pass | 1528, 16 fail (all listed below) |
+| Tests | 1532, all pass | 1531, 19 fail (all listed below) |
 | Real line coverage | 95.6% | ≈95% |
 
 ---
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (16 tests in all; the
+Each is pinned by a test that only the port passes (19 tests in all; the
 original fails exactly these). Each row says whether a game can reach it.
 
 | Where | Original behaviour | Port | Test |
@@ -36,6 +36,9 @@ original fails exactly these). Each row says whether a game can reach it.
 | `queueplanBuilding.buildOverseaDock` | with the last dock builder dead, calls construct on no builder and throws, the plan keeping the dock template | restores the civic-centre plan | queueplanBuilding |
 | `worker` gatherer plan lookup | reads `.state` off a missing transport plan. Unreachable: the naval manager clears `transport` before dropping a plan; kept as a guard matching the builder's | guarded as the builder's lookup already is | worker: "a gatherer whose boat is gone…" |
 | `attackManager` defenders | reads the unit before its own `if (unit && …)` check | checks first | attackManager: "enlists only joinable defenders" |
+| `basesManager.createBase` reusing a ground | calls `newbase.reset(type)` for the signature `reset(gameState, state)`, so the state is always undefined: a ground that lost its centre and gets a new one is never `constructing` (no builders called to a rebuilt centre) and its `neededDefenders` is 0 (no guard for a captured centre; 7 at very hard). Reached in games with a centre lost and replaced (§14) | passes the state | basesManager: "a town that lost its centre guards a centre it captures…" |
+| `defenseArmy` foe ledger | `removeFoe` and a foe's rename leave the foe's `assignedAgainst` row as `undefined`; a merge then appends that `undefined` to the other army's row for the same foe (`concat(undefined)`), so the foe looks fought by one defender more and `assignUnit` passes him over (§14) | deletes the row | defenseArmy: "counts only real defenders against a raider the merged army had let go" |
+| `queueManager.changePriority` | sorts `queueArrays` in place, while `startNextItems` walks it: a started plan resetting its queue's priority (`queueToReset`) reorders the array mid-loop, so a queue is skipped that turn and another visited twice. Reached in most games, from minute 3 on (§14) | sorts into a new array | queueManager: "visits every queue once in a turn…" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -243,3 +246,74 @@ mainland, very hard, Athenians), commit 81cd87039a, checked with
   while its queue trains for it: under attack, the trained units go to the
   defence (inferred, not traced). The winners' attacks fill to 89–104 units
   and leave within about 8 minutes.
+
+## 13. Baseline batches, stage 0 (2026-10-25)
+
+Three batches of `build/petra_ts/batch.ts` (mainland, very hard, Athenians,
+conquest, `-T`; 12 games at a time; each 100 games plus 5 played twice),
+with the baselines built from the tag `petra-ts-parity` (bfa183db2c):
+`petra_parity` against itself (pool seed 101), `petra_fixed` against itself
+(202), and the two against each other from both slots (50 seed pairs, 303).
+
+- **Parallel runs are isolated.** 315 games, no replay outside its job's
+  folder, no script error or warning, and all 15 games played twice gave the
+  same fingerprint as their first run. A job's own `XDG_*` folders are enough
+  (the engine writes only its data, config, cache and log paths,
+  `source/ps/GameSetup/Paths.cpp`); `-writableRoot` is not needed. About 50–60 s
+  of wall time per game at 12 at a time, so roughly 100 games in 8 minutes.
+- **The engine crashes now and then.** Two runs (parity mirror game 13 at 14
+  game minutes; parity vs fixed game 54 at 0:44) aborted with glibc's "The
+  futex facility returned an unexpected error code" (exit status 134).
+  Replayed, both played to a normal end, so this is not the seeds or the bots.
+  It looks like a race in the engine's threads. `batch.ts` now books such a
+  run as failed (a non-zero exit, or no decision under `-T`) and plays it
+  again when the batch is resumed. Not investigated in the engine.
+- **`petra_parity` against `petra_fixed`: no difference.** 53 wins to 51 and
+  1 time-limit draw: 51.0% (95% CI 41.5–60.4%); the SPRT is undecided either
+  way. In 44 of the 50 seed pairs the two games have the same fingerprint:
+  with the slots swapped it is the same game, so the two bots played
+  identically. The 6 other pairs (seeds 314615891/911175050,
+  591600344/948856854, 647912326/610466440, 760686401/577555306,
+  583398897/647901068, 65374167/823491457) differ, though player 1 still
+  won or held out in each. They are where stage 1 (the parity proof, a diff
+  of the command logs) starts. All six come from three bugs of the original
+  the port fixes (§14).
+- **Player 2 wins more mirror games.** Player 1 won 42 of 103 decided parity
+  mirrors and 44 of 101 fixed ones: 86 of 204, 42.2% (95% CI 35.6–49.0%).
+  The batch with slots swapped balances this out; a batch with one slot per
+  seed must not compare two bots from fixed slots. The cause is unknown
+  (candidates: the map's player placement; Petra's HQ update, which runs one
+  turn in eight with an offset by player id).
+- Games last 15:29–88:22 (median about 28 minutes). 7 of 315 reached the
+  90-minute limit.
+
+## 14. Parity proof, stage 1 (2026-10-25)
+
+Tools: `command-diff.ts` (where two command logs part; for a batch with both
+slots, each seed pair: with two bots that play alike the swapped game is the
+same game, so the logs must match line for line) and `parity-bisect.ts`
+(hybrid bots, `baselines.ts hybrid`: `petra_fixed` with one module taken from
+the port, each played on the seeds; the module whose hybrid plays on as
+`petra_parity` does holds the difference).
+
+- The six diverging pairs of §13, replayed with `-l`, parted at 3:43, 8:39,
+  20:34, 21:48, 23:51 and 32:45. Three causes, each a bug of the original that
+  the port fixed when it was written, without a note until now (§1):
+  - `queueManager` (3:43, 8:39, 20:34): `changePriority` re-sorts the array
+    `startNextItems` is walking. At 3:43 the original skipped a funded field
+    plan; the port started it.
+  - `defenseArmy` (21:48): a merge appends `undefined` to a foe's defender
+    list, and a defender attacked a different raider.
+  - `basesManager` (23:51, 32:45, and 30:29 behind the `queueManager` one):
+    `reset(type)` for `reset(gameState, state)`, so a captured or rebuilt
+    centre got no defenders and no builders; the port stopped a batch of
+    workers to guard its captured centre.
+- With the three fixes added to `upstream/petra-fixes.patch` (now 15 fixes),
+  `petra_fixed` and `petra_parity` gave the same command log, line for line,
+  in all 26 seed pairs played: the six above and 20 fresh ones (pool seed
+  606), 52 games, about 290,000 commands
+  (`batches/stage1-parity-proof`). On these seeds the port plays exactly as
+  the patched original.
+- Bisecting is cheaper with `match.sh -L MIN` (the time limit at minute MIN,
+  `-autostart-timelimit`): the hybrids stop two game minutes past the
+  divergence (about 1.5 minutes per bisect instead of 4).

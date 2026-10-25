@@ -1,5 +1,6 @@
 /**
- * Ends the game at a fixed game time if no one has won by then: the player with
+ * Ends the game at a fixed game time (90 minutes, or the MatchTimeLimit
+ * setting, -autostart-timelimit) if no one has won by then: the player with
  * the largest population (the lowest id on a tie) wins, the others are
  * defeated, with the reason "time limit". The engine only ends a game on a win,
  * so without this a bot that cannot finish a game keeps a non-visual game
@@ -33,5 +34,6 @@ Trigger.prototype.MatchTimeLimitReached = function()
 
 {
 	const cmpTrigger = Engine.QueryInterface(SYSTEM_ENTITY, IID_Trigger);
-	cmpTrigger.DoAfterDelay(cmpTrigger.MatchTimeLimitMinutes * 60 * 1000, "MatchTimeLimitReached", {});
+	const minutes = InitAttributes.settings.MatchTimeLimit ?? cmpTrigger.MatchTimeLimitMinutes;
+	cmpTrigger.DoAfterDelay(minutes * 60 * 1000, "MatchTimeLimitReached", {});
 }

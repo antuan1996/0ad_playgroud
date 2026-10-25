@@ -15,7 +15,13 @@
 		"./prepare-bot.ts",
 		"./match-report.ts",
 		"./match-checks.ts",
-		"./match.test.ts"
+		"./match.test.ts",
+		"./baselines.ts",
+		"./batch.ts",
+		"./batch-stats.ts",
+		"./batch-stats.test.ts",
+		"./command-diff.ts",
+		"./parity-bisect.ts"
 	],
 	// The inherited exclude would drop the tests directory.
 	"exclude": []

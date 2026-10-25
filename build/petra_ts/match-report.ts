@@ -6,7 +6,8 @@
  * Prints the end of match.txt (settings the game setup picked, game time,
  * result, a table of each bot's statistics, errors and warnings, the replay and
  * a fingerprint) and writes the statistics NonVisualTrigger.js printed to
- * <match dir>/statistics.json.
+ * <match dir>/statistics.json, and the same summary for programs to
+ * <match dir>/result.json (MatchResult; batch.ts makes its table from it).
  *
  * The fingerprint hashes the game time of the decision and the statistics: two
  * runs with the same seeds and code play the same game and give the same
@@ -23,6 +24,28 @@ interface PlayerStatistics
 	playerID: number;
 	playerState: string;
 	statistics: Record<string, number | Counts>;
+}
+
+/** result.json: a match's outcome and each player's main statistics. */
+export interface MatchResult
+{
+	/** game ms of the decision, undefined if the game was closed first */
+	decided?: number;
+	/** game ms played, from the non-visual engine's turn lines */
+	played: number;
+	players: {
+		id: number;
+		name: string;
+		/** "won", "defeated", or "active" if undecided */
+		state: string;
+		/** the game's reason for the win or defeat, like "last player alive" */
+		reason?: string;
+		statistics: Record<string, number>;
+	}[];
+	/** lines of game.log with ERROR, with WARNING */
+	errors: number;
+	warnings: number;
+	fingerprint: string;
 }
 
 const [dir, ...nameArgs] = process.argv.slice(2);
@@ -140,6 +163,7 @@ else
 	console.log("result: undecided (the game was closed before one bot defeated the other)");
 
 // Errors and warnings, each distinct line once, most frequent first.
+const levelCounts = new Map<string, number>();
 for (const level of ["ERROR", "WARNING"])
 {
 	const counts = new Map<string, number>();
@@ -147,6 +171,7 @@ for (const level of ["ERROR", "WARNING"])
 		if (line.includes(level))
 			counts.set(line, (counts.get(line) ?? 0) + 1);
 	const count = [...counts.values()].reduce((sum, n) => sum + n, 0);
+	levelCounts.set(level, count);
 	console.log(`lines with ${level} in game.log: ${count}${count ? `, ${counts.size} distinct:` : ""}`);
 	const listed = [...counts].sort((a, b) => b[1] - a[1]);
 	for (const [line, n] of listed.slice(0, 10))
@@ -158,3 +183,35 @@ for (const level of ["ERROR", "WARNING"])
 console.log(`replay: ${replay ?? "none written"}`);
 const fingerprint = createHash("sha256").update(`${decided}\n${JSON.stringify(players)}`).digest("hex").slice(0, 16);
 console.log(`fingerprint: ${fingerprint} (the same seeds and code give the same fingerprint)`);
+
+const sum = (counts: number | Counts | undefined, keys?: string[]): number =>
+	typeof counts == "number" ? counts : Object.entries(counts ?? {})
+		.filter(([key]) => keys ? keys.includes(key) : true)
+		.reduce((total, [, n]) => total + n, 0);
+const resourceTypes = ["food", "wood", "stone", "metal"];
+const result: MatchResult = {
+	decided,
+	played,
+	"players": players.map(p => ({
+		"id": p.playerID,
+		"name": name(p.playerID),
+		"state": p.playerState,
+		"reason": reasons.get(p.playerID),
+		"statistics": {
+			"unitsTrained": sum(p.statistics.unitsTrained, ["Unit"]),
+			"unitsLost": sum(p.statistics.unitsLost, ["Unit"]),
+			"unitsLostValue": sum(p.statistics.unitsLostValue),
+			"enemyUnitsKilled": sum(p.statistics.enemyUnitsKilled, ["Unit"]),
+			"enemyUnitsKilledValue": sum(p.statistics.enemyUnitsKilledValue),
+			"buildingsLost": sum(p.statistics.buildingsLost, ["Structure"]),
+			"enemyBuildingsDestroyed": sum(p.statistics.enemyBuildingsDestroyed, ["Structure"]),
+			"resourcesGathered": sum(p.statistics.resourcesGathered, resourceTypes),
+			"resourcesUsed": sum(p.statistics.resourcesUsed, resourceTypes),
+			"peakPercentMapControlled": sum(p.statistics.peakPercentMapControlled)
+		}
+	})),
+	"errors": levelCounts.get("ERROR") ?? 0,
+	"warnings": levelCounts.get("WARNING") ?? 0,
+	fingerprint
+};
+writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, "\t") + "\n");

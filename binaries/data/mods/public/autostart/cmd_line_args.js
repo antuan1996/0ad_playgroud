@@ -34,6 +34,8 @@
  * -autostart-visibility=TYPE      sets the map visibility (explored, hidden, revealed, allied, allied-explored)
  * -autostart-speed=SPEED          sets the sim rate speed (default 1, max 2 in normal mode, 20 in observer mode)
  *
+ * -autostart-timelimit=MINUTES     the game minute scripts/MatchTimeLimit.js ends an undecided game at
+ *                                 (default 90; the script must be added with -autostart-script)
  * -autostart-script=SCRIPT        adds the trigger SCRIPT located in maps/ (e.g. scripts/NonVisualTrigger.js,
  *                                 which prints every player's statistics when the game ends)
  * -autostart-nonvisual            (partly handled in C++) disable any graphics and sounds
@@ -197,6 +199,9 @@ function parseCmdLineArgs(settings, cmdLineArgs)
 	const scripts = cmdLineArgs['autostart-script'];
 	for (const script of Array.isArray(scripts) ? scripts : scripts ? [scripts] : [])
 		settings.triggerScripts.customScripts.add(script);
+
+	if (cmdLineArgs["autostart-timelimit"])
+		settings.matchTimeLimit.minutes = +cmdLineArgs["autostart-timelimit"];
 
 	const victoryConditions = cmdLineArgs["autostart-victory"];
 	if (Array.isArray(victoryConditions))

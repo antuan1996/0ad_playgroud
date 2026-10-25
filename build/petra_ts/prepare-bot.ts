@@ -8,6 +8,8 @@
  *                                              (bot-state.js; match.sh -b)
  *
  * `npm run build:petra:out` runs: clean, tsc, then this script.
+ * `--bot=petra_parity` (after the mode, if any) finishes the frozen port that
+ * baselines.ts compiled from the tag petra-ts-parity instead (PLAN.md §2).
  *
  * Finishing means:
  * - import specifiers: the engine's module loader takes a specifier as a VFS
@@ -21,7 +23,25 @@ import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileS
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BOT_ID = "petra_out";
+const LEVELS = "The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard.";
+const BOTS: Record<string, { name: string; description: string }> = {
+	"petra_out": {
+		"name": "Petra TS",
+		"description": "TypeScript port of Petra, the default 0 A.D. AI bot, built from simulation/ai/petra_ts. " +
+			"It is meant to play as the original does; pit it against Petra to compare them.\n\n" + LEVELS
+	},
+	"petra_parity": {
+		"name": "Petra TS parity",
+		"description": "The TypeScript port of Petra as it was frozen at the tag petra-ts-parity, " +
+			"one file per original file: the baseline Petra TS is measured against.\n\n" + LEVELS
+	}
+};
+
+const botArgument = process.argv.find((arg) => arg.startsWith("--bot="));
+const BOT_ID = botArgument?.slice("--bot=".length) ?? "petra_out";
+const bot = BOTS[BOT_ID];
+if (!bot)
+	fail(`--bot takes ${Object.keys(BOTS).join(" or ")}, not ${BOT_ID}`);
 const VFS_DIR = `simulation/ai/${BOT_ID}`;
 const ENTRY = "_petrabot.js";
 const CONSTRUCTOR = "PetraBot";
@@ -30,10 +50,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const outDir = join(repoRoot, "binaries/data/mods/public", VFS_DIR);
 
 const metadata = {
-	"name": "Petra TS",
-	"description": "TypeScript port of Petra, the default 0 A.D. AI bot, built from simulation/ai/petra_ts. " +
-		"It is meant to play as the original does; pit it against Petra to compare them.\n\n" +
-		"The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard.",
+	...bot,
 	"constructor": CONSTRUCTOR,
 	"filename": ENTRY,
 	"useShared": true
@@ -57,6 +74,8 @@ if (process.argv[2] === "clean")
 
 if (process.argv[2] === "state")
 {
+	if (BOT_ID != "petra_out")
+		fail("only petra_out dumps its state (bot-state.js imports it)");
 	// The entry stays the port's: the wrapper extends its PetraBot.
 	if (!existsSync(join(outDir, "data.json")))
 		fail(`${VFS_DIR} is not built: run npm run build:petra:out first`);

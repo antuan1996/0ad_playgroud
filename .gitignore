@@ -112,3 +112,8 @@ Thumbs.db
 binaries/data/mods/public/simulation/ai/petra_out
 binaries/data/mods/public/simulation/ai/petra_generated
 build/petra_ts/matches
+binaries/data/mods/public/simulation/ai/petra_parity
+binaries/data/mods/public/simulation/ai/petra_fixed
+binaries/data/mods/public/simulation/ai/petra_hybrid*
+build/petra_ts/workers
+build/petra_ts/batches
