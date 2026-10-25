@@ -21,7 +21,8 @@
 		"./batch-stats.ts",
 		"./batch-stats.test.ts",
 		"./command-diff.ts",
-		"./parity-bisect.ts"
+		"./parity-bisect.ts",
+		"./ai-times.ts"
 	],
 	// The inherited exclude would drop the tests directory.
 	"exclude": []

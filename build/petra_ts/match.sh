@@ -21,6 +21,9 @@
 #                      chat (MatchNotices.js)
 #   botstate.txt       with -b: Petra TS's own state every two game minutes, one
 #                      JSON line per player (bot-state.js)
+#   aitimes.txt        with -P: each AI's script time per turn, measured by the
+#                      engine (PYROGENESIS_AI_TIMES, CCmpAIManager.cpp), and
+#                      aitimes-summary.txt (ai-times.ts)
 #   metadata.json      the replay's metadata: the final state of each player and
 #                      every statistic sampled each 30 game seconds ("sequences")
 #   logs.tar.gz        game.log, the game's stdout/stderr (script errors,
@@ -61,6 +64,9 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              tells the bots back, refusals and chat (notices.txt), for debugging
   -b         Petra TS dumps its own state every two game minutes (botstate.txt:
              roles, base resource lists, queues, plans), for debugging
+  -P         time each AI's turn in the engine (aitimes.txt; ai-times.ts
+             summarises it): two clock reads per AI and turn, kept in memory
+             and written when the game ends, so the times are the bot's own
   -T         end the game at 90 game minutes if undecided: the larger
              population wins with the reason "time limit" (MatchTimeLimit.js)
   -L MIN     as -T, but at game minute MIN (parity-bisect.ts stops its games
@@ -96,8 +102,9 @@ keep=5
 timeLimit=false
 limitMinutes=""
 botState=false
+aiTimes=false
 record=""
-while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbTL:r:k:Bh" option; do
+while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:Bh" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -120,6 +127,7 @@ while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbTL:r:k:Bh" option; do
 			limitMinutes="$OPTARG"
 			;;
 		b) botState=true ;;
+		P) aiTimes=true ;;
 		r) record="$OPTARG" ;;
 		k) keep="$OPTARG" ;;
 		h)
@@ -282,6 +290,7 @@ elif [ "$timeLimit" = true ]; then
 	rerun+=(-T)
 fi
 [ "$botState" = true ] && rerun+=(-b)
+[ "$aiTimes" = true ] && rerun+=(-P)
 if [ $# -gt 0 ]; then
 	rerun+=(--)
 fi
@@ -351,9 +360,16 @@ fi
 cat "$out/match.txt"
 
 set +e
-"$game" "${args[@]}" 2>&1 | tee "$out/game.log"
+if [ "$aiTimes" = true ]; then
+	PYROGENESIS_AI_TIMES="$out/aitimes.txt" "$game" "${args[@]}" 2>&1 | tee "$out/game.log"
+else
+	"$game" "${args[@]}" 2>&1 | tee "$out/game.log"
+fi
 status=${PIPESTATUS[0]}
 set -e
+if [ "$aiTimes" = true ] && [ -e "$out/aitimes.txt" ]; then
+	node "$repo/build/petra_ts/ai-times.ts" "$out" >"$out/aitimes-summary.txt" || true
+fi
 
 if [ "$timeline" = true ]; then
 	grep '^TIMELINE ' "$out/game.log" | cut -d' ' -f2- >"$out/timeline.txt" || true

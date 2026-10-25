@@ -29,6 +29,7 @@
 #include "lib/os_path.h"
 #include "lib/path.h"
 #include "lib/tex/tex.h"
+#include "lib/timer.h"
 #include "lib/utf8.h"
 #include "maths/FixedVector2D.h"
 #include "ps/CLogger.h"
@@ -67,6 +68,8 @@
 #include "simulation2/system/Component.h"
 
 #include <boost/random/linear_congruential.hpp>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <js/Array.h>
 #include <js/GCAPI.h>
@@ -254,12 +257,40 @@ public:
 		m_HasLoadedEntityTemplates(false),
 		m_HasSharedComponent(false)
 	{
+		// AI timing, for measuring bots (build/petra_ts/match.sh -P): with
+		// PYROGENESIS_AI_TIMES set to a file, every computation's script time
+		// is kept in memory (two clock reads per AI, no output during the
+		// game) and written to that file when the worker goes away.
+		if (const char* path = std::getenv("PYROGENESIS_AI_TIMES"))
+		{
+			m_AITimesPath = path;
+			m_AITimes.reserve(1 << 20);
+		}
 	}
 
 	~CAIWorker()
 	{
+		WriteAITimes();
 		// Init will always be called.
 		JS_RemoveExtraGCRootsTracer(m_ScriptInterface->GetGeneralJSContext(), Trace, this);
+	}
+
+	/**
+	 * Writes the times kept for PYROGENESIS_AI_TIMES: one line per computation
+	 * and AI, "<computation> <player> <microseconds>", player 0 being the
+	 * shared component every bot uses.
+	 */
+	void WriteAITimes()
+	{
+		if (m_AITimesPath.empty())
+			return;
+		FILE* file = std::fopen(m_AITimesPath.c_str(), "w");
+		if (!file)
+			return;
+		for (const AITime& time : m_AITimes)
+			std::fprintf(file, "%u %d %.1f\n", time.computation, time.player, time.microseconds);
+		std::fclose(file);
+		m_AITimes.clear();
 	}
 
 	void Init(const Script::Interface& simInterface)
@@ -821,10 +852,14 @@ private:
 		// cost is far too high, so we won't do that.
 		// If there is a shared component, run it
 
+		const bool timing = !m_AITimesPath.empty();
 		if (m_HasSharedComponent)
 		{
 			PROFILE3("AI run shared component");
+			const double start = timing ? timer_Time() : 0.0;
 			Script::Function::CallVoid(rq, m_SharedAIObj, "onUpdate", m_GameState);
+			if (timing)
+				m_AITimes.push_back({ m_Computations, 0, static_cast<float>((timer_Time() - start) * 1e6) });
 		}
 
 		for (size_t i = 0; i < m_Players.size(); ++i)
@@ -833,12 +868,27 @@ private:
 			PROFILE2_ATTR("player: %d", m_Players[i]->m_Player);
 			PROFILE2_ATTR("script: %ls", m_Players[i]->m_AIName.c_str());
 
+			const double start = timing ? timer_Time() : 0.0;
 			if (m_HasSharedComponent && m_Players[i]->m_UseSharedComponent)
 				m_Players[i]->Run(m_GameState, m_Players[i]->m_Player, m_SharedAIObj);
 			else
 				m_Players[i]->Run(m_GameState, m_Players[i]->m_Player);
+			if (timing)
+				m_AITimes.push_back({ m_Computations, m_Players[i]->m_Player,
+					static_cast<float>((timer_Time() - start) * 1e6) });
 		}
+		++m_Computations;
 	}
+
+	struct AITime
+	{
+		std::uint32_t computation;
+		player_id_t player;
+		float microseconds;
+	};
+	std::string m_AITimesPath;
+	std::vector<AITime> m_AITimes;
+	std::uint32_t m_Computations = 0;
 
 	std::shared_ptr<Script::Interface> m_ScriptInterface;
 	boost::rand48 m_RNG;
