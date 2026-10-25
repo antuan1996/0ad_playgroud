@@ -58,10 +58,13 @@ rewrites the output's relative imports to VFS paths
 the bot id is `petra_out`.
 
 `npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
-options: map, seeds, difficulty, civ, `-x` swap slots, `-v` speed, `-n`
-headless, `-t` timeline, `-l` command log, `-k` how many match folders to keep, default 5) builds the bot and starts an observed conquest match, Petra JS
-(blue, `petra`) against Petra TS (red, `petra_out`); it needs the engine
-built from this repo. Each match is recorded in `build/petra_ts/matches/<time>/`
+options: map, seeds, difficulty, civ, `-o` the blue bot, `-x` swap slots,
+`-v` speed, `-n` headless, `-t` timeline, `-l` command log (for debugging),
+`-k` how many match folders to keep, default 5) builds the bot and starts an
+observed conquest match of Petra TS (red, `petra_out`) against itself, or with
+`-o petra` against the original, Petra JS (blue, `petra`); it needs the engine
+built from this repo. Petra TS against itself is the default: the original
+loses most games to its `removeSupply` bug (`tests/FINDINGS.md` §10). Each match is recorded in `build/petra_ts/matches/<time>/`
 (`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
 commit SHA, a sha256 of the `petra_out` build, command, a line to rerun it;
 then the result, a statistics table, the distinct errors/warnings, the replay

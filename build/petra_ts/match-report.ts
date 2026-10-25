@@ -1,7 +1,7 @@
 /**
  * Summarises a match recorded by match.sh, from its game.log and the replay.
  *
- *   node build/petra_ts/match-report.ts <match dir> <Petra JS player id>
+ *   node build/petra_ts/match-report.ts <match dir> <player id> <name> <player id> <name>
  *
  * Prints the end of match.txt (settings the game setup picked, game time,
  * result, a table of each bot's statistics, errors and warnings, the replay and
@@ -25,17 +25,18 @@ interface PlayerStatistics
 	statistics: Record<string, number | Counts>;
 }
 
-const [dir, jsArg] = process.argv.slice(2);
-if (!dir || !jsArg)
+const [dir, ...nameArgs] = process.argv.slice(2);
+if (!dir || nameArgs.length != 4)
 {
-	console.error("usage: node match-report.ts <match dir> <Petra JS player id>");
+	console.error("usage: node match-report.ts <match dir> <player id> <name> <player id> <name>");
 	process.exit(2);
 }
-const js = Number(jsArg);
+const names = new Map([[Number(nameArgs[0]), nameArgs[1]], [Number(nameArgs[2]), nameArgs[3]]]);
 const log = readFileSync(join(dir, "game.log"), "utf8");
 const lines = log.split("\n");
 
-const botName = (id: number): string => `${id == js ? "Petra JS" : "Petra TS"} (player ${id})`;
+const name = (id: number): string => names.get(id) ?? `player ${id}`;
+const botName = (id: number): string => `${name(id)} (player ${id})`;
 
 // NonVisualTrigger.js prints one JSON object per player, from "{" to "}" at
 // the start of a line, once the game is decided.
@@ -119,7 +120,7 @@ if (players.length)
 		["map explored %", value("percentMapExplored")],
 		["peak map controlled %", value("peakPercentMapControlled")]
 	];
-	const header = ["", ...players.map(p => p.playerID == js ? "Petra JS" : "Petra TS")];
+	const header = ["", ...players.map(p => name(p.playerID))];
 	const table = [header, ...rows.map(([label, cell]) => [label, ...players.map(p => String(cell(p)))])];
 	const widths = header.map((_, column) => Math.max(...table.map(row => row[column].length)));
 	for (const row of table)

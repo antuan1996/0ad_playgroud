@@ -1,7 +1,7 @@
 #!/bin/bash
-# Watch the original Petra ("Petra JS", simulation/ai/petra) play its
-# TypeScript port ("Petra TS", simulation/ai/petra_out) in the game, as an
-# observer. Builds the port first, then records the match under
+# Watch the TypeScript port of Petra ("Petra TS", simulation/ai/petra_out) play
+# itself, or with -o petra the original ("Petra JS", simulation/ai/petra), in
+# the game, as an observer. Builds the port first, then records the match under
 # build/petra_ts/matches/<time>/ (and matches/latest):
 #   match.txt          who is who, the settings, the commit, a hash of the
 #                      Petra TS build, the command and how to rerun the match;
@@ -37,15 +37,18 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -a SEED    AI seed (default: a random one, recorded in match.txt)
   -d DIFF    difficulty of both bots, 0 sandbox .. 5 very hard (default 5)
   -c CIV     civilisation of both bots (default athen)
-  -x         swap slots: Petra TS plays player 1, Petra JS player 2
+  -o BOT     the blue bot: petra_out, Petra TS (default), or petra, Petra JS
+  -x         swap slots: the red bot plays player 1, the blue one player 2
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
-  -l         log every command each bot sends (commands.txt)
+  -l         log every command each bot sends (commands.txt), for debugging
   -k KEEP    keep the last KEEP match folders, this one included, and delete
              older ones (default 5; 0 keeps them all)
   -h         this help
-Petra JS is always blue and Petra TS always red, whichever slot they play.
+The red bot is always Petra TS. Blue is the -o bot, red the port, whichever
+slot they play; against itself the port is named "Petra TS (blue)" and
+"Petra TS (red)".
 EOF
 }
 
@@ -54,19 +57,21 @@ seed=""
 aiseed=""
 difficulty=5
 civ="athen"
+opponent=petra_out
 swap=false
 speed=1
 nonvisual=false
 timeline=false
 commands=false
 keep=5
-while getopts "m:s:a:d:c:xv:ntlk:h" option; do
+while getopts "m:s:a:d:c:o:xv:ntlk:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
 		a) aiseed="$OPTARG" ;;
 		d) difficulty="$OPTARG" ;;
 		c) civ="$OPTARG" ;;
+		o) opponent="$OPTARG" ;;
 		x) swap=true ;;
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
@@ -84,6 +89,20 @@ while getopts "m:s:a:d:c:xv:ntlk:h" option; do
 	esac
 done
 shift $((OPTIND - 1))
+case "$opponent" in
+	petra)
+		blueName="Petra JS"
+		redName="Petra TS"
+		;;
+	petra_out)
+		blueName="Petra TS (blue)"
+		redName="Petra TS (red)"
+		;;
+	*)
+		echo "-o takes petra or petra_out, not '$opponent'" >&2
+		exit 2
+		;;
+esac
 if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
 	echo "-k takes a number of matches, not '$keep'" >&2
 	exit 2
@@ -105,12 +124,13 @@ aiseed="${aiseed:-$((RANDOM * 32768 + RANDOM))}"
 
 (cd "$repo" && npm run --silent build:petra:out)
 
+# Slots of the blue (-o) bot and of the red one, the port.
 if [ "$swap" = true ]; then
-	ts=1
-	js=2
+	red=1
+	blue=2
 else
-	js=1
-	ts=2
+	blue=1
+	red=2
 fi
 
 args=(
@@ -124,16 +144,16 @@ args=(
 	-autostart-speed="$speed"
 	-autostart-script=scripts/NonVisualTrigger.js
 	-autostart-script=scripts/MatchEnd.js
-	-autostart-ai="$js:petra"
-	-autostart-ai="$ts:petra_out"
-	-autostart-aidiff="$js:$difficulty"
-	-autostart-aidiff="$ts:$difficulty"
-	-autostart-civ="$js:$civ"
-	-autostart-civ="$ts:$civ"
-	-autostart-name="$js:Petra JS"
-	-autostart-name="$ts:Petra TS"
-	-autostart-color="$js:10,10,190"
-	-autostart-color="$ts:230,10,10"
+	-autostart-ai="$blue:$opponent"
+	-autostart-ai="$red:petra_out"
+	-autostart-aidiff="$blue:$difficulty"
+	-autostart-aidiff="$red:$difficulty"
+	-autostart-civ="$blue:$civ"
+	-autostart-civ="$red:$civ"
+	-autostart-name="$blue:$blueName"
+	-autostart-name="$red:$redName"
+	-autostart-color="$blue:10,10,190"
+	-autostart-color="$red:230,10,10"
 )
 if [ "$nonvisual" = true ]; then
 	args+=(-autostart-nonvisual)
@@ -146,7 +166,7 @@ if [ "$commands" = true ]; then
 fi
 args+=("$@")
 
-rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -v "$speed")
+rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -o "$opponent" -v "$speed")
 [ "$swap" = true ] && rerun+=(-x)
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
@@ -173,8 +193,8 @@ if [ "$keep" -gt 0 ]; then
 fi
 
 {
-	echo "player $js: Petra JS (simulation/ai/petra), blue"
-	echo "player $ts: Petra TS (simulation/ai/petra_out), red"
+	echo "player $blue: $blueName (simulation/ai/$opponent), blue"
+	echo "player $red: $redName (simulation/ai/petra_out), red"
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
 	echo "branch $(git -C "$repo" rev-parse --abbrev-ref HEAD)"
 	dirty=""
@@ -218,7 +238,7 @@ done
 wall=$(($(date +%s) - $(date -r "$out/match.txt" +%s)))
 {
 	echo "ended $(date '+%Y-%m-%d %H:%M:%S') after $((wall / 60))m$((wall % 60))s, game exit status $status"
-	node "$repo/build/petra_ts/match-report.ts" "$out" "$js"
+	node "$repo/build/petra_ts/match-report.ts" "$out" "$blue" "$blueName" "$red" "$redName"
 } | tee -a "$out/match.txt"
 
 replay="$(sed -n "s/^Replay written to '\(.*\)'$/\1/p" "$out/game.log")"
