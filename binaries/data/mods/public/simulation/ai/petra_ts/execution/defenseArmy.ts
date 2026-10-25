@@ -1,10 +1,10 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue, returnResources } from
-	"./entityExtend.ts";
+	"../adapter/entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
-import type { Config } from "./config.ts";
-import { playerId, worldPos } from "./brands.ts";
+import type { Config } from "../decision/config.ts";
+import { playerId, worldPos } from "../adapter/brands.ts";
 
 /**
  * Armies used by the defense manager.

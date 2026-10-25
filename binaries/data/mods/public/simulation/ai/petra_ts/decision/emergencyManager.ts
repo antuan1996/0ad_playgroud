@@ -1,4 +1,4 @@
-import { emergency as chatEmergency } from "./chatHelper.ts";
+import { emergency as chatEmergency } from "../adapter/chatHelper.ts";
 import type { Config } from "./config.ts";
 
 /**

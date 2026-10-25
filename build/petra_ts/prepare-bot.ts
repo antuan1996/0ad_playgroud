@@ -14,13 +14,15 @@
  * Finishing means:
  * - import specifiers: the engine's module loader takes a specifier as a VFS
  *   path as it stands (ModuleLoader.cpp), it does not resolve "./x.js" against
- *   the importing file. Relative specifiers become "simulation/ai/petra_out/x.js",
+ *   the importing file. Relative specifiers, resolved against the importing
+ *   file's folder (the port has adapter/, world/, decision/, execution/), become
+ *   "simulation/ai/petra_out/<folder>/x.js",
  *   the form the original petra/*.js uses.
  * - data.json: the engine reads the bot's name, constructor and entry file from
  *   it, and only lists folders of simulation/ai/ that have one.
  */
 import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LEVELS = "The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard.";
@@ -57,7 +59,7 @@ const metadata = {
 };
 
 /** static `from "./x"`, side-effect `import "./x"` and dynamic `import("./x")` */
-const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])\.\/([^"']+)\2/g;
+const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\.?\/[^"']+)\2/g;
 const LEFTOVER_SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\.?\/[^"']*|[^"']*\.ts)\2/;
 
 function fail(message: string): never
@@ -93,14 +95,19 @@ if (!existsSync(join(outDir, ENTRY)))
 	fail(`${VFS_DIR}/${ENTRY} is missing: run tsc -p build/petra_ts/tsconfig.build.json first`);
 
 let rewritten = 0;
-for (const file of readdirSync(outDir).filter((name) => name.endsWith(".js")))
+const files = (readdirSync(outDir, { "recursive": true }) as string[]).filter((name) => name.endsWith(".js"))
+	.map((name) => name.split("\\").join("/"));
+for (const file of files)
 {
 	const path = join(outDir, file);
 	const source = readFileSync(path, "utf8");
 	const code = source.replace(RELATIVE_SPECIFIER, (_match, keyword: string, quote: string, target: string) =>
 	{
 		++rewritten;
-		return `${keyword}${quote}${VFS_DIR}/${target}${quote}`;
+		const resolved = posix.normalize(posix.join(posix.dirname(file), target));
+		if (resolved.startsWith(".."))
+			fail(`${file}: the import ${target} leaves ${VFS_DIR}`);
+		return `${keyword}${quote}${VFS_DIR}/${resolved}${quote}`;
 	});
 	const leftover = code.match(LEFTOVER_SPECIFIER);
 	if (leftover)

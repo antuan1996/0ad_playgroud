@@ -4,11 +4,13 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate, requireValue } from
-	"./entityExtend.ts";
-import { createObstructionMap } from "./mapModule.ts";
-import { ConstructionPlan } from "./queueplanBuilding.ts";
-import { Worker } from "./worker.ts";
-import { NO_TEMPLATE, seconds, worldPos } from "./brands.ts";
+	"../adapter/entityExtend.ts";
+import { createObstructionMap } from "../world/mapModule.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { Worker } from "../execution/worker.ts";
+import { NO_TEMPLATE, seconds, worldPos } from "../adapter/brands.ts";
+import { isInState } from "../adapter/unitState.ts";
+import { debugShade, postCommand } from "../adapter/commands.ts";
 
 /**
  * Base Manager
@@ -281,13 +283,13 @@ export class BaseManager
 				if (debug)
 				{
 					faraway.forEach(function(res){
-						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [2,0,0]});
+						debugShade([res.id], [2,0,0]);
 					});
 					medium.forEach(function(res){
-						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,2,0]});
+						debugShade([res.id], [0,2,0]);
 					});
 					nearby.forEach(function(res){
-						Engine.PostCommand(PlayerID,{"type": "set-shading-color", "entities": [res.id], "rgb": [0,0,2]});
+						debugShade([res.id], [0,0,2]);
 					});
 				}
 				*/
@@ -298,7 +300,7 @@ export class BaseManager
 
 		// Allows all allies to use this dropsite except if base anchor to be sure to keep
 		// a minimum of resources for this base
-		Engine.PostCommand(PlayerID, {
+		postCommand({
 			"type": "set-dropsite-sharing",
 			"entities": [dropsiteId],
 			"shared": dropsiteId != this.anchorId
@@ -553,9 +555,9 @@ export class BaseManager
 				continue;
 			for (const ent of this.gatherersByType(gameState, type).values())
 			{
-				if (ent.unitAIState() == "INDIVIDUAL.GATHER.GATHERING")
+				if (isInState(ent, "INDIVIDUAL.GATHER.GATHERING"))
 					++this.gatherers[type].used;
-				else if (ent.unitAIState() == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
+				else if (isInState(ent, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 					++this.gatherers[type].lost;
 			}
 			// TODO  add also a test on remaining resources.
@@ -737,6 +739,12 @@ export class BaseManager
 			this.basesManager.AddTCResGatherer(to);
 		}
 		return num;
+	}
+
+	/** Drops the supply at `index` of the list for `resource` in `band`: its entity is gone. */
+	forgetSupplyAt(resource: string, band: string, index: number): void
+	{
+		this.dropsiteSupplies[resource][band].splice(index, 1);
 	}
 
 	reassignIdleWorkers(gameState: CommonGameState, idleWorkers?: Iterable<CommonEntity>): void

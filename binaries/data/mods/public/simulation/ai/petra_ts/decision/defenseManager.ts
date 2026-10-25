@@ -5,16 +5,17 @@ export type SerializedDefenseManager = {
 
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { AttackPlan } from "./attackPlan.ts";
-import { DefenseArmy } from "./defenseArmy.ts";
+import { AttackPlan } from "../execution/attackPlan.ts";
+import { DefenseArmy } from "../execution/defenseArmy.ts";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from
-	"./entityExtend.ts";
+	"../adapter/entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
-import type { TerritoryMap } from "./mapModule.ts";
-import { Worker } from "./worker.ts";
+import type { TerritoryMap } from "../world/mapModule.ts";
+import { Worker } from "../execution/worker.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
-import { playerId } from "./brands.ts";
+import { playerId } from "../adapter/brands.ts";
+import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
 	Attacked: Array<{ target: EntityId; attacker: EntityId }>;
@@ -125,7 +126,7 @@ export class DefenseManager
 			return false;
 		// Check if the entity is trying to build a new base near our buildings,
 		// and if yes, add this base in our target list.
-		if (entity.unitAIState() == "INDIVIDUAL.REPAIR.REPAIRING")
+		if (isInState(entity, "INDIVIDUAL.REPAIR.REPAIRING"))
 		{
 			const targetId = entity.unitAIOrderData()[0].target;
 			if (targetId !== undefined)
@@ -275,8 +276,7 @@ export class DefenseManager
 			// Keep animals attacking us or our allies.
 			if (ent.hasClass("Animal"))
 			{
-				const state = ent.unitAIState();
-				if (!state || state.split(".")[1] != "COMBAT")
+				if (!hasActivity(ent, "COMBAT"))
 					continue;
 				const orders = ent.unitAIOrderData();
 				if (!orders || !orders.length || !orders[0].target)
@@ -609,12 +609,11 @@ export class DefenseManager
 			if (attacker && gameState.isEntityOwn(attacker) && gameState.isEntityEnemy(target) && !attacker.hasClass("Ship") &&
 			   (!target.hasClass("Structure") || target.attackRange("Ranged")))
 			{
-				const targetAIState = target.unitAIState();
 				// If enemies are in range of one of our defensive structures, garrison it for arrow multiplier
 				// (enemy non-defensive structure are not considered to stay in sync with garrisonManager).
 				if (attacker.position() && attacker.isGarrisonHolder() && attacker.getArrowMultiplier() &&
 				    (target.owner() != 0 || !target.hasClass("Unit") ||
-				     targetAIState && targetAIState.split(".")[1] == "COMBAT"))
+				     hasActivity(target, "COMBAT")))
 					this.garrisonUnitsInside(gameState, attacker, { "attacker": target });
 			}
 
@@ -627,9 +626,7 @@ export class DefenseManager
 
 			if (attacker && attacker.position() && target.hasClass("FishingBoat"))
 			{
-				const unitAIState = target.unitAIState();
-				const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
-				if (target.isIdle() || unitAIStateOrder == "GATHER")
+				if (target.isIdle() || hasActivity(target, "GATHER"))
 				{
 					const pos = attacker.position();
 					const attackerRange = attacker.attackRange("Ranged");
@@ -751,8 +748,7 @@ export class DefenseManager
 				const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
 				if (currentTarget)
 				{
-					const unitAIState = target.unitAIState();
-					const unitAIStateOrder = unitAIState ? unitAIState.split(".")[1] : "";
+					const unitAIStateOrder = activityOf(unitState(target));
 					if (unitAIStateOrder === "COMBAT" && (currentTarget.id() === attacker.id() ||
 						!currentTarget.hasClasses(["Structure", "Support"])))
 						continue;
@@ -778,8 +774,7 @@ export class DefenseManager
 								continue;
 							}
 							// Check that the unit is still attacking the structure (since the last played turn).
-							const state = ent.unitAIState();
-							if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
+							if (!hasActivity(ent, "COMBAT"))
 								continue;
 							const entOrderData = ent.unitAIOrderData();
 							if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||

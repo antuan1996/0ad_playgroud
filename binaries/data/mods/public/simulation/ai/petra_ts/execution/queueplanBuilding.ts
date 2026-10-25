@@ -2,11 +2,11 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate, requireValue } from "./entityExtend.ts";
-import * as mapMask from "./mapMask.ts";
-import { createObstructionMap } from "./mapModule.ts";
+import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate, requireValue } from "../adapter/entityExtend.ts";
+import * as mapMask from "../world/mapMask.ts";
+import { createObstructionMap } from "../world/mapModule.ts";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
-import { NO_LAND, cellIndex, landRegion, worldPos } from "./brands.ts";
+import { NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
 
 type BuildingPosition = {
 	x: number;

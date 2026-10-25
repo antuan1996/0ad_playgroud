@@ -4,9 +4,10 @@ import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
 import { BaseManager, type SerializedBaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
-import { getBestBase, getLandAccess, requireValue } from "./entityExtend.ts";
-import { Worker } from "./worker.ts";
-import { NO_LAND, worldPos } from "./brands.ts";
+import { getBestBase, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
+import { Worker } from "../execution/worker.ts";
+import { NO_LAND, worldPos } from "../adapter/brands.ts";
+import { requireStateName } from "../adapter/unitState.ts";
 
 export interface SerializedBasesManager {
 	properties: {
@@ -600,7 +601,7 @@ export class BasesManager
 		for (const base of this.baseManagers)
 			for (const worker of base.workers.values())
 			{
-				const aiState = requireValue(worker.unitAIState());
+				const aiState = requireStateName(worker);
 				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
 				const orders = worker.unitAIOrderData();

@@ -1,14 +1,15 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, requireValue, setSeaAccess } from
-	"./entityExtend.ts";
-import type { Queue } from "./queue.ts";
-import { ConstructionPlan } from "./queueplanBuilding.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
-import { TransportPlan } from "./transportPlan.ts";
-import { Worker } from "./worker.ts";
+	"../adapter/entityExtend.ts";
+import type { Queue } from "../execution/queue.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { TransportPlan } from "../execution/transportPlan.ts";
+import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
-import { cellIndex, seaRegion } from "./brands.ts";
+import { cellIndex, seaRegion } from "../adapter/brands.ts";
+import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 
 /**
  * Naval Manager
@@ -602,10 +603,10 @@ export class NavalManager
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.isShipBoarding(ship))
 				continue;
 
-			const unitAIState = ship.unitAIState();
+			const state = unitState(ship);
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined ||
-			    unitAIState == "INDIVIDUAL.GATHER.APPROACHING" ||
-			    unitAIState == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
+			    stateIs(state, "INDIVIDUAL.GATHER.APPROACHING") ||
+			    stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 			{
 				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
 				if (!previousPosition || previousPosition[0] != shipPosition[0] ||
@@ -664,8 +665,7 @@ export class NavalManager
 			if (role === undefined || role !== Worker.ROLE_TRADER)	// already accounted before
 				continue;
 
-			const unitAIState = ship.unitAIState();
-			if (unitAIState == "INDIVIDUAL.TRADE.APPROACHINGMARKET")
+			if (isInState(ship, "INDIVIDUAL.TRADE.APPROACHINGMARKET"))
 			{
 				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
 				if (!previousPosition || previousPosition[0] != shipPosition[0] ||
@@ -723,10 +723,10 @@ export class NavalManager
 				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
 					continue;
 				const distSquare = SquareVectorDistance(shipPosition, blockingShip.position());
-				const unitAIState = blockingShip.unitAIState();
+				const state = unitState(blockingShip);
 				if (blockingShip.getMetadata(PlayerID, "transporter") === undefined &&
-				    unitAIState != "INDIVIDUAL.GATHER.APPROACHING" &&
-				    unitAIState != "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
+				    !stateIs(state, "INDIVIDUAL.GATHER.APPROACHING") &&
+				    !stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 				{
 					if (distSquare < 1600)
 						blockingShip.moveToRange(shipPosition[0], shipPosition[1], 40, 45);
@@ -746,8 +746,7 @@ export class NavalManager
 				if (role === undefined || role !== Worker.ROLE_TRADER)	// already accounted before
 					continue;
 				const distSquare = SquareVectorDistance(shipPosition, blockingShip.position());
-				const unitAIState = blockingShip.unitAIState();
-				if (unitAIState != "INDIVIDUAL.TRADE.APPROACHINGMARKET")
+				if (!isInState(blockingShip, "INDIVIDUAL.TRADE.APPROACHINGMARKET"))
 				{
 					if (distSquare < 1600)
 						blockingShip.moveToRange(shipPosition[0], shipPosition[1], 40, 45);

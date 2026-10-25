@@ -1,4 +1,5 @@
-import { AttackPlan } from "./attackPlan.ts";
+import { AttackPlan } from "../execution/attackPlan.ts";
+import { postCommand } from "./commands.ts";
 
 const launchAttackMessages = {
 	"hugeAttack": [
@@ -152,7 +153,7 @@ const emergencyMessages = {
 
 export function launchAttack(gameState: CommonGameState, player: PlayerId, type: string): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(launchAttackMessages[type === AttackPlan.TYPE_HUGE_ATTACK ? "hugeAttack" : "other"]),
 		"translateMessage": true,
@@ -170,7 +171,7 @@ export function answerRequestAttack(gameState: CommonGameState, player: PlayerId
 	if (answer == "other" && other !== undefined)
 		parameters["_player_2"] = other;
 
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(answerRequestAttackMessages[answer]),
 		"translateMessage": true,
@@ -181,7 +182,7 @@ export function answerRequestAttack(gameState: CommonGameState, player: PlayerId
 
 export function sentTribute(gameState: CommonGameState, player: PlayerId): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(sentTributeMessages),
 		"translateMessage": true,
@@ -192,7 +193,7 @@ export function sentTribute(gameState: CommonGameState, player: PlayerId): void
 
 export function requestTribute(gameState: CommonGameState, resource: string): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(requestTributeMessages),
 		"translateMessage": true,
@@ -203,7 +204,7 @@ export function requestTribute(gameState: CommonGameState, resource: string): vo
 
 export function newTradeRoute(gameState: CommonGameState, player: PlayerId): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(newTradeRouteMessages),
 		"translateMessage": true,
@@ -218,7 +219,7 @@ export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 	const message = pickRandom(newDiplomacyMessages[newDiplomaticStance]);
 	if (message === undefined)
 		return;
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": message,
 		"translateMessage": true,
@@ -231,7 +232,7 @@ export function answerRequestDiplomacy(gameState: CommonGameState, player: Playe
 	requestType: string, response: string,
 	requiredTribute?: { wanted: number; type: string }): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/msg " + gameState.sharedScript.playersData[player].name + " " +
 			pickRandom(answerDiplomacyRequestMessages[requestType][response]),
@@ -247,7 +248,7 @@ export function newRequestDiplomacy(gameState: CommonGameState, player: PlayerId
 	requestType: keyof typeof sendDiplomacyRequestMessages,
 	status: keyof typeof sendDiplomacyRequestMessages["ally"]): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/msg " + gameState.sharedScript.playersData[player].name + " " +
 			pickRandom(sendDiplomacyRequestMessages[requestType][status]),
@@ -259,7 +260,7 @@ export function newRequestDiplomacy(gameState: CommonGameState, player: PlayerId
 
 export function emergency(gameState: CommonGameState, enable: boolean): void
 {
-	Engine.PostCommand(PlayerID, {
+	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(emergencyMessages[enable ? "enter" : "exit"]),
 		"translateMessage": true

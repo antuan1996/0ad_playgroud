@@ -1,5 +1,5 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import type { BaseManager } from "./baseManager.ts";
+import type { BaseManager } from "../decision/baseManager.ts";
 import { worldPos } from "./brands.ts";
 
 /** returns true if this unit should be considered as a siege unit */

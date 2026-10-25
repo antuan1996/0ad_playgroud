@@ -1,14 +1,16 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { newTradeRoute as chatNewTradeRoute } from "./chatHelper.ts";
+import { newTradeRoute as chatNewTradeRoute } from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate, requireValue } from
-	"./entityExtend.ts";
-import { ConstructionPlan } from "./queueplanBuilding.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
-import { Worker } from "./worker.ts";
-import { INVALID_ENTITY, landRegion } from "./brands.ts";
+	"../adapter/entityExtend.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { Worker } from "../execution/worker.ts";
+import { INVALID_ENTITY, landRegion } from "../adapter/brands.ts";
+import { requiredStateWithin } from "../adapter/unitState.ts";
+import { postCommand } from "../adapter/commands.ts";
 
 type TradeRoute = {
 	source: EntityId;
@@ -162,7 +164,7 @@ export class TradeManager
 	updateTrader(gameState: CommonGameState, ent: CommonEntity): void
 	{
 		if (ent.hasClass("Ship") && gameState.ai.playedTurn % 5 == 0 &&
-			!requireValue(ent.unitAIState()).startsWith("INDIVIDUAL.COLLECTTREASURE") &&
+			!requiredStateWithin(ent, "INDIVIDUAL.COLLECTTREASURE") &&
 			gatherTreasure(gameState, ent, true))
 		{
 			return;
@@ -271,7 +273,7 @@ export class TradeManager
 			tradingGoods[mostNeeded[1].type] += nextNeed;
 		else
 			tradingGoods[mostNeeded[0].type] += nextNeed;
-		Engine.PostCommand(PlayerID, { "type": "set-trading-goods", "tradingGoods": tradingGoods });
+		postCommand({ "type": "set-trading-goods", "tradingGoods": tradingGoods });
 		if (this.Config.debug > 2)
 			aiWarn(" trading goods set to " + uneval(tradingGoods));
 	}

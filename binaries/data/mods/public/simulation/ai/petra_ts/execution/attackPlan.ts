@@ -1,14 +1,17 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { Config } from "./config.ts";
-import * as difficulty from "./difficultyLevel.ts";
+import { Config } from "../decision/config.ts";
+import * as difficulty from "../decision/difficultyLevel.ts";
 import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireValue } from
-	"./entityExtend.ts";
+	"../adapter/entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Queue } from "./queue.ts";
-import { INVALID_PLAYER, NO_LAND, NO_REGION, playerId, seconds, worldPos } from "./brands.ts";
+import { INVALID_PLAYER, NO_LAND, NO_REGION, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
+import { debugShade, postCommand } from "../adapter/commands.ts";
+import { basesOf } from "../world/bases.ts";
 
 type AttackUnitStat = {
 	priority: number;
@@ -155,7 +158,7 @@ export class AttackPlan
 		let rallyPoint;
 		let rallyAccess;
 		const allAccesses: Record<number, CommonPosition> = {};
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of basesOf(gameState))
 		{
 			if (!base.anchor)
 				continue;
@@ -724,7 +727,7 @@ export class AttackPlan
 				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
 			// warn our allies so that they can help if possible
 			if (!this.requested && this.targetPlayer !== undefined)
-				Engine.PostCommand(PlayerID, { "type": "attack-request", "source": PlayerID, "player": this.targetPlayer });
+				postCommand({ "type": "attack-request", "source": PlayerID, "player": this.targetPlayer });
 		}
 
 		// Remove those units which were in a temporary bombing attack
@@ -1031,7 +1034,7 @@ export class AttackPlan
 			let rallySame;
 			let distminDiff = Math.min();
 			let rallyDiff;
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				const anchor = base.anchor;
 				const anchorPos = anchor ? anchor.position() : undefined;
@@ -1129,7 +1132,7 @@ export class AttackPlan
 		for (const ent of targets.values())
 		{
 			if (this.targetPlayer == 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-			   (!ent.hasClass("Relic") || gameState.ai.HQ.victoryManager.targetedGaiaRelics.has(ent.id())))
+			   (!ent.hasClass("Relic") || gameState.ai.HQ.victoryManager.isRelicRaided(ent.id())))
 				continue;
 			// Do not bother with some pointless targets
 			if (!this.isValidTarget(ent))
@@ -1156,7 +1159,7 @@ export class AttackPlan
 		if (!target)
 			return undefined;
 		if (this.targetPlayer == 0 && gameState.getVictoryConditions().has("capture_the_relic") && target.hasClass("Relic"))
-			gameState.ai.HQ.victoryManager.targetedGaiaRelics.set(target.id(), [this.name]);
+			gameState.ai.HQ.victoryManager.planRelicRaid(target.id(), this.name);
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target
 		this.targetPlayer = target.owner();
@@ -1814,7 +1817,7 @@ export class AttackPlan
 					else if (attackedByStructure[ent.id()] && target.hasClass("Field"))
 						maybeUpdate = true;
 					else if (!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
-						target.hasClass("Civilian") && requireValue(target.unitAIState()).split(".")[1] == "FLEEING")
+						target.hasClass("Civilian") && requiredActivityIs(target, "FLEEING"))
 						maybeUpdate = true;
 				}
 
@@ -1823,7 +1826,7 @@ export class AttackPlan
 				{
 					if (!maybeUpdate)
 						continue;
-					const deltat = ent.unitAIState() === "INDIVIDUAL.COMBAT.APPROACHING" ? 10 : 5;
+					const deltat = isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING") ? 10 : 5;
 					const lastAttackPlanUpdateTime = ent.getMetadata(PlayerID, "lastAttackPlanUpdateTime");
 					if (lastAttackPlanUpdateTime && time - lastAttackPlanUpdateTime < deltat)
 						continue;
@@ -1911,7 +1914,7 @@ export class AttackPlan
 							return false;
 						if (enemy.hasClass("Animal"))
 							return false;
-						if (nearby && enemy.hasClass("Civilian") && requireValue(enemy.unitAIState()).split(".")[1] == "FLEEING")
+						if (nearby && enemy.hasClass("Civilian") && requiredActivityIs(enemy, "FLEEING"))
 							return false;
 						const dist = SquareVectorDistance(enemyPos, entPos);
 						if (dist > range)
@@ -1960,7 +1963,7 @@ export class AttackPlan
 					else if (SquareVectorDistance(targetPos, entPos) > 2500)
 					{
 						let targetClasses = targetClassesUnit;
-						if (maybeUpdate && ent.unitAIState() === "INDIVIDUAL.COMBAT.APPROACHING")	// we may be blocked by walls, attack everything
+						if (maybeUpdate && isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING"))	// we may be blocked by walls, attack everything
 						{
 							if (!ent.hasClasses(["Ranged", "Ship"]))
 								targetClasses = { "attack": ["Unit", "Structure"], "avoid": ["Ship"], "vetoEntities": veto };
@@ -2020,7 +2023,7 @@ export class AttackPlan
 								if (!unitPos)
 									return;
 								const orderData = unit.unitAIOrderData();
-								if (requireValue(unit.unitAIState()).split(".")[1] != "COMBAT" || !orderData || !orderData.length ||
+								if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length ||
 									!orderData[0].target)
 									return;
 								const target = gameState.getEntityById(orderData[0].target ?? -1);
@@ -2059,9 +2062,9 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			if (this.Config.debug > 1 && ent.getMetadata(PlayerID, "transport") !== undefined)
-				Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [2, 2, 0] });
+				debugShade([ent.id()], [2, 2, 0]);
 			else if (this.Config.debug > 1)
-				Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [1, 1, 1] });
+				debugShade([ent.id()], [1, 1, 1]);
 			if (!done)
 				continue;
 			if (ent.getMetadata(PlayerID, "transport") !== undefined)
@@ -2339,7 +2342,7 @@ export class AttackPlan
 					dist = SquareVectorDistance(pos, rallyPoint);
 				}
 				// Then check if we have a nearer base (in case this attack has captured one)
-				for (const base of gameState.ai.HQ.baseManagers())
+				for (const base of basesOf(gameState))
 				{
 					const anchor = base.anchor;
 					const anchorPos = anchor ? anchor.position() : undefined;
@@ -2427,7 +2430,7 @@ export class AttackPlan
 			if (!gameState.isPlayerEnemy(ent.owner()))
 				continue;
 			const access = getLandAccess(gameState, ent);
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				const anchorPos = base.anchor ? base.anchor.position() : undefined;
 				if (!anchorPos)

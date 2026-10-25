@@ -1,12 +1,12 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import { AttackPlan } from "./attackPlan.ts";
+import { AttackPlan } from "../execution/attackPlan.ts";
 import { getAttackBonus, getBestBase, getLandAccess, returnResources, requireValue } from
-	"./entityExtend.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
-import { Worker } from "./worker.ts";
+	"../adapter/entityExtend.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
-import { seconds } from "./brands.ts";
+import { seconds } from "../adapter/brands.ts";
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -37,7 +37,8 @@ export class VictoryManager
 	declare criticalEnts: Map<EntityId, CriticalEntState>;
 	declare guardEnts: Map<EntityId, boolean>;
 	declare healersPerCriticalEnt: number;
-	declare targetedGaiaRelics: Map<EntityId, number[]>;
+	/** Gaia relics we are after, each with the attack plans raiding it; changed only here. */
+	declare private targetedGaiaRelics: Map<EntityId, number[]>;
 	declare tryCaptureGaiaRelic: boolean;
 	declare tryCaptureGaiaRelicLapseTime: GameSeconds;
 
@@ -815,6 +816,18 @@ export class VictoryManager
 		const relicPlans = this.targetedGaiaRelics.get(relic.id());
 		if (relicPlans)
 			relicPlans.push(plan);
+	}
+
+	/** Whether we are after this gaia relic already. */
+	isRelicRaided(relicId: EntityId): boolean
+	{
+		return this.targetedGaiaRelics.has(relicId);
+	}
+
+	/** An attack plan that chose a gaia relic as its target raids it, alone. */
+	planRelicRaid(relicId: EntityId, plan: number): void
+	{
+		this.targetedGaiaRelics.set(relicId, [plan]);
 	}
 
 	abortCaptureGaiaRelic(gameState: CommonGameState, relicId: EntityId): void

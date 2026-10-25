@@ -3,7 +3,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Queue } from "./queue.ts";
 import { Worker } from "./worker.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../decision/config.ts";
 
 /**
  * This takes the input queues and picks which items to fund with resources until no more resources are left to distribute.

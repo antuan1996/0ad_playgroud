@@ -1,8 +1,9 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
-import * as chat from "./chatHelper.ts";
+import * as chat from "../adapter/chatHelper.ts";
 import type { Config } from "./config.ts";
-import { playerId, seconds } from "./brands.ts";
+import { playerId, seconds } from "../adapter/brands.ts";
+import { postCommand } from "../adapter/commands.ts";
 
 type DiplomacyRequestType = "ally" | "neutral";
 type DiplomacyRequestStatus = "accepted" | "allianceBroken" | "declinedRequest" | "waitingForTribute";
@@ -184,7 +185,7 @@ export class DiplomacyManager
 				aiWarn("Tribute " + uneval(tribute) + " sent to player " + i);
 			if (this.Config.chat)
 				chat.sentTribute(gameState, i);
-			Engine.PostCommand(PlayerID, { "type": "tribute", "player": i, "amounts": tribute });
+			postCommand({ "type": "tribute", "player": i, "amounts": tribute });
 		}
 	}
 
@@ -320,7 +321,7 @@ export class DiplomacyManager
 			// Our diplomacy will have changed already if the response was "accept"
 			if (request.status === "waitingForTribute" && request.wanted !== undefined && request.type !== undefined)
 			{
-				Engine.PostCommand(PlayerID, {
+				postCommand({
 					"type": "tribute-request",
 					"source": PlayerID,
 					"player": evt.source,
@@ -347,7 +348,7 @@ export class DiplomacyManager
 					aiWarn("Responding to tribute request from AI player " + evt.source + " with " +
 						uneval(responseTribute));
 				}
-				Engine.PostCommand(PlayerID, { "type": "tribute", "player": evt.source, "amounts": responseTribute });
+				postCommand({ "type": "tribute", "player": evt.source, "amounts": responseTribute });
 				this.nextTributeUpdate = seconds(gameState.ai.elapsedTime + 15);
 			}
 		}
@@ -521,7 +522,7 @@ export class DiplomacyManager
 	{
 		if (gameState.isPlayerEnemy(player) && (newDiplomaticStance === "ally" || newDiplomaticStance === "neutral"))
 			gameState.ai.HQ.attackManager.cancelAttacksAgainstPlayer(gameState, player);
-		Engine.PostCommand(PlayerID, { "type": "diplomacy", "player": player, "to": newDiplomaticStance });
+		postCommand({ "type": "diplomacy", "player": player, "to": newDiplomaticStance });
 		if (this.Config.debug > 1)
 			aiWarn("diplomacy stance with player " + player + " is now " + newDiplomaticStance);
 		if (this.Config.chat)
@@ -594,7 +595,7 @@ export class DiplomacyManager
 
 		if (this.Config.debug > 0)
 			aiWarn("Sending diplomacy request to player " + player + " with " + requestType);
-		Engine.PostCommand(PlayerID, { "type": "diplomacy-request", "source": PlayerID, "player": player, "to": requestType });
+		postCommand({ "type": "diplomacy-request", "source": PlayerID, "player": player, "to": requestType });
 		chat.newRequestDiplomacy(gameState, player, requestType, "sendRequest");
 	}
 

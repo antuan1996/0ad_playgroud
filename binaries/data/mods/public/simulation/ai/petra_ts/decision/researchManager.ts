@@ -1,5 +1,5 @@
-import { ResearchPlan } from "./queueplanResearch.ts";
-import { Worker } from "./worker.ts";
+import { ResearchPlan } from "../execution/queueplanResearch.ts";
+import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 
 /**

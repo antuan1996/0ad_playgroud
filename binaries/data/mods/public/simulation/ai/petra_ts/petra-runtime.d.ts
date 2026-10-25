@@ -18,16 +18,16 @@ declare namespace PetraRuntime {
  * path always runs with them present.
  */
 	interface AIState {
-		Config: import("./config.ts").Config;
-		HQ: import("./headquarters.ts").Headquarters;
+		Config: import("./decision/config.ts").Config;
+		HQ: import("./decision/headquarters.ts").Headquarters;
 /** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 /** Time elapsed in the game, in seconds (copied from the shared script each turn). */
 		elapsedTime: GameSeconds;
 /** Turn counter used to stagger expensive AI work every 8 turns. */
 		playedTurn: number;
-		queueManager: import("./queueManager.ts").QueueManager;
-		queues: Record<string, import("./queue.ts").Queue>;
+		queueManager: import("./execution/queueManager.ts").QueueManager;
+		queues: Record<string, import("./execution/queue.ts").Queue>;
 		/**
 		 * baseAI: the engine's territory grid, copied onto the AI by baseAI.
 		 * Not the territory map the headquarters builds — that one is
@@ -39,13 +39,13 @@ declare namespace PetraRuntime {
 	}
 
 /** Any QueuePlan subclass instance (structural supertype of the concrete plans). */
-	type PlanLike = import("./queueplan.ts").QueuePlan;
+	type PlanLike = import("./execution/queueplan.ts").QueuePlan;
 
 /** The three concrete plan kinds a Queue can hold (all extend PlanLike). */
-	type ConcretePlan = import("./queueplanTraining.ts").TrainingPlan | import("./queueplanBuilding.ts").ConstructionPlan | import("./queueplanResearch.ts").ResearchPlan;
+	type ConcretePlan = import("./execution/queueplanTraining.ts").TrainingPlan | import("./execution/queueplanBuilding.ts").ConstructionPlan | import("./execution/queueplanResearch.ts").ResearchPlan;
 
 /** All named Petra queues, keyed by their queue name (see Config.priorities). */
-	type QueueCollection = Record<string, import("./queue.ts").Queue>;
+	type QueueCollection = Record<string, import("./execution/queue.ts").Queue>;
 
 /**
  * The three adjustable personality axes Petra reads from the game settings

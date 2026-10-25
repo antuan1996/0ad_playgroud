@@ -1,23 +1,25 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAccess, isFastMoving,
-	isSupplyFull, requireValue, returnResources } from "./entityExtend.ts";
+	isSupplyFull, requireValue, returnResources } from "../adapter/entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
-import type { BaseManager, ResourceSupply } from "./baseManager.ts";
-import { GAIA, INVALID_ENTITY, NO_REGION } from "./brands.ts";
+import type { ResourceSupply } from "../decision/baseManager.ts";
+import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
+import { GAIA, INVALID_ENTITY, NO_REGION } from "../adapter/brands.ts";
+import { requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
  */
 export class Worker
 {
-	declare base: BaseManager;
+	declare base: WorkerBase;
 	declare baseAccess: AccessIndex;
 	declare baseID: number;
 	declare ent: CommonEntity;
 	declare entAccess: AccessIndex;
 
-	constructor(base: BaseManager)
+	constructor(base: WorkerBase)
 	{
 		this.base = base;
 		this.baseID = base.ID;
@@ -115,10 +117,10 @@ export class Worker
 
 		this.ent = ent;
 
-		const unitAIState = ent.unitAIState();
+		const state = unitState(ent);
 		if ((subrole === Worker.SUBROLE_HUNTER || subrole === Worker.SUBROLE_GATHERER) &&
-		    (unitAIState == "INDIVIDUAL.GATHER.GATHERING" || unitAIState == "INDIVIDUAL.GATHER.APPROACHING" ||
-		     unitAIState == "INDIVIDUAL.COMBAT.APPROACHING"))
+		    (stateIs(state, "INDIVIDUAL.GATHER.GATHERING") || stateIs(state, "INDIVIDUAL.GATHER.APPROACHING") ||
+		     stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING")))
 		{
 			if (this.isInaccessibleSupply(gameState))
 			{
@@ -127,7 +129,7 @@ export class Worker
 				ent.stopMoving();
 			}
 
-			if (unitAIState == "INDIVIDUAL.COMBAT.APPROACHING" && ent.unitAIOrderData().length)
+			if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ent.unitAIOrderData().length)
 			{
 				const orderData = ent.unitAIOrderData()[0];
 				if (orderData && orderData.target)
@@ -186,7 +188,7 @@ export class Worker
 			ent.setMetadata(PlayerID, "alreadyTried", undefined);
 		}
 
-		const unitAIStateOrder = requireValue(unitAIState).split(".")[1];
+		const unitAIStateOrder = requireActivity(state);
 		// If we're fighting or hunting, let's not start gathering except if inaccessible target
 		// but for fishers where UnitAI must have made us target a moving whale.
 		// Also, if we are attacking, do not capture
@@ -194,7 +196,7 @@ export class Worker
 		{
 			if (subrole === Worker.SUBROLE_FISHER)
 				this.startFishing(gameState);
-			else if (unitAIState == "INDIVIDUAL.COMBAT.APPROACHING" && ent.unitAIOrderData().length &&
+			else if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ent.unitAIOrderData().length &&
 				!ent.getMetadata(PlayerID, "PartOfArmy"))
 			{
 				const orderData = ent.unitAIOrderData()[0];
@@ -209,7 +211,7 @@ export class Worker
 					}
 				}
 			}
-			else if (unitAIState == "INDIVIDUAL.COMBAT.ATTACKING" && ent.unitAIOrderData().length &&
+			else if (stateIs(state, "INDIVIDUAL.COMBAT.ATTACKING") && ent.unitAIOrderData().length &&
 				!ent.getMetadata(PlayerID, "PartOfArmy"))
 			{
 				const orderData = ent.unitAIOrderData()[0];
@@ -293,7 +295,7 @@ export class Worker
 						}
 					}
 				}
-				if (unitAIState == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
+				if (stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 				{
 					if (gameState.ai.playedTurn % 10 == 0)
 					{
@@ -406,7 +408,7 @@ export class Worker
 				{
 					// nothing to hunt around. Try another region if any
 					let nowhereToHunt = true;
-					for (const base of gameState.ai.HQ.baseManagers())
+					for (const base of basesOf(gameState))
 					{
 						const baseAnchor = base.anchor;
 						const basePos = baseAnchor ? baseAnchor.position() : undefined;
@@ -435,7 +437,7 @@ export class Worker
 					const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(ent.position());
 					if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 						this.startHunting(gameState);
-					else if (unitAIState == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
+					else if (stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 					{
 						// Check that UnitAI does not send us to an inaccessible dropsite
 						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
@@ -504,8 +506,9 @@ export class Worker
 		if (resource == "food" && this.startHunting(gameState))
 			return true;
 
-		const findSupply = function(worker: Worker, supplies: ResourceSupply[]): CommonEntity | false
+		const findSupply = function(worker: Worker, base: BaseView & SupplyUpkeep, resource: string, band: string): CommonEntity | false
 		{
+			const supplies = base.dropsiteSupplies[resource][band];
 			const ent = worker.ent;
 			let ret: CommonEntity | false = false;
 			const gatherRates = requireValue(ent.resourceGatherRates());
@@ -515,7 +518,7 @@ export class Worker
 				// exhausted resource, remove it from this list
 				if (!entity)
 				{
-					supplies.splice(i--, 1);
+					base.forgetSupplyAt(resource, band, i--);
 					continue;
 				}
 				if (isSupplyFull(gameState, entity))
@@ -552,7 +555,7 @@ export class Worker
 		// first look in our own base if accessible from our present position
 		if (this.baseAccess == this.entAccess)
 		{
-			supply = findSupply(this, this.base.dropsiteSupplies[resource].nearby);
+			supply = findSupply(this, this.base, resource, "nearby");
 			if (supply)
 			{
 				this.ent.gather(supply);
@@ -574,7 +577,7 @@ export class Worker
 					return true;
 				}
 			}
-			supply = findSupply(this, this.base.dropsiteSupplies[resource].medium);
+			supply = findSupply(this, this.base, resource, "medium");
 			if (supply)
 			{
 				this.ent.gather(supply);
@@ -583,13 +586,13 @@ export class Worker
 		}
 		// So if we're here we have checked our whole base for a proper resource (or it was not accessible)
 		// --> check other bases directly accessible
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of basesOf(gameState))
 		{
 			if (base.ID == this.baseID)
 				continue;
 			if (base.accessIndex != this.entAccess)
 				continue;
-			supply = findSupply(this, base.dropsiteSupplies[resource].nearby);
+			supply = findSupply(this, base, resource, "nearby");
 			if (supply)
 			{
 				this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -599,7 +602,7 @@ export class Worker
 		}
 		if (resource == "food")	// --> for food, try to gather from fields if any, otherwise build one if any
 		{
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				if (base.ID == this.baseID)
 					continue;
@@ -621,13 +624,13 @@ export class Worker
 				}
 			}
 		}
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of basesOf(gameState))
 		{
 			if (base.ID == this.baseID)
 				continue;
 			if (base.accessIndex != this.entAccess)
 				continue;
-			supply = findSupply(this, base.dropsiteSupplies[resource].medium);
+			supply = findSupply(this, base, resource, "medium");
 			if (supply)
 			{
 				this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -660,11 +663,11 @@ export class Worker
 			return true;
 
 		// Still nothing ... try bases which need a transport
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of basesOf(gameState))
 		{
 			if (base.accessIndex == this.entAccess)
 				continue;
-			supply = findSupply(this, base.dropsiteSupplies[resource].nearby);
+			supply = findSupply(this, base, resource, "nearby");
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID != this.baseID)
@@ -674,7 +677,7 @@ export class Worker
 		}
 		if (resource == "food")	// --> for food, try to gather from fields if any, otherwise build one if any
 		{
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				if (base.accessIndex == this.entAccess)
 					continue;
@@ -694,11 +697,11 @@ export class Worker
 				}
 			}
 		}
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of basesOf(gameState))
 		{
 			if (base.accessIndex == this.entAccess)
 				continue;
-			supply = findSupply(this, base.dropsiteSupplies[resource].medium);
+			supply = findSupply(this, base, resource, "medium");
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID != this.baseID)
@@ -746,20 +749,20 @@ export class Worker
 		{
 			if (this.baseAccess == this.entAccess)
 			{
-				supply = findSupply(this, this.base.dropsiteSupplies[resource].faraway);
+				supply = findSupply(this, this.base, resource, "faraway");
 				if (supply)
 				{
 					this.ent.gather(supply);
 					return true;
 				}
 			}
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				if (base.ID == this.baseID)
 					continue;
 				if (base.accessIndex != this.entAccess)
 					continue;
-				supply = findSupply(this, base.dropsiteSupplies[resource].faraway);
+				supply = findSupply(this, base, resource, "faraway");
 				if (supply)
 				{
 					this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -767,11 +770,11 @@ export class Worker
 					return true;
 				}
 			}
-			for (const base of gameState.ai.HQ.baseManagers())
+			for (const base of basesOf(gameState))
 			{
 				if (base.accessIndex == this.entAccess)
 					continue;
-				supply = findSupply(this, base.dropsiteSupplies[resource].faraway);
+				supply = findSupply(this, base, resource, "faraway");
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID != this.baseID)

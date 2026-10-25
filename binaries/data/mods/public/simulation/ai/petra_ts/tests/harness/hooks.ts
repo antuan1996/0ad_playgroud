@@ -3,11 +3,11 @@
  *
  * The AI scripts import each other the way the game's module loader addresses
  * files in the VFS, e.g. `simulation/ai/common-api/utils.js`, and the reference
- * JS also names its own siblings that way (`simulation/ai/petra/queue.js`).
- * Node has no idea what those mean, so they are mapped to real paths:
+ * bot (petra_out) names its own modules that way
+ * (`simulation/ai/petra_out/execution/queue.js`). Node has no idea what those
+ * mean, so they are mapped to real paths:
  *
- *   simulation/ai/petra/<x>      -> the target under test (petra_ts or petra)
- *   simulation/ai/petra_ts/<x>   -> the same
+ *   simulation/ai/petra_ts/<x>   -> the target under test
  *   simulation/<x>               -> binaries/data/mods/public/simulation/<x>
  *
  * Registered from setup.ts, which tests are run through, so it is installed
@@ -36,12 +36,12 @@ registerHooks({
 
 function resolveVfs(specifier: string): string
 {
-	const petraPrefixed = /^simulation\/ai\/(?:petra|petra_ts)\/(.+)$/;
+	const petraPrefixed = /^simulation\/ai\/petra_ts\/(.+)$/;
 	const match = petraPrefixed.exec(specifier);
 	if (match)
 	{
 		const { dir, ext } = petraModuleDir();
-		// The reference spells its siblings ".js"; the sources spell them ".ts".
+		// The bot spells its modules ".js"; the sources spell them ".ts".
 		const name = match[1].replace(/\.js$/, ext);
 		return path.join(dir, name);
 	}

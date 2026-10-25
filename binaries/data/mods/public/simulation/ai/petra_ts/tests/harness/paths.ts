@@ -18,13 +18,18 @@
  * `ref` is the game's own copy. The harness only ever imports it, so running
  * the suite cannot change it — but nothing here should either.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type PetraTarget = "src" | "ref" | "out";
+/**
+ * What the tests run against: the port's sources (src) or the bot built from
+ * them (out). The original petra/*.js is no longer a target (stage 3, PLAN.md:
+ * the port's folders and modules no longer match it).
+ */
+export type PetraTarget = "src" | "out";
 
-const VALID: PetraTarget[] = ["src", "ref", "out"];
+const VALID: PetraTarget[] = ["src", "out"];
 
 function findRepoRoot(): string
 {
@@ -76,9 +81,23 @@ export function petraModuleDir(target = petraTarget()): { dir: string; ext: stri
 	{
 	case "src":
 		return { dir: path.join(aiRoot, "petra_ts"), ext: ".ts" };
-	case "ref":
-		return { dir: path.join(aiRoot, "petra"), ext: ".js" };
 	case "out":
 		return { dir: path.join(aiRoot, "petra_out"), ext: ".js" };
 	}
+}
+
+/**
+ * The file of module `name` (like "queue", "headquarters") in the target, in
+ * whichever layer folder it lives (adapter/, world/, decision/, execution/),
+ * so a test names a module and not its place.
+ */
+export function petraModuleFile(name: string, target = petraTarget()): string
+{
+	const { dir, ext } = petraModuleDir(target);
+	const matches = (readdirSync(dir, { "recursive": true }) as string[])
+		.map((file) => file.split(path.sep).join("/"))
+		.filter((file) => !file.startsWith("tests/") && path.posix.basename(file) === name + ext);
+	if (matches.length !== 1)
+		throw new Error(`module "${name}": ${matches.length ? `${matches.length} files (${matches.join(", ")})` : "no file"} in ${dir}`);
+	return path.join(dir, matches[0]);
 }

@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 
 import "./hooks.ts";
 import { installEngineGlobals } from "./engine.ts";
-import { commonApiRoot, petraModuleDir, petraTarget, type PetraTarget } from "./paths.ts";
+import { commonApiRoot, petraModuleDir, petraModuleFile, petraTarget, type PetraTarget } from "./paths.ts";
 
 installEngineGlobals();
 
@@ -30,12 +30,12 @@ export function targetLabel(): string
 }
 
 /**
- * Load `<name>.ts`/`.js` from the target directory, e.g. "queue", "headquarters".
+ * Load module `name` (`<name>.ts`/`.js`) of the target, e.g. "queue",
+ * "headquarters", from whichever layer folder holds it.
  */
 export function loadPetraModule<T>(name: string): Promise<T>
 {
-	const { dir, ext } = petraModuleDir();
-	return import(pathToFileURL(path.join(dir, name + ext)).href) as Promise<T>;
+	return import(pathToFileURL(petraModuleFile(name)).href) as Promise<T>;
 }
 
 /**

@@ -4,10 +4,10 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate, requireValue } from
-	"./entityExtend.ts";
-import { ConstructionPlan } from "./queueplanBuilding.ts";
+	"../adapter/entityExtend.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
-import { cellIndex, landRegion, seaRegion } from "./brands.ts";
+import { cellIndex, landRegion, seaRegion } from "../adapter/brands.ts";
 
 /**
  * Determines the strategy to adopt when starting a new game,

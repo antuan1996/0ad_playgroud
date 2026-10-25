@@ -1,12 +1,12 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { AttackPlan, type SerializedAttackPlan } from "./attackPlan.ts";
-import * as chat from "./chatHelper.ts";
+import { AttackPlan, type SerializedAttackPlan } from "../execution/attackPlan.ts";
+import * as chat from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { allowCapture, getLandAccess, requireValue } from "./entityExtend.ts";
-import { Worker } from "./worker.ts";
-import { playerId, worldPos } from "./brands.ts";
+import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
+import { Worker } from "../execution/worker.ts";
+import { playerId, worldPos } from "../adapter/brands.ts";
 
 export type SerializedAttackManager = {
     properties: {

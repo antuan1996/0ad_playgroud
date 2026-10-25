@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { AttackManager } from "./attackManager.ts";
-import { AttackPlan } from "./attackPlan.ts";
+import { AttackPlan } from "../execution/attackPlan.ts";
 import type { BaseManager } from "./baseManager.ts";
 import { BasesManager } from "./basesManager.ts";
 import { BuildManager } from "./buildManager.ts";
@@ -12,21 +12,22 @@ import * as difficulty from "./difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
-	requireTemplate, requireValue, getSeaAccess, setSeaAccess } from "./entityExtend.ts";
+	requireTemplate, requireValue, getSeaAccess, setSeaAccess } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
-import * as mapMask from "./mapMask.ts";
+import * as mapMask from "../world/mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { createBorderMap, createObstructionMap, createTerritoryMap, type TerritoryMap } from
-	"./mapModule.ts";
+	"../world/mapModule.ts";
 import { NavalManager } from "./navalManager.ts";
-import { ConstructionPlan } from "./queueplanBuilding.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { ResearchManager } from "./researchManager.ts";
 import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
-import { Worker } from "./worker.ts";
-import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "./brands.ts";
+import { Worker } from "../execution/worker.ts";
+import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { hasActivity } from "../adapter/unitState.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -2260,8 +2261,7 @@ export class Headquarters
 		{
 			if (!ent.canCapture())
 				continue;
-			const state = ent.unitAIState();
-			if (!state || !state.split(".")[1] || state.split(".")[1] != "COMBAT")
+			if (!hasActivity(ent, "COMBAT"))
 				continue;
 			const orderData = ent.unitAIOrderData();
 			if (!orderData || !orderData.length || !orderData[0].target)

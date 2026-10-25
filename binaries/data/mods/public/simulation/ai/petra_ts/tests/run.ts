@@ -1,21 +1,19 @@
 /**
- * Runs the Petra unit tests against one implementation.
+ * Runs the Petra unit tests against one build of the port.
  *
- *   node tests/run.ts              # the port: simulation/ai/petra_ts/*.ts
- *   node tests/run.ts ref          # the original: simulation/ai/petra/*.js
- *   node tests/run.ts out          # the built "Petra TS" bot: simulation/ai/petra_out/*.js
- *   node tests/run.ts --coverage   # the port, plus a coverage report
- *   node tests/run.ts ref --coverage
+ *   node tests/run.ts              # the sources: simulation/ai/petra_ts/**\/*.ts
+ *   node tests/run.ts out          # the built "Petra TS" bot: simulation/ai/petra_out/**\/*.js
+ *   node tests/run.ts --coverage   # the sources, plus Node's coverage report
  *
- * The two are expected to agree except where the port deliberately behaves
- * differently; a `ref` run then exits non-zero, and that failure is the record
- * of the difference rather than of a regression.
+ * Until stage 3 (PLAN.md) the same tests also ran against the original
+ * petra/*.js; its modules no longer match the port's, so it is no target now
+ * (the parity of the frozen port is checked in games, stage 1).
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const targets = ["src", "ref", "out"];
+const targets = ["src", "out"];
 const [target = "src", ...flags] = process.argv.slice(2);
 
 if (!targets.includes(target) || flags.some((flag) => flag !== "--coverage"))
@@ -37,7 +35,7 @@ const pattern = `${here.split(path.sep).join("/")}/**/*.test.ts`;
 const coverageFlags = flags.includes("--coverage")
 	? [
 		"--experimental-test-coverage",
-		`--test-coverage-include=${target === "ref" ? "**/petra/**" : target === "out" ? "**/petra_out/**" : "**/petra_ts/**"}`,
+		`--test-coverage-include=${target === "out" ? "**/petra_out/**" : "**/petra_ts/**"}`,
 		"--test-coverage-exclude=**/tests/**"
 	]
 	: [];

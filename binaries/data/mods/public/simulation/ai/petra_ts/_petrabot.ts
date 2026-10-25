@@ -1,19 +1,41 @@
 import { BaseAI } from "simulation/ai/common-api/baseAI.js";
+import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Entity } from "simulation/ai/common-api/entity.js";
-import { Config } from "./config.ts";
-import { Headquarters } from "./headquarters.ts";
-import type { HeadquartersEvents, HeadquartersSerializedData } from "./headquarters.ts";
-import { Queue } from "./queue.ts";
-import { QueueManager } from "./queueManager.ts";
-import { gameAnalysis } from "./startingStrategy.ts";
-import { seconds, secondsOf } from "./brands.ts";
+import { Config } from "./decision/config.ts";
+import { Headquarters } from "./decision/headquarters.ts";
+import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
+import { Queue } from "./execution/queue.ts";
+import { QueueManager } from "./execution/queueManager.ts";
+import { gameAnalysis } from "./decision/startingStrategy.ts";
+import { seconds, secondsOf } from "./adapter/brands.ts";
 
 type PetraBotSettings = Record<string, unknown> & {
 	difficulty: number;
 	behavior?: string;
 };
 
+/**
+ * The version of what the bot saves (constraint 4, PLAN.md §1). Raise it with
+ * any change to the shape of a manager's saved data: a save of another
+ * version is refused with a message, and the bot starts afresh from the game
+ * as it stands, as it does in a new game.
+ */
+export const SAVE_VERSION = 1;
+
+/** The version a save says it is of, if it says one. */
+function savedVersion(data: unknown): unknown
+{
+	return typeof data === "object" && data !== null && "saveVersion" in data ? data.saveVersion : undefined;
+}
+
+/** Whether a save is of the version this code reads (its other fields are trusted then). */
+function isCurrentSave(data: unknown): data is PetraBotSavedData
+{
+	return savedVersion(data) === SAVE_VERSION;
+}
+
 type PetraBotSavedData = {
+	saveVersion: number;
 	canPlay: boolean;
 	uniqueIDs: Record<string, number>;
 	turn: number;
@@ -318,6 +340,7 @@ export class PetraBot extends BaseAI
 			throw new Error("Cannot serialize: queueManager or HQ is undefined");
 
 		return {
+			"saveVersion": SAVE_VERSION,
 			"canPlay": this.canPlay,
 			"uniqueIDs": this.uniqueIDs,
 			"turn": this.turn,
@@ -330,8 +353,18 @@ export class PetraBot extends BaseAI
 		};
 	}
 
-	Deserialize(data: PetraBotSavedData, sharedScript: CommonSharedScript): void
+	Deserialize(data: unknown, sharedScript: CommonSharedScript): void
 	{
+		// A save without a version comes from before versions (stage 3) or
+		// from another bot: neither is a shape this code knows.
+		if (!isCurrentSave(data))
+		{
+			aiWarn("Petra: this save is of version " + String(savedVersion(data)) + " and the bot reads version " +
+				SAVE_VERSION + ": it starts afresh from the game as it stands");
+			// the old save's notes on our units name bases and plans that no longer exist
+			sharedScript._entityMetadata[this.player] = {};
+			return;
+		}
 		this.isDeserialized = true;
 		this.data = data;
 	}

@@ -1,8 +1,10 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { getLandAccess, requireMetadata, requireValue } from "./entityExtend.ts";
+import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
-import { worldPos } from "./brands.ts";
+import { worldPos } from "../adapter/brands.ts";
+import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
+import { debugShade } from "../adapter/commands.ts";
 
 /**
  * Describes a transport plan
@@ -182,9 +184,9 @@ export class TransportPlan
 			if (this.debug > 1)
 			{
 				if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
-					Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [2, 0, 0] });
+					debugShade([ent.id()], [2, 0, 0]);
 				else
-					Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [0, 2, 0] });
+					debugShade([ent.id()], [0, 2, 0]);
 			}
 			return ship;
 		}
@@ -401,9 +403,9 @@ export class TransportPlan
 				{
 					shipTested[shipId] = true;
 					let retry = false;
-					const unitAIState = ship.unitAIState();
-					if (unitAIState == "INDIVIDUAL.WALKING" ||
-					    unitAIState == "INDIVIDUAL.PICKUP.APPROACHING")
+					const state = unitState(ship);
+					if (stateIs(state, "INDIVIDUAL.WALKING") ||
+					    stateIs(state, "INDIVIDUAL.PICKUP.APPROACHING"))
 					{
 						if (time - requireMetadata(ship, "timeGarrison") > 2)
 						{
@@ -416,7 +418,7 @@ export class TransportPlan
 						}
 					}
 
-					else if (unitAIState != "INDIVIDUAL.PICKUP.LOADING" &&
+					else if (!stateIs(state, "INDIVIDUAL.PICKUP.LOADING") &&
 						   time - requireMetadata(ship, "timeGarrison") > 5 ||
 						   time - requireMetadata(ship, "timeGarrison") > 8)
 					{
@@ -713,7 +715,7 @@ export class TransportPlan
 
 		for (const ship of this.transportShips.values())
 		{
-			if (ship.unitAIState() == "INDIVIDUAL.WALKING")
+			if (isInState(ship, "INDIVIDUAL.WALKING"))
 				continue;
 			const shipId = ship.id();
 			// set for every ship of the plan when it set sail

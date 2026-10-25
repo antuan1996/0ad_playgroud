@@ -1,11 +1,10 @@
 /**
  * Line, function and block coverage of Petra, read straight from V8.
  *
- *   node tests/coverage.ts                 # the port: simulation/ai/petra_ts/*.ts
- *   node tests/coverage.ts ref             # the original: simulation/ai/petra/*.js
- *   node tests/coverage.ts both            # the two side by side
+ *   node tests/coverage.ts                 # the port: simulation/ai/petra_ts/**\/*.ts
+ *   node tests/coverage.ts out             # the built bot: simulation/ai/petra_out/**\/*.js
  *   node tests/coverage.ts src --file worker        # one module's never-run lines and blocks
- *   node tests/coverage.ts both --json cov.json     # everything, for other tools
+ *   node tests/coverage.ts src --json cov.json      # everything, for other tools
  *
  * Why not `--experimental-test-coverage`: its line figure counts a line as run
  * when V8 left out the line's block, and V8 leaves a block out whenever the
@@ -339,9 +338,10 @@ function analyseTarget(target: PetraTarget): TargetCoverage
 	try
 	{
 		const { "dir": moduleDir, ext } = petraModuleDir(target);
-		const files = readdirSync(moduleDir)
-			.filter((name) => name.endsWith(ext) && !name.endsWith(".d.ts"))
-			.sort()
+		const files = (readdirSync(moduleDir, { "recursive": true }) as string[])
+			.map((name) => name.split(path.sep).join("/"))
+			.filter((name) => name.endsWith(ext) && !name.endsWith(".d.ts") && !name.startsWith("tests/"))
+			.sort((a, b) => path.posix.basename(a).localeCompare(path.posix.basename(b)))
 			.map((name) => path.join(moduleDir, name));
 		return { target, tests, "modules": files.map((file) => analyseModule(dir, file)) };
 	}
@@ -395,27 +395,6 @@ function printTable(result: TargetCoverage): void
 		console.log("* not loaded by any test");
 }
 
-function printBoth(src: TargetCoverage, ref: TargetCoverage): void
-{
-	for (const result of [src, ref])
-		console.log(`${result.target}: ${result.tests.total} tests, ${result.tests.pass} pass, ${result.tests.fail} fail`);
-	console.log("\nmodule               port lines      %   original lines      %   port blocks  orig blocks");
-	const byName = new Map(ref.modules.map((m) => [m.module, m]));
-	const names = [...new Set([...src.modules.map((m) => m.module), ...ref.modules.map((m) => m.module)])].sort();
-	for (const name of names)
-	{
-		const s = src.modules.find((m) => m.module === name);
-		const r = byName.get(name);
-		const cell = (m: ModuleCoverage | undefined): string =>
-			m ? `${`${m.runLines}/${m.codeLines}`.padStart(14)} ${pct(m.runLines, m.codeLines)}` : " ".repeat(21);
-		console.log(`${name.padEnd(20)} ${cell(s)} ${cell(r)}   ${String(s?.missedBlocks.length ?? "").padStart(11)}  ${String(r?.missedBlocks.length ?? "").padStart(11)}`);
-	}
-	const ts = totals(src.modules);
-	const tr = totals(ref.modules);
-	console.log(`${"all modules".padEnd(20)} ${`${ts.runLines}/${ts.codeLines}`.padStart(14)} ${pct(ts.runLines, ts.codeLines)} ` +
-		`${`${tr.runLines}/${tr.codeLines}`.padStart(14)} ${pct(tr.runLines, tr.codeLines)}   ${String(ts.blocks).padStart(11)}  ${String(tr.blocks).padStart(11)}`);
-}
-
 function printModule(result: TargetCoverage, name: string): void
 {
 	const m = result.modules.find((mod) => mod.module === name);
@@ -443,19 +422,16 @@ const option = (flag: string): string | undefined =>
 	return at === -1 ? undefined : args[at + 1];
 };
 const mode = args[0] && !args[0].startsWith("--") ? args[0] : "src";
-if (!["src", "ref", "both"].includes(mode))
+if (mode !== "src" && mode !== "out")
 {
-	console.error("usage: coverage.ts [src|ref|both] [--file <module>] [--json <path>]");
+	console.error("usage: coverage.ts [src|out] [--file <module>] [--json <path>]");
 	process.exit(2);
 }
-const targets: PetraTarget[] = mode === "both" ? ["src", "ref"] : [mode as PetraTarget];
-const results = targets.map(analyseTarget);
+const results = [analyseTarget(mode)];
 const file = option("--file");
 
 if (file)
 	results.forEach((result) => printModule(result, file));
-else if (results.length === 2)
-	printBoth(results[0], results[1]);
 else
 	printTable(results[0]);
 

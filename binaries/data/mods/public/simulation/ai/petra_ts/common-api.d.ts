@@ -193,7 +193,7 @@ interface CommonTechnologyTemplate
 }
 
 type CommonBaseAI = import("simulation/ai/common-api/baseAI.js").BaseAI;
-type PetraBaseManager = import("./baseManager.ts").BaseManager;
+type PetraBaseManager = import("./decision/baseManager.ts").BaseManager;
 
 declare module "simulation/ai/common-api/utils.js"
 {

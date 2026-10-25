@@ -1,9 +1,10 @@
-import { requireValue } from "./entityExtend.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { getMapIndices } from "simulation/ai/common-api/utils.js";
 import * as mapMask from "./mapMask.ts";
-import { cellIndex, playerId } from "./brands.ts";
+import { cellIndex, playerId } from "../adapter/brands.ts";
+import { debugShade } from "../adapter/commands.ts";
 
 /** map functions */
 
@@ -239,10 +240,10 @@ function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 		const z = Math.round(pos[1] / cell);
 		const id = x + width*z;
 		if (map.map[id] == 1)
-			Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [2, 0, 0] });
+			debugShade([ent.id()], [2, 0, 0]);
 		else if (map.map[id] == 2)
-			Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [0, 2, 0] });
+			debugShade([ent.id()], [0, 2, 0]);
 		else if (map.map[id] == 3)
-			Engine.PostCommand(PlayerID, { "type": "set-shading-color", "entities": [ent.id()], "rgb": [0, 0, 2] });
+			debugShade([ent.id()], [0, 0, 2]);
 	});
 }

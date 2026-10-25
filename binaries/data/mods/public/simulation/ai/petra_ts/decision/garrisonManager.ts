@@ -1,7 +1,8 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { dumpEntity, isSiegeUnit, requireValue } from "./entityExtend.ts";
-import { Worker } from "./worker.ts";
+import { dumpEntity, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
+import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
+import { hasActivity } from "../adapter/unitState.ts";
 
 type GarrisonHolderData = {
 	list: EntityId[];
@@ -166,8 +167,7 @@ export class GarrisonManager
 					{
 						if (ent.owner() == 0)
 						{
-							const unitAIState = ent.unitAIState();
-							if (!unitAIState || unitAIState.split(".")[1] != "COMBAT")
+							if (!hasActivity(ent, "COMBAT"))
 								continue;
 						}
 					}
