@@ -76,6 +76,8 @@ noted. Worth raising upstream rather than changing in the port alone.
 - **`entityExtend.getMaxStrength`**: a template with no attack returns 0 before its armour is counted.
 - **`baseManager.assignToFoundations`**: `if (target.hasClass("Field")) continue` cannot fire (fields are filtered out of the foundations before the loop).
 - **`baseManager`**: a worker already mending one building but still marked as a gatherer can be taken by the next repair (only `builder` subroles are kept).
+- **`defenseManager.checkEvents`**: a structure it gives up (capture ratio between 0.5 and 0.7 where it cannot be defended) is destroyed once per `Attacked` event on it that turn: 69 `delete-entities` for one tower in one turn in a mirror match. Harmless, the engine deletes it once.
+- **`worker` builders**: a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home its UnitAI state is not REPAIR, so every update sends the pair again until it arrives: 37 times in two minutes for one worker in a mirror match. The orders keep the same goal; whether each new one delays the walk (a fresh path) is not measured.
 - **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. On a fruit-rich map a bot under pressure starves with wood to spare: in a mirror match (§11, seeds 579602995/974380524, savanna) one side kept 1150–3850 fruit in reach all game, so never built a field, while 6–13 units, then none, gathered food; food stayed under 350 from minute 3 and the side was destroyed at 16:39. The code's own TODO names the gap ("add a check on time used/lost").
 
 ## 5. Unreachable code
