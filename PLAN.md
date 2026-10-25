@@ -11,7 +11,7 @@ project are referenced to the files that hold them.
 |---|---|---|
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
-| Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId` are plain `number` aliases; commands are a union by `type` |
+| Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex`, `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<Grid>` are branded (stage 2; conversions in `petra_ts/brands.ts`); commands are a union by `type` |
 | Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1532 tests on both targets; 95.6% real line coverage; the original fails 19, each a bug the port fixes |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
@@ -99,6 +99,18 @@ Plans are the AI's own objects, so their transitions can be enforced. Today
   plans and queue items.
 - Serialization: each state serializes to a tagged record; `Deserialize`
   validates the tag and rebuilds the state, or rejects the save (constraint 4).
+- **Done in stage 2, the state kind:** `attackPlan.ts` declares
+  `AttackTransitions` (each state and the states it may move to; the values
+  are the strings Petra saves, with names now for `"walking"`,
+  `"transporting"` and the attacking `""`), `state: AttackPlanState`, and
+  `changeState(from, to)`, which only type-checks for a listed move and warns
+  if the plan is not where its caller says. `Deserialize` parses the saved
+  tag and sends a plan with an unknown one back to preparation.
+- **Deferred, the data per state:** in Petra's logic the data spans the
+  states (the target is chosen and updated in all of them, the path is
+  computed while preparing), so moving it into the states changes the logic,
+  not only its types. It goes with stage 4, where the withdrawal and the
+  attack's handling are rewritten anyway.
 
 ### 3.2 Parsing what the AI only observes
 
@@ -135,6 +147,13 @@ Brand the primitives that are mixed up today or easily could be:
 | `AccessIndex`, `SeaIndex` | `number` | comparing a land region with a sea index |
 | `GameMs`, `GameSeconds` | `number` | `elapsedTime` is seconds, the timer and commands use milliseconds |
 
+Done in stage 2, all of them, in `petra_ts/brands.ts`. Two notes from doing
+it: a time loses its brand in arithmetic (`elapsedTime + 20` is a plain
+number, marked again with `seconds()`), so the brand guards what a time is
+stored as, not every sum; and a record keyed by a `for...in` key keeps
+`number` keys, since a branded key cannot index it (a `Map` would, but it
+iterates in insertion order where an object lists integer keys in ascending
+order: a behaviour change, for stage 3).
 Conversions live in one module (`gamePosToMapPos` and friends) and are the
 only way to cross between brands. Brands cost nothing at runtime (they are
 intersections with a phantom tag, erased by `tsc`).
@@ -259,7 +278,7 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 |---|---|---|
 | 0. Baselines (**done** 2026-10-25, `FINDINGS.md` §13) | Tag the port; build `petra_parity` and `petra_fixed` as bots; parallel headless runs (5.3); a results table | 100 mirror games of each baseline run in parallel without a path clash; `petra_parity` vs `petra_fixed` ~50% (no significant difference). Met: 315 games at 12 at a time, no clash, 15/15 repeats with the same fingerprint; 51.0% (CI 41.5–60.4%) |
 | 1. Parity proof (**done** 2026-10-25, `FINDINGS.md` §14) | Command-log diffs on a seed set (5.1), starting with the 6 seed pairs where the baselines differ (`FINDINGS.md` §13); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3. Met: identical in 26 of 26 pairs (52 games) once three more original bugs went into the patch |
-| 2. Types in place | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor) |
+| 2. Types in place (**done** 2026-10-25) | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor). Met: fingerprint `2164cc14d7c5e28f` before and after; 1533 tests pass. Every brand of 3.3: `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex` (`RegionIndex` for either), `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<"territory" \| "passability">`; the attack plan's state kind is a typestate (3.1); the data-carrying states move to stage 4, records keyed by `for...in` keys to stage 3 |
 | 3. Layers | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4) |
 | 4. Fix the known weaknesses | Withdrawal to a reachable point; idle workers re-homed to bases with resources; first field by food income, not fruit left; attacks that cannot fill are cancelled or merged; reconsider the town-phase population | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
 | 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed` |

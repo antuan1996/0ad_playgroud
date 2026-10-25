@@ -200,6 +200,9 @@ untested branches.
   `diplomacy.ts` (`setPlayers`), `world.ts`, `persistence.ts` (save/reload round trips).
 - Fake entities and stubs **throw on any undeclared method**: declare what the
   code under test asks for in the test itself.
+- Every test fails if a plan moved from a state its caller did not expect
+  (`changeState`'s warning; the guard is in `harness/engine.ts`): set the state
+  the game has there, or call `allowMisplacedMoves()` in that test.
 - Harness answers must match what the common-api really returns (e.g. parsed
   template leaves are strings; `resistanceStrengths()` is `{ Damage: {...} }`).
 
@@ -208,10 +211,26 @@ untested branches.
   Check new tests actually reach the branch they name (run `coverage:petra --file`).
 - Every test runs on both targets. A test only the port passes carries a
   `// only the port passes: ...` comment explaining the original's bug; the
-  original currently fails exactly 19 tests, all of that kind.
+  original currently fails exactly 20 tests, all of that kind (19 bugs of
+  the original; one pins the attack plan's save validation, stage 2).
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
+- Ids, positions, regions, times, template names and grid cells are branded
+  (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`, `SeaIndex`,
+  `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName`, `CellIndex<Grid>`
+  in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
+  grid): what the engine hands over carries the brand. `petra_ts/brands.ts`
+  is the only place that gives it to a plain value (`entityId`, `playerId`,
+  `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
+  `templateName`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
+  `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`): its identity
+  functions hold the port's only sanctioned casts. A loop over a map's cells
+  brands its index once (`const j = cellIndex(map, jIndex)`). A loop over player indices brands its index once
+  (`const i = playerId(iIndex)`); records keyed by a `for...in` key keep
+  `number` keys.
+- The attack plan's state changes only through `changeState(from, to)`
+  (the moves are in `AttackTransitions`, `attackPlan.ts`).
 - Methods never called (in port and original) are marked `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

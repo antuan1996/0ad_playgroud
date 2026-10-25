@@ -12,14 +12,14 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 | | Port | Original |
 |---|---|---|
-| Tests | 1532, all pass | 1531, 19 fail (all listed below) |
+| Tests | 1538, all pass | 1537, 20 fail (all listed below) |
 | Real line coverage | 95.6% | ≈95% |
 
 ---
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (19 tests in all; the
+Each is pinned by a test that only the port passes (20 tests in all; the
 original fails exactly these). Each row says whether a game can reach it.
 
 | Where | Original behaviour | Port | Test |
@@ -38,6 +38,7 @@ original fails exactly these). Each row says whether a game can reach it.
 | `attackManager` defenders | reads the unit before its own `if (unit && …)` check | checks first | attackManager: "enlists only joinable defenders" |
 | `basesManager.createBase` reusing a ground | calls `newbase.reset(type)` for the signature `reset(gameState, state)`, so the state is always undefined: a ground that lost its centre and gets a new one is never `constructing` (no builders called to a rebuilt centre) and its `neededDefenders` is 0 (no guard for a captured centre; 7 at very hard). Reached in games with a centre lost and replaced (§14) | passes the state | basesManager: "a town that lost its centre guards a centre it captures…" |
 | `defenseArmy` foe ledger | `removeFoe` and a foe's rename leave the foe's `assignedAgainst` row as `undefined`; a merge then appends that `undefined` to the other army's row for the same foe (`concat(undefined)`), so the foe looks fought by one defender more and `assignUnit` passes him over (§14) | deletes the row | defenseArmy: "counts only real defenders against a raider the merged army had let go" |
+| `attackPlan.Deserialize` (stage 2) | restores any saved string as the state: a started plan in a state `update()` does not know does nothing more | parses the tag; an unknown one sends the plan back to preparation, with a warning | attackPlan: "prepares again when its save names no state it knows" |
 | `queueManager.changePriority` | sorts `queueArrays` in place, while `startNextItems` walks it: a started plan resetting its queue's priority (`queueToReset`) reorders the array mid-loop, so a queue is skipped that turn and another visited twice. Reached in most games, from minute 3 on (§14) | sorts into a new array | queueManager: "visits every queue once in a turn…" |
 
 ## 2. Bugs in the port, fixed (separate commits)
