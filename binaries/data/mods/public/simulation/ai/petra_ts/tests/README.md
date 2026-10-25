@@ -120,6 +120,14 @@ Two rules keep the suite useful as a check on the port:
   code under test needs more of the world, add that method in the test — do not
   widen the shared fake by default.
 
+A guard on every test: an attack plan's `changeState(from, to)` warns when the
+plan is not in the state `from` its caller expects, and `harness/engine.ts`
+fails any test that produced such a warning. It means the test set up a state
+no game reaches (a plan started straight from "unexecuted", where the game has
+it "completing"): set the state the game has there. A test that means to make
+such a move calls `allowMisplacedMoves()` (from `harness/engine.ts`) first; that
+lifts the guard for that test only.
+
 Where the port deliberately behaves differently from the original JS, say so in
 a comment above the test and assert the behaviour that is wanted, not the
 behaviour the original happened to have. The original then fails that test,

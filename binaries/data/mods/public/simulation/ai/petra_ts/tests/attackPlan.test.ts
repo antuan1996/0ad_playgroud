@@ -1616,6 +1616,7 @@ describe("starting the attack", () =>
 				id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 			}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		withPath([{ "x": 32, "y": 44 }], () =>
 		{
@@ -1642,6 +1643,7 @@ describe("starting the attack", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target: islandTarget } });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), true, "the attack began");
 		assert.equal(plan.state, "transporting", "the plan ships");
@@ -1658,6 +1660,7 @@ describe("starting the attack", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target: islandTarget } });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), false, "no sea, no attack");
 	});
@@ -1672,6 +1675,7 @@ describe("starting the attack", () =>
 		const stances: string[] = [];
 		packable.setStance = (stance: string) => stances.push(stance);
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		withPath([{ "x": 32, "y": 44 }], () =>
 		{
@@ -1689,6 +1693,7 @@ describe("starting the attack", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 		plan.target = undefined;
 		plan.targetPlayer = undefined;
 		plan.path = [[10, 10], [30, 40]];
@@ -1710,9 +1715,10 @@ describe("starting the attack", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), false, "nothing to attack");
-		assert.equal(plan.state, "unexecuted", "still unexecuted");
+		assert.equal(plan.state, "completing", "it stays where it was, regrouping");
 	});
 });
 
@@ -2326,6 +2332,23 @@ describe("wrapping up a plan", () =>
 		assert.deepEqual(revived.targetPos, [30, 40], "at its place");
 		assert.deepEqual(revived.failed, undefined, "a fresh failure record");
 		assert.equal(revived.type, "Attack", "the plan type came back too");
+	});
+
+	// only the port passes: the original restores any saved string as the
+	// state; a started plan in a state update() does not know then does
+	// nothing more
+	it("prepares again when its save names no state it knows", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1, init: true });
+		const data = plan.Serialize();
+		data.properties.state = "charging";
+
+		const revived = makePlan(world, { name: 2 });
+		logs.length = 0;
+		revived.Deserialize(world.gameState, data);
+		assert.equal(revived.state, "unexecuted");
+		assert.ok(logs.some((entry) => entry.includes("unknown state \"charging\"")), "the save was refused aloud");
 	});
 });
 
@@ -3784,6 +3807,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		const town = makeTarget(world);
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 		// it was readied against an island: no path was laid, the crossing booked
 		plan.overseas = 4;
 		plan.target = undefined;

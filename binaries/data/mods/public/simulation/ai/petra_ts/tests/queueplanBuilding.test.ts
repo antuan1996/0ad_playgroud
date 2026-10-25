@@ -29,6 +29,7 @@ interface Plan
 	start(gs: unknown): void;
 	isGo(gs: unknown): boolean;
 	findGoodPosition(gs: unknown): Position | false;
+	getDockAngle(gs: unknown, x: number, z: number, size: number): number | false;
 }
 
 const { ConstructionPlan } = await loadPetraModule<{
@@ -805,6 +806,56 @@ describe("where a dock goes: findDockPosition", () =>
 		}, { "attackRange": () => ({ "max": 400 }), "attackTypes": () => ["Ranged"], "hasDefensiveFire": () => true }));
 
 		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).findGoodPosition(world.gameState), false);
+	});
+});
+
+describe("which way a dock faces: getDockAngle", () =>
+{
+	// coast(): our land west of x = 160, the sea east of it to the map's edge
+	// at x = 320. A dock of size 9 looks at 16 points around its spot, then at
+	// 2, 3 and 4 times that distance, for the longest run of water.
+
+	it("a dock on the shore faces the open sea", () =>
+	{
+		const { world, dock } = coast();
+		const plan = new ConstructionPlan(world.gameState, dock, navalDock());
+
+		// at x = 162 the points to the east and straight north and south are
+		// water (8 of 16, then the one at angle 0): the run 8..15, 0 centres
+		// on point 12, so the angle is -(12/16)·2π, the dock facing +x
+		const angle = plan.getDockAngle(world.gameState, 162, 100, 9);
+		assert.equal(angle, -3 * Math.PI / 2);
+	});
+
+	it("a spot on dry land gets no angle", () =>
+	{
+		const { world, dock } = coast();
+		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).getDockAngle(world.gameState, 100, 100, 9), false);
+	});
+
+	it("open water with no shore within four times the dock's size gets no angle", () =>
+	{
+		const { world, dock } = coast();
+		// every point is water out to 36 from x = 240: no shoreline to face
+		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).getDockAngle(world.gameState, 240, 160, 9), false);
+	});
+
+	it("at the map's edge the edge counts as the shore", () =>
+	{
+		const { world, dock } = coast();
+		// at x = 318 the points east of x = 320 are off the map and skipped:
+		// the water left runs over points 0..8 and the dock faces west, -π/2
+		const angle = new ConstructionPlan(world.gameState, dock, navalDock()).getDockAngle(world.gameState, 318, 160, 9);
+		assert.equal(angle, -Math.PI / 2);
+	});
+
+	it("a puddle with no water around it gets no angle", () =>
+	{
+		const { world, dock } = coast();
+		const accessibility = world.ai.accessibility as unknown as { navalPassMap: Uint8Array; width: number };
+		// one cell of the sea's region inland, at (100, 100), with land all around
+		accessibility.navalPassMap[50 + 50 * accessibility.width] = 5;
+		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).getDockAngle(world.gameState, 100, 100, 9), false);
 	});
 });
 

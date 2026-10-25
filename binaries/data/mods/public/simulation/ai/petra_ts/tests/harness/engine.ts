@@ -17,6 +17,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach } from "node:test";
 
 import { modsBase, modsPublic } from "./paths.ts";
 
@@ -31,6 +32,40 @@ export function resetRecorder(): void
 	commands.length = 0;
 	logs.length = 0;
 }
+
+/**
+ * A plan moved from a state its caller did not expect: attackPlan.changeState
+ * warns so (`... moved to "x" from "y", not from "z"`). In a game that is a
+ * mistake in the caller's reasoning; in a test it is a test that set up a state
+ * no game reaches (as a plan started straight from "unexecuted", where the game
+ * always has it "completing"). Every test of every file fails on one, unless it
+ * calls allowMisplacedMoves() first.
+ */
+const MISPLACED_MOVE = /moved to "[^"]*" from "[^"]*", not from "[^"]*"/;
+const misplacedMoves: string[] = [];
+let misplacedMovesAllowed = false;
+
+/** Lets the running test, and only it, move a plan from a state its caller did not expect. */
+export function allowMisplacedMoves(): void
+{
+	misplacedMovesAllowed = true;
+}
+
+beforeEach(() =>
+{
+	misplacedMoves.length = 0;
+	misplacedMovesAllowed = false;
+});
+
+afterEach(() =>
+{
+	const found = misplacedMoves.splice(0);
+	const allowed = misplacedMovesAllowed;
+	misplacedMovesAllowed = false;
+	if (found.length && !allowed)
+		throw new Error("a plan moved from a state its caller did not expect " +
+			"(set the state the game has there, or call allowMisplacedMoves()):\n  " + found.join("\n  "));
+});
 
 /** Thrown by Engine.Exit so a test can tell "the AI gave up" from a crash. */
 export class EngineExit extends Error
@@ -165,7 +200,13 @@ export function installEngineGlobals(): void
 	// structuredClone is the same answer.
 	g["clone"] = (value: unknown) => structuredClone(value);
 	g["global"] = globalThis;
-	g["warn"] = (message: unknown) => { logs.push(String(message)); };
+	g["warn"] = (message: unknown) =>
+	{
+		const text = String(message);
+		logs.push(text);
+		if (MISPLACED_MOVE.test(text))
+			misplacedMoves.push(text);
+	};
 	g["error"] = (message: unknown) => { logs.push(String(message)); };
 	g["dump"] = (message: unknown) => { logs.push(String(message)); };
 	g["deepfreeze"] = function deepfreeze(value: unknown): unknown
