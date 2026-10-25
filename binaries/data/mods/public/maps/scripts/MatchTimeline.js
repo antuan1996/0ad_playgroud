@@ -1,7 +1,8 @@
 /**
  * Prints a snapshot of every player every two game minutes, one line each:
- *   TIMELINE {"minute":..,"player":..,"name":..,"state":..,"pop":..,"resources":{..},
+ *   TIMELINE {"minute":..,"player":..,"name":..,"state":..,"pop":..,"popLimit":..,"resources":{..},
  *             "phase":..,"classes":{..},"unitAI":{..},"idle":{..}}
+ * "popLimit" is the population the player's houses and centres allow now,
  * "classes" counts the player's entities of a few classes, "unitAI" its units
  * by the top of their UnitAI state (IDLE, GATHER, COMBAT, ...), or GARRISONED
  * for units inside a structure or a ship (whose UnitAI state is IDLE), and
@@ -53,6 +54,7 @@ Trigger.prototype.MatchTimelineSnapshot = function()
 			"name": QueryPlayerIDInterface(player, IID_Identity).GetName(),
 			"state": cmpPlayer.GetState(),
 			"pop": cmpPlayer.GetPopulationCount(),
+			"popLimit": cmpPlayer.GetPopulationLimit(),
 			"resources": cmpPlayer.GetResourceCounts(),
 			"phase": phases.sort().join(","),
 			"classes": classes,

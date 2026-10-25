@@ -48,6 +48,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
   -l         log every command each bot sends (commands.txt), for debugging
+  -T         end the game at 90 game minutes if undecided: the larger
+             population wins with the reason "time limit" (MatchTimeLimit.js)
+  -r DIR     record into DIR (emptied first) instead of matches/<time>;
+             no rotation, and matches/latest is left alone
   -k KEEP    keep the last KEEP match folders, this one included, and delete
              older ones (default 5; 0 keeps them all)
   -h         this help
@@ -71,7 +75,9 @@ nonvisual=false
 timeline=false
 commands=false
 keep=5
-while getopts "m:s:a:d:c:w:W:o:xv:ntlk:h" option; do
+timeLimit=false
+record=""
+while getopts "m:s:a:d:c:w:W:o:xv:ntlTr:k:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -86,6 +92,8 @@ while getopts "m:s:a:d:c:w:W:o:xv:ntlk:h" option; do
 		n) nonvisual=true ;;
 		t) timeline=true ;;
 		l) commands=true ;;
+		T) timeLimit=true ;;
+		r) record="$OPTARG" ;;
 		k) keep="$OPTARG" ;;
 		h)
 			usage
@@ -184,6 +192,9 @@ fi
 if [ "$commands" = true ]; then
 	args+=(-autostart-script=scripts/MatchCommands.js)
 fi
+if [ "$timeLimit" = true ]; then
+	args+=(-autostart-script=scripts/MatchTimeLimit.js)
+fi
 for condition in "${victories[@]}"; do
 	args+=(-autostart-victory="$condition")
 done
@@ -195,17 +206,29 @@ rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
 [ "$commands" = true ] && rerun+=(-l)
+[ "$timeLimit" = true ] && rerun+=(-T)
 if [ $# -gt 0 ]; then
 	rerun+=(--)
 fi
 
 matches="$repo/build/petra_ts/matches"
-out="$matches/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$out"
-ln -sfn "$(basename "$out")" "$matches/latest"
+if [ -n "$record" ]; then
+	out="$record"
+	# Only ever empty a previous record, never a folder given by mistake.
+	if [ -e "$out" ] && [ -n "$(ls -A "$out")" ] && [ ! -e "$out/match.txt" ]; then
+		echo "-r: $out is not empty and holds no match.txt; not emptying it" >&2
+		exit 2
+	fi
+	rm -rf -- "$out"
+	mkdir -p "$out"
+else
+	out="$matches/$(date +%Y%m%d-%H%M%S)"
+	mkdir -p "$out"
+	ln -sfn "$(basename "$out")" "$matches/latest"
+fi
 
 # Rotation: the folder names are timestamps, so they sort oldest first.
-if [ "$keep" -gt 0 ]; then
+if [ -z "$record" ] && [ "$keep" -gt 0 ]; then
 	old=()
 	while IFS= read -r dir; do
 		old+=("$matches/$dir")
