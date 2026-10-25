@@ -113,7 +113,7 @@ export class ResearchManager
 			}
 			for (const i in template.modifications)
 			{
-				if (gameState.ai.HQ.navalMap && template.modifications[i].value === "ResourceGatherer/Rates/food.fish")
+				if (gameState.ai.HQ.geography.navalMap && template.modifications[i].value === "ResourceGatherer/Rates/food.fish")
 					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };
 				else if (template.modifications[i].value === "ResourceGatherer/Rates/food.fruit")
 					return { "name": tech[0], "increasePriority": this.CostSum(template.cost) < 400 };

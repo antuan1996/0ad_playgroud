@@ -1,5 +1,6 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { QueuePlan } from "./queueplan.ts";
+import { hqOf } from "./hq.ts";
 
 export class ResearchPlan extends QueuePlan
 {
@@ -85,8 +86,7 @@ export class ResearchPlan extends QueuePlan
 		{
 			if (this.type != gameState.getPhaseName(i))
 				continue;
-			gameState.ai.HQ.phasing = 0;
-			gameState.ai.HQ.OnPhaseUp(gameState, i);
+			hqOf(gameState).phaseResearched(gameState, i);
 			break;
 		}
 	}

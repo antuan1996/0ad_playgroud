@@ -86,7 +86,7 @@ export class NavalManager
 
 		for (let i = 0; i < gameState.ai.accessibility.regionSize.length; ++i)
 		{
-			if (!gameState.ai.HQ.navalRegions[i])
+			if (!gameState.ai.HQ.geography.navalRegions[i])
 			{
 				// push dummies
 				this.seaShips.push(undefined);
@@ -241,7 +241,7 @@ export class NavalManager
 			return true;
 		const ntry = 2;
 		const around = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
-		const territoryMap = gameState.ai.HQ.territoryMap;
+		const territoryMap = gameState.ai.HQ.geography.territoryMap;
 		const width = territoryMap.width;
 		const radius = 120 / territoryMap.cellSize / ntry;
 		const pos = territoryMap.gamePosToMapPos(fish.position());
@@ -759,7 +759,7 @@ export class NavalManager
 
 	buildNavalStructures(gameState: CommonGameState, queues: Record<string, Queue>): void
 	{
-		if (!gameState.ai.HQ.navalMap || !gameState.ai.HQ.hasPotentialBase())
+		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.hasPotentialBase())
 			return;
 
 		if (gameState.ai.HQ.getAccountedPopulation(gameState) > this.Config.Economy.popForDock)
@@ -781,7 +781,7 @@ export class NavalManager
 					const remaining = this.getUnconnectedSeas(gameState, baseAccessIndex);
 					for (const sea of remaining)
 					{
-						if (!gameState.ai.HQ.navalRegions[sea])
+						if (!gameState.ai.HQ.geography.navalRegions[sea])
 							continue;
 						const wantedLand: Record<number, boolean> = {};
 						wantedLand[baseAccessIndex] = true;

@@ -5,12 +5,13 @@ import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
+import { BaseResources } from "../world/baseResources.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { Worker } from "../execution/worker.ts";
 import { NO_TEMPLATE, seconds, worldPos } from "../adapter/brands.ts";
 import { isInState } from "../adapter/unitState.ts";
-import { debugShade, postCommand } from "../adapter/commands.ts";
+import { postCommand } from "../adapter/commands.ts";
 
 /**
  * Base Manager
@@ -54,8 +55,12 @@ export class BaseManager
 	declare basesManager: BasesManager;
 	declare buildings: CommonEntityCollection;
 	declare constructing: boolean;
-	declare dropsiteSupplies: Record<string, Record<string, ResourceSupply[]>>;
-	declare dropsites: Record<number, boolean | undefined>;
+	/** The resources within reach of the base's dropsites; the accessors below keep its fields' old names. */
+	declare resources: BaseResources;
+	get dropsiteSupplies(): Record<string, Record<string, ResourceSupply[]>> { return this.resources.dropsiteSupplies; }
+	set dropsiteSupplies(supplies: Record<string, Record<string, ResourceSupply[]>>) { this.resources.dropsiteSupplies = supplies; }
+	get dropsites(): Record<number, boolean | undefined> { return this.resources.dropsites; }
+	set dropsites(dropsites: Record<number, boolean | undefined>) { this.resources.dropsites = dropsites; }
 	declare gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
 	declare maxDistResourceSquare: number;
 	declare mobileDropsites: CommonEntityCollection;
@@ -71,6 +76,8 @@ export class BaseManager
 		this.Config = basesManager.Config;
 		this.ID = gameState.ai.uniqueIDs.bases++;
 		this.basesManager = basesManager;
+		// init() makes it afresh; here so that a base read back from a save has one before init
+		this.resources = new BaseResources();
 
 		// anchor building: seen as the main building of the base. Needs to have territorial influence
 		this.anchor = undefined;
@@ -127,15 +134,11 @@ export class BaseManager
 		this.buildings.registerUpdates();
 		this.mobileDropsites.registerUpdates();
 
-		// array of entity IDs, with each being
-		this.dropsites = {};
-		this.dropsiteSupplies = {};
+		// the resources within reach of the base's dropsites (world/baseResources.ts)
+		this.resources = new BaseResources();
 		this.gatherers = {};
 		for (const res of Resources.GetCodes())
-		{
-			this.dropsiteSupplies[res] = { "nearby": [], "medium": [], "faraway": [] };
 			this.gatherers[res] = { "nextCheck": 0, "used": 0, "lost": 0 };
-		}
 	}
 
 	reset(gameState: CommonGameState, state: string): void
@@ -222,79 +225,9 @@ export class BaseManager
 	 */
 	assignResourceToDropsite(gameState: CommonGameState, dropsite: CommonEntity, deserialized: boolean): void
 	{
-		if (this.dropsites[dropsite.id()])
-		{
-			if (this.Config.debug > 0)
-				warn("assignResourceToDropsite: dropsite already in the list. Should never happen");
+		const baseless = this.ID == this.basesManager.baselessBase().ID;
+		if (!this.resources.addDropsite(gameState, dropsite, this.accessIndex, baseless, this.maxDistResourceSquare, this.Config.debug))
 			return;
-		}
-
-		let accessIndex = this.accessIndex;
-		const dropsitePos = dropsite.position();
-		const dropsiteId = dropsite.id();
-		this.dropsites[dropsiteId] = true;
-
-		const baseless = this.basesManager.baselessBase();
-		if (this.ID == baseless.ID)
-			accessIndex = getLandAccess(gameState, dropsite);
-
-		const maxDistResourceSquare = this.maxDistResourceSquare;
-		const dropsiteTypes = dropsite.resourceDropsiteTypes();
-		if (dropsiteTypes)
-			for (const type of dropsiteTypes)
-			{
-				const resources = gameState.getResourceSupplies(type);
-				if (!resources.length)
-					continue;
-
-				const nearby = this.dropsiteSupplies[type].nearby;
-				const medium = this.dropsiteSupplies[type].medium;
-				const faraway = this.dropsiteSupplies[type].faraway;
-
-				resources.forEach(function(supply: import("simulation/ai/common-api/entity.js").Entity): void 
-				{
-					if (!supply.position())
-						return;
-					// Moving resources and fields are treated differently.
-					if (supply.hasClasses(["Animal", "Field"]))
-						return;
-					// quick accessibility check
-					if (getLandAccess(gameState, supply) != accessIndex)
-						return;
-
-					const dist = SquareVectorDistance(supply.position(), dropsitePos);
-					if (dist < maxDistResourceSquare)
-					{
-						if (dist < maxDistResourceSquare/16)        // distmax/4
-							nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-						else if (dist < maxDistResourceSquare/4)    // distmax/2
-							medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-						else
-							faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-					}
-				});
-
-				nearby.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-				medium.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-				faraway.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-
-				/*
-				let debug = false;
-				if (debug)
-				{
-					faraway.forEach(function(res){
-						debugShade([res.id], [2,0,0]);
-					});
-					medium.forEach(function(res){
-						debugShade([res.id], [0,2,0]);
-					});
-					nearby.forEach(function(res){
-						debugShade([res.id], [0,0,2]);
-					});
-				}
-				*/
-			}
-
 		if (deserialized)
 			return;
 
@@ -302,41 +235,15 @@ export class BaseManager
 		// a minimum of resources for this base
 		postCommand({
 			"type": "set-dropsite-sharing",
-			"entities": [dropsiteId],
-			"shared": dropsiteId != this.anchorId
+			"entities": [dropsite.id()],
+			"shared": dropsite.id() != this.anchorId
 		});
 	}
 
 	// completely remove the dropsite resources from our list.
 	removeDropsite(gameState: CommonGameState, entityID: EntityId): void
 	{
-		if (!entityID)
-			return;
-
-		const removeSupply = function(supply: ResourceSupply[]): void
-		{
-			for (let i = 0; i < supply.length; ++i)
-			{
-				// resource assigned to the removed dropsite, or whose supply
-				// entity no longer stands in the game: remove it. Port-only
-				// deviation: the reference's first clause reads a supply[i].ent
-				// field that nothing ever writes, so it always fires and a
-				// single dropsite removal wiped every book of every dropsite;
-				// here the removal follows the intent the original comments
-				// describe (pinned port-only in tests/baseManager.test.ts).
-				if (supply[i].dropsite === entityID || !gameState.getEntityById(supply[i].id))
-					supply.splice(i--, 1);
-			}
-		};
-
-		for (const type in this.dropsiteSupplies)
-		{
-			removeSupply(this.dropsiteSupplies[type].nearby);
-			removeSupply(this.dropsiteSupplies[type].medium);
-			removeSupply(this.dropsiteSupplies[type].faraway);
-		}
-
-		this.dropsites[entityID] = undefined;
+		this.resources.removeDropsite(gameState, entityID);
 	}
 
 	/**
@@ -403,7 +310,7 @@ export class BaseManager
 		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
-		const territoryMap = gameState.ai.HQ.territoryMap;
+		const territoryMap = gameState.ai.HQ.geography.territoryMap;
 		const width = territoryMap.width;
 		const cellSize = territoryMap.cellSize;
 
@@ -464,19 +371,7 @@ export class BaseManager
 
 	getResourceLevel(gameState: CommonGameState, type: string, distances: string[] = ["nearby", "medium", "faraway"]): number
 	{
-		let count = 0;
-		const check: Record<number, boolean> = {};
-		for (const proxim of distances)
-			for (const supply of this.dropsiteSupplies[type][proxim])
-			{
-				if (check[supply.id])    // avoid double counting as same resource can appear several time
-					continue;
-				check[supply.id] = true;
-				const supplyEntity = gameState.getEntityById(supply.id);
-				if (supplyEntity)
-					count += requireValue(supplyEntity.resourceSupplyAmount());
-			}
-		return count;
+		return this.resources.getResourceLevel(gameState, type, distances);
 	}
 
 	/** check our resource levels and react accordingly */
@@ -744,7 +639,7 @@ export class BaseManager
 	/** Drops the supply at `index` of the list for `resource` in `band`: its entity is gone. */
 	forgetSupplyAt(resource: string, band: string, index: number): void
 	{
-		this.dropsiteSupplies[resource][band].splice(index, 1);
+		this.resources.forgetSupplyAt(resource, band, index);
 	}
 
 	reassignIdleWorkers(gameState: CommonGameState, idleWorkers?: Iterable<CommonEntity>): void
@@ -1213,7 +1108,7 @@ export class BaseManager
 
 		if (this.constructing)
 		{
-			const owner = gameState.ai.HQ.territoryMap.getOwner(this.anchor.position());
+			const owner = gameState.ai.HQ.geography.territoryMap.getOwner(this.anchor.position());
 			if (owner != 0 && !gameState.isPlayerAlly(owner))
 			{
 				// we're in enemy territory. If we're too close from the enemy, destroy us.
@@ -1277,7 +1172,7 @@ export class BaseManager
 			"neededDefenders": this.neededDefenders,
 			"territoryIndices": this.territoryIndices,
 			"timeNextIdleCheck": this.timeNextIdleCheck,
-			"dropsiteSupplies": this.dropsiteSupplies
+			"dropsiteSupplies": this.resources.dropsiteSupplies
 		};
 	}
 
@@ -1296,7 +1191,7 @@ export class BaseManager
 		this.neededDefenders = data.neededDefenders ?? this.neededDefenders;
 		this.territoryIndices = data.territoryIndices ?? [];
 		this.timeNextIdleCheck = data.timeNextIdleCheck ?? 0;
-		this.dropsiteSupplies = data.dropsiteSupplies ?? this.dropsiteSupplies;
+		this.resources.dropsiteSupplies = data.dropsiteSupplies ?? this.resources.dropsiteSupplies;
 
 		this.anchor = this.anchorId !== undefined ? gameState.getEntityById(this.anchorId) : undefined;
 	}

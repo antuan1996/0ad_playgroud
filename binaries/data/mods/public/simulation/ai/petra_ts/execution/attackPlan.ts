@@ -12,6 +12,7 @@ import { INVALID_PLAYER, NO_LAND, NO_REGION, playerId, seconds, worldPos } from 
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
 import { debugShade, postCommand } from "../adapter/commands.ts";
 import { basesOf } from "../world/bases.ts";
+import { hqOf } from "./hq.ts";
 
 type AttackUnitStat = {
 	priority: number;
@@ -199,7 +200,7 @@ export class AttackPlan
 		}
 		this.rallyPoint = rallyPoint;
 		this.overseas = 0;
-		if (gameState.ai.HQ.navalMap)
+		if (hqOf(gameState).geography.navalMap)
 		{
 			for (const structure of gameState.getEnemyStructures().values())
 			{
@@ -220,7 +221,7 @@ export class AttackPlan
 				{
 					if (rallyAccess === undefined)
 						continue;
-					const sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, rallyAccess, access);
+					const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, access);
 					if (!sea)
 					{
 						if (this.target)
@@ -233,7 +234,7 @@ export class AttackPlan
 						continue;
 					}
 					this.overseas = sea;
-					gameState.ai.HQ.navalManager.setMinimalTransportShips(gameState, sea, 1);
+					hqOf(gameState).navalManager.setMinimalTransportShips(gameState, sea, 1);
 				}
 			}
 		}
@@ -356,7 +357,7 @@ export class AttackPlan
 
 		// each array is [ratio, [associated classes], associated EntityColl, associated unitStat, name ]
 		this.buildOrders = [];
-		this.canBuildUnits = gameState.ai.HQ.canBuildUnits;
+		this.canBuildUnits = hqOf(gameState).canBuildUnits;
 		this.siegeState = AttackPlan.SIEGE_NOT_TESTED;
 
 		// some variables used during the attack
@@ -630,12 +631,12 @@ export class AttackPlan
 			this.debugAttack();
 
 		// if we need a transport, wait for some transport ships
-		if (this.overseas && !gameState.ai.HQ.navalManager.seaTransportShips[this.overseas]?.length)
+		if (this.overseas && !hqOf(gameState).navalManager.seaTransportShips[this.overseas]?.length)
 			return AttackPlan.PREPARATION_KEEP_GOING;
 
 		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)    // Forced Raids have special purposes (as relic capture)
 			this.assignUnits(gameState);
-		if (this.type !== AttackPlan.TYPE_RAID && gameState.ai.HQ.attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
+		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
 			this.reassignFastUnit(gameState);    // reassign some fast units (if any) to fasten raid preparations
 
 		// Fasten the end game.
@@ -646,7 +647,7 @@ export class AttackPlan
 			for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 			{
 				const i = playerId(iIndex);
-				if (!gameState.isPlayerEnemy(i) || gameState.ai.HQ.attackManager.defeated[i])
+				if (!gameState.isPlayerEnemy(i) || hqOf(gameState).attackManager.defeated[i])
 					continue;
 				hasEnemies = true;
 				totEnemies += gameState.getEnemyUnits(i).length;
@@ -669,7 +670,7 @@ export class AttackPlan
 			{
 				if (this.Config.debug > 1)
 				{
-					const am = gameState.ai.HQ.attackManager;
+					const am = hqOf(gameState).attackManager;
 					aiWarn(" attacks upcoming: raid " +
 							am.upcomingAttacks[AttackPlan.TYPE_RAID].length +
 						  " rush " + am.upcomingAttacks[AttackPlan.TYPE_RUSH].length +
@@ -731,7 +732,7 @@ export class AttackPlan
 		}
 
 		// Remove those units which were in a temporary bombing attack
-		for (const unitIds of gameState.ai.HQ.attackManager.bombingAttacks.values())
+		for (const unitIds of hqOf(gameState).attackManager.bombingAttacks.values())
 		{
 			for (const entId of unitIds.values())
 			{
@@ -765,7 +766,7 @@ export class AttackPlan
 			if (index == rallyIndex)
 				ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15, queued);
 			else
-				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
+				hqOf(gameState).navalManager.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
 		}
 
 		// reset all queued units
@@ -841,7 +842,7 @@ export class AttackPlan
 				const interests = firstOrder[3].interests;
 				const template = interests === undefined
 					? undefined
-					: gameState.ai.HQ.findBestTrainableUnit(gameState, firstOrder[1], interests);
+					: hqOf(gameState).findBestTrainableUnit(gameState, firstOrder[1], interests);
 				// HACK (TODO replace) : if we have no trainable template... Then we'll simply remove the buildOrder,
 				// effectively removing the unit from the plan.
 				if (template === undefined)
@@ -922,7 +923,7 @@ export class AttackPlan
 			added = true;
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
-		for (const ent of gameState.ai.HQ.attackManager.outOfPlan.values())
+		for (const ent of hqOf(gameState).attackManager.outOfPlan.values())
 		{
 			if (!this.isAvailableUnit(gameState, ent))
 				continue;
@@ -973,7 +974,7 @@ export class AttackPlan
 		if (ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== -1 ||
 		    ent.getMetadata(PlayerID, "transport") !== undefined || ent.getMetadata(PlayerID, "transporter") !== undefined)
 			return false;
-		if (gameState.ai.HQ.victoryManager.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
+		if (hqOf(gameState).victoryManager.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
 			return false;
 		return true;
 	}
@@ -987,7 +988,7 @@ export class AttackPlan
 				continue;
 			if (!ent.hasClasses(["FastMoving", "CitizenSoldier"]))
 				continue;
-			const raid = gameState.ai.HQ.attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID);
+			const raid = hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID);
 			if (!raid)
 				return;
 			ent.setMetadata(PlayerID, "plan", raid.name);
@@ -1001,7 +1002,7 @@ export class AttackPlan
 	{
 		if (this.targetPlayer === undefined)
 		{
-			this.targetPlayer = gameState.ai.HQ.attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
 				return false;
 		}
@@ -1013,7 +1014,7 @@ export class AttackPlan
 				return false;
 
 			// may-be all our previous enemey target (if not recomputed here) have been destroyed ?
-			this.targetPlayer = gameState.ai.HQ.attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer !== undefined)
 				this.target = this.getNearestTarget(gameState, this.rallyPoint);
 			if (!this.target)
@@ -1070,11 +1071,11 @@ export class AttackPlan
 			{
 				rallyIndex = gameState.ai.accessibility.getAccessValue(rallyDiff);
 				this.rallyPoint = rallyDiff;
-				const sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
+				const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
 				if (sea)
 				{
 					this.overseas = sea;
-					gameState.ai.HQ.navalManager.setMinimalTransportShips(gameState, this.overseas, this.neededShips);
+					hqOf(gameState).navalManager.setMinimalTransportShips(gameState, this.overseas, this.neededShips);
 				}
 				else
 				{
@@ -1132,7 +1133,7 @@ export class AttackPlan
 		for (const ent of targets.values())
 		{
 			if (this.targetPlayer == 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-			   (!ent.hasClass("Relic") || gameState.ai.HQ.victoryManager.isRelicRaided(ent.id())))
+			   (!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id())))
 				continue;
 			// Do not bother with some pointless targets
 			if (!this.isValidTarget(ent))
@@ -1159,7 +1160,7 @@ export class AttackPlan
 		if (!target)
 			return undefined;
 		if (this.targetPlayer == 0 && gameState.getVictoryConditions().has("capture_the_relic") && target.hasClass("Relic"))
-			gameState.ai.HQ.victoryManager.planRelicRaid(target.id(), this.name);
+			hqOf(gameState).victoryManager.planRelicRaid(target.id(), this.name);
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target
 		this.targetPlayer = target.owner();
@@ -1297,7 +1298,7 @@ export class AttackPlan
 	raidTargetFinder(gameState: CommonGameState): CommonEntityCollection
 	{
 		const targets = new EntityCollection(gameState.sharedScript);
-		for (const targetId of gameState.ai.HQ.defenseManager.targetList)
+		for (const targetId of hqOf(gameState).defenseManager.targetList)
 		{
 			const target = gameState.getEntityById(targetId);
 			if (target && target.position())
@@ -1452,12 +1453,12 @@ export class AttackPlan
 	{
 		for (let i = 0; i < this.path.length; ++i)
 		{
-			if (gameState.ai.HQ.territoryMap.getOwner(this.path[i]) === PlayerID)
+			if (hqOf(gameState).geography.territoryMap.getOwner(this.path[i]) === PlayerID)
 				continue;
 
 			if (i === 0)
 				this.rallyPoint = this.path[0];
-			else if (i > 1 && gameState.ai.HQ.isDangerousLocation(gameState, this.path[i-1], 20))
+			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, this.path[i-1], 20))
 			{
 				this.rallyPoint = this.path[i-2];
 				this.path.splice(0, i-2);
@@ -1518,7 +1519,7 @@ export class AttackPlan
 		}
 		else
 		{
-			const sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
+			const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
 			if (sea === undefined)
 				return false;
 			this.overseas = sea;
@@ -1528,7 +1529,7 @@ export class AttackPlan
 			// TODO require a global transport for the collection,
 			// and put back its state to "walking" when the transport is finished
 			for (const ent of this.unitCollection.values())
-				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
+				hqOf(gameState).navalManager.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
 		}
 		return true;
 	}
@@ -2127,7 +2128,7 @@ export class AttackPlan
 		// Are we arrived at destination ?
 		if (attackedNB > 1 && (attackedUnitNB || this.hasSiegeUnits()))
 		{
-			if (gameState.ai.HQ.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3)
+			if (hqOf(gameState).geography.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3)
 			{
 				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 				return true;
@@ -2250,7 +2251,7 @@ export class AttackPlan
 		// Then update the target if needed:
 		if (this.targetPlayer === undefined || !gameState.isPlayerEnemy(this.targetPlayer))
 		{
-			this.targetPlayer = gameState.ai.HQ.attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
 				return false;
 
@@ -2275,7 +2276,7 @@ export class AttackPlan
 					return false;
 
 				// Check if we could help any current attack
-				const attackManager = gameState.ai.HQ.attackManager;
+				const attackManager = hqOf(gameState).attackManager;
 				for (const attackType in attackManager.startedAttacks)
 				{
 					for (const attack of attackManager.startedAttacks[attackType])
@@ -2301,7 +2302,7 @@ export class AttackPlan
 				// If not, let's look for another enemy
 				if (!this.target)
 				{
-					this.targetPlayer = gameState.ai.HQ.attackManager.getEnemyPlayer(gameState, this);
+					this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 					if (this.targetPlayer !== undefined)
 						this.target = this.getNearestTarget(gameState, pos, accessIndex);
 					if (!this.target)
@@ -2411,7 +2412,7 @@ export class AttackPlan
 		{
 			if (this.targetPlayer !== evt.playerId)
 				continue;
-			this.targetPlayer = gameState.ai.HQ.attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			this.target = undefined;
 		}
 

@@ -90,11 +90,11 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
 		const gamepos = gameState.ai.accessibility.gamePosToMapPos(pos);
 		const index = gamepos[0] + gamepos[1]*gameState.ai.accessibility.width;
 		const land = gameState.ai.accessibility.landPassMap[index];
-		if (land > 1 && !HQ.landRegions[land])
-			HQ.landRegions[land] = true;
+		if (land > 1 && !HQ.geography.landRegions[land])
+			HQ.geography.landRegions[land] = true;
 		const sea = gameState.ai.accessibility.navalPassMap[index];
-		if (sea > 1 && !HQ.navalRegions[sea])
-			HQ.navalRegions[sea] = true;
+		if (sea > 1 && !HQ.geography.navalRegions[sea])
+			HQ.geography.navalRegions[sea] = true;
 
 		// if garrisoned units inside, ungarrison them except if a ship in which case we will make a transport
 		// when a construction will start (see createTransportIfNeeded)
@@ -102,8 +102,8 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
 			for (const id of ent.garrisoned())
 				ent.unload(id);
 
-		const territorypos = HQ.territoryMap.gamePosToMapPos(pos);
-		const territoryIndex = cellIndex(HQ.territoryMap, territorypos[0] + territorypos[1] * HQ.territoryMap.width);
+		const territorypos = HQ.geography.territoryMap.gamePosToMapPos(pos);
+		const territoryIndex = cellIndex(HQ.geography.territoryMap, territorypos[0] + territorypos[1] * HQ.geography.territoryMap.width);
 
 		HQ.basesManager.assignEntity(gameState, ent, territoryIndex);
 	}
@@ -160,7 +160,7 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 	for (let i = 0; i < accessibility.regionSize.length; ++i)
 	{
 		if (landIndex && i == landIndex)
-			HQ.landRegions[i] = true;
+			HQ.geography.landRegions[i] = true;
 		else if (accessibility.regionType[i] === "land" && cellArea*accessibility.regionSize[i] > 320)
 		{
 			if (landIndex)
@@ -168,9 +168,9 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 				const sea = HQ.getSeaBetweenIndices(gameState, landIndex, landRegion(i));
 				if (sea && (accessibility.regionSize[i] > minLandSize || accessibility.regionSize[sea] > minWaterSize))
 				{
-					HQ.navalMap = true;
-					HQ.landRegions[i] = true;
-					HQ.navalRegions[sea] = true;
+					HQ.geography.navalMap = true;
+					HQ.geography.landRegions[i] = true;
+					HQ.geography.navalRegions[sea] = true;
 				}
 			}
 			else
@@ -180,31 +180,31 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 				const traject = accessibility.getTrajectToIndex(seaIndex, landRegion(i));
 				if (traject && traject.length === 2)
 				{
-					HQ.navalMap = true;
-					HQ.landRegions[i] = true;
-					HQ.navalRegions[seaIndex] = true;
+					HQ.geography.navalMap = true;
+					HQ.geography.landRegions[i] = true;
+					HQ.geography.navalRegions[seaIndex] = true;
 				}
 			}
 		}
 		else if (accessibility.regionType[i] === "water" && accessibility.regionSize[i] > minWaterSize)
 		{
-			HQ.navalMap = true;
-			HQ.navalRegions[i] = true;
+			HQ.geography.navalMap = true;
+			HQ.geography.navalRegions[i] = true;
 		}
 		else if (accessibility.regionType[i] === "water" && cellArea*accessibility.regionSize[i] > 3600)
-			HQ.navalRegions[i] = true;
+			HQ.geography.navalRegions[i] = true;
 	}
 
 	if (HQ.Config.debug < 3)
 		return true;
-	for (const region in HQ.landRegions)
+	for (const region in HQ.geography.landRegions)
 	{
 		aiWarn(" >>> zone " + region + " taille " +
 			cellArea * gameState.ai.accessibility.regionSize[region]);
 	}
-	aiWarn(" navalMap " + HQ.navalMap);
-	aiWarn(" landRegions " + uneval(HQ.landRegions));
-	aiWarn(" navalRegions " + uneval(HQ.navalRegions));
+	aiWarn(" navalMap " + HQ.geography.navalMap);
+	aiWarn(" landRegions " + uneval(HQ.geography.landRegions));
+	aiWarn(" navalRegions " + uneval(HQ.geography.navalRegions));
 	return true;
 }
 
@@ -439,7 +439,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 
 	let startingSize = 0;
 	const startingLand = [];
-	for (const region in HQ.landRegions)
+	for (const region in HQ.geography.landRegions)
 	{
 		for (const base of HQ.baseManagers())
 		{
@@ -462,7 +462,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		for (const land of startingLand)
 		{
 			for (const sea of gameState.ai.accessibility.regionLinks[land])
-				if (gameState.ai.HQ.navalRegions[sea])
+				if (gameState.ai.HQ.geography.navalRegions[sea])
 					HQ.navalManager.updateFishingBoats(seaRegion(sea), num);
 		}
 		HQ.maxFields = 1;

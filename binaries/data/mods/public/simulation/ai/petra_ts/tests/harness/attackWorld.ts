@@ -193,6 +193,12 @@ export interface DefenseArmyLike
 /** The HQ surface the managers touch; every knob starts neutral. */
 export interface HQLike
 {
+	/**
+	 * The real HQ keeps its maps and regions in `geography` (world/geography.ts)
+	 * with accessors of the old names; the stub is its own geography, so a test
+	 * that sets `HQ.navalMap` or `HQ.territoryMap` sets what the port reads.
+	 */
+	readonly geography: HQLike;
 	baseManagers(): BaseLike[];
 	navalMap: boolean;
 	canBuildUnits: boolean;
@@ -873,6 +879,7 @@ export function makeWorld(options: WorldOptions = {}): World
 	world.ai.queues = queues;
 
 	const HQ: HQLike = {
+		get geography(): HQLike { return HQ; },
 		baseManagers: () => bases,
 		navalMap: knobs.navalMap,
 		canBuildUnits: knobs.canBuildUnits,

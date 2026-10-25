@@ -706,11 +706,11 @@ export class BasesManager
 		if (this.baseAtIndex(territoryIndex) != 0)
 			return false;
 		let landPassable = false;
-		const ind = getMapIndices(territoryIndex, gameState.ai.HQ.territoryMap, passabilityMap);
+		const ind = getMapIndices(territoryIndex, gameState.ai.HQ.geography.territoryMap, passabilityMap);
 		let access;
 		for (const k of ind)
 		{
-			if (!gameState.ai.HQ.landRegions[gameState.ai.accessibility.landPassMap[k]])
+			if (!gameState.ai.HQ.geography.landRegions[gameState.ai.accessibility.landPassMap[k]])
 				continue;
 			landPassable = true;
 			access = gameState.ai.accessibility.landPassMap[k];
@@ -720,7 +720,7 @@ export class BasesManager
 			return false;
 		let distmin = Math.min();
 		let baseID;
-		const pos: CommonPosition = worldPos(gameState.ai.HQ.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.territoryMap.width + 0.5), gameState.ai.HQ.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.territoryMap.width) + 0.5));
+		const pos: CommonPosition = worldPos(gameState.ai.HQ.geography.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.geography.territoryMap.width + 0.5), gameState.ai.HQ.geography.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.geography.territoryMap.width) + 0.5));
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor || !base.anchor.position())

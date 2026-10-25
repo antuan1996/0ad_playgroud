@@ -5,6 +5,7 @@ import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
+import { hqOf } from "./hq.ts";
 
 /**
  * Armies used by the defense manager.
@@ -187,7 +188,7 @@ export class DefenseArmy
 		// Remove from transport plan if not yet on Board
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			const plan = gameState.ai.HQ.navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
 			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
 				plan.removeUnit(gameState, ent);
 		}
@@ -217,7 +218,7 @@ export class DefenseArmy
 			if (!ent || !ent.position())
 				continue;
 			const pos = ent.position();
-			const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(pos);
+			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
 			if (territoryOwner === PlayerID)
 			{
 				posOwn[0] += pos[0];
@@ -253,7 +254,7 @@ export class DefenseArmy
 			for (const struct of gameState.getAllyStructures().values())
 			{
 				const pos = struct.position();
-				if (!pos || !gameState.isPlayerMutualAlly(gameState.ai.HQ.territoryMap.getOwner(pos)))
+				if (!pos || !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(pos)))
 					continue;
 				if (getLandAccess(gameState, struct) !== armyAccess)
 					continue;
@@ -283,10 +284,10 @@ export class DefenseArmy
 					                 ent.getMetadata(PlayerID, "transporter") !== undefined)
 					continue;
 				if (ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
-				    gameState.ai.HQ.defenseManager.garrisonAttackedUnit(gameState, ent))
+				    hqOf(gameState).defenseManager.garrisonAttackedUnit(gameState, ent))
 					continue;
 
-				if (destination && !gameState.isPlayerMutualAlly(gameState.ai.HQ.territoryMap.getOwner(ent.position())))
+				if (destination && !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(ent.position())))
 					ent.moveToRange(destination[0], destination[1], radius, radius + 5);
 				else
 					ent.stopMoving();
@@ -375,7 +376,7 @@ export class DefenseArmy
 		else
 			// ownIndex is a number: ent.position() was checked at the entry of
 			// this function, so getLandAccess resolved past its position guard.
-			gameState.ai.HQ.navalManager.requireTransport(gameState, ent,
+			hqOf(gameState).navalManager.requireTransport(gameState, ent,
 				requireValue(ownIndex), foeIndex, foePosition);
 		return true;
 	}
@@ -425,7 +426,7 @@ export class DefenseArmy
 	needsDefenders(gameState: CommonGameState): number | false
 	{
 		let defenseRatio;
-		const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(this.foePosition);
+		const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(this.foePosition);
 		if (territoryOwner == PlayerID)
 			defenseRatio = this.Config.Defense.defenseRatio.own;
 		else if (gameState.isPlayerAlly(territoryOwner))

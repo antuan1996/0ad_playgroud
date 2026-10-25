@@ -52,7 +52,7 @@ export class DefenseManager
 	{
 		Engine.ProfileStart("Defense Manager");
 
-		this.territoryMap = gameState.ai.HQ.territoryMap;
+		this.territoryMap = gameState.ai.HQ.geography.territoryMap;
 
 		this.checkEvents(gameState, events);
 

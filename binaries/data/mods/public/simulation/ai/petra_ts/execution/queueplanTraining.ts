@@ -3,6 +3,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
+import { hqOf } from "./hq.ts";
 
 export class TrainingPlan extends QueuePlan
 {
@@ -106,9 +107,9 @@ export class TrainingPlan extends QueuePlan
 				// And support units should not be too near to dangerous place
 				if (supportUnit)
 				{
-					if (gameState.ai.HQ.isNearInvadingArmy(a.position()))
+					if (hqOf(gameState).isNearInvadingArmy(a.position()))
 						aa += 50;
-					if (gameState.ai.HQ.isNearInvadingArmy(b.position()))
+					if (hqOf(gameState).isNearInvadingArmy(b.position()))
 						bb += 50;
 				}
 				// Give also priority to buildings with the right accessibility
@@ -120,7 +121,7 @@ export class TrainingPlan extends QueuePlan
 						aa += 30;
 					else
 					{
-						const aBaseManager = gameState.ai.HQ.getBaseByID(aBase);
+						const aBaseManager = hqOf(gameState).getBaseByID(aBase);
 						if (!aBaseManager || aBaseManager.accessIndex != wantedIndex)
 							aa += 30;
 					}
@@ -128,7 +129,7 @@ export class TrainingPlan extends QueuePlan
 						bb += 30;
 					else
 					{
-						const bBaseManager = gameState.ai.HQ.getBaseByID(bBase);
+						const bBaseManager = hqOf(gameState).getBaseByID(bBase);
 						if (!bBaseManager || bBaseManager.accessIndex != wantedIndex)
 							bb += 30;
 					}
@@ -136,8 +137,8 @@ export class TrainingPlan extends QueuePlan
 				// Then, if workers, small preference for bases with less workers
 				if (workerUnit && aBase && bBase && aBase != bBase)
 				{
-					const aBaseManager = gameState.ai.HQ.getBaseByID(aBase);
-					const bBaseManager = gameState.ai.HQ.getBaseByID(bBase);
+					const aBaseManager = hqOf(gameState).getBaseByID(aBase);
+					const bBaseManager = hqOf(gameState).getBaseByID(bBase);
 					if (aBaseManager && bBaseManager)
 					{
 						const apop = aBaseManager.workers.length;

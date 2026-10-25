@@ -57,7 +57,7 @@ export class TradeManager
 		this.traders = gameState.getOwnUnits().filter(
 			filters.byMetadata(PlayerID, "role", Worker.ROLE_TRADER));
 		this.traders.registerUpdates();
-		this.minimalGain = gameState.ai.HQ.navalMap ? 3 : 5;
+		this.minimalGain = gameState.ai.HQ.geography.navalMap ? 3 : 5;
 	}
 
 	hasTradeRoute(): boolean

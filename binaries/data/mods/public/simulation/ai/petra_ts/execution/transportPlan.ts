@@ -5,6 +5,7 @@ import { Worker } from "./worker.ts";
 import { worldPos } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
+import { hqOf } from "./hq.ts";
 
 /**
  * Describes a transport plan
@@ -96,7 +97,7 @@ export class TransportPlan
 		}
 		else
 		{
-			const sea = gameState.ai.HQ.getSeaBetweenIndices(gameState, startIndex, endIndex);
+			const sea = hqOf(gameState).getSeaBetweenIndices(gameState, startIndex, endIndex);
 			if (!sea)
 			{
 				this.failed = true;
@@ -140,9 +141,9 @@ export class TransportPlan
 	init(gameState: CommonGameState): void
 	{
 		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "transport", this.ID));
-		this.ships = gameState.ai.HQ.navalManager.ships.filter(filters.byMetadata(PlayerID, "transporter",
+		this.ships = hqOf(gameState).navalManager.ships.filter(filters.byMetadata(PlayerID, "transporter",
 			this.ID));
-		this.transportShips = gameState.ai.HQ.navalManager.transportShips.filter(filters.byMetadata(PlayerID,
+		this.transportShips = hqOf(gameState).navalManager.transportShips.filter(filters.byMetadata(PlayerID,
 			"transporter", this.ID));
 
 		this.units.registerUpdates();
@@ -215,7 +216,7 @@ export class TransportPlan
 		// and choose the nearest available ship from this unit
 		let distmin = Math.min();
 		let nearest: CommonEntity | undefined;
-		requireValue(gameState.ai.HQ.navalManager.seaTransportShips[this.sea]).forEach((ship: CommonEntity): void =>
+		requireValue(hqOf(gameState).navalManager.seaTransportShips[this.sea]).forEach((ship: CommonEntity): void =>
 		{
 			if (ship.getMetadata(PlayerID, "transporter"))
 				return;
@@ -317,10 +318,10 @@ export class TransportPlan
 	{
 		const ent = this.units.toEntityArray()[0];
 		const baseID = ent.getMetadata(PlayerID, "base");
-		let base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
+		let base = baseID === undefined ? undefined : hqOf(gameState).getBaseByID(baseID);
 		if (!base || !base.anchor || !base.anchor.position())
 		{
-			for (const newbase of gameState.ai.HQ.baseManagers())
+			for (const newbase of hqOf(gameState).baseManagers())
 			{
 				if (!newbase.anchor || !newbase.anchor.position())
 					continue;
@@ -490,7 +491,7 @@ export class TransportPlan
 
 		if (this.needSplit.length)
 		{
-			gameState.ai.HQ.navalManager.splitTransport(gameState, this);
+			hqOf(gameState).navalManager.splitTransport(gameState, this);
 			this.needSplit = [];
 		}
 
@@ -527,12 +528,12 @@ export class TransportPlan
 	/** when avoidEnnemy is true, we try to not board/unboard in ennemy territory */
 	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: AccessIndex, seaIndex: SeaIndex, destination?: CommonPosition, avoidEnnemy: boolean = false): CommonPosition | undefined
 	{
-		if (!gameState.ai.HQ.navalManager.landingZones[landIndex])
+		if (!hqOf(gameState).navalManager.landingZones[landIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex);
 			return destination;
 		}
-		else if (!gameState.ai.HQ.navalManager.landingZones[landIndex][seaIndex])
+		else if (!hqOf(gameState).navalManager.landingZones[landIndex][seaIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex + " and sea " + seaIndex);
 			return destination;
@@ -545,7 +546,7 @@ export class TransportPlan
 		const cell = gameState.getPassabilityMap().cellSize;
 		const alliedDocks = gameState.getAllyStructures().filter(filters.and(filters.byClass("Dock"),
 			filters.byMetadata(PlayerID, "sea", seaIndex))).toEntityArray();
-		for (const i of gameState.ai.HQ.navalManager.landingZones[landIndex][seaIndex])
+		for (const i of hqOf(gameState).navalManager.landingZones[landIndex][seaIndex])
 		{
 			let pos: CommonPosition = worldPos(i%width+0.5, Math.floor(i/width)+0.5);
 			pos = worldPos(cell*pos[0], cell*pos[1]);
@@ -554,7 +555,7 @@ export class TransportPlan
 				dist += VectorDistance(pos, destination);
 			if (avoidEnnemy)
 			{
-				const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(pos);
+				const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
 				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))
 					dist += 100000000;
 			}
@@ -611,7 +612,7 @@ export class TransportPlan
 				aiWarn(">>> transport " + this.ID + " reloading failed ... <<<");
 			// destroy the unit if inaccessible otherwise leave it there
 			const index = requireValue(getLandAccess(gameState, ent));
-			if (gameState.ai.HQ.landRegions[index])
+			if (hqOf(gameState).geography.landRegions[index])
 			{
 				if (this.debug > 1)
 					aiWarn(" recovered entity kept " + ent.id());
@@ -783,14 +784,14 @@ export class TransportPlan
 		const plan = ent.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan >= 0)
 		{
-			const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
+			const attackPlan = hqOf(gameState).attackManager.getPlan(plan);
 			if (attackPlan)
 				attackPlan.removeUnit(ent, true);
 		}
 		const partOfArmy = ent.getMetadata(PlayerID, "PartOfArmy");
 		if (partOfArmy)
 		{
-			const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
+			const army = hqOf(gameState).defenseManager.getArmy(partOfArmy);
 			if (army)
 				army.removeOwn(gameState, ent.id());
 		}

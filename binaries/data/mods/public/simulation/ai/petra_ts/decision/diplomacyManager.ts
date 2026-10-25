@@ -241,7 +241,7 @@ export class DiplomacyManager
 		{
 			const target = gameState.getEntityById(evt.target);
 			if (!target || !target.position() ||
-				gameState.ai.HQ.territoryMap.getOwner(target.position()) !== PlayerID ||
+				gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
 				!gameState.isPlayerEnemy(target.owner()))
 				continue;
 			const attacker = gameState.getEntityById(evt.attacker);

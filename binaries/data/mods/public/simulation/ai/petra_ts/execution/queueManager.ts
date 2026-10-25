@@ -4,6 +4,7 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Queue } from "./queue.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
+import { hqOf } from "./hq.ts";
 
 /**
  * This takes the input queues and picks which items to fund with resources until no more resources are left to distribute.
@@ -218,9 +219,9 @@ export class QueueManager
 			aiWarn(p + ": " + uneval(this.accounts[p]));
 		aiWarn("Current Resources: " + uneval(gameState.getResources()));
 		aiWarn("Available Resources: " + uneval(this.getAvailableResources(gameState)));
-		aiWarn("Wanted Gather Rates: " + uneval(gameState.ai.HQ.GetWantedGatherRates(gameState)));
-		aiWarn("Current Gather Rates: " + uneval(gameState.ai.HQ.GetCurrentGatherRates(gameState)));
-		aiWarn("Most needed resources: " + uneval(gameState.ai.HQ.pickMostNeededResources(gameState)));
+		aiWarn("Wanted Gather Rates: " + uneval(hqOf(gameState).GetWantedGatherRates(gameState)));
+		aiWarn("Current Gather Rates: " + uneval(hqOf(gameState).GetCurrentGatherRates(gameState)));
+		aiWarn("Most needed resources: " + uneval(hqOf(gameState).pickMostNeededResources(gameState)));
 		aiWarn("------------------------------------");
 	}
 
@@ -461,7 +462,7 @@ export class QueueManager
 		for (const q in this.queues)
 		{
 			let toBePaused = false;
-			if (!gameState.ai.HQ.hasPotentialBase())
+			if (!hqOf(gameState).hasPotentialBase())
 				toBePaused = q != "dock" && q != "civilCentre";
 			else if (numWorkers < workersMin / 3)
 				toBePaused = q != "citizenSoldier" && q != "villager" && q != "emergency";
@@ -475,23 +476,23 @@ export class QueueManager
 
 			if (toBePaused)
 			{
-				if (q == "field" && gameState.ai.HQ.needFarm &&
+				if (q == "field" && hqOf(gameState).needFarm &&
 					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "corral" && gameState.ai.HQ.needCorral &&
+				if (q == "corral" && hqOf(gameState).needCorral &&
 					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "dock" && gameState.ai.HQ.needFish &&
+				if (q == "dock" && hqOf(gameState).needFish &&
 					!gameState.getOwnStructures().filter(filters.byClass("Dock")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "ships" && gameState.ai.HQ.needFish &&
-					!gameState.ai.HQ.navalManager.ships.filter(filters.byClass("FishingBoat"))
+				if (q == "ships" && hqOf(gameState).needFish &&
+					!hqOf(gameState).navalManager.ships.filter(filters.byClass("FishingBoat"))
 						.hasEntities())
 				{
 					toBePaused = false;

@@ -28,6 +28,7 @@ import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "../execution/worker.ts";
 import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { hasActivity } from "../adapter/unitState.ts";
+import { Geography } from "../world/geography.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -76,7 +77,6 @@ export class Headquarters
 	declare attackManager: AttackManager;
 	declare bAdvanced: TemplateName[];
 	declare basesManager: BasesManager;
-	declare borderMap: InfoMap;
 	declare buildManager: BuildManager;
 	declare canBarter: boolean;
 	declare canBuildUnits: boolean;
@@ -95,12 +95,10 @@ export class Headquarters
 	declare fortressLapseTime: GameSeconds;
 	declare fortressStartTime: GameSeconds;
 	declare garrisonManager: GarrisonManager;
-	declare landRegions: Record<number, boolean>;
-	declare lastFailedGather: Record<string, number>;
+	/** When a worker last found nothing left to gather, per resource. */
+	declare lastFailedGather: Record<string, GameSeconds>;
 	declare maxFields: number | false;
 	declare navalManager: NavalManager;
-	declare navalMap: boolean;
-	declare navalRegions: Record<number, boolean>;
 	declare needCorral: boolean;
 	declare needFarm: boolean;
 	declare needFish: boolean;
@@ -111,7 +109,6 @@ export class Headquarters
 	declare saveSpace: boolean | undefined;
 	declare supportRatio: number;
 	declare targetNumWorkers: number;
-	declare territoryMap: TerritoryMap;
 	declare towerLapseTime: GameSeconds;
 	declare towerStartTime: GameSeconds;
 	declare tradeManager: TradeManager;
@@ -119,8 +116,23 @@ export class Headquarters
 	declare turnCache: HeadquartersTurnCache;
 	declare victoryManager: VictoryManager;
 
+	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
+	declare geography: Geography;
+
+	get territoryMap(): TerritoryMap { return this.geography.territoryMap; }
+	set territoryMap(map: TerritoryMap) { this.geography.territoryMap = map; }
+	get borderMap(): InfoMap { return this.geography.borderMap; }
+	set borderMap(map: InfoMap) { this.geography.borderMap = map; }
+	get landRegions(): Record<number, boolean> { return this.geography.landRegions; }
+	set landRegions(regions: Record<number, boolean>) { this.geography.landRegions = regions; }
+	get navalRegions(): Record<number, boolean> { return this.geography.navalRegions; }
+	set navalRegions(regions: Record<number, boolean>) { this.geography.navalRegions = regions; }
+	get navalMap(): boolean { return this.geography.navalMap; }
+	set navalMap(naval: boolean) { this.geography.navalMap = naval; }
+
 	constructor(config: Config, deserialized: boolean)
 	{
+		this.geography = new Geography();
 		this.Config = config;
 		this.phasing = 0;	// existing values: 0 means no, i > 0 means phasing towards phase i
 
@@ -161,15 +173,15 @@ export class Headquarters
 	/** More initialisation for stuff that needs the gameState */
 	init(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		this.territoryMap = createTerritoryMap(gameState);
+		this.geography.territoryMap = createTerritoryMap(gameState);
 		// create borderMap: flag cells on the border of the map
 		// then this map will be completed with our frontier in updateTerritories
-		this.borderMap = createBorderMap(gameState);
+		this.geography.borderMap = createBorderMap(gameState);
 		// list of allowed regions
-		this.landRegions = {};
+		this.geography.landRegions = {};
 		// try to determine if we have a water map
-		this.navalMap = false;
-		this.navalRegions = {};
+		this.geography.navalMap = false;
+		this.geography.navalRegions = {};
 
 		this.treasures = gameState.getEntities().filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean => ent.isTreasure());
 		this.treasures.registerUpdates();
@@ -471,6 +483,35 @@ export class Headquarters
 				return;
 			}
 		}
+	}
+
+	/** A phase research started: we no longer phase towards it, and we are in it. */
+	phaseResearched(gameState: CommonGameState, phase: number): void
+	{
+		this.phasing = 0;
+		this.OnPhaseUp(gameState, phase);
+	}
+
+	/** Whether gatherers may go far for food this turn: only while no field or corral can be built (worked out once a turn). */
+	allowsDistantFood(gameState: CommonGameState): boolean
+	{
+		if (this.turnCache.allowDistantFood === undefined)
+			this.turnCache.allowDistantFood =
+				!this.canBuild(gameState, "structures/{civ}/field") &&
+				!this.canBuild(gameState, "structures/{civ}/corral");
+		return this.turnCache.allowDistantFood;
+	}
+
+	/** A construction plan laid its foundation this turn. */
+	markBuildingStarted(): void
+	{
+		this.turnCache.buildingBuilt = true;
+	}
+
+	/** A worker found nothing left to gather of `resource`, now. */
+	noteNothingToGather(resource: string, time: GameSeconds): void
+	{
+		this.lastFailedGather[resource] = time;
 	}
 
 	/** Called by any "phase" research plan once it's started */
@@ -793,7 +834,7 @@ export class Headquarters
 		{
 			const pos = dp.position();
 			if (pos)
-				dpList.push({ "ent": dp, "pos": pos, "territory": this.territoryMap.getOwner(pos) });
+				dpList.push({ "ent": dp, "pos": pos, "territory": this.geography.territoryMap.getOwner(pos) });
 		}
 
 		let bestIdx = -1;
@@ -815,8 +856,8 @@ export class Headquarters
 				scale = 400 * 400;
 		}
 
-		const width = this.territoryMap.width;
-		const cellSize = this.territoryMap.cellSize;
+		const width = this.geography.territoryMap.width;
+		const cellSize = this.geography.territoryMap.cellSize;
 
 		// DistanceSquare cuts to other ccs (bigger or no cuts on inaccessible ccs to allow colonizing other islands).
 		const reduce = (template.hasClass("Colony") ? 30 : 0) + 30 * this.Config.personality.defensive;
@@ -831,18 +872,18 @@ export class Headquarters
 		if (fromStrategic || proximity)  // be less restrictive
 			cut = 30;
 
-		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
+		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(this.territoryMap, jIndex);
-			if (this.territoryMap.getOwnerIndex(j) != 0)
+			const j = cellIndex(this.geography.territoryMap, jIndex);
+			if (this.geography.territoryMap.getOwnerIndex(j) != 0)
 				continue;
 			// With enough room around to build the cc
-			const i = this.territoryMap.getNonObstructedTile(j, radius, obstructions);
+			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
 			if (i < 0)
 				continue;
 			// We require that it is accessible
 			const index = gameState.ai.accessibility.landPassMap[i];
-			if (!this.landRegions[index])
+			if (!this.geography.landRegions[index])
 				continue;
 			if (proxyAccess && nbShips == 0 && proxyAccess != index)
 				continue;
@@ -921,7 +962,7 @@ export class Headquarters
 					continue;
 			}
 
-			if (this.borderMap.map[j] & mapMask.fullBorder)	// disfavor the borders of the map
+			if (this.geography.borderMap.map[j] & mapMask.fullBorder)	// disfavor the borders of the map
 				norm *= 0.5;
 
 			let val = 2 * gameState.sharedScript.ccResourceMaps[resource].map[j];
@@ -1008,24 +1049,24 @@ export class Headquarters
 		const obstructionRadius = requireValue(template.obstructionRadius());
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
-		const width = this.territoryMap.width;
-		const cellSize = this.territoryMap.cellSize;
+		const width = this.geography.territoryMap.width;
+		const cellSize = this.geography.territoryMap.cellSize;
 		let currentVal, delta;
 		let distcc0 = Infinity, distcc1 = Infinity, distcc2 = Infinity;
 		const favoredDistance = (template.hasClass("Colony") ? 220 : 280) - 40 * this.Config.personality.defensive;
 
-		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
+		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(this.territoryMap, jIndex);
-			if (this.territoryMap.getOwnerIndex(j) != 0)
+			const j = cellIndex(this.geography.territoryMap, jIndex);
+			if (this.geography.territoryMap.getOwnerIndex(j) != 0)
 				continue;
 			// with enough room around to build the cc
-			const i = this.territoryMap.getNonObstructedTile(j, radius, obstructions);
+			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
 			if (i < 0)
 				continue;
 			// we require that it is accessible
 			const index = gameState.ai.accessibility.landPassMap[i];
-			if (!this.landRegions[index])
+			if (!this.geography.landRegions[index])
 				continue;
 
 			// checking distances to other cc
@@ -1065,7 +1106,7 @@ export class Headquarters
 				else if (dist < distcc2)
 					distcc2 = dist;
 			}
-			if (minDist < 1 || minDist > 170000 && !this.navalMap)
+			if (minDist < 1 || minDist > 170000 && !this.geography.navalMap)
 				continue;
 
 			delta = Math.sqrt(distcc0) - favoredDistance;
@@ -1078,7 +1119,7 @@ export class Headquarters
 				currentVal += delta*delta;
 			}
 			// disfavor border of the map
-			if (this.borderMap.map[j] & mapMask.fullBorder)
+			if (this.geography.borderMap.map[j] & mapMask.fullBorder)
 				currentVal += 10000;
 
 			if (currentVal > bestVal)
@@ -1148,7 +1189,7 @@ export class Headquarters
 			halfSize = +template.get("Footprint/Circle/@radius");
 
 		let bestIdx = -1;
-		let bestJdx = cellIndex(this.territoryMap, -1);
+		let bestJdx = cellIndex(this.geography.territoryMap, -1);
 		let bestVal = -Infinity;
 		let bestDistSq = 0;
 		let bestGainMult = 0;
@@ -1156,25 +1197,25 @@ export class Headquarters
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		const isNavalMarket = template.hasClasses(["Naval+Trade"]);
 
-		const width = this.territoryMap.width;
-		const cellSize = this.territoryMap.cellSize;
+		const width = this.geography.territoryMap.width;
+		const cellSize = this.geography.territoryMap.cellSize;
 
 		const traderTemplatesGains = gameState.getTraderTemplatesGains();
 
-		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
+		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(this.territoryMap, jIndex);
+			const j = cellIndex(this.geography.territoryMap, jIndex);
 			// do not try on the narrow border of our territory
-			if (this.borderMap.map[j] & mapMask.narrowFrontier)
+			if (this.geography.borderMap.map[j] & mapMask.narrowFrontier)
 				continue;
 			if (this.baseAtIndex(j) == 0)   // only in our territory
 				continue;
 			// with enough room around to build the market
-			const i = this.territoryMap.getNonObstructedTile(j, radius, obstructions);
+			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
 			if (i < 0)
 				continue;
 			const index = gameState.ai.accessibility.landPassMap[i];
-			if (!this.landRegions[index])
+			if (!this.geography.landRegions[index])
 				continue;
 			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 			// checking distances to other markets
@@ -1297,10 +1338,10 @@ export class Headquarters
 			halfSize = +template.get("Footprint/Circle/@radius");
 
 		let bestIdx = -1;
-		let bestJdx = cellIndex(this.territoryMap, -1);
+		let bestJdx = cellIndex(this.geography.territoryMap, -1);
 		let bestVal = Infinity;
-		const width = this.territoryMap.width;
-		const cellSize = this.territoryMap.cellSize;
+		const width = this.geography.territoryMap.width;
+		const cellSize = this.geography.territoryMap.cellSize;
 
 		const isTower = template.hasClass("Tower");
 		const isFortress = template.hasClass("Fortress");
@@ -1311,21 +1352,21 @@ export class Headquarters
 		else
 			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
-		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
+		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(this.territoryMap, jIndex);
+			const j = cellIndex(this.geography.territoryMap, jIndex);
 			if (!wonderMode)
 			{
 				// do not try if well inside or outside territory
-				if (!(this.borderMap.map[j] & mapMask.fullFrontier))
+				if (!(this.geography.borderMap.map[j] & mapMask.fullFrontier))
 					continue;
-				if (this.borderMap.map[j] & mapMask.largeFrontier && isTower)
+				if (this.geography.borderMap.map[j] & mapMask.largeFrontier && isTower)
 					continue;
 			}
 			if (this.baseAtIndex(j) == 0)   // inaccessible cell
 				continue;
 			// with enough room around to build the cc
-			const i = this.territoryMap.getNonObstructedTile(j, radius, obstructions);
+			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
 			if (i < 0)
 				continue;
 
@@ -2118,21 +2159,21 @@ export class Headquarters
 		const around = [ [-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0] ];
 		const alliedVictory = gameState.getAlliedVictory();
 		const passabilityMap = gameState.getPassabilityMap();
-		const width = this.territoryMap.width;
-		const cellSize = this.territoryMap.cellSize;
+		const width = this.geography.territoryMap.width;
+		const cellSize = this.geography.territoryMap.cellSize;
 		const insideSmall = Math.round(45 / cellSize);
 		const insideLarge = Math.round(80 / cellSize);	// should be about the range of towers
 		let expansion = 0;
 
-		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
+		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(this.territoryMap, jIndex);
-			if (this.borderMap.map[j] & mapMask.outside)
+			const j = cellIndex(this.geography.territoryMap, jIndex);
+			if (this.geography.borderMap.map[j] & mapMask.outside)
 				continue;
-			if (this.borderMap.map[j] & mapMask.fullFrontier)
-				this.borderMap.map[j] &= ~mapMask.fullFrontier;	// reset the frontier
+			if (this.geography.borderMap.map[j] & mapMask.fullFrontier)
+				this.geography.borderMap.map[j] &= ~mapMask.fullFrontier;	// reset the frontier
 
-			if (this.territoryMap.getOwnerIndex(j) != PlayerID)
+			if (this.geography.territoryMap.getOwnerIndex(j) != PlayerID)
 				this.basesManager.removeBaseFromTerritoryIndex(j);
 			else
 			{
@@ -2148,12 +2189,12 @@ export class Headquarters
 					let jz = iz + Math.round(insideSmall*a[1]);
 					if (jz < 0 || jz >= width)
 						continue;
-					if (this.borderMap.map[jx+width*jz] & mapMask.outside)
+					if (this.geography.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
-					let territoryOwner = this.territoryMap.getOwnerIndex(cellIndex(this.territoryMap, jx+width*jz));
+					let territoryOwner = this.geography.territoryMap.getOwnerIndex(cellIndex(this.geography.territoryMap, jx+width*jz));
 					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 					{
-						this.borderMap.map[j] |= mapMask.narrowFrontier;
+						this.geography.borderMap.map[j] |= mapMask.narrowFrontier;
 						break;
 					}
 					jx = ix + Math.round(insideLarge*a[0]);
@@ -2162,14 +2203,14 @@ export class Headquarters
 					jz = iz + Math.round(insideLarge*a[1]);
 					if (jz < 0 || jz >= width)
 						continue;
-					if (this.borderMap.map[jx+width*jz] & mapMask.outside)
+					if (this.geography.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
-					territoryOwner = this.territoryMap.getOwnerIndex(cellIndex(this.territoryMap, jx+width*jz));
+					territoryOwner = this.geography.territoryMap.getOwnerIndex(cellIndex(this.geography.territoryMap, jx+width*jz));
 					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 						onFrontier = true;
 				}
-				if (onFrontier && !(this.borderMap.map[j] & mapMask.narrowFrontier))
-					this.borderMap.map[j] |= mapMask.largeFrontier;
+				if (onFrontier && !(this.geography.borderMap.map[j] & mapMask.narrowFrontier))
+					this.geography.borderMap.map[j] |= mapMask.largeFrontier;
 
 				if (this.basesManager.addTerritoryIndexToBase(gameState, j, passabilityMap))
 					expansion++;
@@ -2181,7 +2222,7 @@ export class Headquarters
 		// We've increased our territory, so we may have some new room to build
 		this.buildManager.resetMissingRoom(gameState);
 		// And if sufficient expansion, check if building a new market would improve our present trade routes
-		const cellArea = this.territoryMap.cellSize * this.territoryMap.cellSize;
+		const cellArea = this.geography.territoryMap.cellSize * this.geography.territoryMap.cellSize;
 		if (expansion * cellArea > 960)
 			this.tradeManager.routeProspection = true;
 	}
@@ -2397,7 +2438,7 @@ export class Headquarters
 		Engine.ProfileStart("Headquarters update");
 		this.emergencyManager.update(gameState);
 		this.turnCache = {};
-		this.territoryMap = createTerritoryMap(gameState);
+		this.geography.territoryMap = createTerritoryMap(gameState);
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt())
 			.hasEntities();
 		// TODO find a better way to update
@@ -2522,9 +2563,9 @@ export class Headquarters
 			"maxFields": this.maxFields,
 			"canExpand": this.canExpand,
 			"canBuildUnits": this.canBuildUnits,
-			"navalMap": this.navalMap,
-			"landRegions": this.landRegions,
-			"navalRegions": this.navalRegions,
+			"navalMap": this.geography.navalMap,
+			"landRegions": this.geography.landRegions,
+			"navalRegions": this.geography.navalRegions,
 			"decayingStructures": this.decayingStructures,
 			"capturableTargets": this.capturableTargets,
 			"capturableTargetsTime": this.capturableTargetsTime

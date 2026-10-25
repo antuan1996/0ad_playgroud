@@ -231,7 +231,7 @@ export class AttackManager
 				if (struct.hasClass("Field"))
 				{
 					if (!struct.resourceSupplyNumGatherers() ||
-					    !gameState.isPlayerEnemy(gameState.ai.HQ.territoryMap.getOwner(structPos)))
+					    !gameState.isPlayerEnemy(gameState.ai.HQ.geography.territoryMap.getOwner(structPos)))
 						continue;
 				}
 				const dist = VectorDistance(entPos, structPos);
@@ -244,14 +244,14 @@ export class AttackManager
 						structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
 						structPos[1] + (entPos[1] - structPos[1]) * safety / dist
 					);
-					const owner = gameState.ai.HQ.territoryMap.getOwner(targetPos);
+					const owner = gameState.ai.HQ.geography.territoryMap.getOwner(targetPos);
 					if (owner != 0 && gameState.isPlayerEnemy(owner))
 						continue;
 					targetPos = worldPos(
 						structPos[0] + (entPos[0] - structPos[0]) * range / dist,
 						structPos[1] + (entPos[1] - structPos[1]) * range / dist
 					);
-					if (gameState.ai.HQ.territoryMap.getOwner(targetPos) != PlayerID ||
+					if (gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) != PlayerID ||
 					    gameState.ai.accessibility.getAccessValue(targetPos) != access)
 						continue;
 				}

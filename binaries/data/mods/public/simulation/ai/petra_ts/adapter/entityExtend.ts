@@ -429,7 +429,7 @@ export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): C
  */
 export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonEntity): boolean
 {
-	if (gameState.ai.HQ.territoryMap.getOwner(ent.position()) !== PlayerID)
+	if (gameState.ai.HQ.geography.territoryMap.getOwner(ent.position()) !== PlayerID)
 	{
 		const buildTerritories = ent.buildTerritories();
 		if (buildTerritories && (!buildTerritories.length || buildTerritories.length === 1 && buildTerritories[0] === "own"))
@@ -450,7 +450,7 @@ export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: Com
 	for (let i = 1; i < n; ++i)
 	{
 		const pos: CommonPosition = worldPos(pos1[0]+i*stepx, pos1[1]+i*stepy);
-		const owner = gameState.ai.HQ.territoryMap.getOwner(pos);
+		const owner = gameState.ai.HQ.geography.territoryMap.getOwner(pos);
 		if (owner && gameState.isPlayerEnemy(owner))
 			return true;
 	}
@@ -478,7 +478,7 @@ export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | u
 			continue;
 		if (water && access != getSeaAccess(gameState, treasure))
 			continue;
-		const territoryOwner = gameState.ai.HQ.territoryMap.getOwner(treasure.position());
+		const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(treasure.position());
 		if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))
 			continue;
 		const dist = SquareVectorDistance(ent.position(), treasure.position());

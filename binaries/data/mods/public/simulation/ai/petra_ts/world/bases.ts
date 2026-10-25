@@ -20,10 +20,15 @@ export interface BaseView
 	/** The land the base stands on; undefined for the baseless pool. */
 	readonly accessIndex: AccessIndex | undefined;
 	readonly anchor: CommonEntity | undefined;
-	readonly dropsiteSupplies: SupplyBands;
+	/** The supplies within reach of its dropsites (world/baseResources.ts), read-only. */
+	readonly resources: { readonly dropsiteSupplies: SupplyBands };
 	/** How many of our gatherers this turn are booked on `supply` beyond what the engine counts. */
 	GetTCGatherer(supply: EntityId): number;
 	workersBySubrole(gameState: CommonGameState, subrole: string): CommonEntityCollection;
+	/** The base's workers (a live collection the base keeps up to date). */
+	readonly workers: CommonEntityCollection;
+	/** Where a dropsite for `resource` of this template would serve the base best (a search; it changes nothing). */
+	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: TemplateName): { quality: number; pos: CommonPosition };
 }
 
 /** Booking a supply for a gatherer this turn, so the next one counts it as taken. */
