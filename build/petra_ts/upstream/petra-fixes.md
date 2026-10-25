@@ -8,6 +8,8 @@ there), then confirmed in matches played in the game.
   +36 −19). Apply from the repository root with `git apply petra-fixes.patch`.
 - **Part 2**: behaviour that looks unintended, reported without a patch: the
   right fix is a design choice.
+- **Part 3**: a bug outside Petra, in the game's command checks, that the bots'
+  games show.
 
 The patch is made against this repository's `petra/*.js` (restored from
 upstream in commit 4cf8a9bba9; the upstream revision is not recorded). Check it
@@ -183,3 +185,20 @@ tests as they are.
   turn counter stops.
 - **`baseManager.assignToFoundations`**: `if (target.hasClass("Field"))
   continue` cannot fire (fields are filtered out of the foundations first).
+
+## Part 3: outside Petra, in the game's command checks
+
+Seen in the notices the game sends the bots (`match.sh -l`, `notices.txt`).
+
+- **`simulation/helpers/Commands.js` `CanPlayerOrAllyControlUnit`** calls
+  `CanControlUnit(player, entity, controlAll)`, but the signature is
+  `CanControlUnit(entity, player, controlAll)` (its other callers pass them in
+  that order). The ownership test therefore always fails, and each call posts a
+  bogus "Gaia can't be controlled." notification addressed to the entity id as
+  if it were a player. The order still goes through, by the fallback
+  `IsOwnedByMutualAllyOfPlayer(player, entity) && CanOwnerControlEntity(entity)`
+  (a player is its own mutual ally). It runs for `set-rallypoint`,
+  `unset-rallypoint`, `garrison`, `unload`, `unload-template` and
+  `unload-all-by-owner`: about 1500 bogus notifications in a 46-minute bot game.
+  Fix: `CanControlUnit(entity, player, controlAll)`. Not in the patch: it is not
+  Petra, and a human player may see the effect differently (not checked).
