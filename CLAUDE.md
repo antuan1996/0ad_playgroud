@@ -9,9 +9,17 @@ JavaScript/XML/JSON mod data in `binaries/data/mods/` (`mod` = engine-level
 GUI/global scripts, `public` = the game). Upstream docs live on the Gitea wiki
 (BuildInstructions, GettingStartedProgrammers).
 
-The work on this branch (`petra_behaviour_tests`) is a **TypeScript port of the
-Petra AI** and its behaviour-test suite, under
-`binaries/data/mods/public/simulation/ai/`.
+The work here is a **TypeScript port of the Petra AI** and its behaviour-test
+suite, under `binaries/data/mods/public/simulation/ai/`, and its evolution into
+a stronger AI.
+
+**`PLAN.md` is the project's goal and plan**: the constraints every change must
+keep (determinism, the engine interface, the runtime, save games), the
+strategy (freeze the port as the `petra_parity` baseline, evolve `petra_ts`),
+the type-driven architecture (typestates for plans, parsed observations,
+branded types, layers), validation (parity, per-change checks, win-rate with
+SPRT) and the staged roadmap with exit criteria. Check work against it, and
+update it when a stage is done or a decision changes.
 
 ## Commands
 
