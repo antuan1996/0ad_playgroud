@@ -18,6 +18,8 @@ project are referenced to the files that hold them.
 | Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |
 | Parity tools | `command-diff.ts`, `parity-bisect.ts`, `baselines.ts hybrid` | Where two command logs part; which module makes a difference |
 | Batches | `build/petra_ts/batch.ts`, `batch-stats.ts` | Parallel headless games with isolated `XDG_*` folders; `results.tsv`; win-rate with Wilson CI, SPRT, slot advantage, determinism |
+| Turn timing | `match.sh -P`, `ai-times.ts`, `CCmpAIManager.cpp` | Each AI's script time per turn, measured by the engine (two clock reads, about 27 ns, kept in memory); the paired budget check `ai-times.ts --compare` |
+| Layers | `petra_ts/{adapter,world,decision,execution}/` | Stage 3 under way: the folders, unit state parsed (`unitState.ts`), one command exit (`commands.ts`), versioned saves, the read-only base view |
 | Integration test | `npm run test:petra:match` | One fixed mirror match, 13 anomaly checks on engine data only (`match-checks.ts`) |
 | Upstream notes | `build/petra_ts/upstream/` | A patch of 15 fixes for the original, with which it plays as the port (stage 1); shared quirks; a `Commands.js` bug |
 
@@ -186,13 +188,30 @@ execution/  plans with typestates (3.1): turns decisions into commands,
 
 ## 4. Performance: measure first
 
-- **Measure** AI time per turn in headless matches. The bot already wraps its
-  update in `Engine.ProfileStart`/`ProfileStop` (`_petrabot.ts`), which the
-  engine's profiler reports; to verify: how to read that from a headless run,
-  or a debug-only wrapper (like `bot-state.js`) that times `OnUpdate` with an
-  engine clock and prints it outside the fingerprinted output.
-- **Budget:** pick it from the measurements (e.g. the 99th-percentile turn of
-  a 300-population late game), and add a check to the integration match.
+- **Measure** (done, stage 3): the engine times each AI's script call when
+  `PYROGENESIS_AI_TIMES` names a file (`match.sh -P`): two `timer_Time()`
+  reads around the shared component and each player's `Run`, kept in a
+  preallocated vector and written once when the game ends. One timed call
+  costs about 27 ns (two clock reads and a store) against a median AI turn of
+  about 0.5 ms; nothing is printed during the game, and no bot code changes,
+  so the times are the bot's and the game is the same. Wall-clock times
+  include garbage collection (as in a real game) and the machine's load:
+  measure with few jobs at a time.
+- **Baseline** (stage 2's bot, 20 mirror games, mainland, very hard, 4 at a
+  time; 193,206 turns): the whole turn (shared component and both AIs) takes
+  1.96 ms on average, median 0.60, 99th percentile 12.5, 99.9th 68, at worst
+  351 ms; the 99th percentile grows from 7 ms in the first ten minutes to 34
+  ms at 30–40 minutes. In the mirror games the two sides' 99.9th percentiles
+  differ by a third (41 and 30 ms): the games are not symmetric.
+- **Budget**, so a paired test: the new bot plays `petra_parity` from both
+  slots (`batch.ts --red petra_parity -- -P`, then `ai-times.ts --compare`);
+  while a refactor keeps the fingerprint the two play the same games, and each
+  turn is timed for both on the same game at the same moment. The new bot's
+  mean and 99th percentile may be at most 5% above `petra_parity`'s, its 99.9th
+  at most 10%. Stage 3 so far (20 games, 208,906 turns each): ratios 1.002
+  (mean), 0.994 (99th), 1.001 (99.9th), the same games in all 10 seed pairs.
+  Once the bot plays differently (stage 4 on), the games are no longer the
+  same and the comparison needs more games.
 - **Optimise only what the profile shows.** Likely candidates, from the code:
   `updatingCollection` filters re-evaluated per call, entity scans per turn,
   repeated territory/accessibility lookups. Object pooling is not planned:
@@ -279,7 +298,7 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 | 0. Baselines (**done** 2026-10-25, `FINDINGS.md` §13) | Tag the port; build `petra_parity` and `petra_fixed` as bots; parallel headless runs (5.3); a results table | 100 mirror games of each baseline run in parallel without a path clash; `petra_parity` vs `petra_fixed` ~50% (no significant difference). Met: 315 games at 12 at a time, no clash, 15/15 repeats with the same fingerprint; 51.0% (CI 41.5–60.4%) |
 | 1. Parity proof (**done** 2026-10-25, `FINDINGS.md` §14) | Command-log diffs on a seed set (5.1), starting with the 6 seed pairs where the baselines differ (`FINDINGS.md` §13); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3. Met: identical in 26 of 26 pairs (52 games) once three more original bugs went into the patch |
 | 2. Types in place (**done** 2026-10-25) | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor). Met: fingerprint `2164cc14d7c5e28f` before and after; 1533 tests pass. Every brand of 3.3: `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex` (`RegionIndex` for either), `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<"territory" \| "passability">`; the attack plan's state kind is a typestate (3.1); the data-carrying states move to stage 4, records keyed by `for...in` keys to stage 3 |
-| 3. Layers | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4) |
+| 3. Layers (**in progress**, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). So far: the layer folders, `unitState.ts`, `commands.ts`, `SAVE_VERSION`, the read-only base view for `worker.ts` and `attackPlan.ts`; fingerprint unchanged, budget kept. Left: the world view for the other managers, the execution layer's remaining plans |
 | 4. Fix the known weaknesses | Withdrawal to a reachable point; idle workers re-homed to bases with resources; first field by food income, not fruit left; attacks that cannot fill are cancelled or merged; reconsider the town-phase population | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
 | 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed` |
 | 6. Narrow search | Build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
@@ -290,12 +309,12 @@ original's or the game's (`build/petra_ts/upstream/`).
 
 ## 7. Open questions
 
-- Reading the engine profiler in a headless run, or which clock the AI context
-  offers for a debug-only timer (4).
+- Answered in stage 3: the AI context offers no clock; the engine times the
+  AI's calls instead (`match.sh -P`, 4).
 - Answered in stage 0: `XDG_*` per run is enough to isolate parallel engines
   (config, cache, replays and logs all follow it); `-writableRoot` is not
   needed (5.3, `FINDINGS.md` §13).
 - Why player 2 wins more mirror games (5.3).
 - Which civilisations and maps make the pool, given the time per game.
-- Whether to keep testing against the original (`ref`) once the bot
-  diverges, or only against `petra_parity` (2).
+- Answered in stage 3: the original is no test target once the port is in
+  layers; the frozen port's parity is shown in games (stage 1).

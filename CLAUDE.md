@@ -42,16 +42,15 @@ npm run build:petra                 # strict typecheck of the port (noEmit); cle
 npm run typecheck:petra:tests       # typecheck tests + harness (also re-checks the port); clean
 npm run build:petra:out             # build the "Petra TS" in-game bot into simulation/ai/petra_out/ (gitignored)
 npm run test:petra                  # all tests against the port (petra_ts/*.ts)
-npm run test:petra -- ref           # same tests against the original petra/*.js
 npm run test:petra:out              # build the bot, then the same tests against petra_out/*.js
 npm run test:petra:match            # integration: a fixed headless mirror match in the game, checked for anomalies
 npm run build:petra:baselines       # the baseline bots petra_parity and petra_fixed (gitignored)
 npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
 npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
-npm run coverage:petra -- [src|ref|both] [--file <module>]   # real per-module coverage
+npm run coverage:petra -- [src|out] [--file <module>]   # real per-module coverage
 # one file / one test:
 PETRA_TARGET=src node --test binaries/data/mods/public/simulation/ai/petra_ts/tests/<name>.test.ts
-PETRA_TARGET=ref node --test --test-name-pattern="<regex>" <same path>
+PETRA_TARGET=out node --test --test-name-pattern="<regex>" <same path>
 ```
 Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
 built-in line figure counts never-run branches as covered.
@@ -75,7 +74,11 @@ conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` mi
 held (default 20), `-o` the blue bot, `-p` the red bot (each `petra_out`,
 `petra`, `petra_parity` or `petra_fixed`), `-x` swap slots, `-B` do not build,
 `-v` speed, `-n` headless, `-t` timeline, `-l` command log and notices, `-b`
-the bot's own state (both for debugging),
+the bot's own state (both for debugging), `-P` each AI's script time per turn
+(`aitimes.txt`, measured by the engine: `PYROGENESIS_AI_TIMES` in
+`CCmpAIManager.cpp`, two clock reads per AI and turn kept in memory and written
+at the end; `build/petra_ts/ai-times.ts <dir>...` summarises, `--compare
+<batch>` sets two bots' times side by side, the turn budget's check),
 `-k` how many match folders to keep, default 5) builds the bots and starts an
 observed match of Petra TS (`petra_out`) against itself, or with
 `-o`/`-p` against the original, Petra JS (`petra`), or a baseline; it needs the
@@ -166,9 +169,19 @@ decision with the game's reason ("last player alive", "wonder victory",
 - `common-api/` — shared, engine-facing JS (not part of the port): `SharedScript`
   (entities, templates, terrain/accessibility, resource maps), `GameState`,
   `Entity`/`Template`, `EntityCollection`, `filters`, `BaseAI`.
-- `petra/` — the original JS bot, the reference (`ref`). The game loads the bot named
-  by a folder's `data.json` (`constructor`, `filename`, `useShared`).
-- `petra_ts/` — the port, one `.ts` per original `.js`, meant to stay 1:1 with it.
+- `petra/` — the original JS bot, the reference: the baselines are built from it
+  (`petra_fixed`) and from the frozen port (`petra_parity`); it is no test
+  target since stage 3. The game loads the bot named by a folder's `data.json`
+  (`constructor`, `filename`, `useShared`).
+- `petra_ts/` — the port, in layers (stage 3, `PLAN.md` §3.4): `_petrabot.ts`
+  and the `.d.ts` declarations at the root; `adapter/` (the engine boundary:
+  `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
+  unit does, `commands.ts` where the bot's own commands leave it); `world/` (the
+  AI's model: `mapModule.ts`, `mapMask.ts`, `bases.ts` the read-only view of the
+  bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel and
+  the managers); `execution/` (attack and transport plans, defense armies, queues,
+  the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
+  ended with the tag `petra-ts-parity`.
 - `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
   Imports use VFS paths (`simulation/ai/common-api/...`); the engine-facing
   shapes are declared in `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`
@@ -209,10 +222,10 @@ untested branches.
 ### Conventions for this work
 - Tests assert behaviour in realistic game situations, not implementation.
   Check new tests actually reach the branch they name (run `coverage:petra --file`).
-- Every test runs on both targets. A test only the port passes carries a
-  `// only the port passes: ...` comment explaining the original's bug; the
-  original currently fails exactly 20 tests, all of that kind (19 bugs of
-  the original; one pins the attack plan's save validation, stage 2).
+- Tests run on the port's sources (`src`) and on the built bot (`out`); the
+  original is no target since stage 3. A test with `// only the port passes:
+  ...` pins one of the original's bugs; the original failed exactly those 20
+  when last run (19 bugs; one pins the attack plan's save validation).
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
@@ -231,6 +244,19 @@ untested branches.
   `number` keys.
 - The attack plan's state changes only through `changeState(from, to)`
   (the moves are in `AttackTransitions`, `attackPlan.ts`).
+- What a unit is doing is read through `adapter/unitState.ts` (`isInState`,
+  `hasActivity`, `stateIs`, ...), never by comparing `unitAIState()` strings:
+  the state names are the union `UnitAIStateName`, taken from `UnitAI.js`
+  (`unitState.test.ts` fails when UnitAI's states change).
+- The bot's own commands go through `adapter/commands.ts` (`postCommand`,
+  `debugShade`); only that module calls `Engine.PostCommand`.
+- Saved data carries `SAVE_VERSION` (`_petrabot.ts`): raise it with any change
+  to a manager's saved shape; a save of another version is refused and the bot
+  starts afresh.
+- Execution code reads bases through `world/bases.ts` (`BaseView`, read-only
+  supply lists) and changes them only through its capabilities (`SupplyBooking`,
+  `SupplyUpkeep`, `IdleWorkers`); a manager's own state (e.g. the victory
+  manager's raided relics) is changed only through that manager's methods.
 - Methods never called (in port and original) are marked `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

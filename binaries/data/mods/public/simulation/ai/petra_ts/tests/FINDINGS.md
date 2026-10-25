@@ -12,7 +12,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 | | Port | Original |
 |---|---|---|
-| Tests | 1538, all pass | 1537, 20 fail (all listed below) |
+| Tests | 1548, all pass | no target since stage 3; when last run, 1537, 20 fail (all listed below) |
 | Real line coverage | 95.6% | ≈95% |
 
 ---
@@ -318,3 +318,31 @@ the port, each played on the seeds; the module whose hybrid plays on as
 - Bisecting is cheaper with `match.sh -L MIN` (the time limit at minute MIN,
   `-autostart-timelimit`): the hybrids stop two game minutes past the
   divergence (about 1.5 minutes per bisect instead of 4).
+
+## 15. Layers, stage 3 so far (2026-10-25)
+
+- **Unit state.** `adapter/unitState.ts` holds the 76 states of UnitAI's state
+  machine, read from `UnitAI.js` itself (every key of `FSM.states` for
+  `UnitFsmSpec`); the 24 string comparisons of `unitAIState()` became
+  `isInState`, `hasActivity`, `stateIs`, each name checked by the compiler.
+  The five sites that relied on a unit having a state (`requireValue(...).split`)
+  keep their throw (`requiredActivityIs`, `requiredStateWithin`,
+  `requireStateName`). The first run of the new module's tests found it
+  throwing at load (a table built before the one it reads), which neither the
+  typecheck nor a build would have shown: the bot's first turn would have
+  failed.
+- **The worker maintains the world model as it reads it.** Typed against a
+  read-only view of its bases (`world/bases.ts`), the worker compiled except in
+  one place: `findSupply` drops a supply whose entity is gone from the base's
+  list, mid-search, as it walks it. That is now the base's own
+  `forgetSupplyAt`, called at the same point; the worker otherwise only reads
+  the lists, books supplies and hands back idle workers.
+- **The attack plan wrote into the victory manager.** It set its relic raid in
+  `victoryManager.targetedGaiaRelics` itself; the map is now private to the
+  victory manager, changed through `planRelicRaid` and read through
+  `isRelicRaided`.
+- **Turn time.** Measured by the engine (`match.sh -P`). Stage 2's bot over 20
+  mirror games: the whole turn 1.96 ms on average, 12.5 ms at the 99th
+  percentile, 68 at the 99.9th, 351 at worst, growing with the game. Stage 3's
+  bot against `petra_parity` (20 games, the same games from both slots): ratios
+  1.002, 0.994 and 1.001 for the mean and the 99th and 99.9th percentiles.
