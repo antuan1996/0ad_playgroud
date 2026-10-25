@@ -78,6 +78,7 @@ noted. Worth raising upstream rather than changing in the port alone.
 - **`baseManager`**: a worker already mending one building but still marked as a gatherer can be taken by the next repair (only `builder` subroles are kept).
 - **`defenseManager.checkEvents`**: a structure it gives up (capture ratio between 0.5 and 0.7 where it cannot be defended) is destroyed once per `Attacked` event on it that turn: 69 `delete-entities` for one tower in one turn in a mirror match. Harmless, the engine deletes it once.
 - **`worker` builders**: a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home its UnitAI state is not REPAIR, so every update sends the pair again until it arrives: 37 times in two minutes for one worker in a mirror match. The orders keep the same goal; whether each new one delays the walk (a fresh path) is not measured.
+- **`attackPlan.Abort` withdrawal**: a finished attack sends every unit to within 15 of its rally point, and a nearer base wins: its anchor's position, the centre of a civic centre, inside the building's footprint. The army cannot get there and keeps walking; set back to idle workers, its units are not reassigned while every resource their base needs is exhausted or recently failed (`reassignIdleWorkers`). In a mirror match (§12, seeds 981901659/728914300) the winner sent 163 units to the civic centre it had just captured; about 140 were still walking 12 minutes later, to the end of the game.
 - **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. On a fruit-rich map a bot under pressure starves with wood to spare: in a mirror match (§11, seeds 579602995/974380524, savanna) one side kept 1150–3850 fruit in reach all game, so never built a field, while 6–13 units, then none, gathered food; food stayed under 350 from minute 3 and the side was destroyed at 16:39. The code's own TODO names the gap ("add a check on time used/lost").
 
 ## 5. Unreachable code
@@ -220,3 +221,25 @@ random seeds, mainland, very hard, Athenians), commit 783f74f194:
   workers without a task.
 - Winners at the population cap bank resources (one held 9.3k food and 18k
   wood at pop 299) while their metal stays near 100.
+
+## 12. Mirror matches with the bot's state (2026-10-25)
+
+Ten headless mirror matches with `match.sh -n -t -l -b -T` (random seeds,
+mainland, very hard, Athenians), commit 81cd87039a, checked with
+`match-checks.ts`:
+
+- Each slot won 5; decided at 21:00–54:29; no script error or warning; no
+  order refused beyond a handful.
+- Three checks fired, none on a port bug, and were refined: a beaten side
+  with 2 units and no resources issues no command (silence now needs 5
+  units); 6 idle women in one snapshot between tasks (now two snapshots in a
+  row); a base whose surroundings were gathered out after 45 minutes (its
+  wood fell 18295 → 3022 → 288 → 0; that check, on the bot's state, was then
+  dropped: the checks read only what the engine records, as the bot's
+  internal structure changes with its code).
+- The longest game shows the `Abort` withdrawal in §4: about 140 of the
+  winner's units walked for the last 12 minutes, booked as idle workers.
+- On the losing side an attack plan often keeps 0 units for 18–38 minutes
+  while its queue trains for it: under attack, the trained units go to the
+  defence (inferred, not traced). The winners' attacks fill to 89–104 units
+  and leave within about 8 minutes.

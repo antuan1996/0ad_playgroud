@@ -162,6 +162,11 @@ tests as they are.
   game, never built a field while 6–13 units (then none) gathered food, held
   under 350 food from minute 3 and was destroyed at 16:39. The code's own TODO
   names the gap ("add a check on time used/lost").
+- **`attackPlan.Abort` withdraws into a building**: the rally point of a
+  finished attack can be a base anchor's position, the centre of a civic
+  centre; `moveToRange(x, z, 0, 15)` cannot reach it, so the army keeps
+  walking, and, set back to idle workers, is not reassigned while the base's
+  resources are exhausted. Seen with about 140 units walking for 12 minutes.
 - **`attackPlan.checkTargetObstruction`**: `if (!angle) continue` treats a
   rotation of exactly 0 as no angle, so a wall placed square to the map is
   never seen as blocking.
