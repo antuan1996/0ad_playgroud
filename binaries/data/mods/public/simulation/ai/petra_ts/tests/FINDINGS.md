@@ -76,6 +76,7 @@ noted. Worth raising upstream rather than changing in the port alone.
 - **`entityExtend.getMaxStrength`**: a template with no attack returns 0 before its armour is counted.
 - **`baseManager.assignToFoundations`**: `if (target.hasClass("Field")) continue` cannot fire (fields are filtered out of the foundations before the loop).
 - **`baseManager`**: a worker already mending one building but still marked as a gatherer can be taken by the next repair (only `builder` subroles are kept).
+- **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. On a fruit-rich map a bot under pressure starves with wood to spare: in a mirror match (§11, seeds 579602995/974380524, savanna) one side kept 1150–3850 fruit in reach all game, so never built a field, while 6–13 units, then none, gathered food; food stayed under 350 from minute 3 and the side was destroyed at 16:39. The code's own TODO names the gap ("add a check on time used/lost").
 
 ## 5. Unreachable code
 
@@ -195,3 +196,25 @@ Athenians), commit 70827cf769:
 
 So a match against the original does not show whether the port plays like it:
 a fair comparison needs an opponent with that one fix.
+
+## 11. Mirror matches of the port (2026-10-25)
+
+Ten headless conquest matches of Petra TS against itself (`match.sh -n -t`,
+random seeds, mainland, very hard, Athenians), commit 783f74f194:
+
+- Each slot won 5; no script error or warning in any. Games were decided at
+  16:39–46:20. Winners reached town phase at minutes 13–19 and city phase at
+  19–29; six reached the 300 population cap.
+- A side that falls behind early often never reaches town phase: the bot
+  phases up only at `popPhase2` (150 here) accounted population, so losses
+  keep it in village phase, with food and wood piling up. Same rule in the
+  original.
+- Neither side gathers metal before town phase: nothing an Athenian trains in
+  village phase costs metal, and gatherers follow the queued costs.
+- The one early loss (16:39) is the field rule in §4.
+- Idle units peak at 38–54% of a side's units, just before its population
+  drops: counted by class (`timeline.txt` "idle"), they are soldiers (up to
+  110 idle soldiers, at most 3 idle women), an army waiting to set off, not
+  workers without a task.
+- Winners at the population cap bank resources (one held 9.3k food and 18k
+  wood at pop 299) while their metal stays near 100.
