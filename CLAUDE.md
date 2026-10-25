@@ -177,8 +177,10 @@ decision with the game's reason ("last player alive", "wonder victory",
   and the `.d.ts` declarations at the root; `adapter/` (the engine boundary:
   `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
   unit does, `commands.ts` where the bot's own commands leave it); `world/` (the
-  AI's model: `mapModule.ts`, `mapMask.ts`, `bases.ts` the read-only view of the
-  bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel and
+  AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
+  border maps and the land/sea regions, owned by the HQ; `baseResources.ts`,
+  the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
+  read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel and
   the managers); `execution/` (attack and transport plans, defense armies, queues,
   the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
   ended with the tag `petra-ts-parity`.
@@ -253,10 +255,22 @@ untested branches.
 - Saved data carries `SAVE_VERSION` (`_petrabot.ts`): raise it with any change
   to a manager's saved shape; a save of another version is refused and the bot
   starts afresh.
-- Execution code reads bases through `world/bases.ts` (`BaseView`, read-only
-  supply lists) and changes them only through its capabilities (`SupplyBooking`,
-  `SupplyUpkeep`, `IdleWorkers`); a manager's own state (e.g. the victory
-  manager's raided relics) is changed only through that manager's methods.
+- World state lives in `world/` objects owned by the managers that used to hold
+  it (`HQ.geography`, `base.resources`), and the port reads them there
+  (`HQ.geography.territoryMap`, `base.resources.dropsiteSupplies`): an accessor
+  on a hot path cost measurable turn time. The owners keep get/set accessors with
+  the old names (`HQ.territoryMap`, `HQ.landRegions`, `base.dropsiteSupplies`,
+  ...) for the save format and the tests; the stub HQ of `attackWorld.ts` is
+  its own `geography`.
+- Execution code (`execution/`) reaches the headquarters only through
+  `hqOf(gameState)` (`execution/hq.ts`): a read-only view of the members it
+  uses, whose bases are `BaseView`s, and four reports (`phaseResearched`,
+  `markBuildingStarted`, `noteNothingToGather`, `allowsDistantFood`). It reads
+  bases through `world/bases.ts` (`BaseView`, read-only supply lists) and
+  changes them only through its capabilities (`SupplyBooking`, `SupplyUpkeep`,
+  `IdleWorkers`); a manager's own state (e.g. the victory manager's raided
+  relics) is changed only through that manager's methods. A new use of the HQ
+  from execution code goes into `ExecutionHQ`, as a read or a report.
 - Methods never called (in port and original) are marked `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

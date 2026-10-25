@@ -341,8 +341,31 @@ the port, each played on the seeds; the module whose hybrid plays on as
   `victoryManager.targetedGaiaRelics` itself; the map is now private to the
   victory manager, changed through `planRelicRaid` and read through
   `isRelicRaided`.
+- **The execution layer set the HQ's state in four places**: a phase research
+  plan reset `HQ.phasing` before calling `OnPhaseUp`, a construction plan set
+  `turnCache.buildingBuilt`, a worker recorded `lastFailedGather` and filled
+  the per-turn `allowDistantFood` cache itself (the last one surfaced only
+  under the read-only view). They are the HQ's methods now
+  (`phaseResearched`, `markBuildingStarted`, `noteNothingToGather`,
+  `allowsDistantFood`), and execution code reaches the HQ only through
+  `hqOf` (`execution/hq.ts`), a read-only view of the 39 members it uses.
+  Beyond the worker's capabilities, execution code only reads bases.
+- **World state moved out of the managers.** The territory and border maps
+  and the land/sea regions are `world/geography.ts`, owned by the HQ; the
+  supplies within reach of each base's dropsites, and their upkeep
+  (`addDropsite`, `removeDropsite`, `getResourceLevel`, `forgetSupplyAt`), are
+  `world/baseResources.ts`, owned by each base. The owners keep accessors
+  with the old names. Two details kept the game the same: a dropsite listed
+  already still returns before `getLandAccess` (which caches the land in the
+  entity's metadata), so the model is told whether the base is the baseless
+  pool rather than asking first; and a base read back from a save without
+  `init` (only in tests) now has empty lists rather than none.
 - **Turn time.** Measured by the engine (`match.sh -P`). Stage 2's bot over 20
   mirror games: the whole turn 1.96 ms on average, 12.5 ms at the 99th
   percentile, 68 at the 99.9th, 351 at worst, growing with the game. Stage 3's
   bot against `petra_parity` (20 games, the same games from both slots): ratios
   1.002, 0.994 and 1.001 for the mean and the 99th and 99.9th percentiles.
+  The budget check caught one regression: with the moved world state read
+  through accessors of the old names, the mean rose 5.2% and the 90th
+  percentile 9.6% (`territoryMap` is read about 90 times, often per unit);
+  reading the world objects directly brought them to 1.007 and 1.011.

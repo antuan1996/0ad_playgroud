@@ -209,7 +209,16 @@ execution/  plans with typestates (3.1): turns decisions into commands,
   turn is timed for both on the same game at the same moment. The new bot's
   mean and 99th percentile may be at most 5% above `petra_parity`'s, its 99.9th
   at most 10%. Stage 3 so far (20 games, 208,906 turns each): ratios 1.002
-  (mean), 0.994 (99th), 1.001 (99.9th), the same games in all 10 seed pairs.
+  (mean), 0.994 (99th), 1.001 (99.9th), the same games in all 10 seed pairs;
+  with the execution layer behind `hqOf` (20 other games, 203,382 turns
+  each): 1.010, 1.001, 1.024, again the same games in all 10 pairs. The
+  single worst turn varies by run (ratio 0.99 and 1.16), so it is no budget.
+  With the world state moved into `world/` behind accessors of the old names,
+  the check failed: 1.052 (mean), 1.096 (90th), 1.042 (99th), the accessors
+  being read on hot paths (`territoryMap` about 90 times, the supply lists in
+  the worker's searches). With the port reading the world objects directly
+  (the accessors kept for saves and tests), the same 20 games give 1.007,
+  1.011, 0.997 and 0.989 (99.9th). So the check catches a few percent.
   Once the bot plays differently (stage 4 on), the games are no longer the
   same and the comparison needs more games.
 - **Optimise only what the profile shows.** Likely candidates, from the code:
@@ -298,7 +307,7 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 | 0. Baselines (**done** 2026-10-25, `FINDINGS.md` §13) | Tag the port; build `petra_parity` and `petra_fixed` as bots; parallel headless runs (5.3); a results table | 100 mirror games of each baseline run in parallel without a path clash; `petra_parity` vs `petra_fixed` ~50% (no significant difference). Met: 315 games at 12 at a time, no clash, 15/15 repeats with the same fingerprint; 51.0% (CI 41.5–60.4%) |
 | 1. Parity proof (**done** 2026-10-25, `FINDINGS.md` §14) | Command-log diffs on a seed set (5.1), starting with the 6 seed pairs where the baselines differ (`FINDINGS.md` §13); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3. Met: identical in 26 of 26 pairs (52 games) once three more original bugs went into the patch |
 | 2. Types in place (**done** 2026-10-25) | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor). Met: fingerprint `2164cc14d7c5e28f` before and after; 1533 tests pass. Every brand of 3.3: `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex` (`RegionIndex` for either), `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<"territory" \| "passability">`; the attack plan's state kind is a typestate (3.1); the data-carrying states move to stage 4, records keyed by `for...in` keys to stage 3 |
-| 3. Layers (**in progress**, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). So far: the layer folders, `unitState.ts`, `commands.ts`, `SAVE_VERSION`, the read-only base view for `worker.ts` and `attackPlan.ts`; fingerprint unchanged, budget kept. Left: the world view for the other managers, the execution layer's remaining plans |
+| 3. Layers (**done** 2026-10-26, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). Met: the layer folders; `unitState.ts`, `commands.ts`, `SAVE_VERSION`; the execution layer reaches the HQ only through a read-only view (`execution/hq.ts`) and reads bases as `BaseView`s; the maps and regions (`world/geography.ts`) and the bases' resource model (`world/baseResources.ts`) moved out of the managers. Fingerprint unchanged throughout; the same games as `petra_parity` in every paired check, within the budget. The decision layer still changes the world objects it owns; read-only views for decisions come with stages 4–5, as they are rewritten |
 | 4. Fix the known weaknesses | Withdrawal to a reachable point; idle workers re-homed to bases with resources; first field by food income, not fruit left; attacks that cannot fill are cancelled or merged; reconsider the town-phase population | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
 | 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed` |
 | 6. Narrow search | Build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
