@@ -588,7 +588,7 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 			Record<string, number> | undefined)();
 		for (const trainable of allTrainable)
 		{
-			if (world.gameState.isTemplateDisabled(trainable))
+			if (world.gameState.isTemplateDisabled(trainable as TemplateName))
 				continue;
 			const template = world.templates[trainable];
 			if (!template || !template.available(world.gameState))

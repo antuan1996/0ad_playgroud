@@ -8,6 +8,7 @@ import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, return
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Queue } from "./queue.ts";
+import { INVALID_PLAYER, NO_LAND, NO_REGION, playerId, seconds, worldPos } from "./brands.ts";
 
 type AttackUnitStat = {
 	priority: number;
@@ -34,9 +35,9 @@ export type SerializedAttackPlan = {
 		state: string;
 		forced: boolean;
 		rallyPoint: CommonPosition;
-		overseas: number;
+		overseas: SeaIndex | 0;
 		paused: boolean;
-		maxCompletingTime: number;
+		maxCompletingTime: GameSeconds;
 		neededShips: number;
 		unitStat: Record<string, AttackUnitStat>;
 		siegeState: number;
@@ -44,14 +45,42 @@ export type SerializedAttackPlan = {
 		lastPosition: CommonPosition;
 		position: CommonPosition | undefined;
 		isBlocked: boolean;
-		targetPlayer: number | undefined;
-		target: number | undefined;
+		targetPlayer: PlayerId | undefined;
+		target: EntityId | undefined;
 		targetPos: CommonPosition | undefined;
-		uniqueTargetId: number | undefined;
+		uniqueTargetId: EntityId | undefined;
 		path: CommonPosition[];
-		unitCollUpdateArray: number[] | undefined;
+		unitCollUpdateArray: EntityId[] | undefined;
 	};
 };
+
+/**
+ * The lifecycle of an attack (PLAN.md §3.1), as the moves each state allows:
+ *
+ *   unexecuted ──> completing ──> walking ──────> arrived ──> attacking ("")
+ *     │    ^           │    └───> transporting ──┘
+ *     │    └───────────┘ the target was lost while regrouping
+ *     └──> arrived       an army switched from defence to attack
+ *
+ * The values are the strings Petra saves. A move goes through
+ * AttackPlan.changeState, which only type-checks for a move listed here.
+ */
+type AttackTransitions = {
+	"unexecuted": "completing" | "arrived";
+	"completing": "unexecuted" | "walking" | "transporting";
+	"walking": "arrived";
+	"transporting": "arrived";
+	"arrived": "";
+	"": never;
+};
+export type AttackPlanState = keyof AttackTransitions;
+const ATTACK_PLAN_STATES: readonly AttackPlanState[] = ["unexecuted", "completing", "walking", "transporting", "arrived", ""];
+
+/** Whether a value read back from a save is one of the attack's states. */
+function isAttackPlanState(value: unknown): value is AttackPlanState
+{
+	return ATTACK_PLAN_STATES.some((state: AttackPlanState): boolean => state === value);
+}
 
 /**
  * This is an attack plan:
@@ -71,10 +100,10 @@ export class AttackPlan
 	declare gameState: CommonGameState;
 	declare isBlocked: boolean;
 	declare lastPosition: CommonPosition;
-	declare maxCompletingTime: number;
+	declare maxCompletingTime: GameSeconds;
 	declare name: number;
 	declare neededShips: number;
-	declare overseas: number;
+	declare overseas: SeaIndex | 0;
 	declare path: CommonPosition[];
 	declare paused: boolean;
 	declare position: CommonPosition | undefined;
@@ -84,21 +113,22 @@ export class AttackPlan
 	declare queueSiege: Queue;
 	declare rallyPoint: CommonPosition;
 	declare requested: boolean | undefined;
-	declare sameLand: number | false;
+	declare sameLand: AccessIndex | false;
 	declare siegeState: number;
 	declare startingAttack: boolean;
-	declare state: string;
+	/** Changed only by changeState, and restored by Deserialize. */
+	declare state: AttackPlanState;
 	declare target: CommonEntity | undefined;
-	declare targetPlayer: number | undefined;
+	declare targetPlayer: PlayerId | undefined;
 	declare targetPos: CommonPosition | undefined;
 	declare type: string;
-	declare uniqueTargetId: number | undefined;
+	declare uniqueTargetId: EntityId | undefined;
 	declare unit: Record<string, CommonEntityCollection>;
-	declare unitCollUpdateArray: number[] | undefined;
+	declare unitCollUpdateArray: EntityId[] | undefined;
 	declare unitCollection: CommonEntityCollection;
 	declare unitStat: Record<string, AttackUnitStat>;
 
-	constructor(gameState: CommonGameState, config: Config, uniqueID: number, type: string = AttackPlan.TYPE_DEFAULT, data: { target?: CommonEntity; uniqueTargetId?: number; targetSize?: number } | undefined, deserialized: boolean)
+	constructor(gameState: CommonGameState, config: Config, uniqueID: number, type: string = AttackPlan.TYPE_DEFAULT, data: { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number } | undefined, deserialized: boolean)
 	{
 		this.Config = config;
 		this.name = uniqueID;
@@ -205,7 +235,7 @@ export class AttackPlan
 			}
 		}
 		this.paused = false;
-		this.maxCompletingTime = 0;
+		this.maxCompletingTime = seconds(0);
 
 		// priority of the queues we'll create.
 		let priority;
@@ -327,9 +357,9 @@ export class AttackPlan
 		this.siegeState = AttackPlan.SIEGE_NOT_TESTED;
 
 		// some variables used during the attack
-		this.position5TurnsAgo = [0, 0];
-		this.lastPosition = [0, 0];
-		this.position = [0, 0];
+		this.position5TurnsAgo = worldPos(0, 0);
+		this.lastPosition = worldPos(0, 0);
+		this.position = worldPos(0, 0);
 		this.isBlocked = false;	     // true when this attack faces walls
 
 	}
@@ -346,9 +376,13 @@ export class AttackPlan
 	 */
 	static SIEGE_ADDED = 2;
 
-	static STATE_UNEXECUTED = "unexecuted";
-	static STATE_COMPLETING = "completing";
-	static STATE_ARRIVED = "arrived";
+	static readonly STATE_UNEXECUTED = "unexecuted";
+	static readonly STATE_COMPLETING = "completing";
+	static readonly STATE_WALKING = "walking";
+	static readonly STATE_TRANSPORTING = "transporting";
+	static readonly STATE_ARRIVED = "arrived";
+	/** At the target: the units fight what they find. */
+	static readonly STATE_ATTACKING = "";
 
 	static TYPE_DEFAULT = "Attack";
 	static TYPE_HUGE_ATTACK = "HugeAttack";
@@ -392,6 +426,20 @@ export class AttackPlan
 	isStarted(): boolean
 	{
 		return this.state !== AttackPlan.STATE_UNEXECUTED && this.state !== AttackPlan.STATE_COMPLETING;
+	}
+
+	/**
+	 * Moves the attack from the state `from` to `to`; only the moves of
+	 * AttackTransitions type-check. `from` is where the caller knows the plan
+	 * stands; a plan elsewhere makes the move anyway, as Petra always did, and
+	 * says so (a bug in the caller's reasoning, not in the game).
+	 */
+	changeState<From extends AttackPlanState>(from: From, to: AttackTransitions[From]): void
+	{
+		if (this.state !== from)
+			aiWarn("Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
+				"\", not from \"" + from + "\"");
+		this.state = to;
 	}
 
 	isPaused(): boolean
@@ -560,7 +608,7 @@ export class AttackPlan
 			// if our target was destroyed, go back to "unexecuted" state
 			if (this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id()))
 			{
-				this.state = AttackPlan.STATE_UNEXECUTED;
+				this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_UNEXECUTED);
 				this.target = undefined;
 			}
 			else
@@ -592,8 +640,9 @@ export class AttackPlan
 		{
 			let totEnemies = 0;
 			let hasEnemies = false;
-			for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+			for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 			{
+				const i = playerId(iIndex);
 				if (!gameState.isPlayerEnemy(i) || gameState.ai.HQ.attackManager.defeated[i])
 					continue;
 				hasEnemies = true;
@@ -657,7 +706,7 @@ export class AttackPlan
 		}
 
 		// if we're here, it means we must start
-		this.state = AttackPlan.STATE_COMPLETING;
+		this.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_COMPLETING);
 
 		// Raids have their predefined target
 		if (!this.target && !this.chooseTarget(gameState))
@@ -666,13 +715,13 @@ export class AttackPlan
 			this.getPathToTarget(gameState);
 
 		if (this.type === AttackPlan.TYPE_RAID)
-			this.maxCompletingTime = this.forced ? 0 : gameState.ai.elapsedTime + 20;
+			this.maxCompletingTime = seconds(this.forced ? 0 : gameState.ai.elapsedTime + 20);
 		else
 		{
 			if (this.type === AttackPlan.TYPE_RUSH || this.forced)
-				this.maxCompletingTime = gameState.ai.elapsedTime + 40;
+				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 40);
 			else
-				this.maxCompletingTime = gameState.ai.elapsedTime + 60;
+				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
 			// warn our allies so that they can help if possible
 			if (!this.requested && this.targetPlayer !== undefined)
 				Engine.PostCommand(PlayerID, { "type": "attack-request", "source": PlayerID, "player": this.targetPlayer });
@@ -1040,7 +1089,7 @@ export class AttackPlan
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
 	 */
-	getNearestTarget(gameState: CommonGameState, position: CommonPosition, sameLand?: number | false): CommonEntity | undefined
+	getNearestTarget(gameState: CommonGameState, position: CommonPosition, sameLand?: AccessIndex | false): CommonEntity | undefined
 	{
 		const targetPlayer = this.targetPlayer;
 		if (targetPlayer === undefined)
@@ -1118,7 +1167,7 @@ export class AttackPlan
 	 * Default target finder aims for conquest critical targets
 	 * We must apply the *same* selection (isValidTarget) as done in getNearestTarget
 	 */
-	defaultTargetFinder(gameState: CommonGameState, playerEnemy: number): CommonEntityCollection
+	defaultTargetFinder(gameState: CommonGameState, playerEnemy: PlayerId): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		if (gameState.getVictoryConditions().has("wonder"))
@@ -1178,7 +1227,7 @@ export class AttackPlan
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
-	rushTargetFinder(gameState: CommonGameState, playerEnemy?: number): CommonEntityCollection
+	rushTargetFinder(gameState: CommonGameState, playerEnemy?: PlayerId): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		let buildings;
@@ -1274,7 +1323,7 @@ export class AttackPlan
 		if (!path.length)
 			return undefined;
 
-		const pathPos: CommonPosition = [path[0].x, path[0].y];
+		const pathPos: CommonPosition = worldPos(path[0].x, path[0].y);
 		const dist = VectorDistance(pathPos, targetPos);
 		// targets (units or structures) always have an obstruction
 		const radius = requireValue(target.obstructionRadius()).max;
@@ -1384,7 +1433,7 @@ export class AttackPlan
 		this.path = [];
 		this.path.push(clone(targetPos));
 		for (const p in path)
-			this.path.push([path[p].x, path[p].y]);
+			this.path.push(worldPos(path[p].x, path[p].y));
 		this.path.push(clone(this.rallyPoint));
 		this.path.reverse();
 		// Change the rally point to something useful
@@ -1461,7 +1510,7 @@ export class AttackPlan
 			if (!this.path || !this.path[0][0] || !this.path[0][1])
 				return false;
 			this.overseas = 0;
-			this.state = "walking";
+			this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_WALKING);
 			this.unitCollection.moveToRange(this.path[0][0], this.path[0][1], 0, 15);
 		}
 		else
@@ -1472,7 +1521,7 @@ export class AttackPlan
 			this.overseas = sea;
 			if (!this.overseas)
 				return false;
-			this.state = "transporting";
+			this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_TRANSPORTING);
 			// TODO require a global transport for the collection,
 			// and put back its state to "walking" when the transport is finished
 			for (const ent of this.unitCollection.values())
@@ -1493,7 +1542,7 @@ export class AttackPlan
 
 		// we are transporting our units, let's wait
 		// TODO instead of state "arrived", made a state "walking" with a new path
-		if (this.state == "transporting")
+		if (this.state == AttackPlan.STATE_TRANSPORTING)
 			this.UpdateTransporting(gameState, events);
 
 		if (!this.position)
@@ -1502,7 +1551,7 @@ export class AttackPlan
 			return this.unitCollection.length;
 		}
 
-		if (this.state == "walking" && !this.UpdateWalking(gameState, events))
+		if (this.state == AttackPlan.STATE_WALKING && !this.UpdateWalking(gameState, events))
 		{
 			Engine.ProfileStop();
 			return 0;
@@ -1511,7 +1560,7 @@ export class AttackPlan
 		if (this.state === AttackPlan.STATE_ARRIVED)
 		{
 			// let's proceed on with whatever happens now.
-			this.state = "";
+			this.changeState(AttackPlan.STATE_ARRIVED, AttackPlan.STATE_ATTACKING);
 			this.startingAttack = true;
 			this.unitCollection.forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
 			{
@@ -1530,7 +1579,7 @@ export class AttackPlan
 		}
 
 		// basic state of attacking.
-		if (this.state == "")
+		if (this.state == AttackPlan.STATE_ATTACKING)
 		{
 			// First update the target and/or its position if needed
 			if (!this.UpdateTarget(gameState))
@@ -2021,7 +2070,7 @@ export class AttackPlan
 
 		if (done)
 		{
-			this.state = AttackPlan.STATE_ARRIVED;
+			this.changeState(AttackPlan.STATE_TRANSPORTING, AttackPlan.STATE_ARRIVED);
 			return;
 		}
 
@@ -2077,7 +2126,7 @@ export class AttackPlan
 		{
 			if (gameState.ai.HQ.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3)
 			{
-				this.state = AttackPlan.STATE_ARRIVED;
+				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 				return true;
 			}
 		}
@@ -2130,7 +2179,7 @@ export class AttackPlan
 						aiWarn("Attack Plan " + this.type + " " + this.name +
 							" has met walls and is not happy.");
 					}
-					this.state = AttackPlan.STATE_ARRIVED;
+					this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 					return true;
 				}
 				// abort plan
@@ -2151,7 +2200,7 @@ export class AttackPlan
 		{
 			if (this.Config.debug > 1)
 				aiWarn("Attack Plan " + this.type + " " + this.name + " has arrived to destination.");
-			this.state = AttackPlan.STATE_ARRIVED;
+			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 			return true;
 		}
 		else if (this.path.length && SquareVectorDistance(pos, this.path[0]) < 1600)
@@ -2166,7 +2215,7 @@ export class AttackPlan
 					aiWarn("Attack Plan " + this.type + " " + this.name +
 						" has arrived to destination.");
 				}
-				this.state = AttackPlan.STATE_ARRIVED;
+				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 				return true;
 			}
 		}
@@ -2237,7 +2286,7 @@ export class AttackPlan
 							continue;
 						if (attack.target.owner() == 0 && attack.targetPlayer != 0)	// looks like it has resigned
 							continue;
-						if (!gameState.isPlayerEnemy(attack.targetPlayer ?? -1))
+						if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
 							continue;
 						this.target = attack.target;
 						this.targetPlayer = attack.targetPlayer;
@@ -2425,16 +2474,16 @@ export class AttackPlan
 	 * The center position of this attack may be in an inaccessible area. So we use the access
 	 * of the unit nearest to this center position.
 	 */
-	getAttackAccess(gameState: CommonGameState): number
+	getAttackAccess(gameState: CommonGameState): AccessIndex
 	{
 		// no position: no unit of the army has one (all aboard ships)
 		const pos = this.position;
 		if (!pos)
-			return 0;
+			return NO_LAND;
 		for (const ent of this.unitCollection.filterNearest(pos, 1).values())
-			return getLandAccess(gameState, ent) ?? -1;
+			return getLandAccess(gameState, ent) ?? NO_REGION;
 
-		return 0;
+		return NO_LAND;
 	}
 
 	debugAttack(): void
@@ -2482,7 +2531,15 @@ export class AttackPlan
 	{
 		this.name = data.properties.name;
 		this.type = data.properties.type;
-		this.state = data.properties.state;
+		const state = data.properties.state;
+		if (isAttackPlanState(state))
+			this.state = state;
+		else
+		{
+			aiWarn("Petra: attack plan " + data.properties.name + " saved in an unknown state \"" + state +
+				"\": it prepares again");
+			this.state = AttackPlan.STATE_UNEXECUTED;
+		}
 		this.forced = data.properties.forced;
 		this.rallyPoint = data.properties.rallyPoint;
 		this.overseas = data.properties.overseas;

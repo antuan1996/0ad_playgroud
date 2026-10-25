@@ -16,7 +16,7 @@ import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsi
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "./mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
-import { createBorderMap, createObstructionMap, createTerritoryMap } from
+import { createBorderMap, createObstructionMap, createTerritoryMap, type TerritoryMap } from
 	"./mapModule.ts";
 import { NavalManager } from "./navalManager.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
@@ -26,6 +26,7 @@ import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "./worker.ts";
+import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "./brands.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -72,26 +73,26 @@ export class Headquarters
 {
 	declare Config: Config;
 	declare attackManager: AttackManager;
-	declare bAdvanced: string[];
+	declare bAdvanced: TemplateName[];
 	declare basesManager: BasesManager;
 	declare borderMap: InfoMap;
 	declare buildManager: BuildManager;
 	declare canBarter: boolean;
 	declare canBuildUnits: boolean;
 	declare canExpand: boolean;
-	declare capturableTargets: Map<number, { strength: number; ents: Set<number> }>;
-	declare capturableTargetsTime: number;
+	declare capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId> }>;
+	declare capturableTargetsTime: GameSeconds;
 	declare currentPhase: number;
-	declare decayingStructures: Set<number>;
+	declare decayingStructures: Set<EntityId>;
 	declare defenseManager: DefenseManager;
 	declare diplomacyManager: DiplomacyManager;
 	declare emergencyManager: EmergencyManager;
 	declare extraFortresses: number;
 	declare extraTowers: number;
 	declare firstBaseConfig: boolean;
-	declare fortStartTime: number;
-	declare fortressLapseTime: number;
-	declare fortressStartTime: number;
+	declare fortStartTime: GameSeconds;
+	declare fortressLapseTime: GameSeconds;
+	declare fortressStartTime: GameSeconds;
 	declare garrisonManager: GarrisonManager;
 	declare landRegions: Record<number, boolean>;
 	declare lastFailedGather: Record<string, number>;
@@ -109,13 +110,9 @@ export class Headquarters
 	declare saveSpace: boolean | undefined;
 	declare supportRatio: number;
 	declare targetNumWorkers: number;
-	declare territoryMap: InfoMap & {
-		getOwner: (position: CommonPosition) => number;
-		getOwnerIndex: (index: number) => number;
-		isBlinking: (position: CommonPosition) => boolean;
-	};
-	declare towerLapseTime: number;
-	declare towerStartTime: number;
+	declare territoryMap: TerritoryMap;
+	declare towerLapseTime: GameSeconds;
+	declare towerStartTime: GameSeconds;
 	declare tradeManager: TradeManager;
 	declare treasures: CommonEntityCollection;
 	declare turnCache: HeadquartersTurnCache;
@@ -136,11 +133,11 @@ export class Headquarters
 		this.targetNumWorkers = this.Config.Economy.targetNumWorkers;
 		this.supportRatio = this.Config.Economy.supportRatio;
 
-		this.fortStartTime = 180;	// Sentry towers, will start at fortStartTime + towerLapseTime.
-		this.towerStartTime = 0;	// Stone towers, will start as soon as available (town phase).
-		this.towerLapseTime = this.Config.Military.towerLapseTime;
-		this.fortressStartTime = 0;	// Fortresses, will start as soon as available (city phase).
-		this.fortressLapseTime = this.Config.Military.fortressLapseTime;
+		this.fortStartTime = seconds(180);	// Sentry towers, will start at fortStartTime + towerLapseTime.
+		this.towerStartTime = seconds(0);	// Stone towers, will start as soon as available (town phase).
+		this.towerLapseTime = seconds(this.Config.Military.towerLapseTime);
+		this.fortressStartTime = seconds(0);	// Fortresses, will start as soon as available (city phase).
+		this.fortressLapseTime = seconds(this.Config.Military.fortressLapseTime);
 		this.extraTowers = Math.round(Math.min(this.Config.difficulty, 3) * this.Config.personality.defensive);
 		this.extraFortresses = Math.round(Math.max(Math.min(this.Config.difficulty - 1, 2), 0) * this.Config.personality.defensive);
 
@@ -157,7 +154,7 @@ export class Headquarters
 		this.emergencyManager = new EmergencyManager(this.Config);
 
 		this.capturableTargets = new Map();
-		this.capturableTargetsTime = 0;
+		this.capturableTargetsTime = seconds(0);
 	}
 
 	/** More initialisation for stuff that needs the gameState */
@@ -193,11 +190,11 @@ export class Headquarters
 	 * otherwise return undefined
 	 * for the moment, only the case land-sea-land is supported
 	 */
-	getSeaBetweenIndices(gameState: CommonGameState, index1: number, index2: number): number | undefined
+	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined
 	{
 		const path = gameState.ai.accessibility.getTrajectToIndex(index1, index2);
 		if (path && path.length == 3 && gameState.ai.accessibility.regionType[path[1]] == "water")
-			return path[1];
+			return seaRegion(path[1]);
 
 		if (this.Config.debug > 1)
 		{
@@ -358,8 +355,9 @@ export class Headquarters
 				if (captureRatio < 0.50)
 					continue;
 				let decayToGaia = true;
-				for (let i = 1; i < capture.length; ++i)
+				for (let iIndex = 1; iIndex < capture.length; ++iIndex)
 				{
+					const i = playerId(iIndex);
 					if (gameState.isPlayerAlly(i) || !capture[i])
 						continue;
 					decayToGaia = false;
@@ -599,7 +597,7 @@ export class Headquarters
 
 	/** picks the best template based on parameters and classes */
 	findBestTrainableUnit(gameState: CommonGameState, classes: Array<string | string[]>,
-		requirements: HeadquartersTrainableRequirement[]): string | undefined
+		requirements: HeadquartersTrainableRequirement[]): TemplateName | undefined
 	{
 		let units;
 		if (classes.indexOf("Hero") != -1)
@@ -772,7 +770,7 @@ export class Headquarters
 		Engine.ProfileStart("findEconomicCCLocation");
 
 		// obstruction map
-		const obstructions = createObstructionMap(gameState, 0, template);
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		let halfSize = 0;
 		if (template.get("Footprint/Square"))
 			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
@@ -832,8 +830,9 @@ export class Headquarters
 		if (fromStrategic || proximity)  // be less restrictive
 			cut = 30;
 
-		for (let j = 0; j < this.territoryMap.length; ++j)
+		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
 		{
+			const j = cellIndex(this.territoryMap, jIndex);
 			if (this.territoryMap.getOwnerIndex(j) != 0)
 				continue;
 			// With enough room around to build the cc
@@ -849,7 +848,7 @@ export class Headquarters
 
 			let norm = 0.5;   // TODO adjust it, knowing that we will sum 5 maps
 			// Checking distance to other cc
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 			// We will be more tolerant for cc around our oversea docks
 			let oversea = false;
 
@@ -964,7 +963,7 @@ export class Headquarters
 				this.navalManager.setMinimalTransportShips(gameState, sea, 1);
 		}
 
-		return [x, z];
+		return worldPos(x, z);
 	}
 
 	/**
@@ -996,7 +995,7 @@ export class Headquarters
 		Engine.ProfileStart("findStrategicCCLocation");
 
 		// obstruction map
-		const obstructions = createObstructionMap(gameState, 0, template);
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		let halfSize = 0;
 		if (template.get("Footprint/Square"))
 			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
@@ -1014,8 +1013,9 @@ export class Headquarters
 		let distcc0 = Infinity, distcc1 = Infinity, distcc2 = Infinity;
 		const favoredDistance = (template.hasClass("Colony") ? 220 : 280) - 40 * this.Config.personality.defensive;
 
-		for (let j = 0; j < this.territoryMap.length; ++j)
+		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
 		{
+			const j = cellIndex(this.territoryMap, jIndex);
 			if (this.territoryMap.getOwnerIndex(j) != 0)
 				continue;
 			// with enough room around to build the cc
@@ -1028,7 +1028,7 @@ export class Headquarters
 				continue;
 
 			// checking distances to other cc
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 			let minDist = Math.min();
 			distcc0 = Infinity;
 
@@ -1114,7 +1114,7 @@ export class Headquarters
 				this.navalManager.setMinimalTransportShips(gameState, sea, 1);
 		}
 
-		return [x, z];
+		return worldPos(x, z);
 	}
 
 	/**
@@ -1139,7 +1139,7 @@ export class Headquarters
 			return false;
 
 		// obstruction map
-		const obstructions = createObstructionMap(gameState, 0, template);
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		let halfSize = 0;
 		if (template.get("Footprint/Square"))
 			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
@@ -1147,7 +1147,7 @@ export class Headquarters
 			halfSize = +template.get("Footprint/Circle/@radius");
 
 		let bestIdx = -1;
-		let bestJdx = -1;
+		let bestJdx = cellIndex(this.territoryMap, -1);
 		let bestVal = -Infinity;
 		let bestDistSq = 0;
 		let bestGainMult = 0;
@@ -1160,8 +1160,9 @@ export class Headquarters
 
 		const traderTemplatesGains = gameState.getTraderTemplatesGains();
 
-		for (let j = 0; j < this.territoryMap.length; ++j)
+		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
 		{
+			const j = cellIndex(this.territoryMap, jIndex);
 			// do not try on the narrow border of our territory
 			if (this.borderMap.map[j] & mapMask.narrowFrontier)
 				continue;
@@ -1174,7 +1175,7 @@ export class Headquarters
 			const index = gameState.ai.accessibility.landPassMap[i];
 			if (!this.landRegions[index])
 				continue;
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 			// checking distances to other markets
 			let maxVal = 0;
 			let maxDistSq = 0;
@@ -1255,11 +1256,11 @@ export class Headquarters
 
 		const ownStructures = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"]))
 			.toEntityArray();
-		let enemyStructures = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(0)))
+		let enemyStructures = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(GAIA)))
 			.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
 		if (!enemyStructures.length)	// we may be in cease fire mode, build defense against neutrals
 		{
-			enemyStructures = gameState.getNeutralStructures().filter(filters.not(filters.byOwner(0)))
+			enemyStructures = gameState.getNeutralStructures().filter(filters.not(filters.byOwner(GAIA)))
 				.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray();
 			if (!enemyStructures.length && !gameState.getAlliedVictory())
 			{
@@ -1287,7 +1288,7 @@ export class Headquarters
 		}
 
 		// obstruction map
-		const obstructions = createObstructionMap(gameState, 0, template);
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		let halfSize = 0;
 		if (template.get("Footprint/Square"))
 			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
@@ -1295,7 +1296,7 @@ export class Headquarters
 			halfSize = +template.get("Footprint/Circle/@radius");
 
 		let bestIdx = -1;
-		let bestJdx = -1;
+		let bestJdx = cellIndex(this.territoryMap, -1);
 		let bestVal = Infinity;
 		const width = this.territoryMap.width;
 		const cellSize = this.territoryMap.cellSize;
@@ -1309,8 +1310,9 @@ export class Headquarters
 		else
 			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
-		for (let j = 0; j < this.territoryMap.length; ++j)
+		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
 		{
+			const j = cellIndex(this.territoryMap, jIndex);
 			if (!wonderMode)
 			{
 				// do not try if well inside or outside territory
@@ -1326,7 +1328,7 @@ export class Headquarters
 			if (i < 0)
 				continue;
 
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 			// checking distances to other structures
 			let minDist = Math.min();
 
@@ -2121,8 +2123,9 @@ export class Headquarters
 		const insideLarge = Math.round(80 / cellSize);	// should be about the range of towers
 		let expansion = 0;
 
-		for (let j = 0; j < this.territoryMap.length; ++j)
+		for (let jIndex = 0; jIndex < this.territoryMap.length; ++jIndex)
 		{
+			const j = cellIndex(this.territoryMap, jIndex);
 			if (this.borderMap.map[j] & mapMask.outside)
 				continue;
 			if (this.borderMap.map[j] & mapMask.fullFrontier)
@@ -2146,7 +2149,7 @@ export class Headquarters
 						continue;
 					if (this.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
-					let territoryOwner = this.territoryMap.getOwnerIndex(jx+width*jz);
+					let territoryOwner = this.territoryMap.getOwnerIndex(cellIndex(this.territoryMap, jx+width*jz));
 					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 					{
 						this.borderMap.map[j] |= mapMask.narrowFrontier;
@@ -2160,7 +2163,7 @@ export class Headquarters
 						continue;
 					if (this.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
-					territoryOwner = this.territoryMap.getOwnerIndex(jx+width*jz);
+					territoryOwner = this.territoryMap.getOwnerIndex(cellIndex(this.territoryMap, jx+width*jz));
 					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 						onFrontier = true;
 				}
@@ -2380,7 +2383,7 @@ export class Headquarters
 	 * @param {number} territoryIndex - The index to get the map for.
 	 * @return {number} - The ID of the base at the given territory index.
 	 */
-	baseAtIndex(territoryIndex: number): number
+	baseAtIndex(territoryIndex: CellIndex<"territory">): number
 	{
 		return this.basesManager.baseAtIndex(territoryIndex);
 	}

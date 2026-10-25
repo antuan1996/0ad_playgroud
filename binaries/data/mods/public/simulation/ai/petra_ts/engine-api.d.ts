@@ -53,6 +53,58 @@
  */
 type Vec2 = [number, number];
 /**
+ * A position on the map in world coordinates, [x, z] in metres, as entities
+ * report it (`position()`) and commands take it. Branded so that a grid's
+ * cell coordinates (`MapPos`) or any other pair of numbers cannot pass for one.
+ */
+type WorldPos = Vec2 & { readonly __brand: "WorldPos" };
+/** [x, z] coordinates of a cell on one InfoMap's grid (`gamePosToMapPos`). */
+type MapPos = Vec2 & { readonly __brand: "MapPos" };
+/**
+ * A land region of the accessibility analysis (`landPassMap`): units on two
+ * cells with the same index can walk from one to the other. 0 is unknown, 1
+ * impassable, real regions start at 2.
+ */
+type AccessIndex = number & { readonly __brand: "AccessIndex" };
+/** A sea region (`navalPassMap`): ships on two cells with the same index can sail between them. */
+type SeaIndex = number & { readonly __brand: "SeaIndex" };
+/**
+ * Either kind of region. Land and sea regions are numbered in one sequence
+ * (`regionType` tells which a number is), and a route between two places
+ * alternates them.
+ */
+type RegionIndex = AccessIndex | SeaIndex;
+/** Game time in milliseconds, the engine's unit (turn lengths, timers, the shared script's clock). */
+type GameMs = number & { readonly __brand: "GameMs" };
+/**
+ * Game time in seconds, Petra's unit: `elapsedTime` and every time or delay
+ * the AI keeps. Arithmetic gives a plain number back; `seconds()`
+ * (petra_ts/brands.ts) marks the result as seconds again.
+ */
+type GameSeconds = number & { readonly __brand: "GameSeconds" };
+/**
+ * The name of an entity or technology template as the game knows it, with
+ * the civilisation filled in ("structures/athen/house", not
+ * "structures/{civ}/house"): what entities report and `applyCiv` returns,
+ * and what a template lookup takes.
+ */
+type TemplateName = string & { readonly __brand: "TemplateName" };
+/**
+ * The two grids the AI's maps come in: the territory grid (terrain tiles,
+ * also the resource and influence maps) and the passability grid (navcells,
+ * also accessibility and obstruction maps). Their cell sizes differ, so a
+ * cell index of one is a different place on the other.
+ */
+type GridKind = "territory" | "passability";
+/** The index of a cell on a grid of kind G: x + z * width, in that grid's cells. */
+type CellIndex<G extends GridKind> = number & { readonly __cell: G };
+/** A read-only grid of one kind of value per cell, as the accessibility's region maps. */
+interface CellGrid<T>
+{
+	readonly [cell: number]: T;
+	readonly length: number;
+}
+/**
  * An amount of one or more resources keyed by resource code, most often per
  * generic type (`"food"`, `"wood"`, `"stone"`, `"metal"`). Some payloads key
  * by specific type (`"meat"`, `"fruit"`, `"grain"`, …) as noted on the field.
@@ -63,7 +115,7 @@ type ResourceAmounts = Record<string, number>;
  * players, and -1 (`INVALID_PLAYER`) is returned for not-yet-owned entities.
  * The engine also exposes `INVALID_PLAYER` as a `Sim` global.
  */
-type PlayerId = number;
+type PlayerId = number & { readonly __brand: "PlayerId" };
 /**
  * A simulation entity identifier: `0` is `INVALID_ENTITY`, `1` is
  * `SYSTEM_ENTITY` (host of system components like AIInterface, the pathfinder
@@ -71,7 +123,7 @@ type PlayerId = number;
  * also used as property names (stringified) in state maps such as
  * `entities` and `capturePoints`.
  */
-type EntityId = number;
+type EntityId = number & { readonly __brand: "EntityId" };
 
 /**
  * RGBA player colour as configured in the game settings for each player
@@ -321,7 +373,7 @@ interface EngineProductionQueueItem
 {
 	id: number;
 	/** Unit items only: the unit template being trained. */
-	unitTemplate?: string;
+	unitTemplate?: TemplateName;
 	/** Technology items only: the technology being researched. */
 	technologyTemplate?: string;
 	/** Unit items only: units still to come out of this batch. */

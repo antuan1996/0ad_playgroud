@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 
-function addBuilder(builders: Map<string, number[]>, civ: string, entity: CommonEntity): void
+function addBuilder(builders: Map<string, EntityId[]>, civ: string, entity: CommonEntity): void
 {
 	for (const buildable of entity.buildableEntities(civ))
 	{
@@ -13,7 +13,7 @@ function addBuilder(builders: Map<string, number[]>, civ: string, entity: Common
 	}
 }
 
-function removeBuilder(builders: Map<string, number[]>, entityId: number): void
+function removeBuilder(builders: Map<string, EntityId[]>, entityId: EntityId): void
 {
 	for (const entities of builders.values())
 	{
@@ -30,13 +30,13 @@ function removeBuilder(builders: Map<string, number[]>, entityId: number): void
  */
 
 export type SerializedBuildManager = {
-	builders: Map<string, number[]>;
+	builders: Map<string, EntityId[]>;
 	unbuildables: Map<string, { reason: string; time: number }>;
 };
 
 export class BuildManager
 {
-	declare elapsedTime: number;
+	declare elapsedTime: GameSeconds;
 
 	// List of buildings we have builders for, with number of possible builders.
 	builders = new Map();
@@ -104,7 +104,7 @@ export class BuildManager
 	/**
 	 * Get the buildable structures passing a filter.
 	 */
-	findStructuresByFilter(gameState: CommonGameState, filter: CommonEntityFilter): string[]
+	findStructuresByFilter(gameState: CommonGameState, filter: CommonEntityFilter): TemplateName[]
 	{
 		const result = [];
 		for (const [templateName, entities] of this.builders)

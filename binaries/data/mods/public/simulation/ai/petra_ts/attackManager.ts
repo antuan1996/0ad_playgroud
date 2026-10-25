@@ -6,6 +6,7 @@ import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { allowCapture, getLandAccess, requireValue } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
+import { playerId, worldPos } from "./brands.ts";
 
 export type SerializedAttackManager = {
     properties: {
@@ -16,7 +17,7 @@ export type SerializedAttackManager = {
         debugTime: number;
         maxRushes: number;
         rushSize: number[];
-        currentEnemyPlayer: number | undefined;
+        currentEnemyPlayer: PlayerId | undefined;
         defeated: Record<number, boolean>;
     };
     upcomingAttacks: Record<string, SerializedAttackPlan[]>;
@@ -48,7 +49,7 @@ export class AttackManager
 	debugTime = 0;
 	maxRushes = 0;
 	rushSize: number[] = [];
-	currentEnemyPlayer: number | undefined = undefined; // enemy player we are currently targeting
+	currentEnemyPlayer: PlayerId | undefined = undefined; // enemy player we are currently targeting
 	defeated: Record<number, boolean> = {};
 
 	constructor(config: Config)
@@ -239,17 +240,17 @@ export class AttackManager
 				if (dist > range)
 				{
 					const safety = requireValue(struct.footprintRadius()) + 30;
-					targetPos = [
+					targetPos = worldPos(
 						structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
-						structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
-					];
+						structPos[1] + (entPos[1] - structPos[1]) * safety / dist
+					);
 					const owner = gameState.ai.HQ.territoryMap.getOwner(targetPos);
 					if (owner != 0 && gameState.isPlayerEnemy(owner))
 						continue;
-					targetPos = [
+					targetPos = worldPos(
 						structPos[0] + (entPos[0] - structPos[0]) * range / dist,
-						structPos[1] + (entPos[1] - structPos[1]) * range / dist,
-					];
+						structPos[1] + (entPos[1] - structPos[1]) * range / dist
+					);
 					if (gameState.ai.HQ.territoryMap.getOwner(targetPos) != PlayerID ||
 					    gameState.ai.accessibility.getAccessValue(targetPos) != access)
 						continue;
@@ -538,7 +539,7 @@ export class AttackManager
 	 * attack.targetPlayer is undefined and in that case, we keep track of the chosen target
 	 * for future attacks.
 	 */
-	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): number | undefined
+	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
 		let enemyPlayer;
 
@@ -561,8 +562,9 @@ export class AttackManager
 		// No rush if enemy too well defended (i.e. iberians)
 		if (attack.type === AttackPlan.TYPE_RUSH)
 		{
-			for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+			for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 			{
+				const i = playerId(iIndex);
 				if (!gameState.isPlayerEnemy(i) || veto[i])
 					continue;
 				if (this.defeated[i])
@@ -622,8 +624,9 @@ export class AttackManager
 		// then let's target our strongest enemy (basically counting enemies units)
 		// with priority to enemies with civ center
 		let max = 0;
-		for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			if (veto[i])
 				continue;
 			if (!gameState.isPlayerEnemy(i))
@@ -652,7 +655,7 @@ export class AttackManager
 	 * Target the player with the most advanced wonder.
 	 * TODO currently the first built wonder is kept, should chek on the minimum wonderDuration left instead.
 	 */
-	getWonderEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): number | undefined
+	getWonderEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
 		let enemyPlayer;
 		let enemyWonder;
@@ -686,13 +689,14 @@ export class AttackManager
 	/**
 	 * Target the player with the most relics (including gaia).
 	 */
-	getRelicEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): number | undefined
+	getRelicEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
 		let enemyPlayer;
 		const allRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"));
 		let maxRelicsOwned = 0;
-		for (let i = 0; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 0; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			if (!gameState.isPlayerEnemy(i) || this.defeated[i] ||
 			    i == 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
 				continue;
@@ -714,7 +718,7 @@ export class AttackManager
 	}
 
 	/** f.e. if we have changed diplomacy with another player. */
-	cancelAttacksAgainstPlayer(gameState: CommonGameState, player: number): void
+	cancelAttacksAgainstPlayer(gameState: CommonGameState, player: PlayerId): void
 	{
 		for (const attackType in this.upcomingAttacks)
 			for (const attack of this.upcomingAttacks[attackType])
@@ -836,7 +840,7 @@ export class AttackManager
 		attackPlan.targetPlayer = target.owner();
 		attackPlan.targetPos = pos;
 		attackPlan.target = target;
-		attackPlan.state = AttackPlan.STATE_ARRIVED;
+		attackPlan.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
 		return true;
 	}
 

@@ -166,7 +166,7 @@ export class TrainingPlan extends QueuePlan
 
 	Serialize(): {
 		category: "unit";
-		type: string;
+		type: TemplateName;
 		ID: number;
 		metadata: Record<string, unknown> | undefined;
 		cost: { amounts: Record<string, number>; population: number };

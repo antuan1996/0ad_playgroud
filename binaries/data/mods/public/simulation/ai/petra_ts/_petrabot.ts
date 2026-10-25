@@ -6,6 +6,7 @@ import type { HeadquartersEvents, HeadquartersSerializedData } from "./headquart
 import { Queue } from "./queue.ts";
 import { QueueManager } from "./queueManager.ts";
 import { gameAnalysis } from "./startingStrategy.ts";
+import { seconds, secondsOf } from "./brands.ts";
 
 type PetraBotSettings = Record<string, unknown> & {
 	difficulty: number;
@@ -17,7 +18,7 @@ type PetraBotSavedData = {
 	uniqueIDs: Record<string, number>;
 	turn: number;
 	playedTurn: number;
-	elapsedTime: number;
+	elapsedTime: GameSeconds;
 	savedEvents: HeadquartersEvents;
 	config: Record<string, unknown>;
 	queueManager: Parameters<QueueManager["Deserialize"]>[1];
@@ -179,11 +180,11 @@ export class PetraBot extends BaseAI
 	HQ: Headquarters | undefined = undefined;
 	canPlay: boolean = false;
 	data: PetraBotSavedData | undefined = undefined;
-	elapsedTime: number = 0;
+	elapsedTime: GameSeconds = seconds(0);
 	gameFinished: boolean = false;
 	isDeserialized: boolean = false;
 	playedTurn: number = 0;
-	declare player: number;
+	declare player: PlayerId;
 	queueManager: QueueManager | undefined = undefined;
 	queues: Record<string, Queue> = {};
 	savedEvents: HeadquartersEvents;
@@ -197,7 +198,7 @@ export class PetraBot extends BaseAI
 		// played turn, because Petra doesn't play every turn.
 		this.turn = 0;
 		this.playedTurn = 0;
-		this.elapsedTime = 0;
+		this.elapsedTime = seconds(0);
 
 		this.uniqueIDs = {
 			"armies": 1,	// starts at 1 to allow easier tests on armies ID existence
@@ -276,7 +277,7 @@ export class PetraBot extends BaseAI
 		mergeSharedEvents(this.savedEvents, sharedScript.events);
 
 		// Run the update every n turns, offset depending on player ID to balance the load
-		this.elapsedTime = this.gameState.getTimeElapsed() / 1000;
+		this.elapsedTime = secondsOf(this.gameState.getTimeElapsed());
 		if (!this.playedTurn || (this.turn + this.player) % 8 == 5)
 		{
 			Engine.ProfileStart("PetraBot bot (player " + this.player +")");

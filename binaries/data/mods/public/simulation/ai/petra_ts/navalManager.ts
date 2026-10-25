@@ -8,6 +8,7 @@ import { TrainingPlan } from "./queueplanTraining.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";
+import { cellIndex, seaRegion } from "./brands.ts";
 
 /**
  * Naval Manager
@@ -180,13 +181,13 @@ export class NavalManager
 			setSeaAccess(gameState, dock);
 	}
 
-	updateFishingBoats(sea: number, num: number): void
+	updateFishingBoats(sea: SeaIndex, num: number): void
 	{
 		if (this.wantedFishShips[sea])
 			this.wantedFishShips[sea] = num;
 	}
 
-	resetFishingBoats(gameState: CommonGameState, sea?: number): void
+	resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void
 	{
 		if (sea !== undefined)
 			this.wantedFishShips[sea] = 0;
@@ -251,7 +252,7 @@ export class NavalManager
 				const j = pos[1] + Math.round(a[1]*radius*(ntry-t));
 				if (i < 0 || i >= width || j < 0 || j >= width)
 					continue;
-				const owner = territoryMap.getOwnerIndex(i + j*width);
+				const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, i + j*width));
 				if (owner != 0 && gameState.isPlayerEnemy(owner))
 					return false;
 			}
@@ -260,9 +261,10 @@ export class NavalManager
 	}
 
 	/** get the list of seas (or lands) around this region not connected by a dock */
-	getUnconnectedSeas(gameState: CommonGameState, region: number): number[]
+	getUnconnectedSeas(gameState: CommonGameState, region: AccessIndex): SeaIndex[]
 	{
-		const seas = gameState.ai.accessibility.regionLinks[region].slice();
+		// a land region links only to seas
+		const seas = gameState.ai.accessibility.regionLinks[region].map(seaRegion);
 		this.docks.forEach((dock: import("simulation/ai/common-api/entity.js").Entity): void =>
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) != region)
@@ -376,7 +378,7 @@ export class NavalManager
 	 * (many units can then call this separately and end up in the same plan)
 	 * TODO  check garrison classes
 	 */
-	requireTransport(gameState: CommonGameState, ent: CommonEntity, startIndex: number, endIndex: number,
+	requireTransport(gameState: CommonGameState, ent: CommonEntity, startIndex: AccessIndex, endIndex: AccessIndex,
 		endPos: CommonPosition): boolean
 	{
 		if (!ent.canGarrison())
@@ -458,7 +460,7 @@ export class NavalManager
 	 * needed at start game when starting with a garrisoned ship
 	 */
 	createTransportIfNeeded(gameState: CommonGameState, fromPos: CommonPosition, toPos: CommonPosition,
-		toAccess: number): void
+		toAccess: AccessIndex): void
 	{
 		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
 		if (fromAccess !== 1)
@@ -472,7 +474,7 @@ export class NavalManager
 				continue;
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined)
 				continue;
-			const units = ship.garrisoned().map((entId: number): CommonEntity => requireValue(gameState.getEntityById(entId)));
+			const units = ship.garrisoned().map((entId: EntityId): CommonEntity => requireValue(gameState.getEntityById(entId)));
 			// TODO check that the garrisoned units have not another purpose
 			const plan = new TransportPlan(gameState, units, fromAccess, toAccess, toPos, ship);
 			if (plan.failed)
@@ -483,7 +485,7 @@ export class NavalManager
 	}
 
 	// set minimal number of needed ships when a new event (new base or new attack plan)
-	setMinimalTransportShips(gameState: CommonGameState, sea: number, number: number): void
+	setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void
 	{
 		if (!sea)
 			return;
@@ -528,8 +530,9 @@ export class NavalManager
 		if (!this.docks.filter(filters.isBuilt()).hasEntities())
 			return;
 		// check if we have enough transport ships per region.
-		for (let sea = 0; sea < this.seaShips.length; ++sea)
+		for (let seaNumber = 0; seaNumber < this.seaShips.length; ++seaNumber)
 		{
+			const sea = seaRegion(seaNumber);
 			const transports = this.seaTransportShips[sea];
 			const fishers = this.seaFishShips[sea];
 			// the sea collections are created together, for naval regions only
@@ -822,7 +825,7 @@ export class NavalManager
 	}
 
 	/** goal can be either attack (choose ship with best arrowCount) or transport (choose ship with best capacity) */
-	getBestShip(gameState: CommonGameState, sea: number, goal: "attack" | "transport" | "fishing"): string | undefined
+	getBestShip(gameState: CommonGameState, sea: SeaIndex, goal: "attack" | "transport" | "fishing"): string | undefined
 	{
 		const civ = gameState.getPlayerCiv();
 		const trainableShips = new Map<string, CommonTemplate>();

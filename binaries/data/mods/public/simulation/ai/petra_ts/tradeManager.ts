@@ -8,13 +8,14 @@ import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideE
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
+import { INVALID_ENTITY, landRegion } from "./brands.ts";
 
 type TradeRoute = {
-	source: number;
-	target: number;
+	source: EntityId;
+	target: EntityId;
 	gain: number;
-	land?: number;
-	sea?: number;
+	land?: AccessIndex;
+	sea?: SeaIndex;
 };
 
 /**
@@ -204,10 +205,12 @@ export class TradeManager
 
 		if (!ent.hasClass("Ship") && route.land !== undefined && route.land != access)
 		{
+			// not a ship: access is the land the trader stands on
+			const land = landRegion(access);
 			if (nearerSource)
-				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, access, route.land, routeSource.position());
+				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, land, route.land, routeSource.position());
 			else
-				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, access, route.land, routeTarget.position());
+				gameState.ai.HQ.navalManager.requireTransport(gameState, ent, land, route.land, routeTarget.position());
 			Engine.ProfileStop();
 			return;
 		}
@@ -480,9 +483,9 @@ export class TradeManager
 	 * fills the best trade route in this.tradeRoute and the best potential route in this.potentialTradeRoute
 	 * If an index is given, it returns the best route with this index or the best land route if index is a land index
 	 */
-	checkRoutes(gameState: CommonGameState, accessIndex: number): TradeRoute | false;
+	checkRoutes(gameState: CommonGameState, accessIndex: RegionIndex): TradeRoute | false;
 	checkRoutes(gameState: CommonGameState, accessIndex?: undefined): boolean;
-	checkRoutes(gameState: CommonGameState, accessIndex?: number): boolean | TradeRoute
+	checkRoutes(gameState: CommonGameState, accessIndex?: RegionIndex): boolean | TradeRoute
 	{
 		// If we cannot trade, do not bother checking routes.
 		if (!Resources.GetTradableCodes().length)
@@ -505,10 +508,10 @@ export class TradeManager
 		const onlyOurs = !market2.hasEntities();
 		if (onlyOurs)
 			market2 = market1;
-		let candidate: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
-		let potential: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
-		let bestIndex: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
-		let bestLand: TradeRoute = { "source": 0, "target": 0, "gain": 0 };
+		let candidate: TradeRoute = { "source": INVALID_ENTITY, "target": INVALID_ENTITY, "gain": 0 };
+		let potential: TradeRoute = { "source": INVALID_ENTITY, "target": INVALID_ENTITY, "gain": 0 };
+		let bestIndex: TradeRoute = { "source": INVALID_ENTITY, "target": INVALID_ENTITY, "gain": 0 };
+		let bestLand: TradeRoute = { "source": INVALID_ENTITY, "target": INVALID_ENTITY, "gain": 0 };
 
 		const mapSize = gameState.sharedScript.mapSize;
 		const traderTemplatesGains = gameState.getTraderTemplatesGains();

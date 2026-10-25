@@ -48,7 +48,7 @@ export class QueueManager
 {
 	Config: Config;
 	accounts: Record<string, ResourcesManager>;
-	finishingTime: number | undefined;
+	finishingTime: GameSeconds | undefined;
 	priorities: PetraRuntime.Dict<number>;
 	queueArrays: Array<[string, Queue]>;
 	queues: Record<string, Queue>;

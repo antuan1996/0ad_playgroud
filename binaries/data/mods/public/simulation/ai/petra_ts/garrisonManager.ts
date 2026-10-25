@@ -4,7 +4,7 @@ import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";
 
 type GarrisonHolderData = {
-	list: number[];
+	list: EntityId[];
 	allowMelee: boolean;
 };
 type GarrisonThreats = {
@@ -26,8 +26,8 @@ export class GarrisonManager
 {
 	declare Config: Config;
 
-	holders = new Map<number, GarrisonHolderData>();
-	decayingStructures = new Map<number, number>();
+	holders = new Map<EntityId, GarrisonHolderData>();
+	decayingStructures = new Map<EntityId, number>();
 
 	constructor(Config: Config)
 	{
@@ -387,7 +387,7 @@ export class GarrisonManager
 	 * do it only for structures useful for defense, except if we are expanding (justCaptured=true)
 	 * in which case we also do it for structures useful for unit trainings (TODO only Barracks are done)
 	 */
-	addDecayingStructure(gameState: CommonGameState, entId: number, justCaptured?: boolean): boolean
+	addDecayingStructure(gameState: CommonGameState, entId: EntityId, justCaptured?: boolean): boolean
 	{
 		if (this.decayingStructures.has(entId))
 			return true;
@@ -401,7 +401,7 @@ export class GarrisonManager
 		return true;
 	}
 
-	removeDecayingStructure(entId: number): void
+	removeDecayingStructure(entId: EntityId): void
 	{
 		if (!this.decayingStructures.has(entId))
 			return;

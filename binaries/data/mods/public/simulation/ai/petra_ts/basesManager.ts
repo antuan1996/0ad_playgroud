@@ -6,6 +6,7 @@ import { BaseManager, type SerializedBaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
 import { getBestBase, getLandAccess, requireValue } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
+import { NO_LAND, worldPos } from "./brands.ts";
 
 export interface SerializedBasesManager {
 	properties: {
@@ -55,7 +56,7 @@ export class BasesManager
 
 		this.noBase = new BaseManager(gameState, this);
 		this.noBase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
-		this.noBase.accessIndex = 0;
+		this.noBase.accessIndex = NO_LAND;
 
 		for (const cc of gameState.getOwnStructures().filter(filters.byClass("CivCentre")).values())
 			if (cc.foundationProgress() === undefined)
@@ -462,7 +463,7 @@ export class BasesManager
 	/** Some functions that register that we assigned a gatherer to a resource this turn */
 
 	/** Add a gatherer to the turn cache for this supply. */
-	AddTCGatherer(supplyID: number): void
+	AddTCGatherer(supplyID: EntityId): void
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID] !== undefined)
 			++this.turnCache.resourceGatherer[supplyID];
@@ -475,7 +476,7 @@ export class BasesManager
 	}
 
 	/** Remove a gatherer from the turn cache for this supply. */
-	RemoveTCGatherer(supplyID: number): void
+	RemoveTCGatherer(supplyID: EntityId): void
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
 			--this.turnCache.resourceGatherer[supplyID];
@@ -487,7 +488,7 @@ export class BasesManager
 		}
 	}
 
-	GetTCGatherer(supplyID: number): number
+	GetTCGatherer(supplyID: EntityId): number
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
 			return this.turnCache.resourceGatherer[supplyID];
@@ -613,7 +614,7 @@ export class BasesManager
 	 * Assign an entity to the closest base.
 	 * Used by the starting strategy.
 	 */
-	assignEntity(gameState: CommonGameState, ent: CommonEntity, territoryIndex: number): void
+	assignEntity(gameState: CommonGameState, ent: CommonEntity, territoryIndex: CellIndex<"territory">): void
 	{
 		let bestbase;
 		for (const base of this.baseManagers)
@@ -669,7 +670,7 @@ export class BasesManager
 	 * @param {number} territoryIndex
 	 * @return {number} - The ID of the base at the given territory index.
 	 */
-	baseAtIndex(territoryIndex: number): number
+	baseAtIndex(territoryIndex: CellIndex<"territory">): number
 	{
 		return this.basesMap.map[territoryIndex];
 	}
@@ -677,7 +678,7 @@ export class BasesManager
 	/**
 	 * @param {number} territoryIndex
 	 */
-	removeBaseFromTerritoryIndex(territoryIndex: number): void
+	removeBaseFromTerritoryIndex(territoryIndex: CellIndex<"territory">): void
 	{
 		const baseID = this.basesMap.map[territoryIndex];
 		if (baseID == 0)
@@ -699,7 +700,7 @@ export class BasesManager
 	/**
 	 * @return {boolean} - Whether the index was added to a base.
 	 */
-	addTerritoryIndexToBase(gameState: CommonGameState, territoryIndex: number, passabilityMap: CommonPassabilityMap): boolean
+	addTerritoryIndexToBase(gameState: CommonGameState, territoryIndex: CellIndex<"territory">, passabilityMap: CommonPassabilityMap): boolean
 	{
 		if (this.baseAtIndex(territoryIndex) != 0)
 			return false;
@@ -718,7 +719,7 @@ export class BasesManager
 			return false;
 		let distmin = Math.min();
 		let baseID;
-		const pos: CommonPosition = [gameState.ai.HQ.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.territoryMap.width + 0.5), gameState.ai.HQ.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.territoryMap.width) + 0.5)];
+		const pos: CommonPosition = worldPos(gameState.ai.HQ.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.territoryMap.width + 0.5), gameState.ai.HQ.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.territoryMap.width) + 0.5));
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor || !base.anchor.position())

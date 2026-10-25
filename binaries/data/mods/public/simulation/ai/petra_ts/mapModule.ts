@@ -3,6 +3,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { getMapIndices } from "simulation/ai/common-api/utils.js";
 import * as mapMask from "./mapMask.ts";
+import { cellIndex, playerId } from "./brands.ts";
 
 /** map functions */
 
@@ -11,7 +12,7 @@ let TERRITORY_PLAYER_MASK = 0x1F;
 let TERRITORY_BLINKING_MASK = 0x40;
 /* eslint-enable prefer-const */
 
-export function createObstructionMap(gameState: CommonGameState, accessIndex: number | undefined,
+export function createObstructionMap(gameState: CommonGameState, accessIndex: AccessIndex | undefined,
 	template?: CommonTemplate): InfoMap
 {
 	const passabilityMap = gameState.getPassabilityMap();
@@ -53,7 +54,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 	// See createTerritoryMap: the engine grid's array is `data`, not `map`.
 	for (let k = 0; k < territoryMap.data.length; ++k)
 	{
-		const tilePlayer = territoryMap.data[k] & TERRITORY_PLAYER_MASK;
+		const tilePlayer = playerId(territoryMap.data[k] & TERRITORY_PLAYER_MASK);
 		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) == 0;
 		if (tilePlayer === PlayerID)
 		{
@@ -124,11 +125,14 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: nu
 }
 
 
-export function createTerritoryMap(gameState: CommonGameState): InfoMap & {
-	getOwner: (position: CommonPosition) => number;
-	getOwnerIndex: (index: number) => number;
+/** The territory grid with its owner and blinking bits read out. */
+export type TerritoryMap = InfoMap<"territory"> & {
+	getOwner: (position: CommonPosition) => PlayerId;
+	getOwnerIndex: (index: CellIndex<"territory">) => PlayerId;
 	isBlinking: (position: CommonPosition) => boolean;
-}
+};
+
+export function createTerritoryMap(gameState: CommonGameState): TerritoryMap
 {
 	const map = gameState.ai.territoryMap;
 
@@ -138,18 +142,14 @@ export function createTerritoryMap(gameState: CommonGameState): InfoMap & {
 	// every territory came out unowned, with nothing thrown to say so.
 	// (The territory grid is a Grid<uint8_t>, so the data array is a
 	// Uint8Array; the narrowing below documents that.)
-	const ret = new InfoMap(gameState.sharedScript, "territory", map.data as Uint8Array) as InfoMap & {
-		getOwner: (position: CommonPosition) => number;
-		getOwnerIndex: (index: number) => number;
-		isBlinking: (position: CommonPosition) => boolean;
-	};
-	ret.getOwner = function(this: InfoMap, p: CommonPosition): number
+	const ret = new InfoMap(gameState.sharedScript, "territory", map.data as Uint8Array) as TerritoryMap;
+	ret.getOwner = function(this: InfoMap, p: CommonPosition): PlayerId
 	{
-		return this.point(p) & TERRITORY_PLAYER_MASK;
+		return playerId(this.point(p) & TERRITORY_PLAYER_MASK);
 	};
-	ret.getOwnerIndex = function(this: InfoMap, p: number): number
+	ret.getOwnerIndex = function(this: InfoMap<"territory">, p: CellIndex<"territory">): PlayerId
 	{
-		return this.map[p] & TERRITORY_PLAYER_MASK;
+		return playerId(this.map[p] & TERRITORY_PLAYER_MASK);
 	};
 	ret.isBlinking = function(this: InfoMap, p: CommonPosition): boolean
 	{
@@ -179,8 +179,9 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	{
 		const ic = (width - 1) / 2;
 		const radcut = (ic - border) * (ic - border);
-		for (let j = 0; j < map.length; ++j)
+		for (let jIndex = 0; jIndex < map.length; ++jIndex)
 		{
+			const j = cellIndex(map, jIndex);
 			const dx = j%width - ic;
 			const dy = Math.floor(j/width) - ic;
 			const radius = dx*dx + dy*dy;
@@ -200,8 +201,9 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	else
 	{
 		const borderCut = width - border;
-		for (let j = 0; j < map.length; ++j)
+		for (let jIndex = 0; jIndex < map.length; ++jIndex)
 		{
+			const j = cellIndex(map, jIndex);
 			const ix = j%width;
 			const iy = Math.floor(j/width);
 			if (ix < border || ix >= borderCut || iy < border || iy >= borderCut)

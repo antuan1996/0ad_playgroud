@@ -6,6 +6,7 @@ import { getAttackBonus, getBestBase, getLandAccess, returnResources, requireVal
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";
+import { seconds } from "./brands.ts";
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -15,30 +16,30 @@ import type { Config } from "./config.ts";
  */
 
 type CriticalEntState = {
-	guardsAssigned: Set<number>;
-	healersAssigned?: Set<number>;
-	guards: Map<number, string>;
+	guardsAssigned: Set<EntityId>;
+	healersAssigned?: Set<EntityId>;
+	guards: Map<EntityId, string>;
 	garrisonEmergency?: boolean;
 };
 
 export type SerializedVictoryManager = {
-	criticalEnts: Map<number, CriticalEntState>;
-	guardEnts: Map<number, boolean>;
+	criticalEnts: Map<EntityId, CriticalEntState>;
+	guardEnts: Map<EntityId, boolean>;
 	healersPerCriticalEnt: number;
 	tryCaptureGaiaRelic: boolean;
-	tryCaptureGaiaRelicLapseTime: number;
-	targetedGaiaRelics: Map<number, number[]>;
+	tryCaptureGaiaRelicLapseTime: GameSeconds;
+	targetedGaiaRelics: Map<EntityId, number[]>;
 };
 
 export class VictoryManager
 {
 	declare Config: Config;
-	declare criticalEnts: Map<number, CriticalEntState>;
-	declare guardEnts: Map<number, boolean>;
+	declare criticalEnts: Map<EntityId, CriticalEntState>;
+	declare guardEnts: Map<EntityId, boolean>;
 	declare healersPerCriticalEnt: number;
-	declare targetedGaiaRelics: Map<number, number[]>;
+	declare targetedGaiaRelics: Map<EntityId, number[]>;
 	declare tryCaptureGaiaRelic: boolean;
-	declare tryCaptureGaiaRelicLapseTime: number;
+	declare tryCaptureGaiaRelicLapseTime: GameSeconds;
 
 	constructor(Config: Config)
 	{
@@ -48,7 +49,7 @@ export class VictoryManager
 		this.guardEnts = new Map();
 		this.healersPerCriticalEnt = 2 + Math.round(this.Config.personality.defensive * 2);
 		this.tryCaptureGaiaRelic = false;
-		this.tryCaptureGaiaRelicLapseTime = -1;
+		this.tryCaptureGaiaRelicLapseTime = seconds(-1);
 		// Gaia relics which we are targeting currently and have not captured yet
 		this.targetedGaiaRelics = new Map();
 	}
@@ -348,7 +349,7 @@ export class VictoryManager
 		}
 	}
 
-	removeCriticalEnt(gameState: CommonGameState, criticalEntId: number): void
+	removeCriticalEnt(gameState: CommonGameState, criticalEntId: EntityId): void
 	{
 		const criticalEnt = this.criticalEnts.get(criticalEntId);
 		if (!criticalEnt)
@@ -563,7 +564,7 @@ export class VictoryManager
 	 * which will be used once its transport has finished.
 	 * Return false if the guardEnt is not a valid guard unit (i.e. cannot guard or is being transported).
 	 */
-	assignGuardToCriticalEnt(gameState: CommonGameState, guardEnt: CommonEntity, criticalEntId?: number): boolean
+	assignGuardToCriticalEnt(gameState: CommonGameState, guardEnt: CommonEntity, criticalEntId?: EntityId): boolean
 	{
 		if (guardEnt.getMetadata(PlayerID, "transport") !== undefined || !guardEnt.canGuard())
 			return false;
@@ -648,7 +649,7 @@ export class VictoryManager
 	resetCaptureGaiaRelic(gameState: CommonGameState): void
 	{
 		// Do not capture gaia relics too frequently as the ai has access to the entire map
-		this.tryCaptureGaiaRelicLapseTime = gameState.ai.elapsedTime + 240 - 30 * (this.Config.difficulty - 3);
+		this.tryCaptureGaiaRelicLapseTime = seconds(gameState.ai.elapsedTime + 240 - 30 * (this.Config.difficulty - 3));
 		this.tryCaptureGaiaRelic = false;
 	}
 
@@ -816,7 +817,7 @@ export class VictoryManager
 			relicPlans.push(plan);
 	}
 
-	abortCaptureGaiaRelic(gameState: CommonGameState, relicId: number): void
+	abortCaptureGaiaRelic(gameState: CommonGameState, relicId: EntityId): void
 	{
 		const relicPlans = this.targetedGaiaRelics.get(relicId) ?? [];
 		for (const plan of relicPlans)

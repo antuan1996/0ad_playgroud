@@ -4,6 +4,7 @@ import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAcce
 	isSupplyFull, requireValue, returnResources } from "./entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import type { BaseManager, ResourceSupply } from "./baseManager.ts";
+import { GAIA, INVALID_ENTITY, NO_REGION } from "./brands.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
@@ -11,10 +12,10 @@ import type { BaseManager, ResourceSupply } from "./baseManager.ts";
 export class Worker
 {
 	declare base: BaseManager;
-	declare baseAccess: number;
+	declare baseAccess: AccessIndex;
 	declare baseID: number;
 	declare ent: CommonEntity;
-	declare entAccess: number;
+	declare entAccess: AccessIndex;
 
 	constructor(base: BaseManager)
 	{
@@ -102,7 +103,7 @@ export class Worker
 		if (this.baseID == gameState.ai.HQ.basesManager.baselessBase().ID)
 			this.baseAccess = this.entAccess;
 		else
-			this.baseAccess = this.base.accessIndex ?? -1;
+			this.baseAccess = this.base.accessIndex ?? NO_REGION;
 
 		if (subrole == undefined)	// subrole may-be undefined after a transport, garrisoning, army, ...
 		{
@@ -217,7 +218,7 @@ export class Worker
 					// If we are here, an enemy structure must have targeted one of our workers
 					// and UnitAI sent it fight back with allowCapture=true
 					const target = gameState.getEntityById(orderData.target);
-					const targetOwner = target ? target.owner() : 0;
+					const targetOwner = target ? target.owner() : GAIA;
 					if (target && targetOwner > 0 && !gameState.isPlayerAlly(targetOwner))
 						ent.attack(orderData.target, allowCapture(gameState, ent, target));
 				}
@@ -254,7 +255,7 @@ export class Worker
 				// in case UnitAI did something bad
 				if (ent.unitAIOrderData().length)
 				{
-					const supplyId = ent.unitAIOrderData()[0].target ?? 0;
+					const supplyId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
 					const supply = gameState.getEntityById(supplyId);
 					// While returning resources UnitAI targets the dropsite, which is no supply:
 					// the return trip is checked below, the supply once the unit is back at work
@@ -297,7 +298,7 @@ export class Worker
 					if (gameState.ai.playedTurn % 10 == 0)
 					{
 						// Check from time to time that UnitAI does not send us to an inaccessible dropsite
-						const dropsiteId = ent.unitAIOrderData()[0].target ?? 0;
+						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
@@ -417,7 +418,7 @@ export class Worker
 							if (base.accessIndex == this.entAccess)
 								ent.move(basePos[0], basePos[1]);
 							else
-								gameState.ai.HQ.navalManager.requireTransport(gameState, ent, this.entAccess, base.accessIndex ?? -1, basePos);
+								gameState.ai.HQ.navalManager.requireTransport(gameState, ent, this.entAccess, base.accessIndex ?? NO_REGION, basePos);
 							nowhereToHunt = false;
 							break;
 						}
@@ -437,7 +438,7 @@ export class Worker
 					else if (unitAIState == "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING")
 					{
 						// Check that UnitAI does not send us to an inaccessible dropsite
-						const dropsiteId = ent.unitAIOrderData()[0].target ?? 0;
+						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
@@ -664,7 +665,7 @@ export class Worker
 			if (base.accessIndex == this.entAccess)
 				continue;
 			supply = findSupply(this, base.dropsiteSupplies[resource].nearby);
-			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? -1, supply.position()))
+			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID != this.baseID)
 					this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -678,14 +679,14 @@ export class Worker
 				if (base.accessIndex == this.entAccess)
 					continue;
 				supply = this.gatherNearestField(gameState, base.ID);
-				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? -1, supply.position()))
+				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID != this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
 					return true;
 				}
 				supply = this.buildAnyField(gameState, base.ID);
-				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? -1, supply.position()))
+				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID != this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -698,7 +699,7 @@ export class Worker
 			if (base.accessIndex == this.entAccess)
 				continue;
 			supply = findSupply(this, base.dropsiteSupplies[resource].medium);
-			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? -1, supply.position()))
+			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID != this.baseID)
 					this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -771,7 +772,7 @@ export class Worker
 				if (base.accessIndex == this.entAccess)
 					continue;
 				supply = findSupply(this, base.dropsiteSupplies[resource].faraway);
-				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? -1, supply.position()))
+				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID != this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -811,7 +812,7 @@ export class Worker
 		const foodDropsites = gameState.playerData.hasSharedDropsites ?
 			gameState.getAnyDropsites("food") : gameState.getOwnDropsites("food");
 
-		const hasFoodDropsiteWithinDistance = function(supplyPosition: CommonPosition, supplyAccess: number, distSquare: number): boolean 
+		const hasFoodDropsiteWithinDistance = function(supplyPosition: CommonPosition, supplyAccess: AccessIndex, distSquare: number): boolean 
 		{
 			for (const dropsite of foodDropsites.values())
 			{

@@ -23,7 +23,7 @@ declare namespace PetraRuntime {
 /** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 /** Time elapsed in the game, in seconds (copied from the shared script each turn). */
-		elapsedTime: number;
+		elapsedTime: GameSeconds;
 /** Turn counter used to stagger expensive AI work every 8 turns. */
 		playedTurn: number;
 		queueManager: import("./queueManager.ts").QueueManager;
@@ -33,7 +33,7 @@ declare namespace PetraRuntime {
 		 * Not the territory map the headquarters builds — that one is
 		 * `HQ.territoryMap`.
 		 */
-		territoryMap: CommonPassabilityMap;
+		territoryMap: CommonGrid<"territory">;
 /** Per-name id generators (tagging, fake entities ...), carried across saves. */
 		uniqueIDs: Record<string, number>;
 	}

@@ -8,7 +8,7 @@ export interface PlanLandSet {
 
 export interface PlanMetadata {
 	base?: number;
-	access?: number;
+	access?: AccessIndex;
 	expectedGain?: number;
 	favoredBase?: number;
 	index?: number;
@@ -19,9 +19,9 @@ export interface PlanMetadata {
 	proximity?: CommonPosition;
 	resource?: string;
 	role?: string;
-	sea?: number;
+	sea?: SeaIndex;
 	support?: boolean;
-	trainer?: number;
+	trainer?: EntityId;
 	type?: string;
 	[key: string]: unknown;
 }
@@ -38,7 +38,7 @@ export abstract class QueuePlan
 	declare metadata: PlanMetadata | undefined;
 	declare number: number;
 	declare template: CommonTemplate;
-	declare type: string;
+	declare type: TemplateName;
 	declare queueToReset?: string;
 	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 

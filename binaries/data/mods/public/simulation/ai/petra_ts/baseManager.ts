@@ -8,6 +8,7 @@ import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBui
 import { createObstructionMap } from "./mapModule.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { Worker } from "./worker.ts";
+import { NO_TEMPLATE, seconds, worldPos } from "./brands.ts";
 
 /**
  * Base Manager
@@ -22,22 +23,22 @@ import { Worker } from "./worker.ts";
  */
 
 export type ResourceSupply = {
-	dropsite: number;
+	dropsite: EntityId;
 	dist: number;
 	ent?: CommonEntity;
-	id: number;
+	id: EntityId;
 };
 
 export type SerializedBaseManager = {
 	ID: number;
-	anchorId: number | undefined;
-	accessIndex: number | undefined;
+	anchorId: EntityId | undefined;
+	accessIndex: AccessIndex | undefined;
 	maxDistResourceSquare: number;
 	constructing: boolean;
 	gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
 	neededDefenders: number;
-	territoryIndices: number[];
-	timeNextIdleCheck: number;
+	territoryIndices: Array<CellIndex<"territory">>;
+	timeNextIdleCheck: GameSeconds;
 	dropsiteSupplies: Record<string, Record<string, ResourceSupply[]>>;
 };
 
@@ -45,9 +46,9 @@ export class BaseManager
 {
 	declare Config: Config;
 	declare ID: number;
-	declare accessIndex: number | undefined;
+	declare accessIndex: AccessIndex | undefined;
 	declare anchor: CommonEntity | undefined;
-	declare anchorId: number | undefined;
+	declare anchorId: EntityId | undefined;
 	declare basesManager: BasesManager;
 	declare buildings: CommonEntityCollection;
 	declare constructing: boolean;
@@ -57,8 +58,8 @@ export class BaseManager
 	declare maxDistResourceSquare: number;
 	declare mobileDropsites: CommonEntityCollection;
 	declare neededDefenders: number;
-	declare territoryIndices: number[];
-	declare timeNextIdleCheck: number;
+	declare territoryIndices: Array<CellIndex<"territory">>;
+	declare timeNextIdleCheck: GameSeconds;
 	declare units: CommonEntityCollection;
 	declare workerObject: Worker;
 	declare workers: CommonEntityCollection;
@@ -85,7 +86,7 @@ export class BaseManager
 		// vector for iterating, to check one use the HQ map.
 		this.territoryIndices = [];
 
-		this.timeNextIdleCheck = 0;
+		this.timeNextIdleCheck = seconds(0);
 	}
 
 
@@ -305,7 +306,7 @@ export class BaseManager
 	}
 
 	// completely remove the dropsite resources from our list.
-	removeDropsite(gameState: CommonGameState, entityID: number): void
+	removeDropsite(gameState: CommonGameState, entityID: EntityId): void
 	{
 		if (!entityID)
 			return;
@@ -341,14 +342,14 @@ export class BaseManager
 	 *			its quality and its template name.
 	 */
 	findBestDropsiteAndLocation(gameState: CommonGameState, resource: string):
-		{ quality: number; pos: CommonPosition; templateName: string }
+		{ quality: number; pos: CommonPosition; templateName: TemplateName }
 	{
 		// templateName is set together with quality, so it is "" only when the
 		// quality is 0, which every caller rejects before using it.
-		let bestResult: { quality: number; pos: CommonPosition; templateName: string } = {
+		let bestResult: { quality: number; pos: CommonPosition; templateName: TemplateName } = {
 			"quality": 0,
-			"pos": [0, 0],
-			"templateName": ""
+			"pos": worldPos(0, 0),
+			"templateName": NO_TEMPLATE
 		};
 		for (const templateName of gameState.ai.HQ.buildManager.findStructuresByFilter(gameState,
 			filters.isDropsite(resource)))
@@ -364,7 +365,7 @@ export class BaseManager
 	/**
 	 * Returns the position of the best place to build a new dropsite for the specified resource and dropsite template.
 	 */
-	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: string): { quality: number; pos: CommonPosition }
+	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: TemplateName): { quality: number; pos: CommonPosition }
 	{
 		// Callers pass a template name from findStructuresByFilter(), which only
 		// returns names whose template exists and is available.
@@ -372,7 +373,7 @@ export class BaseManager
 
 		// CCs and Docks are handled elsewhere.
 		if (template.hasClasses(["CivCentre", "Dock"]))
-			return { "quality": 0, "pos": [0, 0] };
+			return { "quality": 0, "pos": worldPos(0, 0) };
 
 		let halfSize = 0;
 		if (template.get("Footprint/Square"))
@@ -422,7 +423,7 @@ export class BaseManager
 			if (total <= bestVal)
 				continue;
 
-			const pos: CommonPosition = [cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5)];
+			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
 
 			for (const dp of dpEnts)
 			{
@@ -452,11 +453,11 @@ export class BaseManager
 
 		// bestIdx is set together with a positive bestVal
 		if (bestVal <= 0 || bestIdx === undefined)
-			return { "quality": bestVal, "pos": [0, 0] };
+			return { "quality": bestVal, "pos": worldPos(0, 0) };
 
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
-		return { "quality": bestVal, "pos": [x, z] };
+		return { "quality": bestVal, "pos": worldPos(x, z) };
 	}
 
 	getResourceLevel(gameState: CommonGameState, type: string, distances: string[] = ["nearby", "medium", "faraway"]): number
@@ -658,7 +659,7 @@ export class BaseManager
 	 */
 	setWorkersIdleByPriority(gameState: CommonGameState): void
 	{
-		this.timeNextIdleCheck = gameState.ai.elapsedTime + 8;
+		this.timeNextIdleCheck = seconds(gameState.ai.elapsedTime + 8);
 		// change resource only towards one which is more needed, and if changing will not change this order
 		let nb = 1;    // no more than 1 change per turn (otherwise we should update the rates)
 		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState);
@@ -1241,17 +1242,17 @@ export class BaseManager
 		return true;
 	}
 
-	AddTCGatherer(supplyID: number): void
+	AddTCGatherer(supplyID: EntityId): void
 	{
 		return this.basesManager.AddTCGatherer(supplyID);
 	}
 
-	RemoveTCGatherer(supplyID: number): void
+	RemoveTCGatherer(supplyID: EntityId): void
 	{
 		this.basesManager.RemoveTCGatherer(supplyID);
 	}
 
-	GetTCGatherer(supplyID: number): number
+	GetTCGatherer(supplyID: EntityId): number
 	{
 		return this.basesManager.GetTCGatherer(supplyID);
 	}

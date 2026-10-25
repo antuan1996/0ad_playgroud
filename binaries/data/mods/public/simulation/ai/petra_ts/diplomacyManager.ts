@@ -2,6 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import * as chat from "./chatHelper.ts";
 import type { Config } from "./config.ts";
+import { playerId, seconds } from "./brands.ts";
 
 type DiplomacyRequestType = "ally" | "neutral";
 type DiplomacyRequestStatus = "accepted" | "allianceBroken" | "declinedRequest" | "waitingForTribute";
@@ -10,38 +11,38 @@ type DiplomacyRequest = {
 	status: DiplomacyRequestStatus;
 	wanted?: number;
 	type?: string;
-	warnTime?: number;
+	warnTime?: GameSeconds;
 	sentWarning?: boolean;
 };
 type SentDiplomacyRequest = {
 	requestType: DiplomacyRequestType;
-	timeSent: number;
+	timeSent: GameSeconds;
 };
 type TributeExchangedEvent = {
-	to: number;
-	from: number;
+	to: PlayerId;
+	from: PlayerId;
 	amounts: Record<string, number>;
 };
 
 type AttackedEvent = {
-	target: number;
-	attacker: number;
+	target: EntityId;
+	attacker: EntityId;
 };
 
 type DiplomacyChangedEvent = {
-	player: number;
-	otherPlayer: number;
+	player: PlayerId;
+	otherPlayer: PlayerId;
 };
 
 type DiplomacyRequestEvent = {
-	player: number;
-	source: number;
+	player: PlayerId;
+	source: PlayerId;
 	to: DiplomacyRequestType;
 };
 
 type TributeRequestEvent = {
-	player: number;
-	source: number;
+	player: PlayerId;
+	source: PlayerId;
 	resourceWanted: number;
 	resourceType: string;
 };
@@ -72,27 +73,27 @@ type TributeRequestEvent = {
 export class DiplomacyManager
 {
 	declare Config: Config;
-	declare betrayLapseTime: number;
+	declare betrayLapseTime: GameSeconds;
 	declare betrayWeighting: number;
-	declare nextTributeRequest: Map<string, number>;
-	declare nextTributeUpdate: number;
-	declare receivedDiplomacyRequests: Map<number, DiplomacyRequest>;
-	declare sentDiplomacyRequestLapseTime: number;
-	declare sentDiplomacyRequests: Map<number, SentDiplomacyRequest>;
+	declare nextTributeRequest: Map<string, GameSeconds>;
+	declare nextTributeUpdate: GameSeconds;
+	declare receivedDiplomacyRequests: Map<PlayerId, DiplomacyRequest>;
+	declare sentDiplomacyRequestLapseTime: GameSeconds;
+	declare sentDiplomacyRequests: Map<PlayerId, SentDiplomacyRequest>;
 	declare waitingToBetray: boolean;
 
 	constructor(Config: Config, deserialized: boolean)
 	{
 		this.Config = Config;
-		this.nextTributeUpdate = 90;
+		this.nextTributeUpdate = seconds(90);
 		this.nextTributeRequest = new Map();
-		this.nextTributeRequest.set("all", 240);
-		this.betrayLapseTime = -1;
+		this.nextTributeRequest.set("all", seconds(240));
+		this.betrayLapseTime = seconds(-1);
 		this.waitingToBetray = false;
 		this.betrayWeighting = 150;
 		this.receivedDiplomacyRequests = new Map();
 		this.sentDiplomacyRequests = new Map();
-		this.sentDiplomacyRequestLapseTime = deserialized ? 175 : randFloat(130, 220);
+		this.sentDiplomacyRequestLapseTime = seconds(deserialized ? 175 : randFloat(130, 220));
 	}
 
 	/**
@@ -103,8 +104,9 @@ export class DiplomacyManager
 	{
 		this.lastManStandingCheck(gameState);
 
-		for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			if (i === PlayerID)
 				continue;
 
@@ -123,15 +125,16 @@ export class DiplomacyManager
 	 */
 	tributes(gameState: CommonGameState): void
 	{
-		this.nextTributeUpdate = gameState.ai.elapsedTime + 30;
+		this.nextTributeUpdate = seconds(gameState.ai.elapsedTime + 30);
 		const resTribCodes = Resources.GetTributableCodes();
 		if (!resTribCodes.length)
 			return;
 		const totalResources = gameState.getResources();
 		const availableResources = gameState.ai.queueManager.getAvailableResources(gameState);
 		let mostNeeded;
-		for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			if (i === PlayerID || !gameState.isPlayerAlly(i) || gameState.ai.HQ.attackManager.defeated[i])
 				continue;
 			const donor = gameState.getAlliedVictory() || gameState.getEntities(i).length < gameState.getOwnEntities().length;
@@ -165,8 +168,8 @@ export class DiplomacyManager
 					{
 						if (mostNeeded[k].type == res && mostNeeded[k].wanted > 0)
 						{
-							this.nextTributeRequest.set("all", gameState.ai.elapsedTime + 90);
-							this.nextTributeRequest.set(res, gameState.ai.elapsedTime + 240);
+							this.nextTributeRequest.set("all", seconds(gameState.ai.elapsedTime + 90));
+							this.nextTributeRequest.set(res, seconds(gameState.ai.elapsedTime + 240));
 							chat.requestTribute(gameState, res);
 							if (this.Config.debug > 1)
 								aiWarn("Tribute on " + res + " requested to player " + i);
@@ -214,7 +217,7 @@ export class DiplomacyManager
 					else if (evt.amounts[request.type] > 0)
 					{
 						// Reset the warning sent to the player that reminds them to speed up the tributes
-						request.warnTime = gameState.ai.elapsedTime + 60;
+						request.warnTime = seconds(gameState.ai.elapsedTime + 60);
 						request.sentWarning = false;
 					}
 				}
@@ -345,7 +348,7 @@ export class DiplomacyManager
 						uneval(responseTribute));
 				}
 				Engine.PostCommand(PlayerID, { "type": "tribute", "player": evt.source, "amounts": responseTribute });
-				this.nextTributeUpdate = gameState.ai.elapsedTime + 15;
+				this.nextTributeUpdate = seconds(gameState.ai.elapsedTime + 15);
 			}
 		}
 	}
@@ -372,7 +375,7 @@ export class DiplomacyManager
 		// wait a bit before turning
 		if (!this.waitingToBetray)
 		{
-			this.betrayLapseTime = gameState.ai.elapsedTime + randFloat(10, 110);
+			this.betrayLapseTime = seconds(gameState.ai.elapsedTime + randFloat(10, 110));
 			this.waitingToBetray = true;
 			return;
 		}
@@ -380,7 +383,7 @@ export class DiplomacyManager
 		// do not turn against a player yet if we are not strong enough
 		if (gameState.getOwnUnits().length < 50)
 		{
-			this.betrayLapseTime += 60;
+			this.betrayLapseTime = seconds(this.betrayLapseTime + 60);
 			return;
 		}
 
@@ -388,8 +391,9 @@ export class DiplomacyManager
 		let max = 0;
 
 		// count the amount of entities remaining players have
-		for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			if (i === PlayerID || gameState.ai.HQ.attackManager.defeated[i])
 				continue;
 
@@ -440,7 +444,7 @@ export class DiplomacyManager
 			// If we had sent this player a diplomacy request, just rescind it
 			this.sentDiplomacyRequests.delete(playerToTurnAgainst);
 		}
-		this.betrayLapseTime = -1;
+		this.betrayLapseTime = seconds(-1);
 		this.waitingToBetray = false;
 	}
 
@@ -448,7 +452,7 @@ export class DiplomacyManager
 	 * Do not become allies with a player if the game would be over.
 	 * Overall, be reluctant to become allies with any one player, but be more likely to accept neutral requests.
 	 */
-	handleDiplomacyRequest(gameState: CommonGameState, player: number, requestType: DiplomacyRequestType): void
+	handleDiplomacyRequest(gameState: CommonGameState, player: PlayerId, requestType: DiplomacyRequestType): void
 	{
 		if (gameState.sharedScript.playersData[PlayerID].teamLocked)
 			return;
@@ -498,7 +502,7 @@ export class DiplomacyManager
 					"status": "waitingForTribute",
 					"wanted": requiredTribute.wanted,
 					"type": requiredTribute.type,
-					"warnTime": gameState.ai.elapsedTime + 60,
+					"warnTime": seconds(gameState.ai.elapsedTime + 60),
 					"sentWarning": false,
 					"requestType": requestType
 				});
@@ -513,7 +517,7 @@ export class DiplomacyManager
 			requiredTribute === undefined ? undefined : { "wanted": requiredTribute.wanted ?? 0, "type": requiredTribute.type ?? "" });
 	}
 
-	changePlayerDiplomacy(gameState: CommonGameState, player: number, newDiplomaticStance: DiplomacyRequestType | "enemy"): void
+	changePlayerDiplomacy(gameState: CommonGameState, player: PlayerId, newDiplomaticStance: DiplomacyRequestType | "enemy"): void
 	{
 		if (gameState.isPlayerEnemy(player) && (newDiplomaticStance === "ally" || newDiplomaticStance === "neutral"))
 			gameState.ai.HQ.attackManager.cancelAttacksAgainstPlayer(gameState, player);
@@ -537,7 +541,7 @@ export class DiplomacyManager
 				else
 				{
 					data.sentWarning = true;
-					data.warnTime = gameState.ai.elapsedTime + 60;
+					data.warnTime = seconds(gameState.ai.elapsedTime + 60);
 					chat.answerRequestDiplomacy(gameState, player, data.requestType, "waitingForTribute", {
 						"wanted": data.wanted,
 						"type": data.type
@@ -554,8 +558,9 @@ export class DiplomacyManager
 	{
 		let player;
 		let max = 0;
-		for (let i = 1; i < gameState.sharedScript.playersData.length; ++i)
+		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
+			const i = playerId(iIndex);
 			let mutualEnemies = 0;
 			const request = this.receivedDiplomacyRequests.get(i); // Do not send to players we have already rejected before
 			if (i === PlayerID || gameState.isPlayerMutualAlly(i) || gameState.ai.HQ.attackManager.defeated[i] ||
@@ -563,8 +568,9 @@ export class DiplomacyManager
 			    this.sentDiplomacyRequests.get(i) !== undefined || request && request.status === "declinedRequest")
 				continue;
 
-			for (let j = 1; j < gameState.sharedScript.playersData.length; ++j)
+			for (let jIndex = 1; jIndex < gameState.sharedScript.playersData.length; ++jIndex)
 			{
+				const j = playerId(jIndex);
 				if (gameState.sharedScript.playersData[i].isEnemy[j] && gameState.isPlayerEnemy(j) &&
 				    !gameState.ai.HQ.attackManager.defeated[j])
 					++mutualEnemies;
@@ -621,7 +627,7 @@ export class DiplomacyManager
 		// Be unlikely to send diplomacy requests to other players
 		if (gameState.ai.elapsedTime > this.sentDiplomacyRequestLapseTime)
 		{
-			this.sentDiplomacyRequestLapseTime = gameState.ai.elapsedTime + 300 + randFloat(10, 100);
+			this.sentDiplomacyRequestLapseTime = seconds(gameState.ai.elapsedTime + 300 + randFloat(10, 100));
 			const numEnemies = gameState.getEnemies().length;
 			// Don't consider gaia
 			if (numEnemies > 2 && gameState.getMutualAllies().length < numEnemies - 1 && randBool(0.1))

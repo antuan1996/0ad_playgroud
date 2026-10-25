@@ -2,6 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, requireMetadata, requireValue } from "./entityExtend.ts";
 import { Worker } from "./worker.ts";
+import { worldPos } from "./brands.ts";
 
 /**
  * Describes a transport plan
@@ -29,16 +30,16 @@ export interface SerializedTransportPlan {
 	ID: number;
 	flotilla: boolean;
 	endPos: CommonPosition;
-	endIndex: number;
-	startIndex: number;
-	sea: number;
+	endIndex: AccessIndex;
+	startIndex: AccessIndex;
+	sea: SeaIndex;
 	state: string;
 	boardingPos: Record<string, CommonPosition | undefined>;
 	needTransportShips: boolean;
 	nTry: Record<number, number>;
 	canceled: boolean | undefined;
-	unloaded: number[];
-	recovered: Array<{ entId: number; entPos: CommonPosition; shipId: number }>;
+	unloaded: EntityId[];
+	recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
 }
 
 export class TransportPlan
@@ -48,23 +49,23 @@ export class TransportPlan
 	declare boardingRange: number;
 	declare canceled: boolean | undefined;
 	declare debug: number;
-	declare endIndex: number;
+	declare endIndex: AccessIndex;
 	declare endPos: CommonPosition;
 	declare failed: boolean;
 	declare flotilla: boolean;
 	declare nTry: Record<number, number>;
 	declare needSplit: CommonEntity[];
 	declare needTransportShips: boolean;
-	declare recovered: Array<{ entId: number; entPos: CommonPosition; shipId: number }>;
-	declare sea: number;
+	declare recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
+	declare sea: SeaIndex;
 	declare ships: CommonEntityCollection;
-	declare startIndex: number;
+	declare startIndex: AccessIndex;
 	declare state: string;
 	declare transportShips: CommonEntityCollection;
 	declare units: CommonEntityCollection;
-	declare unloaded: number[];
+	declare unloaded: EntityId[];
 
-	constructor(gameState: CommonGameState, units: CommonEntity[], startIndex: number, endIndex: number, endPos: CommonPosition, ship?: CommonEntity)
+	constructor(gameState: CommonGameState, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex, endPos: CommonPosition, ship?: CommonEntity)
 	{
 		this.ID = gameState.ai.uniqueIDs.transports++;
 		this.debug = gameState.ai.Config.debug;
@@ -522,7 +523,7 @@ export class TransportPlan
 	}
 
 	/** when avoidEnnemy is true, we try to not board/unboard in ennemy territory */
-	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: number, seaIndex: number, destination?: CommonPosition, avoidEnnemy: boolean = false): CommonPosition | undefined
+	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: AccessIndex, seaIndex: SeaIndex, destination?: CommonPosition, avoidEnnemy: boolean = false): CommonPosition | undefined
 	{
 		if (!gameState.ai.HQ.navalManager.landingZones[landIndex])
 		{
@@ -544,8 +545,8 @@ export class TransportPlan
 			filters.byMetadata(PlayerID, "sea", seaIndex))).toEntityArray();
 		for (const i of gameState.ai.HQ.navalManager.landingZones[landIndex][seaIndex])
 		{
-			let pos: CommonPosition = [i%width+0.5, Math.floor(i/width)+0.5];
-			pos = [cell*pos[0], cell*pos[1]];
+			let pos: CommonPosition = worldPos(i%width+0.5, Math.floor(i/width)+0.5);
+			pos = worldPos(cell*pos[0], cell*pos[1]);
 			let dist = VectorDistance(startPos, pos);
 			if (destination)
 				dist += VectorDistance(pos, destination);

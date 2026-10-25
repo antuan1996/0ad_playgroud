@@ -10,12 +10,14 @@ import { DefenseArmy } from "./defenseArmy.ts";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from
 	"./entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
+import type { TerritoryMap } from "./mapModule.ts";
 import { Worker } from "./worker.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
+import { playerId } from "./brands.ts";
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
-	Attacked: Array<{ target: number; attacker: number }>;
+	Attacked: Array<{ target: EntityId; attacker: EntityId }>;
 };
 
 export class DefenseManager
@@ -26,12 +28,8 @@ export class DefenseManager
 	declare attackedAllies: Record<number, number>;
 	declare attackingArmies: Record<number, Record<number, number>>;
 	declare attackingUnits: Record<number, Record<number, number> | undefined>;
-	declare targetList: number[];
-	declare territoryMap: CommonInfoMap & {
-		getOwner: (position: CommonPosition) => number;
-		getOwnerIndex: (index: number) => number;
-		isBlinking: (position: CommonPosition) => boolean;
-	};
+	declare targetList: EntityId[];
+	declare territoryMap: TerritoryMap;
 
 	constructor(Config: Config)
 	{
@@ -100,7 +98,7 @@ export class DefenseManager
 		Engine.ProfileStop();
 	}
 
-	makeIntoArmy(gameState: CommonGameState, entityID: number, type: string = "default"): void
+	makeIntoArmy(gameState: CommonGameState, entityID: EntityId, type: string = "default"): void
 	{
 		if (type == "default")
 		{
@@ -239,7 +237,7 @@ export class DefenseManager
 	checkEnemyUnits(gameState: CommonGameState): void
 	{
 		const nbPlayers = gameState.sharedScript.playersData.length;
-		const i = gameState.ai.playedTurn % nbPlayers;
+		const i = playerId(gameState.ai.playedTurn % nbPlayers);
 		this.attackingUnits[i] = undefined;
 
 		if (i == PlayerID)
@@ -256,7 +254,7 @@ export class DefenseManager
 						continue;
 					let lost = 0;
 					for (let j = 0; j < capture.length; ++j)
-						if (gameState.isPlayerEnemy(j))
+						if (gameState.isPlayerEnemy(playerId(j)))
 							lost += capture[j];
 					if (lost < Math.ceil(0.25 * capture[i]))
 						continue;
@@ -512,7 +510,7 @@ export class DefenseManager
 						continue;
 
 					// Do not assign defender if it cannot attack at least part of the attacking army.
-					if (!armiesNeeding[a].army.foeEntities.some((eEnt: number): boolean =>
+					if (!armiesNeeding[a].army.foeEntities.some((eEnt: EntityId): boolean =>
 					{
 						const eEntID = gameState.getEntityById(eEnt);
 						if (!eEntID)
@@ -705,9 +703,10 @@ export class DefenseManager
 						const capture = target.capturePoints();
 						if (capture)
 						{
-							for (let j = 0; j < capture.length; ++j)
+							for (let jIndex = 0; jIndex < capture.length; ++jIndex)
 							{
-								if (!gameState.isPlayerEnemy(j) || capture[j] == 0)
+								const j = playerId(jIndex);
+								if (!gameState.isPlayerEnemy(playerId(j)) || capture[j] == 0)
 									continue;
 								abort = false;
 								break;
@@ -977,7 +976,7 @@ export class DefenseManager
 	/**
 	 * Be more inclined to help an ally attacked by several enemies.
 	 */
-	GetCooperationLevel(ally: number): number
+	GetCooperationLevel(ally: PlayerId): number
 	{
 		let cooperation = this.Config.personality.cooperative;
 		if (this.attackedAllies[ally] && this.attackedAllies[ally] > 1)

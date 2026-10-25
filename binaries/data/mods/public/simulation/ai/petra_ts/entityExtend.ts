@@ -1,5 +1,6 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import type { BaseManager } from "./baseManager.ts";
+import { worldPos } from "./brands.ts";
 
 /** returns true if this unit should be considered as a siege unit */
 export function isSiegeUnit(ent: CommonEntity): boolean
@@ -85,7 +86,7 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 }
 
 /** Get access and cache it (except for units as it can change) in metadata if not already done */
-export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined
+export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): AccessIndex | undefined
 {
 	if (ent.hasClass("Unit"))
 	{
@@ -121,8 +122,8 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): nu
 			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < halfDepth; d += 3)
 			{
-				const pos: CommonPosition = [ entPos[0] - d * sina,
-					entPos[1] - d * cosa];
+				const pos: CommonPosition = worldPos(entPos[0] - d * sina,
+					entPos[1] - d * cosa);
 				access = gameState.ai.accessibility.getAccessValue(pos);
 				if (access > 1)
 					break;
@@ -134,7 +135,7 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): nu
 }
 
 /** Sea access always cached as it never changes */
-export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): number | undefined
+export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): SeaIndex | undefined
 {
 	let sea = ent.getMetadata(PlayerID, "sea");
 	if (!sea)
@@ -149,8 +150,8 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): num
 			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < 15; d += 3)
 			{
-				const pos: CommonPosition = [ entPos[0] + d * sina,
-					entPos[1] + d * cosa];
+				const pos: CommonPosition = worldPos(entPos[0] + d * sina,
+					entPos[1] + d * cosa);
 				sea = gameState.ai.accessibility.getAccessValue(pos, true);
 				if (sea > 1)
 					break;
@@ -173,7 +174,7 @@ export function setSeaAccess(gameState: CommonGameState, ent: CommonEntity): voi
  * Throws (after a warning) if the template is unexpectedly missing, so that
  * such an unexpected case is noticed instead of silently skipping a decision.
  */
-export function requireTemplate(gameState: CommonGameState, type: string): CommonTemplate
+export function requireTemplate(gameState: CommonGameState, type: TemplateName): CommonTemplate
 {
 	const template = gameState.getTemplate(type);
 	if (!template)
@@ -448,7 +449,7 @@ export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: Com
 	const stepy = (pos2[1] - pos1[1]) / n;
 	for (let i = 1; i < n; ++i)
 	{
-		const pos: CommonPosition = [pos1[0]+i*stepx, pos1[1]+i*stepy];
+		const pos: CommonPosition = worldPos(pos1[0]+i*stepx, pos1[1]+i*stepy);
 		const owner = gameState.ai.HQ.territoryMap.getOwner(pos);
 		if (owner && gameState.isPlayerEnemy(owner))
 			return true;

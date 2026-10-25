@@ -8,7 +8,7 @@
 // which grid element sizes the engine produces) rather than paraphrasing
 // method names.
 
-type CommonPosition = Vec2;
+type CommonPosition = WorldPos;
 type CommonResourceAmounts = ResourceAmounts;
 type CommonResourcesManager = import("simulation/ai/common-api/resources.js").ResourcesManager;
 type CommonEntityFilter = {
@@ -21,8 +21,14 @@ type CommonEntityFilter = {
  * by Petra's common-api/shared.js (world metres per cell, 1 for the navcell
  * passability grid, 4 for the territory grid).
  */
-type CommonPassabilityMap = EngineGridMap & {
+type CommonPassabilityMap = CommonGrid<"passability">;
+/**
+ * An engine grid of kind G with its cell size filled in. `__grid` exists only
+ * for the compiler: grids of different kinds do not pass for each other.
+ */
+type CommonGrid<G extends GridKind> = EngineGridMap & {
 	cellSize: number;
+	readonly __grid?: G;
 };
 /**
  * An AI-side analysis map: the {width, height, cellSize} dimensions common
@@ -48,7 +54,7 @@ type CommonRequirement = TechnologyRequirements;
  */
 type CommonTrainingQueueItem = {
 	id: number;
-	unitTemplate: string;
+	unitTemplate: TemplateName;
 	count: number;
 	progress: number;
 	timeRemaining: number;
@@ -85,29 +91,29 @@ interface PetraEntityMetadata
 	plan: number;
 	base: number;
 	transport: number;
-	transporter: number;
-	sea: number;
-	access: number;
+	transporter: EntityId;
+	sea: SeaIndex;
+	access: AccessIndex;
 	PartOfArmy: number;
-	"target-foundation": number;
-	supply: number;
-	treasure: number;
-	garrisonHolder: number;
-	guardedEnt: number;
+	"target-foundation": EntityId;
+	supply: EntityId;
+	treasure: EntityId;
+	garrisonHolder: EntityId;
+	guardedEnt: EntityId;
 	distance: number;
-	lastAttackPlanUpdateTime: number;
-	inaccessibleTime: number;
-	approachingTime: number;
-	timeGarrison: number;
-	holderTimeUpdate: number;
+	lastAttackPlanUpdateTime: GameSeconds;
+	inaccessibleTime: GameSeconds;
+	approachingTime: GameSeconds;
+	timeGarrison: GameSeconds;
+	holderTimeUpdate: GameSeconds;
 	turnPreviousPosition: number;
-	nextMoveToGatherer: number;
-	lastHuntSearch: number;
+	nextMoveToGatherer: GameSeconds;
+	lastHuntSearch: GameSeconds;
 	role: string;
 	subrole: string;
 	"gather-type": string;
 	garrisonType: string;
-	onBoard: number | "onBoard";
+	onBoard: EntityId | "onBoard";
 	endPos: CommonPosition;
 	posGarrison: CommonPosition;
 	previousPosition: CommonPosition;
@@ -121,8 +127,8 @@ interface PetraEntityMetadata
 	stationnary: boolean;
 	alreadyTried: number | boolean;
 	phaseUp: boolean;
-	route: { source: number; target: number; gain: number; land?: number; sea?: number };
-	lastGathered: number;
+	route: { source: EntityId; target: EntityId; gain: number; land?: number; sea?: number };
+	lastGathered: GameSeconds;
 	carriedBefore: number;
 /** The subrole of the entity before it was turned into a defender. */
 	formerSubrole?: string;
@@ -203,7 +209,9 @@ declare module "simulation/ai/common-api/utils.js"
  * All indices of `map2` covered by cell `index` of `map1`; `map1.cellSize`
  * must be an integer multiple of `map2.cellSize` (typically 4x navcells).
  */
-	export function getMapIndices(index: number, map1: CommonMap | CommonPassabilityMap, map2: CommonMap | CommonPassabilityMap): number[];
+	export function getMapIndices<A extends GridKind, B extends GridKind>(index: CellIndex<A>,
+		map1: import("simulation/ai/common-api/map-module.js").InfoMap<A> | CommonGrid<A>,
+		map2: import("simulation/ai/common-api/map-module.js").InfoMap<B> | CommonGrid<B>): Array<CellIndex<B>>;
 }
 
 declare module "simulation/ai/common-api/terrain-states.js"
@@ -254,9 +262,9 @@ declare module "simulation/ai/common-api/terrain-analysis.js"
 	{
 		constructor(rawState: EngineAIState, terrainAnalyzer: TerrainAnalysis);
 /** Per-region id of each navcell for land movement (region 1 = impassable, ids start at 2). */
-		landPassMap: Uint16Array;
+		landPassMap: CellGrid<AccessIndex>;
 /** Per-region id of each navcell for naval movement. */
-		navalPassMap: Uint16Array;
+		navalPassMap: CellGrid<SeaIndex>;
 /** Constant ceiling of region ids (65535; Uint16 region maps). */
 		maxRegions: number;
 /** Total navcell count per region index ([0] and [1] unused). */
@@ -264,19 +272,21 @@ declare module "simulation/ai/common-api/terrain-analysis.js"
 /** "land" / "water" / "inaccessible" classification per region index. */
 		regionType: string[];
 /** Region ids adjacent to the region of a given index (e.g. across a navigable river). */
-		regionLinks: number[][];
+		regionLinks: RegionIndex[][];
 /** Id the next floodFill will allocate (starts at 2: 0 unknown, 1 impassable). */
 		regionID: number;
 /** Region id of the cell containing `position` (of the land or, with `onWater`, the naval map). */
-		getAccessValue(position: CommonPosition, onWater?: boolean): number;
+		getAccessValue(position: CommonPosition, onWater?: false): AccessIndex;
+		getAccessValue(position: CommonPosition, onWater: true): SeaIndex;
+		getAccessValue(position: CommonPosition, onWater: boolean): RegionIndex;
 /** Chain of region ids to travel from `start` to `end` (crossing linked regions); false when unreachable, undefined for invalid regions. */
-		getTrajectTo(start: CommonPosition, end: CommonPosition): number[] | false | undefined;
+		getTrajectTo(start: CommonPosition, end: CommonPosition): RegionIndex[] | false | undefined;
 /** getTrajectTo for already-known region indices. */
-		getTrajectToIndex(startRegion: number, endRegion: number): number[] | undefined;
+		getTrajectToIndex(startRegion: RegionIndex, endRegion: RegionIndex): RegionIndex[] | undefined;
 /** Navcell count of the region containing `position` (land or water map). */
 		getRegionSize(position: CommonPosition, onWater: boolean): number;
 /** getRegionSize for an already-known region index. */
-		getRegionSizei(index: number, onWater: boolean): number;
+		getRegionSizei(index: RegionIndex, onWater: boolean): number;
 /** Flood-fills one region from `startIndex` on the land or naval map; true when a region was (re)allocated. */
 		floodFill(startIndex: number, value: number, onWater: boolean): boolean;
 	}
@@ -338,11 +348,11 @@ declare module "simulation/ai/common-api/shared.js"
 /** Events collected since the last processed turn (as pushed by the engine's message list). */
 		events: EngineAIEvents;
 /** Player ids Petra owns, read from the settings' players map. */
-		_players: number[];
+		_players: PlayerId[];
 /** Cache of all entity templates ever requested, keyed by template name; null entries mark failed downloads. */
 		_templates: Record<string, Record<string, unknown> | null>;
 /** All alive entity snapshot objects, keyed by entity id. */
-		_entities: Map<number, CommonEntity>;
+		_entities: Map<EntityId, CommonEntity>;
 /** Collection of all currently-visible entities. */
 		entities: CommonEntityCollection;
 		_entityCollections: Map<number, CommonEntityCollection>;
@@ -350,7 +360,7 @@ declare module "simulation/ai/common-api/shared.js"
 		_entityCollectionsByDynProp: Record<string, Map<number, CommonEntityCollection>>;
 		_entityCollectionsUID: number;
 /** Modification caches per entity template and per entity instance (values keyed by tech). */
-		_entitiesModifications: Map<number, Map<string, unknown>>;
+		_entitiesModifications: Map<EntityId, Map<string, unknown>>;
 		_templatesModifications: Record<string, Record<number, Map<string, unknown>>>;
 /** Metadata store: [player id][entity id][key]. */
 		_entityMetadata: Record<number, Record<number, Record<string, unknown>>>;
@@ -358,7 +368,7 @@ declare module "simulation/ai/common-api/shared.js"
 		passabilityClasses: Record<string, number>;
 		playersData: EnginePlayerState[];
 /** Game time in seconds at the last processed turn. */
-		timeElapsed: number;
+		timeElapsed: GameMs;
 /** Whether the map wraps around horizontally. */
 		circularMap: boolean;
 /** Map size in metres. */
@@ -374,13 +384,13 @@ declare module "simulation/ai/common-api/shared.js"
 /** Terrain passability flags per navcell (engine Grid), with cellSize added. */
 		passabilityMap: CommonPassabilityMap;
 /** Territory ownership flags per tile (engine Grid), with cellSize added. */
-		territoryMap: CommonPassabilityMap;
+		territoryMap: CommonGrid<"territory">;
 /** Terrain-type analyzer over the classified passability data (built once at init). */
 		terrainAnalyzer: CommonInfoMap;
 /** Region analyzer built over the terrain analyzer (built once at init). */
 		accessibility: CommonInfoMap;
 /** Per-player derived GameState objects, created lazily per AI player id. */
-		gameState: Record<number, CommonGameState>;
+		gameState: Record<PlayerId, CommonGameState>;
 /** Entity ids of all supplies covered by the resource influence maps. */
 		resources: number[];
 /** Gather-rate influence maps per resource type, keyed "food"/"wood"/... */
@@ -415,12 +425,12 @@ declare module "simulation/ai/common-api/shared.js"
 /** Updates the metadata-keyed collections after a metadata change for `property`. */
 		updateEntityCollections(property: string, entity: CommonEntity): void;
 /** Assigns Petra's custom metadata for a player+entity+key triple (extending/creating the per-entity metadata object). */
-		setMetadata(player: number, entity: CommonEntity, key: string, value: unknown): void;
+		setMetadata(player: PlayerId, entity: CommonEntity, key: string, value: unknown): void;
 /** Reads metadata for a player+entity; undefined when never set. */
-		getMetadata<K extends keyof PetraEntityMetadata>(player: number, entity: CommonEntity, key: K): PetraEntityMetadata[K] | undefined;
-		getMetadata(player: number, entity: CommonEntity, key: string): unknown;
+		getMetadata<K extends keyof PetraEntityMetadata>(player: PlayerId, entity: CommonEntity, key: K): PetraEntityMetadata[K] | undefined;
+		getMetadata(player: PlayerId, entity: CommonEntity, key: string): unknown;
 /** Deletes one metadata key; returns whether a value was actually removed. */
-		deleteMetadata(player: number, entity: CommonEntity, key: string): boolean;
+		deleteMetadata(player: PlayerId, entity: CommonEntity, key: string): boolean;
 /** Rebuilds the resource influence maps from scratch (used at init). */
 		createResourceMaps(): void;
 /** Applies Destroy/Gathering progress events to the influence maps. */
@@ -472,15 +482,17 @@ declare module "simulation/ai/common-api/map-module.js"
  * placement. Resolution varies by instantiation — navcell-sized (cellSize 1)
  * for accessibility, tile-sized (cellSize 4) for most influence maps.
  */
-	export class InfoMap
+	export class InfoMap<G extends GridKind = GridKind>
 	{
+/** Exists only for the compiler: the kind of grid this map covers. */
+		readonly __grid?: G;
 /**
  * When `sharedScript` is a SharedScript, dimensions and cell size are read
  * from its passability map; when it is a plain object, its {width, height,
  * cellSize} triple is used instead. `originalMap` seeds `map` from a real
  * engine grid (`actualCopy` decides between copying and aliasing it).
  */
-		constructor(sharedScript: CommonSharedScript | Record<string, unknown>, type: string, originalMap?: Uint8Array, actualCopy?: boolean);
+		constructor(sharedScript: CommonSharedScript | Record<string, unknown>, type: G, originalMap?: Uint8Array, actualCopy?: boolean);
 		width: number;
 		height: number;
 /** World-metre size of one cell of this map (1 = navcell, 4 = terrain tile in practice). */
@@ -495,7 +507,7 @@ declare module "simulation/ai/common-api/map-module.js"
 /** Re-declares the highest possible map value (used by influence maths). */
 		setMaxVal(value: number): void;
 /** Converts a world [x, z] position to its [x, z] map coordinates. */
-		gamePosToMapPos(position: CommonPosition): CommonPosition;
+		gamePosToMapPos(position: CommonPosition): MapPos;
 /** Map value at the cell containing `position`. */
 		point(position: CommonPosition): number;
 /** Iterates the cells within `maxDistSquared` around (cx, cy) calling `callback` (whose return value is added to the cell). */
@@ -507,11 +519,11 @@ declare module "simulation/ai/common-api/map-module.js"
 /** Adds the values of another InfoMap into this one (element-wise sum, clamped to [0, maxVal]). */
 		add(map: CommonInfoMap): void;
 /** Overwrites the value of cell `index` (clamped to [0, maxVal]). */
-		set(index: number, value: number): void;
+		set(index: CellIndex<G>, value: number): void;
 /** Finds the best cell for a building of `radius` inside `obstruction`'s constraint map (winning cell index and its valuation; idx undefined when nothing fits). */
-		findBestTile(radius: number, obstruction: CommonInfoMap): { idx: number | undefined; val: number };
+		findBestTile<O extends GridKind>(radius: number, obstruction: InfoMap<O>): { idx: CellIndex<O> | undefined; val: number };
 /** Searches the nearest non-obstructed tile of radius `radius` around the cell `index`. */
-		getNonObstructedTile(index: number, radius: number, obstruction: CommonInfoMap): number;
+		getNonObstructedTile<O extends GridKind>(index: CellIndex<G>, radius: number, obstruction: InfoMap<O>): CellIndex<O>;
 /** Tests whether a circular building at (x, y) overlaps an obstruction in the map, returning one blocked cell. */
 		isObstructedTile(x: number, y: number, radius: number): { x: number; y: number } | null;
 /** Writes the map out as a PNG via Engine.DumpImage (debugging helper; values above `threshold`, or at maxVal when omitted). */
@@ -536,11 +548,11 @@ declare module "simulation/ai/common-api/gamestate.js"
 		entities: CommonEntityCollection;
 		EntCollecNames: Map<string, CommonEntityCollection>;
 /** Shared-script game time in milliseconds. */
-		timeElapsed: number;
+		timeElapsed: GameMs;
 		circularMap: boolean;
 		templates: Record<string, Record<string, unknown> | null>;
 /** Player id of this view (gameState.player). */
-		player: number;
+		player: PlayerId;
 		playerData: EnginePlayerState;
 		victoryConditions: Set<string>;
 		alliedVictory: boolean;
@@ -549,7 +561,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Phase progression of this civ, precomputed at init from the civil centre's researchable techs ({name, requirements} in research order). */
 		phases: Array<{ name: string; requirements: CommonRequirement[] }>;
 /** Fills this per-player state from the shared script (and refreshes the phases list). */
-		init(sharedScript: CommonSharedScript, state: Record<string, unknown>, player: number): void;
+		init(sharedScript: CommonSharedScript, state: Record<string, unknown>, player: PlayerId): void;
 /** Copies the shared script's current values into this object (per-turn refresh). */
 		update(sharedScript: CommonSharedScript): void;
 /** Registers a named, auto-updating entity collection filtered by `filter`, derived from `parentCollection` (or the own entities). */
@@ -563,7 +575,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Rebuilds auto-updating collections after a diplomacy change reclassifies owners. */
 		resetOnDiplomacyChanged(): void;
 /** Time since the game started, in milliseconds. */
-		getTimeElapsed(): number;
+		getTimeElapsed(): GameMs;
 /** Current barter prices as {buy, sell} per-resource-value objects. */
 		getBarterPrices(): { buy: CommonResourceAmounts; sell: CommonResourceAmounts };
 /** The set of active victory condition codes shared by all players. */
@@ -582,19 +594,19 @@ declare module "simulation/ai/common-api/gamestate.js"
  * ResearchPlan is the only path that looks up a technology and calls only
  * the duck-typed methods. Returns null for templates that failed lookup.
  */
-		getTemplate(type: string): CommonTemplate | null;
+		getTemplate(type: TemplateName): CommonTemplate | null;
 /** Template of the structure a foundation builds (strips the "foundation|" filter prefix); null for a bogus name or unknown template. */
-		getBuiltTemplate(foundationName: string): CommonTemplate | null;
+		getBuiltTemplate(foundationName: TemplateName): CommonTemplate | null;
 /** Replaces the {civ} wildcard in a template name with this player's civ. */
-		applyCiv(templateName: string): string;
+		applyCiv(templateName: string): TemplateName;
 /** Civ of `player` (this player's own when omitted). */
-		getPlayerCiv(player?: number): string;
+		getPlayerCiv(player?: PlayerId): string;
 /** Number of the last researched phase (1-based); 0 when none reached yet. */
 		currentPhase(): number;
 /** Count of this civ's phases. */
 		getNumberOfPhases(): number;
 /** Name of phase `i` (1-based); undefined when out of range. */
-		getPhaseName(index: number): string | undefined;
+		getPhaseName(index: number): TemplateName | undefined;
 /** Entity-class requirements ("check: count" entries only) of phase `i`, flattened to {class, count} pairs. */
 		getPhaseEntityRequirements(index: number): Array<{ class: string; count: number }>;
 /** Whether `template` is already researched by this player. */
@@ -607,7 +619,7 @@ declare module "simulation/ai/common-api/gamestate.js"
  * template availability; `noRequirementCheck` skips only the requirement
  * subtree.
  */
-		canResearch(templateName: string, noRequirementCheck?: boolean): boolean;
+		canResearch(templateName: TemplateName, noRequirementCheck?: boolean): boolean;
 /** Whether a requirement list (as produced by DeriveTechnologyRequirements) is satisfiable; false values give false. */
 		checkTechRequirements(requirements: CommonRequirement[] | false): boolean;
 /** Terrain passability grid of the map (engine Grid, cellSize added by shared.js). */
@@ -623,7 +635,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Total population the player may ever reach, incl. everything still building (playerData.popMax). */
 		getPopulationMax(): number;
 /** Own player id (shortcuts `this.player`). */
-		getPlayerID(): number;
+		getPlayerID(): PlayerId;
 /** Whether the player has current-game allies. */
 		hasAllies(): boolean;
 /** Whether the player has current-game enemies. */
@@ -631,22 +643,22 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Whether the player has current-game neutral parties. */
 		hasNeutrals(): boolean;
 /** Diplomacy relationship checks by id (gaia is neither ally, enemy nor neutral). */
-		isPlayerNeutral(id: number): boolean;
-		isPlayerAlly(id: number): boolean;
-		isPlayerMutualAlly(id: number): boolean;
-		isPlayerEnemy(id: number): boolean;
+		isPlayerNeutral(id: PlayerId): boolean;
+		isPlayerAlly(id: PlayerId): boolean;
+		isPlayerMutualAlly(id: PlayerId): boolean;
+		isPlayerEnemy(id: PlayerId): boolean;
 /** Count of enemy players (everyone listed in getEnemies). */
 		getNumPlayerEnemies(): number;
 /** Player ids whose isEnemy flag is set in this player's diplomacy data. */
-		getEnemies(): number[];
+		getEnemies(): PlayerId[];
 /** Player ids whose isNeutral flag is set. */
-		getNeutrals(): number[];
+		getNeutrals(): PlayerId[];
 /** Player ids whose isAlly flag is set (includes the player itself). */
-		getAllies(): number[];
+		getAllies(): PlayerId[];
 /** getAllies without this player's own id. */
-		getExclusiveAllies(): number[];
+		getExclusiveAllies(): PlayerId[];
 /** Player ids with mutual ally relationships (both directions true), used by Petra for trade planning. */
-		getMutualAllies(): number[];
+		getMutualAllies(): PlayerId[];
 /** Diplomacy checks for an entity's owner (undefined/false-y entities are safe). */
 		isEntityAlly(entity: CommonEntity | undefined): boolean;
 		isEntityExclusiveAlly(entity: CommonEntity | undefined): boolean;
@@ -654,9 +666,9 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Whether the entity belongs to this player (its own). */
 		isEntityOwn(entity: CommonEntity | undefined): boolean;
 /** Live entity by id (undefined/0/stale ids give undefined). */
-		getEntityById(id: number | undefined): CommonEntity | undefined;
+		getEntityById(id: EntityId | undefined): CommonEntity | undefined;
 /** Updating collection keyed over all entities: entities of owner `id`, or the whole world collection when omitted. */
-		getEntities(id?: number): CommonEntityCollection;
+		getEntities(id?: PlayerId): CommonEntityCollection;
 /** All structures of the world (any owner, as global collection). */
 		getStructures(): CommonEntityCollection;
 /** All entities owned by the AI player. */
@@ -670,13 +682,13 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Entity ids of exclusive allies. */
 		getExclusiveAllyEntities(): CommonEntityCollection;
 /** Structures of ally `allyID` or of all allies. */
-		getAllyStructures(allyID?: number): CommonEntityCollection;
+		getAllyStructures(allyID?: PlayerId): CommonEntityCollection;
 /** All structures of neutral players as global collection. */
 		getNeutralStructures(): CommonEntityCollection;
 /** Entities/structures/units of all enemy players (global view). */
 		getEnemyEntities(): CommonEntityCollection;
-		getEnemyStructures(enemyID?: number): CommonEntityCollection;
-		getEnemyUnits(enemyID?: number): CommonEntityCollection;
+		getEnemyStructures(enemyID?: PlayerId): CommonEntityCollection;
+		getEnemyUnits(enemyID?: PlayerId): CommonEntityCollection;
 /** Auto-updating collections of Petra's own entities whose metadata key matches `value`. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
 /** By `role` metadata (helper over getOwnEntitiesByMetadata). */
@@ -721,9 +733,9 @@ declare module "simulation/ai/common-api/gamestate.js"
  * the player's entity limits; [templateName, Template] pairs in iteration
  * order (no cost weighting happens here).
  */
-		findTrainableUnits(classes: Array<string | string[]>, anticlasses?: string[]): Array<[string, CommonTemplate]>;
+		findTrainableUnits(classes: Array<string | string[]>, anticlasses?: string[]): Array<[TemplateName, CommonTemplate]>;
 /** Available technologies across all own researchable structures, deduplicated and not disabled; [name, Technology] pairs (the wrapper for tech names is a Technology). */
-		findAvailableTech(): Array<[string, CommonTemplate]>;
+		findAvailableTech(): Array<[TemplateName, CommonTemplate]>;
 /** Whether one of the AI's structures can train `template`. */
 		hasTrainer(template: string): boolean;
 /** Own structures able to train `template`, as collection. */
@@ -731,9 +743,9 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** One builder able to construct `template`, preferring the nearest idle one. */
 		findBuilder(template: string): CommonEntity | undefined;
 /** Whether one of the AI's structures can research `templateName`. */
-		hasResearchers(templateName: string, noRequirementCheck?: boolean): boolean;
+		hasResearchers(templateName: TemplateName, noRequirementCheck?: boolean): boolean;
 /** Own structures able to research `templateName` (undefined when the tech is not available). */
-		findResearchers(templateName: string, noRequirementCheck?: boolean): CommonEntityCollection | undefined;
+		findResearchers(templateName: TemplateName, noRequirementCheck?: boolean): CommonEntityCollection | undefined;
 /** Per-template entity limit categories, straight from this player's engine player state. */
 		getEntityLimits(): Record<string, number>;
 /** Per-template counts of existing entities with active match markers (playerData.matchEntityCounts). */
@@ -741,9 +753,9 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Per-template existing entity counts (playerData.entityCounts). */
 		getEntityCounts(): Record<string, number>;
 /** Whether a template is both downloaded and not disabled by the player; undefined (truthy template object, etc.) otherwise. */
-		isTemplateAvailable(templateName: string): boolean | Record<string, unknown> | null | undefined;
+		isTemplateAvailable(templateName: TemplateName): boolean | Record<string, unknown> | null | undefined;
 /** Whether a template is disabled by this player (the disabled-templates data of game settings). */
-		isTemplateDisabled(templateName: string): boolean;
+		isTemplateDisabled(templateName: TemplateName): boolean;
 /** Whether category `category` has reached its entity limit. */
 		isEntityLimitReached(category: string): boolean;
 /** Trade-gain multipliers of the trainable trader templates, keyed by land/naval transport. */
@@ -768,9 +780,9 @@ declare module "simulation/ai/common-api/filters.js"
 /** byClass with a matches-class-list specification ("Class1+Class2 Class3" etc.). */
 	export function byClasses(clsList: string[] | string): CommonEntityFilter;
 /** Matches own entities whose metadata `key` equals `value`. */
-	export function byMetadata(player: number, key: string, value: unknown): CommonEntityFilter;
+	export function byMetadata(player: PlayerId, key: string, value: unknown): CommonEntityFilter;
 /** Matches entities that have any value for the metadata `key` of `player`. */
-	export function byHasMetadata(player: number, key: string): CommonEntityFilter;
+	export function byHasMetadata(player: PlayerId, key: string): CommonEntityFilter;
 /** Logical AND of two filters (dynamic properties merged). */
 	export function and(filter1: CommonEntityFilter, filter2: CommonEntityFilter): CommonEntityFilter;
 /** Logical OR of two filters. */
@@ -778,9 +790,9 @@ declare module "simulation/ai/common-api/filters.js"
 /** Inverts a filter over the same entity universe. */
 	export function not(filter: CommonEntityFilter): CommonEntityFilter;
 /** Owner checks by player id, sets of ids, and negated variants. */
-	export function byOwner(owner: number): CommonEntityFilter;
-	export function byNotOwner(owner: number): CommonEntityFilter;
-	export function byOwners(owners: number[]): CommonEntityFilter;
+	export function byOwner(owner: PlayerId): CommonEntityFilter;
+	export function byNotOwner(owner: PlayerId): CommonEntityFilter;
+	export function byOwners(owners: PlayerId[]): CommonEntityFilter;
 /** Matches entities that can garrison (Garrisonable classes non-empty). */
 	export function byCanGarrison(): CommonEntityFilter;
 /** Matches own structures with a non-empty production queue. */
@@ -828,21 +840,21 @@ declare module "simulation/ai/common-api/entitycollection.js"
  * map) and initial filters. `sharedAI` is required to enable membership
  * tracking of dynamic filters and the registration updates.
  */
-		constructor(sharedAI: CommonSharedScript, entities?: Map<number, CommonEntity>, filters?: CommonEntityFilter[]);
+		constructor(sharedAI: CommonSharedScript, entities?: Map<EntityId, CommonEntity>, filters?: CommonEntityFilter[]);
 /** Number of entities in the collection (a getter backed by the entity map). */
 		readonly length: number;
 /** Whether updates from the engine are queued (deferred) rather than applied instantly. */
 		frozen: boolean;
 /** Round-trips the entity ids, the frozen flag and the filter specs by name. */
-		Serialize(): { ents: number[]; frozen: boolean; filters: string[] };
+		Serialize(): { ents: EntityId[]; frozen: boolean; filters: string[] };
 /** Restores the collection from Serialize()'s output. */
-		Deserialize(data: { ents: number[]; frozen: boolean; filters: string[] }, sharedAI: CommonSharedScript): void;
+		Deserialize(data: { ents: EntityId[]; frozen: boolean; filters: string[] }, sharedAI: CommonSharedScript): void;
 /** Freeze: auto-updates stop adding entities (removals still happen), so dead members are cleaned up automatically. */
 		freeze(): void;
 /** Applies all deferred updates. */
 		defreeze(): void;
 /** Entity ids as plain array. */
-		toIdArray(): number[];
+		toIdArray(): EntityId[];
 /** Entity objects as plain array. */
 		toEntityArray(): CommonEntity[];
 /** Iterates over the entities (unsorted). */
@@ -854,11 +866,11 @@ declare module "simulation/ai/common-api/entitycollection.js"
  * the entries of `dynamicProperties` of CommonEntityFilter cause re-checking
  * on the listed entity field changes.
  */
-		filter(filter: CommonEntityFilter | ((entity: CommonEntity, id: number, collection: this) => boolean), thisp?: unknown): EntityCollection;
+		filter(filter: CommonEntityFilter | ((entity: CommonEntity, id: EntityId, collection: this) => boolean), thisp?: unknown): EntityCollection;
 /** The entities of the collection nearest to `targetPos` (all of them when `n` is omitted; entities without a position are skipped), as a new collection. */
 		filterNearest(targetPos: CommonPosition, n?: number): EntityCollection;
 /** filter() with a raw function that receives the raw entity object rather than the wrapper (faster, e.g. velocity check). */
-		filter_raw(callback: (entity: unknown, id: number, collection: this) => boolean, thisp?: unknown): EntityCollection;
+		filter_raw(callback: (entity: unknown, id: EntityId, collection: this) => boolean, thisp?: unknown): EntityCollection;
 /** Runs `callback` on each member entity and returns the collection. */
 		forEach(callback: (entity: CommonEntity) => void): this;
 /** Whether the collection holds at least one entity. */
@@ -882,7 +894,7 @@ declare module "simulation/ai/common-api/entitycollection.js"
 /** Destroys all members (via the engine "delete-entity" command). */
 		destroy(): this;
 /** Orders all members to attack `unitId` (entity id, not wrapper). */
-		attack(unitId: number, queued?: boolean, pushFront?: boolean): this;
+		attack(unitId: EntityId, queued?: boolean, pushFront?: boolean): this;
 /** Sets a stance for all members (only meaningful for unit members with a stance component). */
 		setStance(stance: string): this;
 /** Average position of all positioned members; undefined when the collection is empty. */
@@ -890,7 +902,7 @@ declare module "simulation/ai/common-api/entitycollection.js"
 /** Average over the first `sample` positioned members (faster, but less exact); undefined when empty. */
 		getApproximatePosition(sample: number): CommonPosition | undefined;
 /** Whether the collection includes the entity id `id`. */
-		hasEntId(id: number): boolean;
+		hasEntId(id: EntityId): boolean;
 /** Removes one entity from the collection (entity wrapper); true actually removed. */
 		removeEnt(entity: CommonEntity): boolean;
 /** Adds one entity (when not already in); true added. */
@@ -941,7 +953,7 @@ declare module "simulation/ai/common-api/entity.js"
 		}> | undefined;
 		get(path: string): any;
 /** Full template name (civ or wildcard substitution already applied where appropriate). */
-		templateName(): string;
+		templateName(): TemplateName;
 /** Display name from the template (undefined if absent). */
 		genericName(): string | undefined;
 /** Template civ restriction from Identity/Civ (undefined when the template sets none). */
@@ -995,11 +1007,11 @@ declare module "simulation/ai/common-api/entity.js"
 /** Bonus multiplier of a given attack type against one identity class (undefined without a matching bonus entry). */
 		getMultiplierAgainst(type: string, againstClass: string): number | undefined;
 /** All structure templates a builder-class template can construct for a civ. */
-		buildableEntities(civ: string): string[];
+		buildableEntities(civ: string): TemplateName[];
 /** All units trainable by the template for a civ (undefined when it trains none). */
-		trainableEntities(civ: string): string[] | undefined;
+		trainableEntities(civ: string): TemplateName[] | undefined;
 /** Techs researchable by the template for `gameState` and civ (undefined when it researches none). */
-		researchableTechs(gameState: CommonGameState, civ: string): string[] | undefined;
+		researchableTechs(gameState: CommonGameState, civ: string): TemplateName[] | undefined;
 /** {generic, specific} resource names the template supplies (undefined when it supplies nothing). */
 		resourceSupplyType(): CommonResourceSupplyType | undefined;
 /** Generic part of ResourceSupply/Type (everything before the first dot); undefined when the template supplies nothing. */
@@ -1119,16 +1131,16 @@ declare module "simulation/ai/common-api/entity.js"
 /** Debug helper "\<template> (id)" describing the entity briefly. */
 		toString(): string;
 /** The entity id (INVALID_ENTITY never occurs inside a collection — dead entities are removed). */
-		id(): number;
+		id(): EntityId;
 /** Metadata for a player+entity pair from the shared script's metadata cache (undefined unless set). */
-		getMetadata<K extends keyof PetraEntityMetadata>(player: number, key: K): PetraEntityMetadata[K] | undefined;
-		getMetadata(player: number, key: string): any;
+		getMetadata<K extends keyof PetraEntityMetadata>(player: PlayerId, key: K): PetraEntityMetadata[K] | undefined;
+		getMetadata(player: PlayerId, key: string): any;
 /** Sets metadata for a player+entity via the shared script. */
-		setMetadata(player: number, key: string, value: unknown): void;
+		setMetadata(player: PlayerId, key: string, value: unknown): void;
 /** Deletes all metadata of one player+entity pair. */
-		deleteAllMetadata(player: number): void;
+		deleteAllMetadata(player: PlayerId): void;
 /** Deletes one metadata key of a player+entity pair. */
-		deleteMetadata(player: number, key: string): void;
+		deleteMetadata(player: PlayerId, key: string): void;
 /** World position [x, z]. Entities without a position component (rare, mostly short-lived effects) are not usable here. */
 		position(): CommonPosition;
 /** Facing angle in radians (built from the position coordinates of the engine direction data). */
@@ -1140,7 +1152,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** UnitAI state name (undefined unless the UnitAI is active). */
 		unitAIState(): string | undefined;
 /** Order targets of the UnitAI (target entity ids and other per-order data; empty for complex orders). */
-		unitAIOrderData(): Array<{ target?: number; force?: boolean; [key: string]: unknown }>;
+		unitAIOrderData(): Array<{ target?: EntityId; force?: boolean; [key: string]: unknown }>;
 /** Current hitpoints from the snapshot (0 for entities the engine reports none for). */
 		hitpoints(): number;
 /** Whether the entity is below full health. */
@@ -1166,13 +1178,13 @@ declare module "simulation/ai/common-api/entity.js"
 /** Completion fraction [0, 1] of a foundation (undefined once built, for fully-built structures). */
 		foundationProgress(): number | undefined;
 /** Entity ids currently building the structure (undefined unless a foundation). */
-		getBuilders(): number[] | undefined;
+		getBuilders(): EntityId[] | undefined;
 /** Number of currently paired builders (undefined unless a foundation). */
 		getBuildersNb(): number | undefined;
 /** Owner player id straight from the snapshot (0 = gaia). */
-		owner(): number;
+		owner(): PlayerId;
 /** Whether the owner is `player`. */
-		isOwn(player: number): boolean;
+		isOwn(player: PlayerId): boolean;
 /** Amount of the supply remaining (undefined for non-supplies). */
 		resourceSupplyAmount(): number | undefined;
 /** Number of units currently gathering the supply (undefined for non-supplies). */
@@ -1184,9 +1196,9 @@ declare module "simulation/ai/common-api/entity.js"
 /** Current gather rate of the unit (undefined when not gathering). */
 		currentGatherRate(): number | undefined;
 /** Id of the entity this unit is garrisoned in (undefined unless garrisoned). */
-		garrisonHolderID(): number | undefined;
+		garrisonHolderID(): EntityId | undefined;
 /** Entity ids of the units garrisoned in this holder (empty for empty holder). */
-		garrisoned(): number[];
+		garrisoned(): EntityId[];
 /** Summed garrison slots currently occupied (0 for empty holders). */
 		garrisonedSlots(): number;
 /** Whether this entity can garrison other entities (garrisoning capacity > 0). */
@@ -1210,14 +1222,14 @@ declare module "simulation/ai/common-api/entity.js"
 /** Issues a stop order, cancelling the unit's current movement. */
 		stopMoving(): void;
 /** Orders entity `id` (one unit garrisoned here) out of this holder. */
-		unload(id: number): this | undefined;
+		unload(id: EntityId): this | undefined;
 /** Ejects every garrisoned entity of this holder. */
 		unloadAll(): this | undefined;
 /** Garrison (move inside) into `target` with optional queue/pushFront handling. */
 		garrison(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
 		["occupy-turret"](target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
 /** Attacks the entity with id `unitId` (a raw entity id, not another wrapper). */
-		attack(unitId: number, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
+		attack(unitId: EntityId, allowCapture?: boolean, queued?: boolean, pushFront?: boolean): this;
 /** Moves to and collects treasure `target`. */
 		collectTreasure(target: CommonEntity, queued?: boolean, pushFront?: boolean): this;
 /** Moves at least `distance` metres away from `point`. */
@@ -1269,29 +1281,29 @@ declare module "simulation/ai/common-api/baseAI.js"
 	{
 		constructor(settings?: Record<string, unknown>);
 /** Player id passed when the AI was instantiated. */
-		player: number;
+		player: PlayerId;
 		/**
 		 * The engine's territory grid, handed to the AI as `{width, height, data}`
 		 * (CCmpAIManager, EngineScriptConversions). Not an InfoMap: baseAI assigns
 		 * `sharedAI.territoryMap` here without wrapping it.
 		 */
-		territoryMap: CommonPassabilityMap;
+		territoryMap: CommonGrid<"territory">;
 /** Copy of the shared accessibility analyzer (read-only use). */
 		accessibility: CommonInfoMap;
 /** Shared territory/accessibility references and the per-player GameState (this.ai State for Petra's code paths through gameState.ai). */
 		gameState: CommonGameState;
 /** Time elapsed at the last turn's update. */
-		timeElapsed: number;
+		timeElapsed: GameMs;
 /** Serializes the base class state (empty by default; AIs extend it via their own Serialize). */
 		Serialize(): Record<string, unknown>;
 /** Restores the serialized base state (empty by default; no-op common services). */
 		Deserialize(data: Record<string, unknown>, sharedScript: CommonSharedScript): void;
 /** Binds this AI to `sharedAI` and `playerID`, copies the territory/accessibility references and creates its GameState; ends in CustomInit. */
-		Init(playerID: number, sharedAI: CommonSharedScript): void;
+		Init(playerID: PlayerId, sharedAI: CommonSharedScript): void;
 /** Hook the concrete AI implements to fill its own state (called once at init). */
 		CustomInit(gameState: CommonGameState): void;
 /** Turn integration point: refreshes PlayerID and the territory grid copy, then calls OnUpdate. */
-		HandleMessage(state: Record<string, unknown>, playerID: number, sharedAI: CommonSharedScript): void;
+		HandleMessage(state: Record<string, unknown>, playerID: PlayerId, sharedAI: CommonSharedScript): void;
 /** Per-turn drive of the custom AI update. */
 		OnUpdate(sharedAI: CommonSharedScript): void;
 /** Sends a chat line as this player (through the engine Chat command). */

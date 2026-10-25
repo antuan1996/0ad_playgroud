@@ -4,6 +4,7 @@ import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue,
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "./config.ts";
+import { playerId, worldPos } from "./brands.ts";
 
 /**
  * Armies used by the defense manager.
@@ -18,19 +19,19 @@ export class DefenseArmy
 {
 	declare Config: Config;
 	declare ID: number;
-	declare assignedAgainst: Record<number, number[]>;
-	declare assignedTo: Record<number, number>;
+	declare assignedAgainst: Record<number, EntityId[]>;
+	declare assignedTo: Record<number, EntityId | 0>;
 	declare breakawaySize: number;
 	declare compactSize: number;
-	declare foeEntities: number[];
+	declare foeEntities: EntityId[];
 	declare foePosition: CommonPosition;
 	declare foeStrength: number;
-	declare ownEntities: number[];
+	declare ownEntities: EntityId[];
 	declare ownStrength: number;
 	declare positionLastUpdate: number;
 	declare type: string;
 
-	constructor(gameState: CommonGameState, foeEntities: number[], type?: string)
+	constructor(gameState: CommonGameState, foeEntities: EntityId[], type?: string)
 	{
 		this.ID = gameState.ai.uniqueIDs.armies++;
 		this.type = type || "default";
@@ -40,7 +41,7 @@ export class DefenseArmy
 		this.breakawaySize = this.Config.Defense.armyBreakawaySize;
 
 		// average
-		this.foePosition = [0, 0];
+		this.foePosition = worldPos(0, 0);
 		this.positionLastUpdate = gameState.ai.elapsedTime;
 
 		// Some caching
@@ -70,7 +71,7 @@ export class DefenseArmy
 	 * won't recalculate our position but will dirty it.
 	 * force is true at army creation or when merging armies, so in this case we should add it even if far
 	 */
-	addFoe(gameState: CommonGameState, enemyId: number, force?: boolean): boolean
+	addFoe(gameState: CommonGameState, enemyId: EntityId, force?: boolean): boolean
 	{
 		if (this.foeEntities.indexOf(enemyId) !== -1)
 			return false;
@@ -95,7 +96,7 @@ export class DefenseArmy
 	 * returns true if the entity was removed and false otherwise.
 	 * TODO: when there is a technology update, we should probably recompute the strengths, or weird stuffs will happen.
 	 */
-	removeFoe(gameState: CommonGameState, enemyId: number, enemyEntity?: CommonEntity): boolean
+	removeFoe(gameState: CommonGameState, enemyId: EntityId, enemyEntity?: CommonEntity): boolean
 	{
 		const idx = this.foeEntities.indexOf(enemyId);
 		if (idx === -1)
@@ -123,7 +124,7 @@ export class DefenseArmy
 	 * adds a defender but doesn't assign him yet.
 	 * force is true when merging armies, so in this case we should add it even if no position as it can be in a ship
 	 */
-	addOwn(gameState: CommonGameState, id: number, force?: boolean): boolean
+	addOwn(gameState: CommonGameState, id: EntityId, force?: boolean): boolean
 	{
 		if (this.ownEntities.indexOf(id) !== -1)
 			return false;
@@ -148,7 +149,7 @@ export class DefenseArmy
 		return true;
 	}
 
-	removeOwn(gameState: CommonGameState, id: number, Entity?: CommonEntity): boolean
+	removeOwn(gameState: CommonGameState, id: EntityId, Entity?: CommonEntity): boolean
 	{
 		const idx = this.ownEntities.indexOf(id);
 		if (idx === -1)
@@ -208,7 +209,7 @@ export class DefenseArmy
 		let nOwn = 0;
 		const posAlly = [0, 0];
 		let nAlly = 0;
-		const posOther: CommonPosition = [0, 0];
+		const posOther: CommonPosition = worldPos(0, 0);
 		let nOther = 0;
 		for (const entId of this.ownEntities)
 		{
@@ -299,7 +300,7 @@ export class DefenseArmy
 		this.recalculatePosition(gameState);
 	}
 
-	assignUnit(gameState: CommonGameState, entID: number): boolean
+	assignUnit(gameState: CommonGameState, entID: EntityId): boolean
 	{
 		// we'll assume this defender is ours already.
 		// we'll also override any previous assignment
@@ -577,7 +578,7 @@ export class DefenseArmy
 		}
 	}
 
-	update(gameState: CommonGameState): number[]
+	update(gameState: CommonGameState): EntityId[]
 	{
 		for (const entId of this.ownEntities)
 		{
@@ -605,7 +606,7 @@ export class DefenseArmy
 				const capture = firstFoe.capturePoints();
 				if (capture)
 					for (let j = 0; j < capture.length; ++j)
-						if (gameState.isPlayerEnemy(j) && capture[j] > 0)
+						if (gameState.isPlayerEnemy(playerId(j)) && capture[j] > 0)
 							return [];
 				this.removeFoe(gameState, this.foeEntities[0], firstFoe);
 			}

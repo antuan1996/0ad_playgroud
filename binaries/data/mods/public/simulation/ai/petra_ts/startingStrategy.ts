@@ -7,6 +7,7 @@ import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate
 	"./entityExtend.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
+import { cellIndex, landRegion, seaRegion } from "./brands.ts";
 
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -102,7 +103,7 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
 				ent.unload(id);
 
 		const territorypos = HQ.territoryMap.gamePosToMapPos(pos);
-		const territoryIndex = territorypos[0] + territorypos[1] * HQ.territoryMap.width;
+		const territoryIndex = cellIndex(HQ.territoryMap, territorypos[0] + territorypos[1] * HQ.territoryMap.width);
 
 		HQ.basesManager.assignEntity(gameState, ent, territoryIndex);
 	}
@@ -164,7 +165,7 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 		{
 			if (landIndex)
 			{
-				const sea = HQ.getSeaBetweenIndices(gameState, landIndex, i);
+				const sea = HQ.getSeaBetweenIndices(gameState, landIndex, landRegion(i));
 				if (sea && (accessibility.regionSize[i] > minLandSize || accessibility.regionSize[sea] > minWaterSize))
 				{
 					HQ.navalMap = true;
@@ -176,7 +177,7 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 			{
 				if (seaIndex === undefined)
 					continue;
-				const traject = accessibility.getTrajectToIndex(seaIndex, i);
+				const traject = accessibility.getTrajectToIndex(seaIndex, landRegion(i));
 				if (traject && traject.length === 2)
 				{
 					HQ.navalMap = true;
@@ -282,7 +283,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		return;
 
 	// We first choose as startingPoint the point where we have the more units
-	const startingPoint: Array<{ pos: CommonPosition, land: number, sea: number, weight: number }> = [];
+	const startingPoint: Array<{ pos: CommonPosition, land: AccessIndex, sea: SeaIndex, weight: number }> = [];
 	for (const ent of gameState.getOwnUnits().values())
 	{
 		if (!ent.hasClass("Worker"))
@@ -462,7 +463,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		{
 			for (const sea of gameState.ai.accessibility.regionLinks[land])
 				if (gameState.ai.HQ.navalRegions[sea])
-					HQ.navalManager.updateFishingBoats(sea, num);
+					HQ.navalManager.updateFishingBoats(seaRegion(sea), num);
 		}
 		HQ.maxFields = 1;
 		HQ.needCorral = true;
