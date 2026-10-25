@@ -19,7 +19,8 @@
 #   logs.tar.gz        game.log, the game's stdout/stderr (script errors,
 #                      warnings, the statistics), and the engine's own
 #                      mainlog.html and interestinglog.html
-# The game ends on conquest: once one bot has defeated the other. In visual
+# The game ends once one bot has won by one of the victory conditions (-w;
+# conquest by default, the game's own default). In visual
 # mode the game then stops on that turn (-autostart-stop-on-end) and shows the
 # result; the record is finished once you close the game (Alt+F4, or Quit and
 # then Exit in the main menu).
@@ -37,6 +38,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -a SEED    AI seed (default: a random one, recorded in match.txt)
   -d DIFF    difficulty of both bots, 0 sandbox .. 5 very hard (default 5)
   -c CIV     civilisation of both bots (default athen)
+  -w LIST    victory conditions, comma separated, from
+             simulation/data/settings/victory_conditions/ (default
+             conquest; e.g. conquest,wonder,capture_the_relic)
+  -W MINUTES how long a wonder or all relics must be held to win (default 20)
   -o BOT     the blue bot: petra_out, Petra TS (default), or petra, Petra JS
   -x         swap slots: the red bot plays player 1, the blue one player 2
   -v SPEED   game speed (default 1; up to 20 while observing)
@@ -57,6 +62,8 @@ seed=""
 aiseed=""
 difficulty=5
 civ="athen"
+victory="conquest"
+holdMinutes=20
 opponent=petra_out
 swap=false
 speed=1
@@ -64,13 +71,15 @@ nonvisual=false
 timeline=false
 commands=false
 keep=5
-while getopts "m:s:a:d:c:o:xv:ntlk:h" option; do
+while getopts "m:s:a:d:c:w:W:o:xv:ntlk:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
 		a) aiseed="$OPTARG" ;;
 		d) difficulty="$OPTARG" ;;
 		c) civ="$OPTARG" ;;
+		w) victory="$OPTARG" ;;
+		W) holdMinutes="$OPTARG" ;;
 		o) opponent="$OPTARG" ;;
 		x) swap=true ;;
 		v) speed="$OPTARG" ;;
@@ -103,6 +112,18 @@ case "$opponent" in
 		exit 2
 		;;
 esac
+conditions="$(dirname "$0")/../../binaries/data/mods/public/simulation/data/settings/victory_conditions"
+IFS=, read -r -a victories <<<"$victory"
+for condition in "${victories[@]}"; do
+	if [ ! -e "$conditions/$condition.json" ]; then
+		echo "-w: no victory condition '$condition' (see $conditions)" >&2
+		exit 2
+	fi
+done
+if ! [[ "$holdMinutes" =~ ^[0-9]+$ ]]; then
+	echo "-W takes a number of minutes, not '$holdMinutes'" >&2
+	exit 2
+fi
 if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
 	echo "-k takes a number of matches, not '$keep'" >&2
 	exit 2
@@ -139,7 +160,6 @@ args=(
 	-autostart-aiseed="$aiseed"
 	-autostart-players=2
 	-autostart-player=-1
-	-autostart-victory=conquest
 	-autostart-stop-on-end
 	-autostart-speed="$speed"
 	-autostart-script=scripts/NonVisualTrigger.js
@@ -164,9 +184,13 @@ fi
 if [ "$commands" = true ]; then
 	args+=(-autostart-script=scripts/MatchCommands.js)
 fi
+for condition in "${victories[@]}"; do
+	args+=(-autostart-victory="$condition")
+done
+args+=(-autostart-wonderduration="$holdMinutes" -autostart-relicduration="$holdMinutes")
 args+=("$@")
 
-rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -o "$opponent" -v "$speed")
+rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -w "$victory" -W "$holdMinutes" -o "$opponent" -v "$speed")
 [ "$swap" = true ] && rerun+=(-x)
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
@@ -196,6 +220,11 @@ fi
 	echo "player $blue: $blueName (simulation/ai/$opponent), blue"
 	echo "player $red: $redName (simulation/ai/petra_out), red"
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
+	hold=""
+	if [[ ",$victory," =~ ,(wonder|capture_the_relic), ]]; then
+		hold="; a wonder or all relics win when held $holdMinutes min"
+	fi
+	echo "victory conditions $victory$hold"
 	echo "branch $(git -C "$repo" rev-parse --abbrev-ref HEAD)"
 	dirty=""
 	if ! git -C "$repo" diff --quiet HEAD || [ -n "$(git -C "$repo" ls-files --others --exclude-standard)" ]; then

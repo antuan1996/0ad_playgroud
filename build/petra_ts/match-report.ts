@@ -58,9 +58,17 @@ if (players.length)
 // MatchEnd.js prints the game time of each win and defeat. Failing those (the
 // window was closed first), the non-visual engine prints "Turn N (length in
 // ms)..." before each turn; the visual one prints nothing.
+// Those with "players" also give the reason, like "wonder victory".
 let decided: number | undefined;
+const reasons = new Map<number, string>();
 for (const match of log.matchAll(/^MATCHEND (.*)$/gm))
-	decided = Math.max(decided ?? 0, JSON.parse(match[1]).time);
+{
+	const end: { time: number; players?: number[]; reason?: string } = JSON.parse(match[1]);
+	decided = Math.max(decided ?? 0, end.time);
+	for (const player of end.players ?? [])
+		if (end.reason)
+			reasons.set(player, end.reason);
+}
 let played = 0;
 for (const match of log.matchAll(/^Turn \d+ \((\d+)\)\.\.\.$/gm))
 	played += Number(match[1]);
@@ -88,7 +96,8 @@ else if (played)
 
 if (players.length)
 {
-	console.log("result: " + players.map(p => `${botName(p.playerID)} ${p.playerState}`).join(", "));
+	console.log("result: " + players.map(p => `${botName(p.playerID)} ${p.playerState}` +
+		(reasons.has(p.playerID) ? ` (${reasons.get(p.playerID)})` : "")).join(", "));
 	// The "total" of the lost/killed/destroyed counters is never incremented
 	// (StatisticsTracker.js): count the Unit and Structure classes instead.
 	type Row = [string, (p: PlayerStatistics) => string | number];

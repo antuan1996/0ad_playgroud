@@ -423,7 +423,7 @@ function handlePlayersFinished(players, message, won)
 	});
 
 	for (const handler of g_PlayerFinishedHandlers)
-		handler(players, won);
+		handler(players, won, message);
 }
 
 function onClientJoin(guid)

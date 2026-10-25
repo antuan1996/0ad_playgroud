@@ -16,7 +16,7 @@ class QuitConfirmationObserver extends QuitConfirmation
 		registerPlayersFinishedHandler(this.onPlayersFinished.bind(this, closeSession));
 	}
 
-	onPlayersFinished(closeSession, players, won)
+	onPlayersFinished(closeSession, players, won, message)
 	{
 		if (!won || this.shown || g_IsReplay || Engine.GetPlayerID() != -1)
 			return;
@@ -26,12 +26,14 @@ class QuitConfirmationObserver extends QuitConfirmation
 		// The simulation already holds every result of the turn, while g_Players
 		// may not be updated yet.
 		const states = Engine.GuiInterfaceCall("GetSimulationState").players;
-		this.Caption = states.slice(1).map((player, i) =>
+		// How the game was won, as in the chat: "... has won (wonder victory)."
+		const reason = new ChatMessageFormatSimulation.playerstate().parse({ "message": message, "players": players }).text;
+		this.Caption = reason + "\n\n" + states.slice(1).map((player, i) =>
 			sprintf(translate("%(player)s: %(state)s"), {
 				"player": colorizePlayernameByID(i + 1),
 				"state": this.States[player.state] || player.state
 			})).join("\n") + "\n\n" + QuitConfirmation.prototype.Caption;
-		this.Height = 160 + 20 * (states.length - 1);
+		this.Height = 200 + 20 * (states.length - 1);
 
 		this.display(closeSession);
 	}

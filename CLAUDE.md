@@ -58,10 +58,12 @@ rewrites the output's relative imports to VFS paths
 the bot id is `petra_out`.
 
 `npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
-options: map, seeds, difficulty, civ, `-o` the blue bot, `-x` swap slots,
+options: map, seeds, difficulty, civ, `-w` victory conditions (default
+conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` minutes a wonder or the relics must be
+held (default 20), `-o` the blue bot, `-x` swap slots,
 `-v` speed, `-n` headless, `-t` timeline, `-l` command log (for debugging),
 `-k` how many match folders to keep, default 5) builds the bot and starts an
-observed conquest match of Petra TS (red, `petra_out`) against itself, or with
+observed match of Petra TS (red, `petra_out`) against itself, or with
 `-o petra` against the original, Petra JS (blue, `petra`); it needs the engine
 built from this repo. Petra TS against itself is the default: the original
 loses most games to its `removeSupply` bug (`tests/FINDINGS.md` §10). Each match is recorded in `build/petra_ts/matches/<time>/`
@@ -86,7 +88,10 @@ The names and colors use autostart options added on this branch
 `autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
 runs no turn after the one the game is decided in, the turn a non-visual game
 quits on, so both leave the same files; a visual game then shows the result
-(`gui/session/message_box/QuitConfirmationObserver.js`) until you leave it.
+(`gui/session/message_box/QuitConfirmationObserver.js`: how it was won, then
+each player's state) until you leave it. `maps/scripts/MatchEnd.js` prints the
+decision with the game's reason ("last player alive", "wonder victory",
+"Capture the Relic", ...), which `match.txt` shows with the result.
 
 ## Petra architecture (`simulation/ai/`)
 
