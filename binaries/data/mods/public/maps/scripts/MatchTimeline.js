@@ -3,7 +3,8 @@
  *   TIMELINE {"minute":..,"player":..,"name":..,"state":..,"pop":..,"resources":{..},
  *             "phase":..,"classes":{..},"unitAI":{..}}
  * "classes" counts the player's entities of a few classes, "unitAI" its units
- * by the top of their UnitAI state (IDLE, GATHER, COMBAT, ...).
+ * by the top of their UnitAI state (IDLE, GATHER, COMBAT, ...), or GARRISONED
+ * for units inside a structure or a ship (whose UnitAI state is IDLE).
  * It only reads the simulation. Used by build/petra_ts/match.sh -t.
  */
 Trigger.prototype.MatchTimelineClasses = ["CivCentre", "House", "Field", "Storehouse", "Farmstead", "Barracks",
@@ -31,7 +32,8 @@ Trigger.prototype.MatchTimelineSnapshot = function()
 			const cmpUnitAI = Engine.QueryInterface(ent, IID_UnitAI);
 			if (cmpUnitAI && list.indexOf("Unit") != -1)
 			{
-				const state = (cmpUnitAI.GetCurrentState() || "NONE").split(".")[1] || "NONE";
+				const state = Engine.QueryInterface(ent, IID_Garrisonable)?.IsGarrisoned() ? "GARRISONED" :
+					(cmpUnitAI.GetCurrentState() || "NONE").split(".")[1] || "NONE";
 				unitAI[state] = (unitAI[state] || 0) + 1;
 			}
 		}
