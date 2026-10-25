@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadCommonModule, loadPetraModule, target } from "./harness/target.ts";
+import { loadCommonModule, loadPetraModule } from "./harness/target.ts";
 import { logs, resetRecorder } from "./harness/engine.ts";
 import {
 	ENEMY, GAIA, makeEntity, makeTemplate, makeWorld, mapOf, PLAYER, type FakeEnt, type World
@@ -187,7 +187,7 @@ describe("land and sea access", () =>
 });
 
 // the require helpers are the port's own (the original reads the values unchecked)
-describe("the require helpers: values Petra relies on", { "skip": target === "ref" }, () =>
+describe("the require helpers: values Petra relies on", () =>
 {
 	it("each returns what is there and throws, after a warning, on what is missing", () =>
 	{

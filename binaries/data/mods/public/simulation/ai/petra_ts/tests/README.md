@@ -2,16 +2,14 @@
 
 Tests for the Petra AI, written in TypeScript and run by Node's built-in test
 runner. They describe what the AI does, not how it is written, so the same suite
-can be pointed at different builds of it.
+runs on the port's sources and on the bot built from them.
 
 ## Running
 
 ```sh
-npm run test:petra                 # the port: simulation/ai/petra_ts/*.ts
-npm run test:petra -- ref          # the original: simulation/ai/petra/*.js
-npm run test:petra:out             # builds the "Petra TS" bot, then runs on simulation/ai/petra_out/*.js
-npm run test:petra:coverage        # the port, plus a coverage report
-npm run test:petra:coverage:ref    # the original, plus a coverage report
+npm run test:petra                 # the port: simulation/ai/petra_ts/**/*.ts
+npm run test:petra:out             # builds the "Petra TS" bot, then runs on simulation/ai/petra_out/**/*.js
+npm run test:petra:coverage        # the port, plus Node's coverage report
 ```
 
 Coverage counts the code under test only: the report takes the target's own
@@ -28,10 +26,9 @@ surrounding code, so whole untested branches read as covered (worker.ts showed
 
 ```sh
 npm run coverage:petra                      # the port, per module
-npm run coverage:petra -- ref               # the original
-npm run coverage:petra -- both              # the two side by side
+npm run coverage:petra -- out               # the built bot
 npm run coverage:petra -- src --file worker # one module: functions, lines and blocks never run
-npm run coverage:petra -- both --json c.json
+npm run coverage:petra -- src --json c.json
 ```
 
 It runs the suite once with `NODE_V8_COVERAGE`, resolves every character of a
@@ -42,24 +39,26 @@ any process saw, and only then folds characters into lines. It reports:
   Comments, blank lines, lone braces/`else` and TypeScript-only declarations
   (interfaces, type aliases, `declare` members) are not code.
 - **blocks never run**: stretches of code no test reached — a branch, a
-  `continue;` never taken, a `?? -1` fallback never used. The port counts more
-  of these than the original for the same logic, because its `??` defaults are
-  extra blocks.
+  `continue;` never taken, a `?? -1` fallback never used.
 - **functions**: bodies V8 saw called at least once.
 
 A module no test loads is marked `*`.
 
-`ref` is the game's own copy of Petra, the `petra` folder that sits next to the
-port's `petra_ts` folder in the mod, so the suite reads whatever the game would
-load today. `npm run build:petra:out` builds the port into the game's "Petra
-TS" bot in `simulation/ai/petra_out/` (see the root `CLAUDE.md`). The `out`
-target runs the suite on that output: it is the port again, not a third
-implementation, and checks that the build the game loads still works.
+`npm run build:petra:out` builds the port into the game's "Petra TS" bot in
+`simulation/ai/petra_out/` (see the root `CLAUDE.md`). The `out` target runs the
+suite on that output: it is the port again, and checks that the build the game
+loads still works.
 
-Running against `ref` is expected to fail wherever the port deliberately
-behaves differently from the original — that failure is the record of the
-difference, not a regression. `queue.test.ts` says so above each test that only
-the port passes.
+A test names a module, not its place: `loadPetraModule("queue")` finds
+`execution/queue.ts` in whichever layer folder holds it (`harness/paths.ts`).
+
+Until stage 3 (`PLAN.md`) the suite also ran against the original
+`simulation/ai/petra/*.js`, the `ref` target; its modules no longer match the
+port's folders and names, so that target is gone. The parity of the port as it
+was frozen is shown in games instead (stage 1, `FINDINGS.md` §14). A test with
+an `// only the port passes: ...` comment pins one of the original's bugs
+(`FINDINGS.md` §1); the original failed exactly those 20 tests when it was last
+run.
 
 Type checking:
 
@@ -130,8 +129,7 @@ lifts the guard for that test only.
 
 Where the port deliberately behaves differently from the original JS, say so in
 a comment above the test and assert the behaviour that is wanted, not the
-behaviour the original happened to have. The original then fails that test,
-which is the point of running it against `ref`.
+behaviour the original happened to have.
 
 ## Save and reload
 

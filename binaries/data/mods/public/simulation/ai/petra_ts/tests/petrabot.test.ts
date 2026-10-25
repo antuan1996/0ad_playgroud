@@ -243,6 +243,24 @@ describe("saving and loading", () =>
 		assert.equal(g.world.diplomacyResets.length, 1);
 	});
 
+	it("a save of another version is refused aloud, and the bot starts afresh from the game as it stands", () =>
+	{
+		const g = game();
+		const saved = playedBot(g).Serialize();
+		assert.equal(saved.saveVersion, 1, "a save says its version");
+		g.shared["_entityMetadata"] = { [PLAYER]: { 1000: { "base": 7 } } };
+
+		logs.length = 0;
+		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
+		loaded.Deserialize({ ...saved, "saveVersion": 0 }, g.shared);
+		assert.ok(logs.some((entry) => entry.includes("version 0") && entry.includes("starts afresh")), "the refusal is said");
+		assert.deepEqual((g.shared["_entityMetadata"] as Record<number, unknown>)[PLAYER], {}, "the old notes on our units are dropped");
+
+		loaded.Init(PLAYER, g.shared);
+		assert.equal(loaded.isDeserialized, false, "it plays as in a new game");
+		assert.equal(loaded.HQ.baseManagers().length, 1, "with the town's centre as its first base");
+	});
+
 	it("saving the loaded bot again, before anything happened, gives the same game", () =>
 	{
 		const g = game();

@@ -231,6 +231,8 @@ export interface HQLike
 	victoryManager: {
 		criticalEnts: Map<number, unknown>;
 		targetedGaiaRelics: Map<number, number[]>;
+		isRelicRaided(relicId: number): boolean;
+		planRelicRaid(relicId: number, plan: number): void;
 		tryCaptureGaiaRelic: boolean;
 		resetCaptureGaiaRelic(gameState: CommonGameState): void;
 	};
@@ -747,6 +749,7 @@ export function makeWorld(options: WorldOptions = {}): World
 	const transportCalls: World["transportCalls"] = [];
 	const minimalShipCalls: World["minimalShipCalls"] = [];
 	const relicResets: unknown[] = [];
+	const targetedGaiaRelics = new Map<number, number[]>();
 	const garrisonCalls: Array<[FakeEnt, FakeEnt, string]> = [];
 	const garrisonCounts = new Map<number, number>();
 	const emergencyCalls: Array<[CommonGameState, [number, number][]]> = [];
@@ -919,7 +922,9 @@ export function makeWorld(options: WorldOptions = {}): World
 		},
 		victoryManager: {
 			criticalEnts: new Map(),
-			targetedGaiaRelics: new Map(),
+			targetedGaiaRelics,
+			isRelicRaided: (relicId: number) => targetedGaiaRelics.has(relicId),
+			planRelicRaid: (relicId: number, plan: number) => { targetedGaiaRelics.set(relicId, [plan]); },
 			tryCaptureGaiaRelic: false,
 			resetCaptureGaiaRelic: (gs: CommonGameState) => relicResets.push(gs)
 		},
