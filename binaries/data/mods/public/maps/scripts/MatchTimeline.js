@@ -1,10 +1,12 @@
 /**
  * Prints a snapshot of every player every two game minutes, one line each:
  *   TIMELINE {"minute":..,"player":..,"name":..,"state":..,"pop":..,"resources":{..},
- *             "phase":..,"classes":{..},"unitAI":{..}}
+ *             "phase":..,"classes":{..},"unitAI":{..},"idle":{..}}
  * "classes" counts the player's entities of a few classes, "unitAI" its units
  * by the top of their UnitAI state (IDLE, GATHER, COMBAT, ...), or GARRISONED
- * for units inside a structure or a ship (whose UnitAI state is IDLE).
+ * for units inside a structure or a ship (whose UnitAI state is IDLE), and
+ * "idle" its IDLE units of each of the classes, an army waiting to set off
+ * (Soldier) apart from workers left without a task (Support).
  * It only reads the simulation. Used by build/petra_ts/match.sh -t.
  */
 Trigger.prototype.MatchTimelineClasses = ["CivCentre", "House", "Field", "Storehouse", "Farmstead", "Barracks",
@@ -20,6 +22,7 @@ Trigger.prototype.MatchTimelineSnapshot = function()
 		const cmpPlayer = QueryPlayerIDInterface(player);
 		const classes = {};
 		const unitAI = {};
+		const idle = {};
 		for (const ent of cmpRangeManager.GetEntitiesByPlayer(player))
 		{
 			const cmpIdentity = Engine.QueryInterface(ent, IID_Identity);
@@ -35,6 +38,10 @@ Trigger.prototype.MatchTimelineSnapshot = function()
 				const state = Engine.QueryInterface(ent, IID_Garrisonable)?.IsGarrisoned() ? "GARRISONED" :
 					(cmpUnitAI.GetCurrentState() || "NONE").split(".")[1] || "NONE";
 				unitAI[state] = (unitAI[state] || 0) + 1;
+				if (state == "IDLE")
+					for (const cls of this.MatchTimelineClasses)
+						if (list.indexOf(cls) != -1)
+							idle[cls] = (idle[cls] || 0) + 1;
 			}
 		}
 		const cmpTechnologyManager = QueryPlayerIDInterface(player, IID_TechnologyManager);
@@ -49,7 +56,8 @@ Trigger.prototype.MatchTimelineSnapshot = function()
 			"resources": cmpPlayer.GetResourceCounts(),
 			"phase": phases.sort().join(","),
 			"classes": classes,
-			"unitAI": unitAI
+			"unitAI": unitAI,
+			"idle": idle
 		}) + "\n");
 	}
 };
