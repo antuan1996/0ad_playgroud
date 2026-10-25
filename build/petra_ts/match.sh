@@ -11,6 +11,9 @@
 #   statistics.json    the statistics printed when the game ends, one entry per
 #                      player
 #   timeline.txt       with -t: each player's state every two game minutes
+#   commands.txt       with -l: every command each bot sent, "<game ms> <player>
+#                      <command JSON>"; diff two of them to find where two
+#                      runs diverge
 #   metadata.json      the replay's metadata: the final state of each player and
 #                      every statistic sampled each 30 game seconds ("sequences")
 #   logs.tar.gz        game.log, the game's stdout/stderr (script errors,
@@ -38,6 +41,7 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
+  -l         log every command each bot sends (commands.txt)
   -k KEEP    keep the last KEEP match folders, this one included, and delete
              older ones (default 5; 0 keeps them all)
   -h         this help
@@ -54,8 +58,9 @@ swap=false
 speed=1
 nonvisual=false
 timeline=false
+commands=false
 keep=5
-while getopts "m:s:a:d:c:xv:ntk:h" option; do
+while getopts "m:s:a:d:c:xv:ntlk:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -66,6 +71,7 @@ while getopts "m:s:a:d:c:xv:ntk:h" option; do
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
 		t) timeline=true ;;
+		l) commands=true ;;
 		k) keep="$OPTARG" ;;
 		h)
 			usage
@@ -135,12 +141,16 @@ fi
 if [ "$timeline" = true ]; then
 	args+=(-autostart-script=scripts/MatchTimeline.js)
 fi
+if [ "$commands" = true ]; then
+	args+=(-autostart-script=scripts/MatchCommands.js)
+fi
 args+=("$@")
 
 rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -v "$speed")
 [ "$swap" = true ] && rerun+=(-x)
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
+[ "$commands" = true ] && rerun+=(-l)
 if [ $# -gt 0 ]; then
 	rerun+=(--)
 fi
@@ -193,6 +203,10 @@ set -e
 
 if [ "$timeline" = true ]; then
 	grep '^TIMELINE ' "$out/game.log" | cut -d' ' -f2- >"$out/timeline.txt" || true
+fi
+# Not anchored: the engine may not end its line before the first command.
+if [ "$commands" = true ]; then
+	grep -oE 'COMMAND [0-9]+ [0-9]+ \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/commands.txt" || true
 fi
 
 for log in mainlog.html interestinglog.html; do

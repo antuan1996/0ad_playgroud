@@ -59,14 +59,17 @@ the bot id is `petra_out`.
 
 `npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
 options: map, seeds, difficulty, civ, `-x` swap slots, `-v` speed, `-n`
-headless, `-k` how many match folders to keep, default 5) builds the bot and starts an observed conquest match, Petra JS
+headless, `-t` timeline, `-l` command log, `-k` how many match folders to keep, default 5) builds the bot and starts an observed conquest match, Petra JS
 (blue, `petra`) against Petra TS (red, `petra_out`); it needs the engine
 built from this repo. Each match is recorded in `build/petra_ts/matches/<time>/`
 (`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
 commit SHA, a sha256 of the `petra_out` build, command, a line to rerun it;
 then the result, a statistics table, the distinct errors/warnings, the replay
 path and a fingerprint, written by `build/petra_ts/match-report.ts`),
-`statistics.json`, `timeline.txt` with `-t`, the replay's `metadata.json` (each
+`statistics.json`, `timeline.txt` with `-t`, `commands.txt` with `-l` (every
+command each bot sent, `<game ms> <player> <JSON>`, from
+`maps/scripts/MatchCommands.js`: AI commands are not in the replay; diffing two
+runs' logs finds where they diverge), the replay's `metadata.json` (each
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's
 `mainlog.html`/`interestinglog.html`.
