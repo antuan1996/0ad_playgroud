@@ -34,9 +34,9 @@ const match = [
 	"-c", "athen",
 	"-w", "conquest",
 	"-o", "petra_out",
-	// headless, timeline, command log and notices, the bot's state, end at 90
-	// game minutes if undecided
-	"-n", "-t", "-l", "-b", "-T",
+	// headless, timeline, command log and notices, end at 90 game minutes if
+	// undecided; not -b: the checks do not read the bot's internal state
+	"-n", "-t", "-l", "-T",
 	"-r", record
 ];
 

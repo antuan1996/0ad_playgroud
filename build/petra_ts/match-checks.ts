@@ -1,16 +1,21 @@
 /**
- * Checks a match recorded by match.sh -t -l (-b) for anomalies in the bots' play:
+ * Checks a match recorded by match.sh -t -l for anomalies in the bots' play:
  *
  *   node build/petra_ts/match-checks.ts <match dir>
  *
- * Reads match.txt, statistics.json, timeline.txt, commands.txt and notices.txt,
- * and botstate.txt when there is one (-b); prints one
+ * Reads match.txt, statistics.json, timeline.txt, commands.txt and notices.txt;
+ * prints one
  * line per check and exits 1 if any fails. match.test.ts runs a fixed match and
  * asserts each check. The thresholds come from twenty matches of the port
  * against itself (tests/FINDINGS.md §11) with a wide margin: they flag a broken
  * bot, not a weak game.
+ *
+ * Every check reads what the engine records (statistics, the trigger scripts'
+ * timeline, commands and notices), never the bot's internal state (-b,
+ * botstate.txt): that changes with the bot's code, and a check on it would
+ * break with a refactor rather than with a bug.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -49,13 +54,6 @@ interface Notice
 	message?: string;
 }
 
-interface BotState
-{
-	minute: number;
-	player: number;
-	bases: Array<{ id: number; anchor?: number; anchorBuilt: boolean; supplies: Record<string, { nearby: number; medium: number }> }>;
-}
-
 interface Command
 {
 	time: number;
@@ -71,7 +69,8 @@ export const limits = {
 	townPhaseMinute: 25,
 	// metal the winner gathers over the game (winners: 2400-15600)
 	winnerMetal: 1000,
-	// idle women: at most this many, or this share of all women (seen: 3)
+	// idle women: at most this many, or this share of all women, in two
+	// snapshots in a row (seen: 6 of 32 once, between two tasks)
 	idleSupport: 5,
 	idleSupportShare: 0.15,
 	// a stock of one resource this large while far below the population cap
@@ -82,7 +81,10 @@ export const limits = {
 	// population at minute 9 against minute 1 (seen: 4.5-5x)
 	earlyGrowth: 2,
 	// minutes in a row with no command while the player still has buildings
+	// and this many units (a beaten side with 2 units and no resources has
+	// nothing to order)
 	silentMinutes: 2,
+	silentPopulation: 5,
 	// the same command in this many turns within two minutes is a stuck loop
 	// (seen: 37, a builder re-sent to its foundation every update while it
 	// walks home with its load); one turn is 0.2 s, an HQ update 1.6 s
@@ -123,8 +125,6 @@ export function checkMatch(dir: string): Check[]
 	const timeline: Snapshot[] = readLines(dir, "timeline.txt").map(line => JSON.parse(line));
 	const commands = readLines(dir, "commands.txt").map(parseCommand);
 	const notices: Notice[] = readLines(dir, "notices.txt").map(line => JSON.parse(line));
-	const states: BotState[] | undefined = existsSync(join(dir, "botstate.txt")) ?
-		readLines(dir, "botstate.txt").map(line => JSON.parse(line)) : undefined;
 	const ids = players.map(p => p.playerID);
 	const winner = players.find(p => p.playerState == "won")?.playerID;
 	const decidedAt = /^decided at (\d+):(\d+) game time$/m.exec(report);
@@ -173,12 +173,15 @@ export function checkMatch(dir: string): Check[]
 	const growth: string[] = [];
 	for (const player of ids)
 	{
+		let idleBefore = false;
 		for (const t of snapshots(player))
 		{
 			const women = t.classes.Support ?? 0;
 			const idleWomen = t.idle?.Support ?? 0;
-			if (idleWomen > Math.max(limits.idleSupport, limits.idleSupportShare * women))
-				idle.push(`player ${player} at minute ${t.minute}: ${idleWomen} of ${women} women idle`);
+			const idleNow = idleWomen > Math.max(limits.idleSupport, limits.idleSupportShare * women);
+			if (idleNow && idleBefore)
+				idle.push(`player ${player} at minute ${t.minute}: ${idleWomen} of ${women} women idle, as two minutes before`);
+			idleBefore = idleNow;
 			for (const [type, amount] of Object.entries(t.resources))
 				if (amount > limits.stockpile && t.pop < limits.stockpileBelowPop)
 					stock.push(`player ${player} at minute ${t.minute}: ${amount} ${type} at population ${t.pop}`);
@@ -212,6 +215,11 @@ export function checkMatch(dir: string): Check[]
 			const snapshot = snapshots(player).filter(t => t.minute <= minute).at(-1);
 			if (snapshot && !snapshot.popLimit)
 				break;
+			if (snapshot && snapshot.pop < limits.silentPopulation)
+			{
+				quiet = 0;
+				continue;
+			}
 			quiet = perMinute.has(minute) ? 0 : quiet + 1;
 			if (quiet == limits.silentMinutes)
 				silent.push(`player ${player}: no command in minutes ${minute - quiet + 1}-${minute}`);
@@ -271,7 +279,7 @@ export function checkMatch(dir: string): Check[]
 		if (player == winner && !own.some(c => c.type == "research" && c.template?.startsWith("phase_town")))
 			phasing.push(`player ${player}, the winner, never ordered town phase`);
 	}
-	check("no side falls silent", silent, `a command every minute while it has buildings`);
+	check("no side falls silent", silent, `a command every minute while it has buildings and ${limits.silentPopulation} units`);
 	check("no command repeated turn after turn", repeated,
 		`no command in more than ${limits.repeatedTurns} turns within ${limits.repeatWindow / 60000} minutes`);
 	check("no command flood", floods, `at most ${limits.commandsPerTurn} commands a turn`);
@@ -296,24 +304,6 @@ export function checkMatch(dir: string): Check[]
 		}
 	}
 	check("few orders refused", refused, `at most ${limits.refusals} a player`);
-
-	// The bot's own books (-b): a base with a built centre keeps its resource
-	// lists (a base under construction has none yet).
-	// The original's removeSupply bug emptied them at the first unit lost.
-	if (states)
-	{
-		const empty: string[] = [];
-		for (const state of states)
-			for (const base of state.bases)
-			{
-				if (!base.anchorBuilt)
-					continue;
-				const entries = Object.values(base.supplies).reduce((sum, bands) => sum + bands.nearby + bands.medium, 0);
-				if (!entries)
-					empty.push(`player ${state.player} at minute ${state.minute}: base ${base.id} lists no resource nearby or medium`);
-			}
-		check("bases keep their resource lists", empty.slice(0, 5), "every base with a built centre lists resources");
-	}
 
 	return checks;
 }

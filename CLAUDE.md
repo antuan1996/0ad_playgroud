@@ -93,14 +93,17 @@ After a port change, a headless match (`-n`) is a quick smoke test: the unit
 tests once missed a `requireValue` that threw every turn in a real game.
 `npm run test:petra:match` (`build/petra_ts/match.test.ts`, about 80 s, skipped
 without the engine) plays one fixed mirror match (seeds 287591089/941505347,
-recorded in `matches/test/`, `-r`) with `-t -l -b -T` (`-T`: `MatchTimeLimit.js`
+recorded in `matches/test/`, `-r`) with `-t -l -T` (`-T`: `MatchTimeLimit.js`
 ends an undecided game at 90 game minutes, "time limit") and asserts the
 checks of `build/petra_ts/match-checks.ts`, which also runs on any record
 (`node build/petra_ts/match-checks.ts <dir>`): no errors, a decided game, the
 winner's town phase and metal, idle women, unspent stockpiles, early growth,
 and from the commands silence, a command repeated turn after turn, floods,
-production churn and phases ordered but not had, from the notices refused
-orders, and from the bot's state bases with empty resource lists. It does not assert the
+production churn and phases ordered but not had, and from the notices refused
+orders. The checks read only what the engine records, never `botstate.txt`:
+the bot's internal structure changes with its code, so `-b` is for reading
+while debugging (a section of the dump that no longer fits the code prints as
+`{"error": ...}` rather than breaking the bot's turn). It does not assert the
 fingerprint, which any change to the bot moves; it prints it.
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see
