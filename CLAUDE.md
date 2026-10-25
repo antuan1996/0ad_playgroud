@@ -62,7 +62,8 @@ the bot id is `petra_out`.
 options: map, seeds, difficulty, civ, `-w` victory conditions (default
 conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` minutes a wonder or the relics must be
 held (default 20), `-o` the blue bot, `-x` swap slots,
-`-v` speed, `-n` headless, `-t` timeline, `-l` command log (for debugging),
+`-v` speed, `-n` headless, `-t` timeline, `-l` command log and notices, `-b`
+the bot's own state (both for debugging),
 `-k` how many match folders to keep, default 5) builds the bot and starts an
 observed match of Petra TS (red, `petra_out`) against itself, or with
 `-o petra` against the original, Petra JS (blue, `petra`); it needs the engine
@@ -75,7 +76,13 @@ path and a fingerprint, written by `build/petra_ts/match-report.ts`),
 `statistics.json`, `timeline.txt` with `-t`, `commands.txt` with `-l` (every
 command each bot sent, `<game ms> <player> <JSON>`, from
 `maps/scripts/MatchCommands.js`: AI commands are not in the replay; diffing two
-runs' logs finds where they diverge), the replay's `metadata.json` (each
+runs' logs finds where they diverge), `notices.txt` with `-l` (what the game
+told the bots: refused orders, their chat; `maps/scripts/MatchNotices.js`),
+`botstate.txt` with `-b` (Petra TS's AI-side state every two game minutes:
+workers by role, each base's resource lists, queues and reserved resources,
+attack plans, HQ flags; `build/petra_ts/bot-state.js`, which
+`prepare-bot.ts state` adds to the `petra_out` build only, so the port stays
+1:1 and the game is the same), the replay's `metadata.json` (each
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's
 `mainlog.html`/`interestinglog.html`.
@@ -86,13 +93,14 @@ After a port change, a headless match (`-n`) is a quick smoke test: the unit
 tests once missed a `requireValue` that threw every turn in a real game.
 `npm run test:petra:match` (`build/petra_ts/match.test.ts`, about 80 s, skipped
 without the engine) plays one fixed mirror match (seeds 287591089/941505347,
-recorded in `matches/test/`, `-r`) with `-t -l -T` (`-T`: `MatchTimeLimit.js`
+recorded in `matches/test/`, `-r`) with `-t -l -b -T` (`-T`: `MatchTimeLimit.js`
 ends an undecided game at 90 game minutes, "time limit") and asserts the
 checks of `build/petra_ts/match-checks.ts`, which also runs on any record
 (`node build/petra_ts/match-checks.ts <dir>`): no errors, a decided game, the
 winner's town phase and metal, idle women, unspent stockpiles, early growth,
 and from the commands silence, a command repeated turn after turn, floods,
-production churn and phases ordered but not had. It does not assert the
+production churn and phases ordered but not had, from the notices refused
+orders, and from the bot's state bases with empty resource lists. It does not assert the
 fingerprint, which any change to the bot moves; it prints it.
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see

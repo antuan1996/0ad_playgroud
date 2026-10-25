@@ -1,15 +1,16 @@
 /**
- * Checks a match recorded by match.sh -t -l for anomalies in the bots' play:
+ * Checks a match recorded by match.sh -t -l (-b) for anomalies in the bots' play:
  *
  *   node build/petra_ts/match-checks.ts <match dir>
  *
- * Reads match.txt, statistics.json, timeline.txt and commands.txt; prints one
+ * Reads match.txt, statistics.json, timeline.txt, commands.txt and notices.txt,
+ * and botstate.txt when there is one (-b); prints one
  * line per check and exits 1 if any fails. match.test.ts runs a fixed match and
  * asserts each check. The thresholds come from twenty matches of the port
  * against itself (tests/FINDINGS.md §11) with a wide margin: they flag a broken
  * bot, not a weak game.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -38,6 +39,21 @@ interface PlayerStatistics
 	playerID: number;
 	playerState: string;
 	statistics: Record<string, number | Record<string, number>>;
+}
+
+interface Notice
+{
+	time: number;
+	players: number[];
+	type: string;
+	message?: string;
+}
+
+interface BotState
+{
+	minute: number;
+	player: number;
+	bases: Array<{ id: number; anchor?: number; anchorBuilt: boolean; supplies: Record<string, { nearby: number; medium: number }> }>;
 }
 
 interface Command
@@ -79,7 +95,10 @@ export const limits = {
 	cancelsPerMinute: 30,
 	capMargin: 5,
 	// minutes between ordering a phase and having it (research takes 1-2)
-	phaseResearchMinutes: 4
+	phaseResearchMinutes: 4,
+	// orders the game refused, per player and game (seen: 1; the bot checks
+	// costs before it orders)
+	refusals: 30
 };
 
 function readLines(dir: string, file: string): string[]
@@ -103,6 +122,9 @@ export function checkMatch(dir: string): Check[]
 	const players: PlayerStatistics[] = JSON.parse(readFileSync(join(dir, "statistics.json"), "utf8"));
 	const timeline: Snapshot[] = readLines(dir, "timeline.txt").map(line => JSON.parse(line));
 	const commands = readLines(dir, "commands.txt").map(parseCommand);
+	const notices: Notice[] = readLines(dir, "notices.txt").map(line => JSON.parse(line));
+	const states: BotState[] | undefined = existsSync(join(dir, "botstate.txt")) ?
+		readLines(dir, "botstate.txt").map(line => JSON.parse(line)) : undefined;
 	const ids = players.map(p => p.playerID);
 	const winner = players.find(p => p.playerState == "won")?.playerID;
 	const decidedAt = /^decided at (\d+):(\d+) game time$/m.exec(report);
@@ -255,6 +277,43 @@ export function checkMatch(dir: string): Check[]
 	check("no command flood", floods, `at most ${limits.commandsPerTurn} commands a turn`);
 	check("no production churn", churn, `at most ${limits.cancelsPerMinute} cancels a minute below the population cap`);
 	check("phases follow their orders", phasing, `each phase within ${limits.phaseResearchMinutes} minutes of its order`);
+
+	// What the game refused. Notices addressed to an entity id rather than a
+	// player come from a swapped call in Commands.js (CanPlayerOrAllyControlUnit
+	// passes player and entity the wrong way round: "Gaia can't be controlled.",
+	// though the order goes through) and are left out.
+	const refused: string[] = [];
+	for (const player of ids)
+	{
+		const own = notices.filter(n => n.type == "text" && n.players.length == 1 && n.players[0] == player);
+		if (own.length > limits.refusals)
+		{
+			const kinds = new Map<string, number>();
+			for (const n of own)
+				kinds.set(n.message ?? "", (kinds.get(n.message ?? "") ?? 0) + 1);
+			const top = [...kinds].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${n}x ${m}`).join(", ");
+			refused.push(`player ${player}: ${own.length} orders refused (${top})`);
+		}
+	}
+	check("few orders refused", refused, `at most ${limits.refusals} a player`);
+
+	// The bot's own books (-b): a base with a built centre keeps its resource
+	// lists (a base under construction has none yet).
+	// The original's removeSupply bug emptied them at the first unit lost.
+	if (states)
+	{
+		const empty: string[] = [];
+		for (const state of states)
+			for (const base of state.bases)
+			{
+				if (!base.anchorBuilt)
+					continue;
+				const entries = Object.values(base.supplies).reduce((sum, bands) => sum + bands.nearby + bands.medium, 0);
+				if (!entries)
+					empty.push(`player ${state.player} at minute ${state.minute}: base ${base.id} lists no resource nearby or medium`);
+			}
+		check("bases keep their resource lists", empty.slice(0, 5), "every base with a built centre lists resources");
+	}
 
 	return checks;
 }

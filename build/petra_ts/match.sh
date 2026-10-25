@@ -14,6 +14,11 @@
 #   commands.txt       with -l: every command each bot sent, "<game ms> <player>
 #                      <command JSON>"; diff two of them to find where two
 #                      runs diverge
+#   notices.txt        with -l: what the game told the bots, one JSON line each:
+#                      refused orders ("Insufficient resources - ...") and their
+#                      chat (MatchNotices.js)
+#   botstate.txt       with -b: Petra TS's own state every two game minutes, one
+#                      JSON line per player (bot-state.js)
 #   metadata.json      the replay's metadata: the final state of each player and
 #                      every statistic sampled each 30 game seconds ("sequences")
 #   logs.tar.gz        game.log, the game's stdout/stderr (script errors,
@@ -47,7 +52,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
-  -l         log every command each bot sends (commands.txt), for debugging
+  -l         log every command each bot sends (commands.txt) and what the game
+             tells the bots back, refusals and chat (notices.txt), for debugging
+  -b         Petra TS dumps its own state every two game minutes (botstate.txt:
+             roles, base resource lists, queues, plans), for debugging
   -T         end the game at 90 game minutes if undecided: the larger
              population wins with the reason "time limit" (MatchTimeLimit.js)
   -r DIR     record into DIR (emptied first) instead of matches/<time>;
@@ -76,8 +84,9 @@ timeline=false
 commands=false
 keep=5
 timeLimit=false
+botState=false
 record=""
-while getopts "m:s:a:d:c:w:W:o:xv:ntlTr:k:h" option; do
+while getopts "m:s:a:d:c:w:W:o:xv:ntlbTr:k:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -93,6 +102,7 @@ while getopts "m:s:a:d:c:w:W:o:xv:ntlTr:k:h" option; do
 		t) timeline=true ;;
 		l) commands=true ;;
 		T) timeLimit=true ;;
+		b) botState=true ;;
 		r) record="$OPTARG" ;;
 		k) keep="$OPTARG" ;;
 		h)
@@ -152,6 +162,9 @@ seed="${seed:-$((RANDOM * 32768 + RANDOM))}"
 aiseed="${aiseed:-$((RANDOM * 32768 + RANDOM))}"
 
 (cd "$repo" && npm run --silent build:petra:out)
+if [ "$botState" = true ]; then
+	node "$repo/build/petra_ts/prepare-bot.ts" state
+fi
 
 # Slots of the blue (-o) bot and of the red one, the port.
 if [ "$swap" = true ]; then
@@ -190,7 +203,7 @@ if [ "$timeline" = true ]; then
 	args+=(-autostart-script=scripts/MatchTimeline.js)
 fi
 if [ "$commands" = true ]; then
-	args+=(-autostart-script=scripts/MatchCommands.js)
+	args+=(-autostart-script=scripts/MatchCommands.js -autostart-script=scripts/MatchNotices.js)
 fi
 if [ "$timeLimit" = true ]; then
 	args+=(-autostart-script=scripts/MatchTimeLimit.js)
@@ -207,6 +220,7 @@ rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty
 [ "$timeline" = true ] && rerun+=(-t)
 [ "$commands" = true ] && rerun+=(-l)
 [ "$timeLimit" = true ] && rerun+=(-T)
+[ "$botState" = true ] && rerun+=(-b)
 if [ $# -gt 0 ]; then
 	rerun+=(--)
 fi
@@ -279,6 +293,10 @@ fi
 # Not anchored: the engine may not end its line before the first command.
 if [ "$commands" = true ]; then
 	grep -oE 'COMMAND [0-9]+ [0-9]+ \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/commands.txt" || true
+	grep -oE 'NOTICE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/notices.txt" || true
+fi
+if [ "$botState" = true ]; then
+	grep -oE 'BOTSTATE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/botstate.txt" || true
 fi
 
 for log in mainlog.html interestinglog.html; do

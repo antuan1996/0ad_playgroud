@@ -4,6 +4,8 @@
  *
  *   node build/petra_ts/prepare-bot.ts clean   remove the previous output
  *   node build/petra_ts/prepare-bot.ts         finish the output tsc wrote
+ *   node build/petra_ts/prepare-bot.ts state   then make the bot dump its state
+ *                                              (bot-state.js; match.sh -b)
  *
  * `npm run build:petra:out` runs: clean, tsc, then this script.
  *
@@ -15,7 +17,7 @@
  * - data.json: the engine reads the bot's name, constructor and entry file from
  *   it, and only lists folders of simulation/ai/ that have one.
  */
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +52,21 @@ function fail(message: string): never
 if (process.argv[2] === "clean")
 {
 	rmSync(outDir, { "recursive": true, "force": true });
+	process.exit(0);
+}
+
+if (process.argv[2] === "state")
+{
+	// The entry stays the port's: the wrapper extends its PetraBot.
+	if (!existsSync(join(outDir, "data.json")))
+		fail(`${VFS_DIR} is not built: run npm run build:petra:out first`);
+	copyFileSync(join(repoRoot, "build/petra_ts/bot-state.js"), join(outDir, "_botstate.js"));
+	writeFileSync(join(outDir, "data.json"), JSON.stringify({
+		...metadata,
+		"constructor": "PetraBotState",
+		"filename": "_botstate.js"
+	}, null, "\t") + "\n");
+	console.log(`prepare-bot: "${metadata.name}" in ${VFS_DIR} dumps its state (PetraBotState)`);
 	process.exit(0);
 }
 
