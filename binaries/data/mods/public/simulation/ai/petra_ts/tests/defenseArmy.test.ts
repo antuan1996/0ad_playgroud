@@ -865,6 +865,38 @@ describe("merging armies", () =>
 		assert.equal(army.assignedTo[3000], 2001, "our defender still knows whom he faced");
 		assert.equal(army.assignedTo[3010], 0, "the merged-in defender begins unassigned");
 	});
+
+	// only the port passes: the original's removeFoe leaves the raider's row
+	// as undefined, and the merge appends that undefined to our row
+	// (concat(undefined)), so the raider looks fought by one defender more
+	it("counts only real defenders against a raider the merged army had let go", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeSoldier(2000, [40, 40]));
+		world.addEntity(makeSoldier(2001, [45, 40]));
+		// the raid pack's army lets one raider break away, and another army
+		// takes him up with two defenders on him
+		const other = new DefenseArmy(world.gameState, [2000, 2001]);
+		assert.equal(other.removeFoe(world.gameState, 2000), true);
+		const army = new DefenseArmy(world.gameState, [2000]);
+		for (const id of [3001, 3002])
+		{
+			world.addEntity(makeDefender(id, [38, 40]));
+			army.addOwn(world.gameState, id);
+			army.assignedAgainst[2000].push(id);
+			army.assignedTo[id] = 2000;
+		}
+
+		assert.equal(army.merge(world.gameState, other), true, "the merge came through");
+		assert.deepEqual(army.assignedAgainst[2000], [3001, 3002], "the breakaway's ledger holds his two defenders");
+
+		// a third defender goes at the nearer raider, two on him being no mob
+		world.addEntity(makeDefender(3000, [20, 20]));
+		const strikes: unknown[] = [];
+		world.ents.get(3000)!.attack = (target: unknown) => strikes.push(target);
+		army.assignUnit(world.gameState, 3000);
+		assert.deepEqual(strikes, [2000]);
+	});
 });
 
 describe("hearing events", () =>

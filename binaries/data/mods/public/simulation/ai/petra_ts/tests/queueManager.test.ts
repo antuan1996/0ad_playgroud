@@ -502,6 +502,40 @@ describe("QueueManager", () =>
 		assert.equal(manager.queues.a.switched, 0, "and loses its switch debt");
 	});
 
+	// only the port passes: the original re-sorts queueArrays in place while
+	// startNextItems walks it, so once the house queue drops behind the field
+	// queue the loop skips the field and comes back to the houses
+	it("visits every queue once in a turn when a started plan resets its queue's priority", () =>
+	{
+		const gameState = worldWithResources();
+		let houses = 0;
+		let fields = 0;
+		// A house plan raised its queue for a pop-cap emergency; starting it
+		// puts the queue back to its normal priority (a plan's queueToReset).
+		const house = (): FakePlan => makePlan({
+			getCost: costOf(50),
+			start: () =>
+			{
+				++houses;
+				manager.changePriority("house", 20);
+			}
+		});
+		const manager = makeManager(makeConfig({ priorities: { house: 1000, field: 50, economicBuilding: 30 } }), {
+			house: [house(), house()],
+			field: [makePlan({ getCost: costOf(100), start: () => { ++fields; } })],
+			economicBuilding: []
+		});
+		account(manager, "house").food = 100;
+		account(manager, "field").food = 100;
+
+		manager.startNextItems(gameState);
+
+		assert.equal(fields, 1, "the funded field starts this turn");
+		assert.equal(houses, 1, "one house a turn, as for any queue");
+		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["field", "economicBuilding", "house"],
+			"the next turn sees the new order");
+	});
+
 	it("leaves a paused queue's plans and account alone", () =>
 	{
 		const gameState = worldWithResources();

@@ -4,8 +4,8 @@ Found while porting Petra (`simulation/ai/petra/`) to TypeScript and covering
 it with behaviour tests (`simulation/ai/petra_ts/tests/`, see `FINDINGS.md`
 there), then confirmed in matches played in the game.
 
-- **Part 1**: twelve bugs with a fix each, in `petra-fixes.patch` (11 files,
-  +36 −19). Apply from the repository root with `git apply petra-fixes.patch`.
+- **Part 1**: fifteen bugs with a fix each, in `petra-fixes.patch` (13 files,
+  +43 −22). Apply from the repository root with `git apply petra-fixes.patch`.
 - **Part 2**: behaviour that looks unintended, reported without a patch: the
   right fix is a design choice.
 - **Part 3**: a bug outside Petra, in the game's command checks, that the bots'
@@ -18,8 +18,8 @@ with `git apply --check` against upstream's current `main` before filing.
 ## How the patch was checked
 
 - **Tests.** The behaviour-test suite runs against both the port and the
-  original. Unpatched, the original fails 16 of 1528 tests, each pinning one of
-  the bugs below; patched, it passes all 1528. ESLint is clean.
+  original. Unpatched, the original fails 19 of 1531 tests, each pinning one of
+  the bugs below; patched, it passes all 1531. ESLint is clean.
 - **In game.** Unpatched, the original never reaches town phase in a real game
   (bug 1): it lost 9 of 10 headless conquest matches against the port, and a
   match against itself was still in village phase at game minute 1899.
@@ -29,7 +29,9 @@ with `git apply --check` against upstream's current `main` before filing.
 
 ## Part 1: bugs, fixed in the patch
 
-Ordered by how much they matter in a game.
+Bugs 1–12 are ordered by how much they matter in a game. Bugs 13–15 were
+found later, by comparing the patched original with the port game by game
+(below, "Patched, it plays as the port").
 
 ### 1. `baseManager.removeDropsite` wipes every resource list (every game)
 
@@ -148,6 +150,53 @@ exists, which the builder's lookup just above does check. Not reached today
 lookups should match.
 
 Fix: `if (plan && ...)`, as for builders.
+
+### 13. `queueManager.changePriority` reorders the queues mid-loop (most games)
+
+`changePriority` re-sorts `queueArrays` in place. `startNextItems` walks
+that array and starts plans, and a plan's `onStart` (or `queue.check`
+dropping an invalid plan) calls `changePriority` to put its `queueToReset`
+back to its normal priority. The loop then goes on over the reordered array,
+so one queue is skipped that turn and another is visited twice. Seen in a
+game at minute 3:43: the original left a funded field plan for a later turn,
+where the port started it; in 3 of 26 seed pairs it was the first decision
+the two made differently.
+
+Fix: sort a copy (`this.queueArrays = this.queueArrays.slice()` before
+`sortQueues`), so the running loop finishes the old order.
+
+### 14. `basesManager.createBase` passes no state to a reused base
+
+```js
+newbase.reset(type);
+```
+
+`BaseManager.reset` is `reset(gameState, state)`, so `state` is always
+undefined when an existing base without anchor is reused: a base that lost
+its civic centre and gets a new one is never `constructing` (builders are not
+called to a rebuilt centre's foundation) and gets `neededDefenders` 0 (no
+guard for a captured centre; 7 at very hard).
+
+Fix: `newbase.reset(gameState, type)`.
+
+### 15. `defenseArmy` counts a removed foe's `undefined` as a defender
+
+`removeFoe` (and the rename of a foe) set `assignedAgainst[foe] = undefined`
+instead of deleting it. When two armies merge, `merge` walks the other
+army's `assignedAgainst`, and for a foe both armies know it appends
+`concat(undefined)`: the foe's list gains an `undefined` member, looks one
+defender more crowded, and `assignUnit` sends defenders elsewhere.
+
+Fix: `delete this.assignedAgainst[foe]` in both places.
+
+### Patched, it plays as the port
+
+With the fifteen fixes, the patched original and the port were played
+against each other from both slots on 26 seed pairs (mainland, very hard,
+Athenians): in every pair the game with the slots swapped was the same game,
+the two command logs identical line for line (52 games, about 290,000
+commands). So on these seeds the TypeScript port and patched Petra make the
+same decisions.
 
 ## Part 2: unintended-looking behaviour, no patch
 

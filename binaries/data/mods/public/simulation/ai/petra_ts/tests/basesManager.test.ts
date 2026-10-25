@@ -11,7 +11,7 @@ import { describe, it } from "node:test";
 
 import { loadPetraModule } from "./harness/target.ts";
 import {
-	makeGaiaSupply, makeHqEntity, makeHqWorld, seatHQ, structureTemplate, PLAYER, ENEMY,
+	makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, seatHQ, structureTemplate, PLAYER, ENEMY,
 	type HqInstance, type HqSeatOptions, type HqWorldOptions
 } from "./harness/hqWorld.ts";
 import { emptyEvents } from "./harness/attackWorld.ts";
@@ -293,6 +293,35 @@ describe("a building lost: the turn of the destruction events", () =>
 
 		assert.equal(base.anchor, undefined);
 		assert.equal(hq.numActiveBases(), 0, "the town is no longer an active ground");
+	});
+
+	// only the port passes: the original calls newbase.reset(type) for the
+	// (gameState, state) signature, so a reused ground gets no state: it is
+	// never founding, and never asks for defenders
+	it("a town that lost its centre guards a centre it captures, and founds one it rebuilds", () =>
+	{
+		const { world, hq, base, bs } = seat({}, { "config": makeHQConfig({ "difficulty": 5 }) });
+		bs.checkEvents(world.gameState, eventsWith({
+			"Destroy": [{ "entity": 1000, "metadata": { [PlayerID]: { "base": base.ID, "baseAnchor": true } } }]
+		}));
+		const captured = world.addEntity(makeHqEntity({
+			"id": 4300, "owner": PLAYER, "position": [70, 70],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}));
+
+		const reused = bs.createBase(world.gameState, captured, BaseManager.STATE_CAPTURED);
+		assert.equal(reused, base, "the town's ground takes the captured centre");
+		assert.equal(reused.neededDefenders, 7, "very hard guards a captured centre with 3 + 2 × 2 defenders");
+		assert.equal(reused.constructing, false);
+
+		bs.checkEvents(world.gameState, eventsWith({
+			"Destroy": [{ "entity": 4300, "metadata": { [PlayerID]: { "base": base.ID, "baseAnchor": true } } }]
+		}));
+		const rebuilt = foundation(world, undefined, 4301, [70, 70], ["CivCentre"]);
+		assert.equal(bs.createBase(world.gameState, rebuilt, BaseManager.STATE_UNCONSTRUCTED), base);
+		assert.equal(base.constructing, true, "the ground founds its new centre, calling builders to it");
+		assert.equal(base.neededDefenders, 0, "a foundation asks for no defenders");
+		void hq;
 	});
 
 	it("a foundation raised and felled in the same turn costs the towns nothing", () =>
