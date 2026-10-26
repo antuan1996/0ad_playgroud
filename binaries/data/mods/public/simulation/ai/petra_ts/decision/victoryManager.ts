@@ -512,7 +512,9 @@ export class VictoryManager
 
 	tryAssignMilitaryGuard(gameState: CommonGameState, guardEnt: CommonEntity, criticalEnt: CommonEntity, checkForSameAccess: boolean): boolean
 	{
-		if (guardEnt.getMetadata(PlayerID, "plan") !== undefined ||
+		// a unit out of any plan (-1, the attack manager's reserve) may guard
+		const plan = guardEnt.getMetadata(PlayerID, "plan");
+		if (plan !== undefined && plan !== -1 ||
 		    guardEnt.getMetadata(PlayerID, "transport") !== undefined || this.criticalEnts.has(guardEnt.id()) ||
 		    checkForSameAccess && (!guardEnt.position() || !criticalEnt.position() ||
 		    getLandAccess(gameState, criticalEnt) != getLandAccess(gameState, guardEnt)))

@@ -215,8 +215,10 @@ export class ResearchManager
 		for (let i = 0; i < techs.length; ++i)
 		{
 			const template = techs[i][1]._template;
-			if (template.affects && template.affects.length === 1 &&
-				(template.affects[0] === "Healer" || template.affects[0] === "Outpost" || template.affects[0] === "Wall"))
+			// the class list's first class: "Healer !Champion !Hero" is for healers
+			const classes = template.affects && template.affects.length === 1 ? template.affects[0] : undefined;
+			const firstClass = typeof classes === "string" ? classes.split(" ")[0] : classes?.[0];
+			if (firstClass === "Healer" || firstClass === "Outpost" || firstClass === "Wall")
 			{
 				techs.splice(i--, 1);
 				continue;

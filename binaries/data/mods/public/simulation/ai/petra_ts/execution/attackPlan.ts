@@ -990,7 +990,7 @@ export class AttackPlan
 		{
 			if (!ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined)
 				continue;
-			if (!ent.hasClasses(["FastMoving", "CitizenSoldier"]))
+			if (!ent.hasClasses(["FastMoving+CitizenSoldier"]))
 				continue;
 			const raid = hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID);
 			if (!raid)
@@ -1351,7 +1351,7 @@ export class AttackPlan
 			if (struct.get("Obstruction/Static"))
 			{
 				const angle = struct.angle();
-				if (!angle)
+				if (angle === undefined)
 					continue;
 				const width = +struct.get("Obstruction/Static/@width");
 				const depth = +struct.get("Obstruction/Static/@depth");
@@ -1368,7 +1368,7 @@ export class AttackPlan
 			else if (struct.get("Obstruction/Obstructions"))
 			{
 				const angle = struct.angle();
-				if (!angle)
+				if (angle === undefined)
 					continue;
 				let width = +struct.get("Obstruction/Obstructions/Door/@width");
 				let depth = +struct.get("Obstruction/Obstructions/Door/@depth");

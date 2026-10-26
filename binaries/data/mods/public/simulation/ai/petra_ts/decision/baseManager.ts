@@ -726,24 +726,18 @@ export class BaseManager
 				return false;
 			return true;
 		}).toEntityArray();
-		availableWorkers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number =>
+		// idle hands first, then the town's own, then a plan's; builders last
+		const lendScore = (ent: import("simulation/ai/common-api/entity.js").Entity): number =>
 		{
-			let vala = 0;
-			let valb = 0;
-			if (a.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
-				vala = 100;
-			if (b.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
-				valb = 100;
-			if (a.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_IDLE)
-				vala = -50;
-			if (b.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_IDLE)
-				valb = -50;
-			if (a.getMetadata(PlayerID, "plan") === undefined)
-				vala = -20;
-			if (b.getMetadata(PlayerID, "plan") === undefined)
-				valb = -20;
-			return vala - valb;
-		});
+			const subrole = ent.getMetadata(PlayerID, "subrole");
+			if (subrole === Worker.SUBROLE_BUILDER)
+				return 100;
+			if (subrole === Worker.SUBROLE_IDLE)
+				return -50;
+			return ent.getMetadata(PlayerID, "plan") === undefined ? -20 : 0;
+		};
+		availableWorkers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number =>
+			lendScore(a) - lendScore(b));
 		const needed = Math.min(number, availableWorkers.length - 3);
 		for (let i = 0; i < needed; ++i)
 		{

@@ -390,6 +390,11 @@ export class Worker
 					return;
 				}
 			}
+			else if (unitAIStateOrder == "RETURNRESOURCE" &&
+				ent.unitAIOrderData().some(order => order.target == targetFoundationId))
+			{
+				// already walking its load home, the building queued after it
+			}
 			else
 			{
 				const goalAccess = requireValue(getLandAccess(gameState, target));
