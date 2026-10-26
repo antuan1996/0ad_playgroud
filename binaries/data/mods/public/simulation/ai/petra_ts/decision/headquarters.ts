@@ -273,7 +273,7 @@ export class Headquarters
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_TRADER);
 				ent.setMetadata(PlayerID, "route", undefined);
 			}
-			if (ent.hasClass("Worker"))
+			if (ent.hasClass("Worker") && ent.isGatherer())
 			{
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
 				ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
@@ -316,7 +316,12 @@ export class Headquarters
 					// we are autogarrisoned, check that the holder is registered in the garrisonManager
 					const holderID = ent.garrisonHolderID();
 					const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
-					if (holder)
+					// The rally point garrisons a whole building's batches, set from the one
+					// at the head of its queue as we last saw it: a unit not trained to
+					// garrison (one of an attack, say) comes out again.
+					if (holder && !ent.getMetadata(PlayerID, "garrisonType"))
+						holder.unload(ent.id());
+					else if (holder)
 						this.garrisonManager.registerHolder(gameState, holder);
 				}
 				else if (ent.getMetadata(PlayerID, "garrisonType"))
@@ -626,7 +631,8 @@ export class Headquarters
 			if (pickedClass !== undefined)
 				classes[0].push(pickedClass);
 
-			template = this.findBestTrainableUnit(gameState, classes, requirements);
+			// only units that gather: a mercenary (Athens' archers) is a citizen soldier by its classes
+			template = this.findBestTrainableUnit(gameState, classes, requirements, true);
 		}
 
 		// If the template variable is empty, the default unit (Support unit) will be used
@@ -639,7 +645,7 @@ export class Headquarters
 
 	/** picks the best template based on parameters and classes */
 	findBestTrainableUnit(gameState: CommonGameState, classes: Array<string | string[]>,
-		requirements: HeadquartersTrainableRequirement[]): TemplateName | undefined
+		requirements: HeadquartersTrainableRequirement[], gatherersOnly = false): TemplateName | undefined
 	{
 		let units;
 		if (classes.indexOf("Hero") != -1)
@@ -647,6 +653,8 @@ export class Headquarters
 		// We do not want siege tower as AI does not know how to use it nor hero when not explicitely specified.
 		else
 			units = gameState.findTrainableUnits(classes, ["Hero", "SiegeTower"]);
+		if (gatherersOnly)
+			units = units.filter(([, template]) => template.resourceGatherRates() !== undefined);
 
 		if (!units.length)
 			return undefined;

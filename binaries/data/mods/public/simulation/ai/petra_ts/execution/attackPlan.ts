@@ -78,6 +78,9 @@ type AttackTransitions = {
 	"": never;
 };
 export type AttackPlanState = keyof AttackTransitions;
+/** How near its rally point a withdrawing army stops, past the anchor's footprint when it is a base. */
+const WITHDRAW_RANGE = 15;
+
 const ATTACK_PLAN_STATES: readonly AttackPlanState[] = ["unexecuted", "completing", "walking", "transporting", "arrived", ""];
 
 /** Whether a value read back from a save is one of the attack's states. */
@@ -860,8 +863,9 @@ export class AttackPlan
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
 					const data: Record<string, unknown> = { "plan": this.name, "special": specialData, "base": 0 };
 					const templateObj = gameState.getTemplate(template);
-					data.role = templateObj && templateObj.hasClass("CitizenSoldier") ?
-						Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
+					// a mercenary is a citizen soldier that cannot gather: an attacker only
+					data.role = templateObj && templateObj.hasClass("CitizenSoldier") &&
+						templateObj.resourceGatherRates() !== undefined ? Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
 					const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 					if (trainingPlan.template)
 						queue.addPlan(trainingPlan);
@@ -1541,6 +1545,25 @@ export class AttackPlan
 			return 0;
 
 		Engine.ProfileStart("Update Attack");
+
+		// A unit inside one of our buildings on land, not on its way by sea, is
+		// out of the attack (trained where the rally point garrisons, then kept
+		// there by the garrison manager): let it go, or a plan of only such
+		// units waits for good and holds up the next attack.
+		for (const ent of this.unitCollection.values())
+		{
+			if (ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined)
+				continue;
+			const holderId = ent.garrisonHolderID();
+			const holder = holderId === undefined ? undefined : gameState.getEntityById(holderId);
+			if (holder && !holder.hasClass("Ship"))
+				this.removeUnit(ent, true);
+		}
+		if (!this.unitCollection.hasEntities())
+		{
+			Engine.ProfileStop();
+			return 0;
+		}
 
 		this.position = this.unitCollection.getCentrePosition();
 
@@ -2333,6 +2356,10 @@ export class AttackPlan
 			// If the attack was started, look for a good rallyPoint to withdraw
 			// (an army with no position is aboard ships: it gets no rallyPoint)
 			let rallyPoint;
+			// how far from the rally point the units may stop: an anchor's
+			// position is the centre of its building, so the ring must reach
+			// out past the footprint or nobody can get there
+			let withdrawRange = WITHDRAW_RANGE;
 			if (this.isStarted() && pos)
 			{
 				const access = this.getAttackAccess(gameState);
@@ -2356,6 +2383,8 @@ export class AttackPlan
 						continue;
 					dist = newdist;
 					rallyPoint = anchorPos;
+					// anchors always have an obstruction
+					withdrawRange = requireValue(anchor.obstructionRadius()).max + WITHDRAW_RANGE;
 				}
 			}
 
@@ -2364,7 +2393,7 @@ export class AttackPlan
 				if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
 					ent.stopMoving();
 				if (rallyPoint)
-					ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15);
+					ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, withdrawRange);
 				this.removeUnit(ent);
 			}
 		}
@@ -2379,7 +2408,7 @@ export class AttackPlan
 	{
 		if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
 		{
-			if (ent.hasClass("CitizenSoldier"))
+			if (ent.hasClass("CitizenSoldier") && ent.isGatherer())
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
 			else
 				ent.setMetadata(PlayerID, "role", undefined);

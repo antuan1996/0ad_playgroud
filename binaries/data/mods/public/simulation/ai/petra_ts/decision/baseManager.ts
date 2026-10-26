@@ -542,7 +542,9 @@ export class BaseManager
 
 		for (const ent of roleless)
 		{
-			if (ent.hasClasses(["Worker", "CitizenSoldier", "FishingBoat"]))
+			// the classes are not enough: a mercenary keeps Worker and
+			// CitizenSoldier but cannot gather, so as a worker it would idle for good
+			if (ent.hasClasses(["Worker", "CitizenSoldier", "FishingBoat"]) && ent.isGatherer())
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
 			else if (ent.hasClass("Support") && ent.hasClass("Elephant"))
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
