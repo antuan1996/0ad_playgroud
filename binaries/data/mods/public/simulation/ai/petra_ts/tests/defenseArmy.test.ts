@@ -14,7 +14,7 @@ import { describe, it } from "node:test";
 import { emptyEvents, makeEntity, type Methods, override } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-import { entityId, seconds, templateName, worldPos } from "../adapter/brands.ts";
+import { armyId, entityId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { DefenseArmy } from "../execution/defenseArmy.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { Worker } from "../execution/worker.ts";
@@ -331,7 +331,7 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 12 }));
-		world.ai.HQ.navalManager.getPlan = (name: number) => name === 12 ? {
+		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) => name === 12 ? {
 			state: TransportPlan.BOARDING,
 			removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id())
 		} as never : undefined;
@@ -348,7 +348,7 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 13 }));
-		world.ai.HQ.navalManager.getPlan = (name: number) => name === 13 ? {
+		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) => name === 13 ? {
 			state: "sailing",
 			removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id())
 		} as never : undefined;
@@ -1239,7 +1239,7 @@ describe("saved and restored", () =>
 	{
 		const world = makeWorld();
 		const shell = new DefenseArmy(world.gameState, []);
-		const data = { "ID": 77, "type": "default", "foePosition": worldPos(5, 5), "positionLastUpdate": 3,
+		const data = { "ID": armyId(77), "type": "default", "foePosition": worldPos(5, 5), "positionLastUpdate": 3,
 			"assignedAgainst": { "99": [entityId(7)] }, "assignedTo": { "7": entityId(99) }, "foeEntities": [entityId(99)],
 			"foeStrength": 12, "ownEntities": [entityId(55)], "ownStrength": 3 };
 		shell.Deserialize(data);

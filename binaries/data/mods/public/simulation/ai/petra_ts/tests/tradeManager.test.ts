@@ -16,7 +16,7 @@ import {
 } from "./harness/hqWorld.ts";
 import { collectionOf } from "./harness/world.ts";
 
-import { entityId, landRegion, playerId, seaRegion } from "../adapter/brands.ts";
+import { baseId, entityId, landRegion, playerId, seaRegion } from "../adapter/brands.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { type SerializedTradeManager, TradeManager, type TradeRoute } from "../decision/tradeManager.ts";
 
@@ -659,7 +659,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 			market(s.world, 401, [280, 40]);
 			s.manager.checkRoutes(s.world.gameState);
 		}
-		s.hq.findMarketLocation = () => options.position ?? [200, 200, 2, 50000];
+		s.hq.findMarketLocation = () => options.position ?? [200, 200, baseId(2), 50000];
 		s.manager.routeProspection = true;
 		return s;
 	}
@@ -676,7 +676,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 
 	it("a market adding too little to the present route is not queued", () =>
 	{
-		const { world, manager, queues } = prospecting({ "route": true, "position": [200, 200, 2, 10] });
+		const { world, manager, queues } = prospecting({ "route": true, "position": [200, 200, baseId(2), 10] });
 		manager.prospectForNewMarket(world.gameState, queues);
 		assert.equal(queues.economicBuilding.plans.length, 0);
 	});
@@ -691,7 +691,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 		noMarket.hq.canBuild = () => true;
 		noMarket.world.templates["structures/athen/market"] = makeTemplate("structures/athen/market", { "classes": ["Structure", "Market"] });
 		market(noMarket.world, 400, [40, 40], { "dock": 5 });	// a trading dock, no market
-		noMarket.hq.findMarketLocation = () => [200, 200, 2, 0];
+		noMarket.hq.findMarketLocation = () => [200, 200, baseId(2), 0];
 		noMarket.manager.routeProspection = true;
 		noMarket.manager.prospectForNewMarket(noMarket.world.gameState, noMarket.queues);
 		assert.equal(noMarket.manager.routeProspection, false);

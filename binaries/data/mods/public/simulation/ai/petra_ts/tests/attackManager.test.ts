@@ -15,7 +15,7 @@ import { logs, resetRecorder, sent } from "./harness/engine.ts";
 import { emptyEvents, fake, makeEntity, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from "./harness/world.ts";
 
-import { entityId, playerId, worldPos } from "../adapter/brands.ts";
+import { armyId, attackPlanId, entityId, playerId, worldPos } from "../adapter/brands.ts";
 import { AttackManager } from "../decision/attackManager.ts";
 import { Config } from "../decision/config.ts";
 import { MEDIUM, SANDBOX } from "../decision/difficultyLevel.ts";
@@ -1182,9 +1182,9 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Rush"].push(preparing);
 			manager.startedAttacks["Attack"].push(marching);
 
-			assert.equal(manager.getPlan(3), preparing, "found among the preparing");
-			assert.equal(manager.getPlan(9), marching, "found among the marching");
-			assert.equal(manager.getPlan(50), undefined, "nothing under that name");
+			assert.equal(manager.getPlan(attackPlanId(3)), preparing, "found among the preparing");
+			assert.equal(manager.getPlan(attackPlanId(9)), marching, "found among the marching");
+			assert.equal(manager.getPlan(attackPlanId(50)), undefined, "nothing under that name");
 		});
 
 		it("pauses exactly the named plan, or every plan at once", () =>
@@ -1196,7 +1196,7 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Rush"].push(a, b);
 			manager.startedAttacks["Attack"].push(c);
 
-			manager.pausePlan(4);
+			manager.pausePlan(attackPlanId(4));
 			assert.deepEqual(b.pauses, [true], "the named plan was paused");
 			assert.deepEqual(a.pauses, [], "the rest was untouched");
 
@@ -1230,7 +1230,7 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Rush"].push(a, b);
 
 			manager.pauseAllPlans();
-			manager.unpausePlan(4);
+			manager.unpausePlan(attackPlanId(4));
 			assert.equal(b.paused, false, "the named plan runs again");
 			assert.equal(a.paused, true, "the rest stays paused");
 		});
@@ -1368,7 +1368,7 @@ describe("attack manager", () =>
 			defender(world, 1300);
 
 			assert.equal(manager.switchDefenseToAttack(world.gameState, target,
-				{ "armyID": 6, "uniqueTarget": true }), true, "the named army was handed over");
+				{ "armyID": armyId(6), "uniqueTarget": true }), true, "the named army was handed over");
 			const plan = manager.startedAttacks["Attack"][0];
 			assert.equal(plan.uniqueTargetId, 5000, "the attack holds only this target");
 			assert.deepEqual(neighbour.foeEntities, [], "the named army was drained");

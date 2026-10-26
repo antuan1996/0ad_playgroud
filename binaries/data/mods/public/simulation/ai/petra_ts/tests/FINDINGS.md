@@ -561,6 +561,22 @@ A scan of the port's syntax trees and, for inferred types, its type checker
     plain: `addPlan` of no plan, `ResearchPlan`'s `researchTime` check.
   - **A quirk kept** (§4): a dock whose best angle is exactly 0 is not
     placed (`angle == false`).
+- **The third round** (`PLAN.md` 3.5): base, army and transport-plan ids
+  branded; plan metadata typed as entity metadata; roles as unions; one
+  helper for the plans of every attack type; `debugWarn`; `noUnusedLocals`.
+  The fingerprint and the 24-game batch did not move. On the way:
+  - **More sentinels named.** A `base` of -1 or -2 on a foundation means "found
+    a new base" (civic centre) or "a new base without an anchor" (dock), 0
+    "no base" or "the trainer's base" in a training plan; the market search's
+    own -1 is neither ("no base of its own, the standard placement").
+  - **An unused parameter**: `changePriority`'s `metadata`, passed as
+    `{ "phaseUp": true }` and never read (as in the original).
+  - **Dead code**: `basesManager.init` walked our dropsites, looked their base
+    up and did nothing with it (the original too); an unused variable in
+    `emergencyManager`; imports nobody used, which the compiler did not check
+    for until `noUnusedLocals`.
+  - **Tests on made-up values**: roles `"keep"` and `"expansion"` on
+    construction plans (the bot gives a construction plan no role).
 - **Left** (`PLAN.md` 3.5): 19 functions over 150 lines, the records keyed
   by player or entity id (a `Map` reorders them), and 105 `declare` fields
   (below). The 117 other `any` hits of the first scan are evolving

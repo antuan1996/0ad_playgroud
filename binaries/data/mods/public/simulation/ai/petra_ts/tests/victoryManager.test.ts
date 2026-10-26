@@ -15,7 +15,7 @@ import {
 	PLAYER, seatHQ
 } from "./harness/hqWorld.ts";
 
-import { entityId, playerId, seconds } from "../adapter/brands.ts";
+import { armyId, entityId, playerId, seconds, transportPlanId } from "../adapter/brands.ts";
 import { type SerializedVictoryManager, VictoryManager } from "../decision/victoryManager.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
 
@@ -443,7 +443,7 @@ describe("healers and guards for the critical entities", () =>
 			unit(world, 1100 + i, ["Worker"], [30, 30], { "role": "worker" });
 		const champion = unit(world, 1200, ["Soldier", "Champion"], [90, 90]);
 		const reserve = unit(world, 1201, ["Soldier", "Infantry"], [90, 95], { "plan": -1 });
-		const busy = unit(world, 1202, ["Soldier", "Infantry"], [90, 85], { "plan": 3 });
+		unit(world, 1202, ["Soldier", "Infantry"], [90, 85], { "plan": 3 });
 		const free = unit(world, 1203, ["Soldier", "Infantry"], [95, 90]);
 
 		manager.manageCriticalEntGuards(world.gameState);
@@ -625,8 +625,8 @@ describe("the relic game: raids on gaia relics", () =>
 		assert.deepEqual(forced, [], "7.5 capture less 1 regeneration beats a fiftieth of 200 points");
 
 		const busy = relicGame([60, 60]);
-		busy.units[0].ent.setMetadata(PlayerID, "transport", 1);
-		busy.units[1].ent.setMetadata(PlayerID, "PartOfArmy", 1);
+		busy.units[0].ent.setMetadata(PlayerID, "transport", transportPlanId(1));
+		busy.units[1].ent.setMetadata(PlayerID, "PartOfArmy", armyId(1));
 		busy.units[2].ent.setMetadata(PlayerID, "plan", -2);
 		raids(busy.manager).set(entityId(701), []);
 		busy.manager.captureGaiaRelic(busy.world.gameState, busy.relic.ent);

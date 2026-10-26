@@ -16,7 +16,7 @@ import {
 	territoryCellAt
 } from "./harness/hqWorld.ts";
 
-import { entityId } from "../adapter/brands.ts";
+import { NEW_BASE, entityId } from "../adapter/brands.ts";
 import { BaseManager } from "../decision/baseManager.ts";
 import { BasesManager } from "../decision/basesManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
@@ -246,7 +246,7 @@ describe("a building lost: the turn of the destruction events", () =>
 
 		bs.checkEvents(world.gameState, eventsWith({
 			"Destroy": [{
-				"entity": entityId(4002), "metadata": { [PlayerID]: entityMetadata({ "base": -1 }) }, "SuccessfulFoundation": false
+				"entity": entityId(4002), "metadata": { [PlayerID]: entityMetadata({ "base": NEW_BASE }) }, "SuccessfulFoundation": false
 			}]
 		}));
 
@@ -307,7 +307,7 @@ describe("a foundation raised: the turn of the Create events", () =>
 	it("a colony's centre foundation founds a ground and calls ten hands from the towns to it", () =>
 	{
 		const { world, hq, base, bs } = seat();
-		const colony = secondTown(world, hq, 4401, [240, 240]);
+		secondTown(world, hq, 4401, [240, 240]);
 		// the handing town keeps three hands home, so thirteen are needed for ten
 		for (let i = 0; i < 13; ++i)
 			hand(world, base, 4410 + i, {}, {}, [20 + i, 20]);
@@ -378,7 +378,7 @@ describe("a foundation standing finished: the turn of the ConstructionFinished e
 		assert.equal(newBase.constructing, true);
 		const calls = watchHandleNewBase(hq);
 		// the raised centre carries the anchor's metadata, as the engine hands it over
-		const raised = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			"id": 4502, "owner": PLAYER, "position": [250, 250],
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}, {}, { "base": newBase.ID, "baseAnchor": true }));
@@ -420,7 +420,6 @@ describe("a foundation standing finished: the turn of the ConstructionFinished e
 		}));
 
 		assert.equal(base.dropsites[4521] === undefined, false, "the storehouse keeps its place");
-		const count = Object.keys(base.dropsites).length;
 		assert.equal(Object.keys(base.dropsites).filter((id) => bs.baseManagers.some((b) => b.dropsites[id as unknown as number] !== undefined)).length, 1, "no doubled booking: one storehouse, one place");
 	});
 });

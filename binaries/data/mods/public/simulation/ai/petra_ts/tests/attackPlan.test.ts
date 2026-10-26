@@ -506,7 +506,7 @@ describe("choosing a target", () =>
 	it("picks the enemy civil centre nearest to the rally point", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
-		const farther = world.addEntity(makeEntity({
+		world.addEntity(makeEntity({
 			id: 2001, owner: ENEMY, position: [60, 60], classes: ["Structure", "CivCentre"]
 		}));
 		const target = makeTarget(world); // [30,40], also a civ centre
@@ -539,7 +539,7 @@ describe("choosing a target", () =>
 			id: 1300, owner: PLAYER, position: [40, 45], classes: ["Structure", "CivCentre"]
 		}));
 		world.bases.push({ anchor: otherAnchor, accessIndex: 3 });
-		const target = world.addEntity(makeEntity({
+		world.addEntity(makeEntity({
 			id: 2100, owner: ENEMY, position: [55, 55], classes: ["Structure", "CivCentre"]
 		}));
 
@@ -556,7 +556,7 @@ describe("choosing a target", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY, sea: 4 });
 		world.accessAt.set("55,55", 3);
-		const target = world.addEntity(makeEntity({
+		world.addEntity(makeEntity({
 			id: 2100, owner: ENEMY, position: [55, 55], classes: ["Structure", "CivCentre"]
 		}));
 
@@ -2669,7 +2669,7 @@ describe("the retaliating crowd", () =>
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
-		const attacker = world.addEntity(makeEntity({
+		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Melee"]
 		}, { attackTypes: () => ["Melee"] }));
 		const rescues: unknown[][] = [];
@@ -2694,7 +2694,7 @@ describe("the retaliating crowd", () =>
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
-		const attacker = world.addEntity(makeEntity({
+		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege", "Melee"]
 		}, { attackTypes: () => ["Melee"] }));
 		const volleys: unknown[][] = [];

@@ -21,9 +21,7 @@ import {
 	structureTemplate
 } from "./harness/hqWorld.ts";
 
-import {
-	cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos
-} from "../adapter/brands.ts";
+import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
@@ -130,7 +128,7 @@ describe("checkEvents: a finished market frees the fields", () => {
 	it("a market finishing sets maxFields off", () => {
 		const { world, hq } = seat();
 		hq.maxFields = 5;	// fields are still being limited (configFirstBase's small map case)
-		const market = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 31, owner: PLAYER, position: centerOfCell(20, 21),
 			classes: ["Structure", "Market"], templateName: "structures/athen/market"
 		}));
@@ -236,7 +234,7 @@ describe("checkEvents: what a captured unit carries into town", () => {
 describe("checkEvents: the wall that decays (captured or fading)", () => {
 	it("a captured decaying tower goes to the garrison office's decay watch", () => {
 		const { world, hq } = seat();
-		const tower = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 61, owner: PLAYER, position: centerOfCell(25, 25),
 			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
 		}, {
@@ -254,7 +252,7 @@ describe("checkEvents: the wall that decays (captured or fading)", () => {
 
 	it("a decaying wall without garrison rights lands on the plain list", () => {
 		const { world, hq } = seat();
-		const wall = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 62, owner: PLAYER, position: centerOfCell(25, 26),
 			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
 		}, { "decaying": () => true }));
@@ -306,7 +304,7 @@ describe("checkEvents: rally points when training starts", () => {
 		const { world, hq } = seat();
 		calls = [];
 		world.addEntity(trainer(73, false));
-		const enemyBarracks = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 74, owner: ENEMY, position: centerOfCell(30, 30),
 			classes: ["Structure", "Trainer"], templateName: "structures/athen/barracks"
 		}, {
@@ -326,7 +324,7 @@ describe("checkEvents: training finished — landing and stale plans", () => {
 			id: 81, owner: PLAYER, position: centerOfCell(20, 20),
 			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
 		}));
-		const unit = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 82, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_archer_b"
 		}, { "garrisonHolderID": () => 81 }, { "garrisonType": "protection" }));	// no position: garrisoned inside the holder
 		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(82)], "owner": PLAYER }] }));
@@ -401,11 +399,11 @@ describe("checkEvents: training finished — landing and stale plans", () => {
 describe("checkEvents: territory decay events", () => {
 	it("a wall in dead territory goes to the plain book, a tower to garrison", () => {
 		const { world, hq } = seat();
-		const wall = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 91, owner: PLAYER, position: centerOfCell(12, 12),
 			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
 		}, { "decaying": () => true }));
-		const tower = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 92, owner: PLAYER, position: centerOfCell(12, 13),
 			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
 		}, {
@@ -425,7 +423,7 @@ describe("checkEvents: territory decay events", () => {
 
 	it("the tower recovered: the garrison bet is withdrawn", () => {
 		const { world, hq } = seat();
-		const tower = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 92, owner: PLAYER, position: centerOfCell(12, 13),
 			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
 		}, {
@@ -441,11 +439,11 @@ describe("checkEvents: territory decay events", () => {
 
 	it("a foundation and a foreign wall are not decayed property yet", () => {
 		const { world, hq } = seat();
-		const foundation = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 93, owner: PLAYER, position: centerOfCell(12, 12),
 			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
 		}, { "foundationProgress": () => 0.5, "decaying": () => true }));
-		const foreign = world.addEntity(makeHqEntity({
+		world.addEntity(makeHqEntity({
 			id: 94, owner: ENEMY, position: centerOfCell(12, 14),
 			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
 		}, { "decaying": () => true }));
@@ -469,7 +467,7 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 		stubGlobal("randFloat", () => 0);
 		try
 		{
-			const wall = world.addEntity(makeHqEntity({
+			world.addEntity(makeHqEntity({
 				id: 101, owner: PLAYER, position: centerOfCell(12, 12),
 				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
 			}, {
@@ -4722,7 +4720,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		const base = hq.baseManagers()[0];
 
 		assert.equal(hq.getBaseByID(base.ID), base);
-		assert.equal(hq.getBaseByID(999), undefined);
+		assert.equal(hq.getBaseByID(baseId(999)), undefined);
 	});
 
 	it("after a reload, the bases' territory map is rebuilt from the bases' own ground", () =>

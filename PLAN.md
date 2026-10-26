@@ -235,6 +235,17 @@ identical game for game before and after):
    two-step set-up of managers and plans: a constructor that can compute
    them, or a type that admits their absence), as each class is rewritten.
 
+A third round (done, the same checks, the 24 games identical again):
+`BaseId`, `ArmyId`, `TransportPlanId` brands (with `NO_BASE`, and `NEW_BASE`
+and `NEW_ANCHORLESS_BASE` for the foundations that found a base); plan
+metadata typed as the entity metadata it becomes (`PlanMetadata extends
+Partial<PetraEntityMetadata>`; `train`/`construct` take it); `WorkerRole`
+and `WorkerSubrole` unions for `role`/`subrole`; `plansIn()` for the loop
+over every attack plan; no callback restating its types; `debugWarn(config,
+level, () => message)` for the single-warning debug guards; and
+`noUnusedLocals` on for the port, after removing what it found (unused
+imports, a loop the original also left doing nothing, unused test names).
+
 ## 4. Performance: measure first
 
 - **Measure** (done, stage 3): the engine times each AI's script call when
@@ -299,9 +310,15 @@ identical game for game before and after):
 ### 5.2 Every change
 
 - `npm run build:petra`, `npm run typecheck:petra:tests`, `npm run test:petra`
-  (and `-- ref` while parity tests remain).
+  and `npm run test:petra:out`.
 - `npm run test:petra:match`: the fixed match and its anomaly checks; the
   fingerprint is printed, not asserted (any behaviour change moves it).
+- `npm run test:petra:smoke`: 24 fixed games (12 seed pairs from both slots,
+  `petra_out` against `petra_parity`, about 3 minutes) compared game for game
+  with the recorded `build/petra_ts/smoke/reference.tsv`. A refactor must
+  leave all 24 identical; a change meant to alter play lists the games it
+  moved, and is recorded with `--update` in the same commit. It is a check
+  that play did (not) change, not a measure of strength (5.3).
 - Determinism: the integration match run twice gives the same fingerprint.
 - Save/load: the persistence round trips in the tests (`persistence.ts`),
   plus an in-game check once a stage touches serialized data: save at a

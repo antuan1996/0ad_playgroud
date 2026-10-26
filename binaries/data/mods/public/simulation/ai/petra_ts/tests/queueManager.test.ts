@@ -465,7 +465,6 @@ describe("QueueManager", () =>
 
 	it("stops a queue from using its account when asked", () =>
 	{
-		const gameState = worldWithResources();
 		const manager = makeManager(makeConfig());
 		account(manager, "villager").food = 30;
 		account(manager, "citizenSoldier").food = 30;

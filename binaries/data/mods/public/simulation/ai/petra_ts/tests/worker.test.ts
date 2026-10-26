@@ -172,7 +172,7 @@ describe("a worker picking its crop: startGathering", () =>
 	{
 		const { world, base, worker } = seat();
 		const bush = rawSupply(world, 6031, [30, 30], "food", "fruit");
-		const tree = rawSupply(world, 6032, [34, 30], "wood", "tree");
+		rawSupply(world, 6032, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6033, { "gather-type": "wood" },
@@ -188,9 +188,9 @@ describe("a worker picking its crop: startGathering", () =>
 	it("a supply already stripped bare is passed over for the next tree", () =>
 	{
 		const { world, base, worker } = seat();
-		const stripped = rawSupply(world, 6041, [30, 30], "wood", "tree",
+		rawSupply(world, 6041, [30, 30], "wood", "tree",
 			{ "resourceSupplyAmount": () => 0, "resourceSupplyMax": () => 0 });
-		const tree = rawSupply(world, 6042, [34, 30], "wood", "tree");
+		rawSupply(world, 6042, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6043, { "gather-type": "wood" },
@@ -716,7 +716,7 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 		const { world, base, worker } = seat();
 		const bare = rawSupply(world, 6551, [30, 30], "wood", "tree",
 			{ "resourceSupplyAmount": () => 10, "resourceSupplyNumGatherers": () => 2 });
-		const full = rawSupply(world, 6552, [34, 30], "wood", "tree");
+		rawSupply(world, 6552, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6553, { "gather-type": "wood" },
@@ -2143,7 +2143,6 @@ describe("a hunter and a fisher through their turn: update", () =>
 	{
 		const { world, base, worker } = seat();
 		const ent = rider(world, base, 7501);
-		const gs = world.gameState;
 
 		worker.update(world.gameState, ent);
 
@@ -2156,7 +2155,6 @@ describe("a hunter and a fisher through their turn: update", () =>
 		herd(world, 7511, [40, 40]);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const gs = world.gameState;
 		const ent = rider(world, base, 7512, { "lastHuntSearch": world.ai.elapsedTime - 5 }, { "gather": ids(gathered) });
 
 		worker.update(world.gameState, ent);
@@ -2300,7 +2298,6 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	it("a woodcutter passes over a tree marked unreachable", () =>
 	{
 		const { world, base, worker } = seat();
-		const gs = world.gameState;
 		rawSupply(world, 7701, [30, 30], "wood", "tree", {}).setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		rawSupply(world, 7702, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
@@ -2347,7 +2344,6 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	it("a hungry hand passes over cattle marked unreachable", () =>
 	{
 		const { world, base, worker } = seat();
-		const gs = world.gameState;
 		herd(world, 7721, [40, 40]).setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		herd(world, 7722, [44, 40]);
 		bookCentreSupplies(world, base);
@@ -2563,7 +2559,6 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 	it("a woodcutter heading for a tree another hand found unreachable turns to the next one", () =>
 	{
 		const { world, base, worker } = seat();
-		const gs = world.gameState;
 		rawSupply(world, 8001, [30, 30], "wood", "tree").setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		rawSupply(world, 8002, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
@@ -2583,7 +2578,6 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 	it("a crop marked unreachable is cleared once a hand gathers from it after all", () =>
 	{
 		const { world, base, worker } = seat();
-		const gs = world.gameState;
 		const tree = rawSupply(world, 8011, [30, 30], "wood", "tree");
 		tree.setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		let carrying = 0;
@@ -2639,7 +2633,6 @@ describe("a worker elephant following the gatherers: moveToGatherer", () =>
 	{
 		const { world, base, worker } = seat();
 		hand(world, base, 8111, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
-		const gs = world.gameState;
 		const moved: number[] = [];
 
 		// the town's turn asks without forcing it (baseManager.update)

@@ -44,6 +44,7 @@ npm run build:petra:out             # build the "Petra TS" in-game bot into simu
 npm run test:petra                  # all tests against the port (petra_ts/*.ts)
 npm run test:petra:out              # build the bot, then the same tests against petra_out/*.js
 npm run test:petra:match            # integration: a fixed headless mirror match in the game, checked for anomalies
+npm run test:petra:smoke            # 24 fixed games vs petra_parity, each compared with the recorded reference (~3 min)
 npm run build:petra:baselines       # the baseline bots petra_parity and petra_fixed (gitignored)
 npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
 npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
@@ -121,6 +122,24 @@ the bot's internal structure changes with its code, so `-b` is for reading
 while debugging (a section of the dump that no longer fits the code prints as
 `{"error": ...}` rather than breaking the bot's turn). It does not assert the
 fingerprint, which any change to the bot moves; it prints it.
+`npm run test:petra:smoke` (`build/petra_ts/smoke.ts`; `-- --jobs J`, default
+12) plays 24 headless games, `petra_out` against `petra_parity`: the 12 map/AI
+seed pairs of `build/petra_ts/smoke/reference.tsv`, each from both slots, on
+random/mainland, athen, difficulty 5, conquest, ended at 90 game minutes (one
+`batch.ts` run into `batches/smoke-<time>/`). Each game's fingerprint (the
+decision's game time and both players' end statistics) is compared with the
+reference's; it fails on a game that differs, a script error or warning, or a
+game the engine could not finish (an abort, status 134, is replayed up to
+twice first), and lists each moved game's seeds, old and new outcome and
+length. A refactor must leave all 24 identical (the check every type and
+structure change since stage 4 was held to); a change meant to alter play
+records the new games with `-- --update` (or `-- --update --from <batch>` from
+a batch already played on the reference's pairs), and the reference is
+committed with that change. Changes to the game data or the engine move the
+fingerprints too, `petra_parity`'s games included. The reference's header
+names the commit and the parity tag it was recorded with; its 24 games run
+20-56 game minutes. Its win-rate means nothing (24 games): strength is
+`batch.ts` with hundreds of games.
 Baselines (`PLAN.md` §2; `build/petra_ts/baselines.ts`, gitignored outputs):
 `petra_parity` ("Petra TS parity") is the port compiled from the tag
 `petra-ts-parity` (git archive of that tag's `petra_ts/` and tsconfigs, tsc,
@@ -246,12 +265,14 @@ untested branches.
 - Ids, positions, regions, times, template names and grid cells are branded
   (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`, `SeaIndex`,
   `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName` (entity templates),
-  `TechName` (technologies), `AttackPlanId`, `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
+  `TechName` (technologies), `AttackPlanId`, `BaseId`, `ArmyId`, `TransportPlanId`,
+  `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
   grid): what the engine hands over carries the brand. `petra_ts/brands.ts`
   is the only place that gives it to a plain value (`entityId`, `playerId`,
   `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
-  `templateName`, `techName`, `attackPlanId`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
-  `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`): its identity
+  `templateName`, `techName`, `attackPlanId`, `baseId`, `armyId`, `transportPlanId`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
+  `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`, `NO_BASE`, `NEW_BASE`,
+  `NEW_ANCHORLESS_BASE`): its identity
   functions hold the port's only sanctioned casts. A loop over a map's cells
   brands its index once (`const j = cellIndex(map, jIndex)`). A loop over player indices brands its index once
   (`const i = playerId(iIndex)`); records keyed by a `for...in` key keep
@@ -260,9 +281,13 @@ untested branches.
   (`PetraRuntime.QueueName`: the configured ones and an attack plan's
   `plan_<n>`, `_champ`, `_siege`), attack types (`AttackType`,
   `ATTACK_TYPES`), a unit's `plan` metadata (`UnitPlan`; its states and
-  lending in `execution/unitPlan.ts`). Metadata reads and writes are typed
-  by key (`PetraEntityMetadata`). Template data is read through
+  lending in `execution/unitPlan.ts`), roles (`WorkerRole`, `WorkerSubrole`).
+  Metadata reads and writes are typed by key (`PetraEntityMetadata`), and a
+  plan's metadata as the entity metadata it becomes (`PlanMetadata`). Template data is read through
   `adapter/templateData.ts` (`Template.get()` returns `unknown`).
+- A debug warning is `debugWarn(config, level, () => message)` (`adapter/debug.ts`):
+  the message is built only at that level. The port compiles with
+  `noUnusedLocals`.
 - The attack plan's state changes only through `changeState(from, to)`
   (the moves are in `AttackTransitions`, `attackPlan.ts`).
 - What a unit is doing is read through `adapter/unitState.ts` (`isInState`,

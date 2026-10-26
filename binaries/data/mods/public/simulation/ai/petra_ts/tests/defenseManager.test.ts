@@ -19,13 +19,9 @@ import { describe, it } from "node:test";
 import { emptyEvents, eventsWith, makeEntity, type Methods } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-import { entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { DefenseManager } from "../decision/defenseManager.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-
-/** damage-weighted attack strength: config weighs "Hack" at 0.075,
- * spread across the four damage types the config knows */
-const hackOf = (strength: number) => 0.075 * strength / 4;
 
 /** reads the diplomacy row the engine keeps, to name an ally per test */
 function allyRow(world: World): { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[] }
@@ -516,7 +512,7 @@ describe("the turn rota", () =>
 		world.ai.playedTurn = 2;
 		const raider = makeSoldier(2000, [40, 40]);
 		world.addEntity(raider);
-		raider.setMetadata(PLAYER, "PartOfArmy", 99);
+		raider.setMetadata(PLAYER, "PartOfArmy", armyId(99));
 		const manager = makeDefenseManager(world);
 
 		manager.update(world.gameState, emptyEvents());
@@ -722,9 +718,9 @@ function userEnt(world: World, id: number): CommonEntity
 }
 
 /** the army under its roster id, plainly */
-function userArmy(manager: DefenseManager, id: number): any
+function userArmy(manager: DefenseManager, id: ArmyId | undefined): any
 {
-	const army = manager.getArmy(id);
+	const army = id === undefined ? undefined : manager.getArmy(id);
 	assert.ok(army, `army ${id} must exist`);
 	return army;
 }
@@ -1055,7 +1051,7 @@ describe("calling the defenders", () =>
 		world.ai.playedTurn = 2;
 		world.addEntity(makeSoldier(2000, [40, 40], { strength: 400 }));
 		const manager = makeDefenseManager(world);
-		const { calls, make } = attackRecorder();
+		const { make } = attackRecorder();
 		world.addEntity(make(3000, [20, 20]));	// the one honest defender
 		world.addEntity(makeEntity({
 			id: 3001, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Worker"]
@@ -1088,7 +1084,7 @@ describe("calling the defenders", () =>
 		world.ai.playedTurn = 2;
 		world.addEntity(makeSoldier(2000, [40, 40], { strength: 400 }));
 		const manager = makeDefenseManager(world);
-		const { calls, make } = attackRecorder();
+		const { make } = attackRecorder();
 		world.addEntity(make(3000, [20, 20], { canAttackTarget: () => false }));
 
 		manager.update(world.gameState, emptyEvents());
@@ -1112,11 +1108,10 @@ describe("when our own are hit", () =>
 			attackRange: () => ({ "max": 33 }),
 			garrisonMax: () => 10
 		});
-		tower.setMetadata(PLAYER, "base", 1);
+		tower.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(tower);
 		world.addEntity(makeSoldier(2000, [40, 40]));
 
-		const calls: number[] = [];
 		for (let i = 0; i < 2; ++i)
 		{
 			const archer = makeEntity({ id: 3000 + i, owner: PLAYER, position: [20, 20],
@@ -1146,7 +1141,7 @@ describe("when our own are hit", () =>
 		world.addEntity(hunter);
 		const raider = makeSoldier(2000, [21, 21]);
 		world.addEntity(raider);
-		world.ai.HQ.attackManager.getPlan = (plan: number) =>
+		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) =>
 			plan == 5 ? { "state": "started", "removeUnit": () => undefined } as never : undefined;
 
 		const events = eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] });
@@ -1185,7 +1180,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [21, 21]));
 
 		const events = eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] });
-		const raider = userEnt(world, 2000);
+		userEnt(world, 2000);
 		// the raider at the same spot: retaliation would reorder the whole fight
 		manager.checkEvents(world.gameState, events);
 		assert.equal(calls.length, 0, "the ongoing duel was left alone");
@@ -1198,7 +1193,7 @@ describe("when our own are hit", () =>
 		const tower = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Tower"], {
 			hasDefensiveFire: () => true
 		});
-		tower.setMetadata(PLAYER, "base", 1);
+		tower.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(tower);
 		world.addEntity(makeDefender(3000, [28, 30], {
 			attack: (target) => { calls.push(target); },
@@ -1284,7 +1279,7 @@ describe("when our own are hit", () =>
 			capturePoints: () => [5, 30, 10, 5],
 			destroy: () => { destroyCalls.push(5000); }
 		});
-		ruin.setMetadata(PLAYER, "base", 9);	// a base that no longer exists
+		ruin.setMetadata(PLAYER, "base", baseId(9));	// a base that no longer exists
 		world.addEntity(ruin);
 		world.blinking.set("30,30", true);
 		world.addEntity(makeDefender(3000, [30, 31]));
@@ -1308,7 +1303,7 @@ describe("when our own are hit", () =>
 			capturePoints: () => [5, 30, 10, 5],
 			destroy: () => { destroyCalls.push(5000); }
 		});
-		keep.setMetadata(PLAYER, "base", 1);
+		keep.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(keep);
 		world.blinking.set("30,30", true);
 		world.ai.HQ.isDefendable = () => true;
@@ -1395,7 +1390,7 @@ describe("when our own are hit", () =>
 		});
 		world.addEntity(fort);
 		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
-		const capturingID = fort.getMetadata(PLAYER, "PartOfArmy") as number;
+		const capturingID = fort.getMetadata(PLAYER, "PartOfArmy");
 		world.addEntity(makeSoldier(2000, [61, 60]));
 		const soldier = makeDefender(3001, [59, 60]);
 		// the recovery army had a swordsman of its own inside the fort
@@ -1419,7 +1414,7 @@ describe("when our own are hit", () =>
 		const fort = makeStructure(5000, [60, 60], PLAYER, ["Structure"], {
 			capturePoints: () => [0, 25, 0, 0]
 		});
-		fort.setMetadata(PLAYER, "base", 1);
+		fort.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(fort);
 		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 
@@ -1441,7 +1436,7 @@ describe("when our own are hit", () =>
 		const fort = makeStructure(5000, [60, 60], PLAYER, ["Structure"], {
 			capturePoints: () => [5, 20, 5, 0]
 		});
-		fort.setMetadata(PLAYER, "base", 1);
+		fort.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(fort);
 		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 
@@ -1464,13 +1459,13 @@ describe("when our own are hit", () =>
 			garrisonMax: () => 10,
 			buffHeal: () => 8
 		});
-		hospital.setMetadata(PLAYER, "base", 1);
+		hospital.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(hospital);
 		const shelter = makeStructure(5001, [30, 30], PLAYER, ["Structure"], {
 			isGarrisonHolder: () => true,
 			garrisonableClasses: () => ["Support"]
 		});
-		shelter.setMetadata(PLAYER, "base", 1);
+		shelter.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(shelter);
 		world.addEntity(makeEntity({
 			id: 3000, owner: PLAYER, position: [40, 40], classes: ["Unit", "Support", "Worker"]
@@ -1494,7 +1489,7 @@ describe("when our own are hit", () =>
 			garrisonableClasses: () => ["StoneThrower"],
 			garrisonMax: () => 4
 		});
-		fortress.setMetadata(PLAYER, "base", 1);
+		fortress.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(fortress);
 		world.addEntity(makeEntity({
 			id: 3000, owner: PLAYER, position: [40, 40],
@@ -1520,7 +1515,7 @@ describe("when our own are hit", () =>
 			attackRange: () => ({ "max": 33 }),
 			garrisonMax: () => 10
 		});
-		tower.setMetadata(PLAYER, "base", 1);
+		tower.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(tower);
 		world.addEntity(makeEntity({
 			id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Infantry"]
@@ -1629,7 +1624,7 @@ describe("garrisoning by hand", () =>
 
 		const removed: number[] = [];
 		const planStub = { "state": "started", "removeUnit": (ent: CommonEntity) => { removed.push(ent.id()); } };
-		world.ai.HQ.attackManager.getPlan = (plan: number) => plan == 1 ? planStub as never : undefined;
+		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
 		// the tower is a captured decay-prone one: it takes even plan hands
 		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
 			{ "attacker": userEnt(world, 2000), "type": GarrisonManager.TYPE_DECAY }), true,
@@ -1650,14 +1645,14 @@ describe("garrisoning by hand", () =>
 			garrisonableClasses: () => ["StoneThrower"],
 			garrisonMax: () => 4
 		});
-		far.setMetadata(PLAYER, "base", 1);
+		far.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(far);
 		const near = makeStructure(5001, [40, 40], PLAYER, ["Structure", "Fortress"], {
 			isGarrisonHolder: () => true,
 			garrisonableClasses: () => ["StoneThrower"],
 			garrisonMax: () => 4
 		});
-		near.setMetadata(PLAYER, "base", 1);
+		near.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(near);
 
 		assert.equal(manager.garrisonSiegeUnit(world.gameState, ram), true);
@@ -1677,7 +1672,7 @@ describe("garrisoning by hand", () =>
 			garrisonableClasses: () => ["StoneThrower"],
 			garrisonMax: () => 4
 		});
-		fortress.setMetadata(PLAYER, "base", 1);
+		fortress.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(fortress);
 		world.garrisonCounts.set(5000, 4);
 
@@ -1694,7 +1689,7 @@ describe("garrisoning by hand", () =>
 			garrisonableClasses: () => ["Support"],
 			garrisonMax: () => 10
 		});
-		house.setMetadata(PLAYER, "base", 1);
+		house.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(house);
 		const hospital = makeStructure(5001, [70, 70], PLAYER, ["Structure"], {
 			isGarrisonHolder: () => true,
@@ -1702,7 +1697,7 @@ describe("garrisoning by hand", () =>
 			garrisonMax: () => 10,
 			buffHeal: () => 8
 		});
-		hospital.setMetadata(PLAYER, "base", 1);
+		hospital.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(hospital);
 		const wounded = makeEntity({
 			id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Worker"]
@@ -1723,7 +1718,7 @@ describe("garrisoning by hand", () =>
 			garrisonableClasses: () => ["Support"],
 			garrisonMax: () => 10
 		});
-		house.setMetadata(PLAYER, "base", 1);
+		house.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(house);
 		const wounded = makeEntity({
 			id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Worker"]
@@ -1747,7 +1742,7 @@ describe("garrisoning by hand", () =>
 			// like the engine: the holder reports its residents, here id 3000
 			garrisoned: () => [3000]
 		});
-		shelter.setMetadata(PLAYER, "base", 1);
+		shelter.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(shelter);
 		world.garrisonCounts.set(5000, 1);
 		const bleeding = makeEntity({
@@ -1772,7 +1767,7 @@ describe("garrisoning by hand", () =>
 			garrisonMax: () => 1,
 			garrisoned: () => []
 		});
-		shelter.setMetadata(PLAYER, "base", 1);
+		shelter.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(shelter);
 		world.garrisonCounts.set(5000, 1);
 		const bleeding = makeEntity({
@@ -1808,7 +1803,7 @@ describe("the office itself", () =>
 		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 		assert.equal(manager.armies.length, 2,
 			"a capture army never folds into a punitive one");
-		const captureID = fort.getMetadata(PLAYER, "PartOfArmy") as number;
+		const captureID = fort.getMetadata(PLAYER, "PartOfArmy");
 		assert.equal(userArmy(manager, captureID).getType(), "capturing");
 	});
 
@@ -1830,7 +1825,7 @@ describe("the office itself", () =>
 
 	it("lifts cooperation with each extra enemy raiding the same ally", () =>
 	{
-		const { world, manager } = assembledWorld();
+		const { manager } = assembledWorld();
 		assert.equal(manager.GetCooperationLevel(playerId(3)), 0.5,
 			"friendly cooperation stands at the personality's value");
 		manager.attackedAllies[3] = 2;
@@ -1988,7 +1983,7 @@ describe("rarer turns of the defence", () =>
 		const field = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Field"], {
 			destroy: () => assert.fail("a field is not burnt")
 		});
-		field.setMetadata(PLAYER, "base", 1);
+		field.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(field);
 		world.blinking.set("30,30", true);
 		world.addEntity(makeSoldier(2000, [32, 30]));

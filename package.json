@@ -18,6 +18,7 @@
 		"batch:petra": "node build/petra_ts/batch.ts",
 		"test:petra": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts",
 		"test:petra:match": "node --test build/petra_ts/match.test.ts",
+		"test:petra:smoke": "node build/petra_ts/smoke.ts",
 		"test:petra:tools": "node --test build/petra_ts/batch-stats.test.ts",
 		"test:petra:out": "npm run build:petra:out && node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts out",
 		"test:petra:coverage": "node binaries/data/mods/public/simulation/ai/petra_ts/tests/run.ts src --coverage",

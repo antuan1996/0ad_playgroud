@@ -16,7 +16,7 @@ import {
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import { techName } from "../adapter/brands.ts";
+import { NO_BASE, entityId, techName } from "../adapter/brands.ts";
 
 const SPEARMAN = "units/athen/infantry_spearman_b";
 const FEMALE = "units/athen/support_female_citizen";
@@ -99,7 +99,7 @@ describe("a batch of units: TrainingPlan", () =>
 	{
 		const { world } = seat();
 		const barracks = trainer(world, 301, ["Barracks"], [SPEARMAN], { "metadata": { "base": 2 } });
-		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "trainer": 301, "role": "worker", "base": 0 }, 5);
+		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "trainer": entityId(301), "role": "worker", "base": NO_BASE }, 5);
 		plan.canStart(world.gameState);
 
 		plan.start(world.gameState);

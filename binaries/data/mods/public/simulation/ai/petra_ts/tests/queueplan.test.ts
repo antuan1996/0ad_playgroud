@@ -20,6 +20,7 @@ import { commands, resetRecorder } from "./harness/engine.ts";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
 import { type PlanMetadata, QueuePlan, type SerializedQueuePlan } from "../execution/queueplan.ts";
+import { baseId } from "../adapter/brands.ts";
 
 /** The base plan on its own; it saves only the fields every plan saves. */
 class BarePlan extends QueuePlan<CommonTemplate>
@@ -111,8 +112,8 @@ describe("QueuePlan", () =>
 	it("keeps the metadata it is handed", () =>
 	{
 		const gameState = world();
-		const plan = new BarePlan(gameState, SOLDITE, { base: 2 });
-		assert.deepEqual(plan.metadata, { base: 2 }, "the metadata arrives as it was given");
+		const plan = new BarePlan(gameState, SOLDITE, { base: baseId(2) });
+		assert.deepEqual(plan.metadata, { base: baseId(2) }, "the metadata arrives as it was given");
 		const bare = new BarePlan(gameState, SOLDITE);
 		assert.equal(bare.metadata, undefined, "a plan without metadata has none");
 	});

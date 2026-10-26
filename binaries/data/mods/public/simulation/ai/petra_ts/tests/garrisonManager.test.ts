@@ -970,7 +970,7 @@ describe("garrisonManager", () =>
 
 		it("a name the watch never knew is simply nothing", () =>
 		{
-			const { world, manager } = towerWorld();
+			const { manager } = towerWorld();
 			manager.removeDecayingStructure(entityId(9999));	// a stray id from a lost age
 			assert.equal(manager.decayingStructures.size, 0);
 		});
