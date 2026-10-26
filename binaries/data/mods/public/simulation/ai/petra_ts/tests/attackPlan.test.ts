@@ -754,6 +754,22 @@ describe("training units", () =>
 		assert.ok(plan.queue.plans[0].template.available(world.gameState), "the template is available");
 	});
 
+	it("trains a mercenary for the attack as an attacker, not as a worker", () =>
+	{
+		const world = makeWorld();
+		world.templates["units/athen_mercenary"] = makeTemplate("units/athen_mercenary", {
+			classes: ["Infantry", "Ranged", "CitizenSoldier", "Worker", "Mercenary"],
+			cost: { "food": 50, "metal": 50 }
+		});
+		world.knobs.bestTrainable = "units/athen_mercenary";
+		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+
+		plan.trainMoreUnits(world.gameState);
+
+		assert.equal(plan.queue.plans[0]?.type, "units/athen_mercenary");
+		assert.equal(plan.queue.plans[0]?.metadata?.role, "attack");
+	});
+
 	it("queues champions and heroes in their own queues", () =>
 	{
 		const world = makeWorld();
@@ -2150,6 +2166,70 @@ describe("wrapping up a plan", () =>
 		assert.deepEqual(soldier.getMetadata(PLAYER, "role"), "worker", "civilians gathered home");
 		assert.equal(hero.getMetadata(PLAYER, "role"), undefined, "others dropped the role");
 		assert.deepEqual(soldier.getMetadata(PLAYER, "plan"), -1, "and left the plan");
+		resetRecorder();
+	});
+
+	it("a mercenary leaving the attack goes back to no role, not to work it cannot do", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1, init: true });
+		const mercenary = world.addEntity(makeEntity({
+			id: 1012, owner: PLAYER, position: [17, 17], classes: ["Unit", "Ranged", "CitizenSoldier", "Worker", "Mercenary"]
+		}, {}, { "plan": 1, "role": "attack", "subrole": "attacking" }));
+		plan.unitCollection.updateEnt(mercenary);
+
+		plan.Abort(world.gameState);
+
+		assert.equal(mercenary.getMetadata(PLAYER, "role"), undefined);
+		assert.equal(mercenary.getMetadata(PLAYER, "plan"), -1, "and left the plan");
+		resetRecorder();
+	});
+
+	it("withdraws to the ground around the anchor, not into its footprint", () =>
+	{
+		// a civic centre's footprint (30 by 30 for the athenians) reaches 21.2 from
+		// its centre: a march to within 15 of the centre ends inside the building,
+		// which no unit can reach, so the army would walk on for good
+		const world = makeWorld();
+		override(world.bases[0].anchor!, { "obstructionRadius": () => ({ "min": 15, "max": 21.2 }) });
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "walking";
+		plan.position = worldPos(18, 18);
+		plan.rallyPoint = worldPos(60, 60);
+		const soldier = world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [17, 17], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, {}, { "plan": 1, "role": "attack" }));
+		plan.unitCollection.updateEnt(soldier);
+		const marches: number[][] = [];
+		override(soldier, { "moveToRange": (x: number, z: number, min: number, max: number) => marches.push([x, z, min, max]) });
+
+		plan.Abort(world.gameState);
+
+		assert.equal(marches.length, 1);
+		const [x, z, min, max] = marches[0];
+		assert.deepEqual([x, z], [10, 10], "to the nearest anchor");
+		assert.ok(min <= 21.2 && max > 21.2 + 5, `the ring [${min}, ${max}] reaches out past the footprint`);
+		resetRecorder();
+	});
+
+	it("withdraws to within 15 of an open rally point", () =>
+	{
+		const world = makeWorld();
+		world.bases.length = 0;
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.state = "walking";
+		plan.position = worldPos(18, 18);
+		plan.rallyPoint = worldPos(60, 60);
+		const soldier = world.addEntity(makeEntity({
+			id: 1010, owner: PLAYER, position: [17, 17], classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, {}, { "plan": 1, "role": "attack" }));
+		plan.unitCollection.updateEnt(soldier);
+		const marches: number[][] = [];
+		override(soldier, { "moveToRange": (x: number, z: number, min: number, max: number) => marches.push([x, z, min, max]) });
+
+		plan.Abort(world.gameState);
+
+		assert.deepEqual(marches, [[60, 60, 0, 15]]);
 		resetRecorder();
 	});
 
@@ -3751,6 +3831,59 @@ describe("second pass: the army at work", () =>
 		plan.state = "";
 		return plan;
 	}
+
+	it("a unit sitting in one of our buildings has left the attack; the others fight on", () =>
+	{
+		// units can end up inside our own buildings with their plan still on
+		// them (trained at a building whose rally point garrisons, then kept
+		// there by the garrison manager as "protection"); the plan must not
+		// wait for them, or it never ends and holds up the next attack
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const fort = world.addEntity(makeEntity({ id: 1600, owner: PLAYER, position: [40, 40], classes: ["Structure", "Fortress"] },
+			{ "isGarrisonHolder": () => true }));
+		const inside = fighter(world, 1010, undefined, ["Infantry", "Ranged"], { "garrisonHolderID": () => fort.id() });
+		const outside = fighter(world, 1011, [20, 20], ["Infantry", "Melee"]);
+		const plan = attacking(world, target);
+		plan.unitCollection.updateEnt(inside.ent);
+		plan.unitCollection.updateEnt(outside.ent);
+
+		const remaining = plan.update(world.gameState, emptyEvents());
+
+		assert.equal(inside.ent.getMetadata(PLAYER, "plan"), -1, "free for the next attack once it comes out");
+		assert.equal(plan.unitCollection.hasEntId(inside.ent.id()), false);
+		assert.equal(remaining, 1, "the plan goes on with the one in the field");
+	});
+
+	it("an attack whose units all sit in our buildings is over", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const tower = world.addEntity(makeEntity({ id: 1601, owner: PLAYER, position: [40, 40], classes: ["Structure", "Tower"] },
+			{ "isGarrisonHolder": () => true }));
+		const a = fighter(world, 1010, undefined, ["Infantry", "Ranged"], { "garrisonHolderID": () => tower.id() });
+		const b = fighter(world, 1011, undefined, ["Infantry", "Ranged"], { "garrisonHolderID": () => tower.id() });
+		const plan = attacking(world, target);
+		plan.unitCollection.updateEnt(a.ent);
+		plan.unitCollection.updateEnt(b.ent);
+
+		assert.ok(!plan.update(world.gameState, emptyEvents()), "nothing left to attack with: the manager ends it");
+	});
+
+	it("an army aboard ships is still the attack's", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const ship = world.addEntity(makeEntity({ id: 1602, owner: PLAYER, position: [40, 40], classes: ["Unit", "Ship"] },
+			{ "isGarrisonHolder": () => true }));
+		const sailor = fighter(world, 1010, undefined, ["Infantry", "Melee"], { "garrisonHolderID": () => ship.id() },
+			{ "transport": 7 });
+		const plan = attacking(world, target);
+		plan.unitCollection.updateEnt(sailor.ent);
+
+		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the plan waits for the landing");
+		assert.equal(sailor.ent.getMetadata(PLAYER, "plan"), 1);
+	});
 
 	it("an attacked siege engine is rescued by swordsmen, not by war elephants nor by archers who cannot reach the foe", () =>
 	{

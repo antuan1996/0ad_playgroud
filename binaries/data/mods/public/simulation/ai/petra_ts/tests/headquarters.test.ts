@@ -184,6 +184,21 @@ describe("checkEvents: what a captured unit carries into town", () => {
 		assert.equal(worker.getMetadata(PLAYER, "PartOfArmy"), undefined);
 	});
 
+	it("a captured mercenary, a worker by its classes, is no worker", () => {
+		const { world, hq } = seat();
+		const mercenary = world.addEntity(makeHqEntity({
+			id: 54, owner: PLAYER, position: centerOfCell(21, 22),
+			classes: ["Unit", "CitizenSoldier", "Worker", "Infantry", "Ranged", "Mercenary"],
+			templateName: "units/athen/infantry_archer_b"
+		}, { "attackTypes": () => ["Ranged"] }, { "plan": 3 }));
+		hq.checkEvents(world.gameState, eventsWith({
+			"OwnershipChanged": [{ "entity": entityId(54), "from": ENEMY, "to": PLAYER }]
+		}));
+		assert.equal(mercenary.getMetadata(PLAYER, "role"), undefined);
+		assert.equal(mercenary.getMetadata(PLAYER, "subrole"), undefined);
+		assert.equal(mercenary.getMetadata(PLAYER, "plan"), -1, "free for the next attack");
+	});
+
 	it("a captured attacker keeps no old plans and loses the worker books", () => {
 		const { world, hq } = seat();
 		const soldier = world.addEntity(makeHqEntity({
@@ -313,11 +328,30 @@ describe("checkEvents: training finished — landing and stale plans", () => {
 		}));
 		const unit = world.addEntity(makeHqEntity({
 			id: 82, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_archer_b"
-		}, { "garrisonHolderID": () => 81 }));	// no position: garrisoned inside the holder
+		}, { "garrisonHolderID": () => 81 }, { "garrisonType": "protection" }));	// no position: garrisoned inside the holder
 		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(82)], "owner": PLAYER }] }));
 		// registration only: nobody has marched into the holder through this call
 		assert.ok(hq.garrisonManager.holders.has(entityId(81)));
 		assert.deepEqual(hq.garrisonManager.holders.get(entityId(81))?.list, []);
+	});
+
+	it("a unit the rally point garrisoned but not trained to garrison comes out again", () => {
+		// the rally point is set per building from the batch at the head of its
+		// queue as the bot last saw it, so a batch for an attack trained behind
+		// an emergency one walks in too, and would sit there with its plan
+		const { world, hq } = seat();
+		const unloaded: unknown[] = [];
+		world.addEntity(makeHqEntity({
+			id: 85, owner: PLAYER, position: centerOfCell(20, 20),
+			classes: ["Structure", "Fortress"], templateName: "structures/athen/fortress"
+		}, { "unload": (id: unknown) => unloaded.push(id) }));
+		const unit = world.addEntity(makeHqEntity({
+			id: 86, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_spearman_b"
+		}, { "garrisonHolderID": () => 85 }, { "plan": 4 }));
+		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(86)], "owner": PLAYER }] }));
+		assert.deepEqual(unloaded, [86]);
+		assert.equal(hq.garrisonManager.holders.has(entityId(85)), false, "no holder of ours to keep it in");
+		void unit;
 	});
 
 	it("autogarrison that fails on a full wall forgets its intent", () => {
@@ -1213,6 +1247,38 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			assert.equal(queues.citizenSoldier.plans[0].type, "units/athen/infantry_spearman_b");
 			// the villager line stands still
 			assert.equal(queues.villager.plans.length, 0);
+		}
+		finally
+		{
+			restoreEngine();
+		}
+	});
+
+	it("a town reaching for archers does not hire mercenaries as workers", () =>
+	{
+		// the same census as above, the draw on the ranged: the only archer the
+		// barracks offers is a mercenary, who cannot gather, so no worker is
+		// trained from it and the order goes to the civilians
+		const { world, hq } = seat();
+		trainerTown(world);
+		world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b", {
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged", "Archer", "Worker", "Mercenary"],
+			"cost": { "food": 50, "metal": 50 }, "walkSpeed": 9, "getPaths": { "Cost": { "Population": 1 } }
+		});
+		for (let i = 0; i < 13; ++i)
+			hand(world, 500 + i, false);
+		for (let i = 0; i < 17; ++i)
+			hand(world, 600 + i, true);
+		hq.attackManager.maxRushes = 1;
+
+		stubGlobal("pickRandom", (list: string[]) => list[0]);
+		try
+		{
+			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+
+			const queues = world.ai.queues;
+			assert.deepEqual(queues.citizenSoldier.plans.map((plan) => plan.type), [], "no mercenary in the worker line");
+			assert.equal(queues.villager.plans.length, 1);
 		}
 		finally
 		{

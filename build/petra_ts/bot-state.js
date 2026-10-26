@@ -6,7 +6,7 @@
  * prepare-bot.ts state copies this file into petra_out/_botstate.js and points
  * data.json at PetraBotState. Every two game minutes (minutes 1, 3, 5, ..., as
  * the timeline) it prints one line:
- *   BOTSTATE {"minute":..,"player":..,"hq":{..},"workers":{..},"gathering":{..},"workersByBase":{..},
+ *   BOTSTATE {"minute":..,"player":..,"hq":{..},"workers":{..},"gathering":{..},"workersByBase":{..},"idleWorkers":{..},
  *             "bases":[..],"queues":{..},"attacks":{..},"defenseArmies":..}
  * It only reads: the game is the same with it or without (same fingerprint).
  *
@@ -73,7 +73,10 @@ export class PetraBotState extends PetraBot
 			"needFarm": !!HQ.needFarm,
 			"canBuildUnits": HQ.canBuildUnits,
 			"targetNumWorkers": HQ.targetNumWorkers,
-			"popPhase2": this.Config.Economy.popPhase2
+			"popPhase2": this.Config.Economy.popPhase2,
+			// seconds since a worker last found nothing to gather, per resource
+			"lastFailedGather": Object.fromEntries(Object.entries(HQ.lastFailedGather ?? {})
+				.map(([type, time]) => [type, Math.round(this.gameState.ai.elapsedTime - time)]))
 		};
 	}
 
@@ -84,17 +87,23 @@ export class PetraBotState extends PetraBot
 		const workers = {};
 		const gathering = {};
 		const workersByBase = {};
+		// what the idle workers are: class, the resource they were last given,
+		// and what the engine has them do
+		const idleWorkers = {};
 		for (const ent of this.gameState.getOwnUnits().values())
 		{
 			const role = ent.getMetadata(PlayerID, "role") ?? "none";
 			const subrole = ent.getMetadata(PlayerID, "subrole");
 			count(workers, subrole ? role + "/" + subrole : role);
+			if (role == "worker" && subrole == "idle")
+				count(idleWorkers, [ent.hasClass("Support") ? "Support" : ent.hasClass("CitizenSoldier") ? "CitizenSoldier" : "other",
+					ent.getMetadata(PlayerID, "gather-type") ?? "-", ent.unitAIState() ?? "-"].join(" "));
 			if (subrole == "gatherer")
 				count(gathering, ent.getMetadata(PlayerID, "gather-type") ?? "none");
 			if (role == "worker")
 				count(workersByBase[ent.getMetadata(PlayerID, "base") ?? "none"] ??= {}, subrole ?? "none");
 		}
-		return { workers, gathering, workersByBase };
+		return { workers, gathering, workersByBase, idleWorkers };
 	}
 
 	/** Each base's resource lists, by distance band, and the amount within reach. */
@@ -163,8 +172,37 @@ export class PetraBotState extends PetraBot
 						type,
 						"state": plan.state,
 						"target": plan.targetPlayer,
-						"units": plan.unitCollection.length
+						"units": plan.unitCollection.length,
+						...(state == "started" ? this.startedDetail(plan) : {})
 					});
 		return attacks;
+	}
+
+	/** Where a started attack is and what its units do. */
+	startedDetail(plan)
+	{
+		const states = {};
+		const holders = {};
+		for (const ent of plan.unitCollection.values())
+		{
+			const key = (ent.position() ? "" : "inside:") + (ent.unitAIState() ?? "-");
+			states[key] = (states[key] ?? 0) + 1;
+			const holderId = ent.position() ? undefined : ent.garrisonHolderID();
+			const holder = holderId === undefined ? undefined : this.gameState.getEntityById(holderId);
+			if (holderId !== undefined)
+			{
+				const name = (holder ? holder.templateName() + " (" + holder.owner() + ")" : "gone " + holderId) +
+					" plan " + ent.getMetadata(PlayerID, "plan") + " type " + ent.getMetadata(PlayerID, "garrisonType") +
+					" subrole " + ent.getMetadata(PlayerID, "subrole");
+				holders[name] = (holders[name] ?? 0) + 1;
+			}
+		}
+		return {
+			"paused": plan.paused, "position": plan.position?.map(Math.round),
+			"targetEntity": plan.target ? plan.target.templateName() + "@" + plan.target.position()?.map(Math.round) : undefined,
+			"targetPos": plan.targetPos?.map(Math.round),
+			"unitStates": states,
+			"holders": holders
+		};
 	}
 }

@@ -100,7 +100,13 @@ export const limits = {
 	phaseResearchMinutes: 4,
 	// orders the game refused, per player and game (seen: 1; the bot checks
 	// costs before it orders)
-	refusals: 30
+	refusals: 30,
+	// units walking (UnitAI WALKING, not an attack's WALKINGANDFIGHTING) in
+	// this many snapshots in a row: a march that never arrives (seen: up to
+	// 121 in one snapshot; 138-156 for twelve minutes when a finished attack
+	// withdrew into its civic centre's footprint, tests/FINDINGS.md §4)
+	walkingUnits: 50,
+	walkingSnapshots: 3
 };
 
 function readLines(dir: string, file: string): string[]
@@ -168,14 +174,21 @@ export function checkMatch(dir: string): Check[]
 		`${metal} gathered`);
 
 	// The economy, snapshot by snapshot.
+	const walking: string[] = [];
 	const idle: string[] = [];
 	const stock: string[] = [];
 	const growth: string[] = [];
 	for (const player of ids)
 	{
 		let idleBefore = false;
+		let walkingSince = 0;
 		for (const t of snapshots(player))
 		{
+			const walkers = t.unitAI?.WALKING ?? 0;
+			walkingSince = walkers >= limits.walkingUnits ? walkingSince + 1 : 0;
+			if (walkingSince == limits.walkingSnapshots)
+				walking.push(`player ${player}: ${walkers} units walking at minute ${t.minute}, ` +
+					`at least ${limits.walkingUnits} for ${limits.walkingSnapshots} snapshots`);
 			const women = t.classes.Support ?? 0;
 			const idleWomen = t.idle?.Support ?? 0;
 			const idleNow = idleWomen > Math.max(limits.idleSupport, limits.idleSupportShare * women);
@@ -191,6 +204,7 @@ export function checkMatch(dir: string): Check[]
 		if (start === undefined || later === undefined || later < limits.earlyGrowth * start)
 			growth.push(`player ${player}: population ${start} at minute 1, ${later} at minute 9`);
 	}
+	check("no march goes on for good", walking, `never ${limits.walkingUnits} units walking ${limits.walkingSnapshots} snapshots in a row`);
 	check("workers are not left idle", idle, `at most ${limits.idleSupport} idle women, or ${limits.idleSupportShare * 100}%`);
 	check("no stockpile grows unspent", stock, `no resource above ${limits.stockpile} below population ${limits.stockpileBelowPop}`);
 	check("both sides grow early", growth, `population at least ${limits.earlyGrowth}x from minute 1 to 9`);

@@ -82,8 +82,8 @@ noted. Worth raising upstream rather than changing in the port alone.
 - **`baseManager`**: a worker already mending one building but still marked as a gatherer can be taken by the next repair (only `builder` subroles are kept).
 - **`defenseManager.checkEvents`**: a structure it gives up (capture ratio between 0.5 and 0.7 where it cannot be defended) is destroyed once per `Attacked` event on it that turn: 69 `delete-entities` for one tower in one turn in a mirror match. Harmless, the engine deletes it once.
 - **`worker` builders**: a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home its UnitAI state is not REPAIR, so every update sends the pair again until it arrives: 37 times in two minutes for one worker in a mirror match. The orders keep the same goal; whether each new one delays the walk (a fresh path) is not measured.
-- **`attackPlan.Abort` withdrawal**: a finished attack sends every unit to within 15 of its rally point, and a nearer base wins: its anchor's position, the centre of a civic centre, inside the building's footprint. The army cannot get there and keeps walking; set back to idle workers, its units are not reassigned while every resource their base needs is exhausted or recently failed (`reassignIdleWorkers`). In a mirror match (§12, seeds 981901659/728914300) the winner sent 163 units to the civic centre it had just captured; about 140 were still walking 12 minutes later, to the end of the game.
-- **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. On a fruit-rich map a bot under pressure starves with wood to spare: in a mirror match (§11, seeds 579602995/974380524, savanna) one side kept 1150–3850 fruit in reach all game, so never built a field, while 6–13 units, then none, gathered food; food stayed under 350 from minute 3 and the side was destroyed at 16:39. The code's own TODO names the gap ("add a check on time used/lost").
+- **`attackPlan.Abort` withdrawal**: fixed in stage 4, §16.
+- **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. The code's own TODO names the gap ("add a check on time used/lost"). The game once blamed on it was lost to an early fight (§16).
 
 ## 5. Unreachable code
 
@@ -369,3 +369,113 @@ the port, each played on the seeds; the module whose hybrid plays on as
   through accessors of the old names, the mean rose 5.2% and the 90th
   percentile 9.6% (`territoryMap` is read about 90 times, often per unit);
   reading the world objects directly brought them to 1.007 and 1.011.
+
+## 16. Stage 4: the known weaknesses (2026-10-26)
+
+First ranked by what each costs in games and how often it fires: the
+withdrawal (every finished attack), the first field, idle workers in a
+gathered-out base, the town-phase population, attacks that never fill. The
+replays below moved the first field down and the idle workers and the
+attacks up (`PLAN.md` §6).
+
+- **The withdrawal into the anchor's footprint** (was §4). A finished attack
+  sent every unit to within 15 of its rally point, or of a nearer base's
+  anchor, whose position is the centre of its building: a civic centre
+  reaches 21 from its centre, so the whole ring lay inside the building. In
+  the mirror match of §12 (seeds 981901659/728914300), replayed with `-t -b`:
+  138-156 of the winner's units in UnitAI `WALKING` from minute 43 to the end
+  (54:29). Now an anchor's ring reaches 15 past its obstruction radius, as the
+  hero's retreat in `victoryManager` already did: on the same seeds the
+  walkers fall to 13 at minute 43 and the army stands at its base. The match
+  check "no march goes on for good" (50 units walking in three snapshots in a
+  row; never more than one snapshot in the 35 recorded games) fails on the
+  old game and passes on the new.
+- What that shows next: the 140-150 withdrawn units then stand idle for good
+  in their base (base 2), whose supplies are all gathered out, while base 3
+  still has 2762 wood and 1927 stone within reach: the idle-worker weakness.
+  And the next HugeAttack is created and dropped about 37 times a minute
+  (its number climbs from 52 to 415 in ten minutes, 0 units each time): the
+  attack-filling one. With the walkers home the game went to the 90-minute
+  limit instead of ending at 54:29; one game decides nothing.
+- **The first field was not what lost §11's early game.** Replayed (seeds
+  579602995/974380524, savanna) with `-b`: by minute 7 the two sides had
+  fought near their bases, player 1 losing 38 units (20 women) and player 2
+  21 (the statistics' `unitsLost` and `enemyUnitsKilled` agree), with no
+  attack plan on either side; player 1's food stock was 300+ until minute 9.
+  It never built a field, keeping 1155-3184 fruit within reach, but by then it
+  was 14 units against 61. The rule may still cost games where food income is
+  the limit; that needs a game showing it before the rule changes.
+- **Mercenaries booked as workers** (the idle workers of the first point).
+  The 140-150 idle "workers" were Athens' Cretan archers
+  (`infantry_archer_a`): mercenaries keep the `Worker` and `CitizenSoldier`
+  classes, but `mixins/mercenary.xml` disables their `ResourceGatherer`, so
+  `reassignIdleWorkers` never finds them a resource and they stand idle for
+  good (seen in the dump: `isGatherer` false, no `gather-type`, UnitAI IDLE).
+  They got the role in four places that decide by class: `trainMoreWorkers`
+  hired the strongest ranged citizen soldier as a worker, paying metal for
+  it; `assignRolelessUnits`; a unit leaving an attack (`removeUnit`); a unit
+  taken over (`OwnershipChanged`); and an attack trained a citizen-soldier
+  template as a worker. The bot already meant workers to gather: a promoted
+  worker that can no longer gather loses its role (`basesManager`
+  `EntityRenamed`), only for `assignRolelessUnits` to give it back. Now each
+  of those requires the unit (or template) to gather, and `trainMoreWorkers`
+  asks `findBestTrainableUnit` for gatherers only; a mercenary is left
+  roleless, for the armies. On §12's seeds: no idle worker until minute 29
+  (2-3 after), against 140-175 from minute 43 before, and the game decided
+  at 36:31 (54:29 before the fixes, 90:00 with the withdrawal fixed alone).
+- **Attacks that never end, holding up every later one.** In the integration
+  match (seeds 287591089/941505347) with the mercenaries fixed, two started
+  attacks kept 2 and 18 units for 20-35 minutes, units inside our own
+  defense tower and fortress, with their plan still on them and the garrison
+  manager keeping them in as "protection" (its default for a unit it finds
+  in a holder with no `garrisonType`). An attack plan waits while its army
+  has no position (meant for an army aboard ships), and the attack manager
+  plans no new default or huge attack while two are started, so the side
+  that had won the field (red down to 3-50 units) stopped attacking and
+  training soldiers, banked 171k food and ran to the time limit. One way in:
+  the HQ sets a building's rally point to garrison from the first batch in
+  its queue (`TrainingStarted`), so an attack's batch queued behind an
+  emergency one walks into the building. Now a started attack lets go of
+  every unit inside one of our buildings on land that is not transporting
+  (`plan` -1, free for the next attack once it comes out), and a plan left
+  with nobody on the map ends. The integration match is decided again, at
+  44:01, every check passing.
+- **Measured: 51.0% against `petra_parity`** with the withdrawal, the
+  mercenaries and the stuck attacks fixed (batch `stage4-a`: 100 seed pairs
+  from both slots, mainland, athen, very hard; 194 decided, 2 draws, 3
+  engine aborts, 1 unplayed; 95% CI 44.0-58.0%, SPRT undecided). The economy
+  is clearly better (14.5% more resources gathered, peak map control 50%
+  against 44%), the fights a little worse (value lost 30849 against 28300).
+  92 of the 96 seed pairs played from both slots are split: the same slot
+  won both games, whichever bot sat in it.
+- **What the batch says decides games: the first big fight.** In 139 of the
+  196 decided games the loser never reached town phase; every winner did
+  (median minute 17). Those losers peaked at a median 69 units (never above
+  135) around minute 11 and were down to a median 15 when the winner phased
+  up: they lost a fight at minutes 10-15, not the race to `popPhase2` (150).
+  The 53 sides short of food (under 100 for three snapshots between minutes 5
+  and 20) all lost, but most had 6-12 fields by minute 15: starving after the
+  fight, not for want of a field. So the town-phase population and the first
+  field are not what loses these games; the early fight is, and it is
+  decided by the start rather than by the bot.
+- **The first fight is a border skirmish, and the same code fights it on
+  both sides.** Replayed (game 5 of `stage4-a`): from 0:44 two of player 1's
+  units attack one of player 2's near the border, the defense managers feed
+  the fight, and by minute 11 player 2 has lost 55 units to player 1's 28
+  (no attack plan launched by either). Both bots play the same opening
+  (games of a seed pair with the slots swapped have the same trajectories
+  until minute 11 or so), so the start position decides, which is why the
+  pairs split. With all four fixes (batch `stage4-b-control`, the same pool):
+  50.3% against `petra_parity` (CI 43.2-57.3%), 90 of 93 pairs split.
+- **An earlier army is a small lever at most.** Training citizen soldiers
+  sooner (the support share's `alpha` 0.85 to 0.6, 0.7 to 0.5 with a rush
+  planned; batch `stage4-c-alpha06`, 500 pairs from both slots): 52.2% (CI
+  49.1-55.3%), 95 pairs won from both slots against 74, the SPRT undecided
+  (its first 200 games read 53.8%, the first 500 53.6%). Reverted: a gain of
+  2 points is not shown, and tuning is stage 5's.
+- **Two game errors in 1000 games, neither in Petra TS:** "too much
+  recursion" in `MatchesClassList` (globalscripts/Templates.js) from
+  `petra_parity`'s `defenseManager.checkEnemyUnits`, and `cmpResourceGatherer
+  is null` in UnitAI's gather state (UnitAI.js 2920), a unit without a
+  gatherer entering it, as a gatherer promoted into a champion would.
+

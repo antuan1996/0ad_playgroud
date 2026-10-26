@@ -113,6 +113,7 @@ ends an undecided game at 90 game minutes, "time limit") and asserts the
 checks of `build/petra_ts/match-checks.ts`, which also runs on any record
 (`node build/petra_ts/match-checks.ts <dir>`): no errors, a decided game, the
 winner's town phase and metal, idle women, unspent stockpiles, early growth,
+a march that goes on for good (units in UnitAI WALKING),
 and from the commands silence, a command repeated turn after turn, floods,
 production churn and phases ordered but not had, and from the notices refused
 orders. The checks read only what the engine records, never `botstate.txt`:

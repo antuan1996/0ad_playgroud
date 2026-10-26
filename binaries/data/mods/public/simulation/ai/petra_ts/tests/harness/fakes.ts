@@ -18,6 +18,17 @@ export function fake<T>(value: unknown): T
 	return value as T;
 }
 
+/**
+ * Whether the classes are those of a gatherer, as the templates have it:
+ * workers, citizen soldiers and fishing boats carry a ResourceGatherer, but
+ * mercenaries do not (mixins/mercenary.xml disables it), whatever classes
+ * they keep.
+ */
+function gathers(classes: readonly string[]): boolean
+{
+	return ["Worker", "CitizenSoldier", "FishingBoat"].some((cls) => classes.includes(cls)) && !classes.includes("Mercenary");
+}
+
 /** Method overrides a test supplies on top of the neutral entity defaults. */
 export type Methods = Record<string, (...args: any[]) => unknown>;
 
@@ -145,6 +156,8 @@ export function makeEntity(spec: {
 		needsRepair: () => false,
 		isInvulnerable: () => false,
 		isGarrisonHolder: () => false,
+		// in no holder: on the map, or somewhere the test says
+		garrisonHolderID: () => undefined,
 		isFull: () => false,
 		isSharedDropsite: () => false,
 		hasDefensiveFire: () => false,
@@ -167,7 +180,7 @@ export function makeEntity(spec: {
 		counters: () => false,
 		// the builder list lives on the template: no Builder tag, nothing buildable
 		buildableEntities: () => [],
-		isGatherer: () => false,
+		isGatherer: () => gathers(classes),
 		// dropsites carry a template tag; a plain entity drops nowhere
 		resourceDropsiteTypes: () => undefined,
 		isResourceDropsite: () => false,
@@ -304,7 +317,8 @@ export function makeTemplate(name: string, detail: {
 	const classes = [...(detail.classes ?? [])];
 	const getPaths = detail.getPaths ? { ...detail.getPaths } : {};
 	const available = detail.available ?? true;
-	const gatherRates = detail.resourceGatherRates ? { ...detail.resourceGatherRates } : undefined;
+	// a gatherer whose rates the test does not name still has the component
+	const gatherRates = detail.resourceGatherRates ? { ...detail.resourceGatherRates } : gathers(classes) ? {} : undefined;
 	// the template walk the `get` method below reads leaves from
 	const getTemplateValue = (path: string): unknown => templateValue(getPaths, path);
 	return fake<CommonTemplate>({

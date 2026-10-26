@@ -376,7 +376,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 	}
 
 	/** berries of the given amount near the seated centre, booked by it */
-	function berries(world: HqWorld, base: { assignResourceToDropsite(gs: unknown, ent: unknown, d: boolean): void }, amount: number): void
+	function berries(world: HqWorld, base: BaseManager, amount: number): void
 	{
 		const centre = dropsiteCC(world);
 		if (amount > 0)
@@ -583,7 +583,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 });
 
 /** a worker of ours at a position, on the base's payroll with the given metadata */
-function hand(world: HqWorld, base: { assignEntity(gs: unknown, ent: unknown): void }, id: number,
+function hand(world: HqWorld, base: BaseManager, id: number,
 	classes: string[], metadata: Record<string, unknown>, methods: Record<string, unknown> = {},
 	position: [number, number] = [60, 60]): ReturnType<typeof makeHqEntity>
 {
@@ -652,6 +652,20 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		assert.equal(soldier.getMetadata(PlayerID, "role"), Worker.ROLE_WORKER);
 		assert.equal(elephant.getMetadata(PlayerID, "role"), Worker.ROLE_WORKER, "an elephant hauls like a worker");
 		assert.equal(cavalry.getMetadata(PlayerID, "role"), undefined, "a horseman is not put to the fields");
+	});
+
+	it("a mercenary, a worker and citizen soldier by its classes, gathers nothing and is no worker", () =>
+	{
+		// Athens' Cretan archers keep the Worker and CitizenSoldier classes, but
+		// mixins/mercenary.xml takes away their ResourceGatherer: as workers they
+		// would stand idle for good, never given a resource to gather
+		const { world, base } = seat();
+		const mercenary = hand(world, base, 2824, ["Unit", "CitizenSoldier", "Worker", "Infantry", "Ranged", "Mercenary"], {},
+			{ "isGatherer": () => false, "canGather": () => false });
+
+		base.assignRolelessUnits(world.gameState);
+
+		assert.equal(mercenary.getMetadata(PlayerID, "role"), undefined, "left to the armies");
 	});
 
 	it("a gatherer moved from the wood to the food is the civilian first", () =>
