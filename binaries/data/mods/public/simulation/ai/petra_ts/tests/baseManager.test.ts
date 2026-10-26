@@ -1099,7 +1099,7 @@ describe("the builders: crews by kind of building, and what holds them back", ()
 		const barracks = world.addEntity(makeHqEntity({ "id": 3790, "owner": PLAYER, "position": [62, 60],
 			"classes": ["Structure", "Barracks"] }, { "needsRepair": () => true, "healthLevel": () => 0.8 }));
 		base.assignEntity(world.gameState, barracks);
-		world.ents.get(3786)!.setMetadata(PlayerID, "target-foundation", 3790);
+		world.ents.get(3786)!.setMetadata(PlayerID, "target-foundation", entityId(3790));
 
 		base.assignToFoundations(world.gameState);
 

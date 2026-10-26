@@ -13,7 +13,7 @@ import {
 } from "./harness/hqWorld.ts";
 import { board, type HqWorld, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
 
-import { landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
+import { entityId, landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
 import * as baseModule from "../decision/baseManager.ts";
 import { NavalManager } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -228,7 +228,7 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		assert.equal(s.naval.getFishSea(s.world.gameState, shoal), SEA);
 		assert.equal(shoal.getMetadata(PlayerID, "opensea"), undefined);
 		assert.equal(shoal.getMetadata(PlayerID, "sea"), SEA);
-		shoal.setMetadata(PlayerID, "sea", 9);
+		shoal.setMetadata(PlayerID, "sea", seaRegion(9));
 		assert.equal(s.naval.getFishSea(s.world.gameState, shoal), 9, "read back, not measured again");
 	});
 
@@ -395,7 +395,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		init(s);
 		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
-		a.ent.setMetadata(PlayerID, "onBoard", 202);
+		a.ent.setMetadata(PlayerID, "onBoard", entityId(202));
 		p.needSplit = [a.ent];
 
 		assert.equal(s.naval.splitTransport(s.world.gameState, p), false);
@@ -732,7 +732,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const near = dock(s.world, 300, [180, 160]);
 		const far = dock(s.world, 301, [156, 40]);
 		init(s);
-		near.setMetadata(PlayerID, "sea", 9);	// a dock on another sea
+		near.setMetadata(PlayerID, "sea", seaRegion(9));	// a dock on another sea
 		void far;
 
 		s.naval.moveApart(s.world.gameState);	// noted
@@ -832,7 +832,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const near = dock(s.world, 300, [180, 160]);	// near, but on another sea
 		dock(s.world, 301, [156, 40]);	// on its sea, but far
 		init(s);
-		near.setMetadata(PlayerID, "sea", 9);
+		near.setMetadata(PlayerID, "sea", seaRegion(9));
 
 		s.naval.moveApart(s.world.gameState);	// noted
 		s.naval.moveApart(s.world.gameState);	// still: it looks around once

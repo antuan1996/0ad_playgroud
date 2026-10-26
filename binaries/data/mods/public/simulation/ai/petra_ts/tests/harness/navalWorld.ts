@@ -27,7 +27,7 @@ import {
 	PASS_RATIO, passLand, passShore, passWater, PLAYER, seatHQ
 } from "./hqWorld.ts";
 
-import { landRegion, playerId, seaRegion, worldPos } from "../../adapter/brands.ts";
+import { landRegion, seaRegion, worldPos } from "../../adapter/brands.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 
 export const WEST = landRegion(2);
@@ -123,9 +123,9 @@ export function navalWorld(options: {
 	{
 		addEntity(ent);
 		const setMetadata = ent.setMetadata.bind(ent);
-		ent.setMetadata = (player: number, key: string, value: unknown) =>
+		ent.setMetadata = <K extends keyof PetraEntityMetadata>(player: PlayerId, key: K, value: PetraEntityMetadata[K] | undefined) =>
 		{
-			setMetadata(playerId(player), key, value);
+			setMetadata(player, key, value);
 			for (const collection of registered)
 				if (collection.dynamicProperties().some((p) => p === "metadata" || p === "metadata." + key))
 					collection.updateEnt(ent);

@@ -27,7 +27,7 @@ import { ResearchManager } from "../decision/researchManager.ts";
 import { TradeManager } from "../decision/tradeManager.ts";
 import { VictoryManager } from "../decision/victoryManager.ts";
 import { Queue } from "../execution/queue.ts";
-import { QueueManager } from "../execution/queueManager.ts";
+import { QueueManager, configuredQueues } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -202,7 +202,7 @@ describe("save and reload", () =>
 
 	it("keeps a queue manager", () =>
 	{
-		const queues = () => ({ "military": new Queue(), "economic": new Queue() });
+		const queues = configuredQueues;
 		assertRoundTrip(
 			{
 				label: "QueueManager",

@@ -79,6 +79,7 @@ All are harmless or never reached in a game; kept on purpose.
 Behaviour that looks unintended but is identical in both; tests pin it where
 noted. Worth raising upstream rather than changing in the port alone.
 
+- **`queueplanBuilding.findDockPosition`**: `if (angle == false) continue` also rejects an angle of exactly 0, which `getDockAngle` returns when the water's centre lies in the first direction it samples: a dock square to the map there is not placed. Kept, spelled `angle === false || angle === 0`, by the `===` pass (`PLAN.md` 3.5).
 - **`_petrabot`**: `gameFinished` is never set anywhere, so its check is dead. A bot that cannot play (`canPlay` false) never clears its saved events, and its turn counter stops advancing.
 - **`entityExtend.getMaxStrength`**: a template with no attack returns 0 before its armour is counted.
 - **`baseManager.assignToFoundations`**: `if (target.hasClass("Field")) continue` cannot fire (fields are filtered out of the foundations before the loop).
@@ -541,18 +542,37 @@ A scan of the port's syntax trees and, for inferred types, its type checker
     `attackManager.bombingAttacks` were `new Map()` without type arguments,
     hence `Map<any, any>`, invisible to a search for `any`. Typing them
     found a test that keyed `bombingAttacks` by a string.
-- **Left** (`PLAN.md` 3.5): `Template.get()` returning `any` (55 uses),
-  three more `any` declarations, the `plan` metadata's magic numbers (31
-  uses), queue names as `string`, 19 functions over 150 lines, 571 `==`, 84
-  inline `import()` types, 99 `for...in`, and the `declare` fields. The 117
-  other `any` hits are evolving declarations (`let x;`, `const a = []`) that
-  the compiler types from their assignments: not holes.
+- **The second round** (`PLAN.md` 3.5, items 1-4 and 6-8), with the
+  fingerprint unchanged at every step and a 24-game batch identical game for
+  game before and after. What the stricter types found on the way:
+  - **Wrong declarations.** The attack bonuses were declared an array with
+    numeric multipliers (the template holds an object of strings); the ship
+    metadata `transporter` an entity id (it is a transport plan's id).
+  - **Implicit `any`.** `Object.values()` on a plain `object`, and three
+    `new Map()` without type arguments (above): a search for the word misses
+    them; the type checker's scan does not.
+  - **Tests on impossible data.** A queue test named `plan_siege` and
+    `plan_champ` (attack queues are `plan_<n>_siege`); one plan with no
+    template; the queue manager's tests ran on made-up queue names and
+    without the configured queues; an attack manager round trip restored
+    plans whose queues the save never had. Each now sets up what a game
+    has.
+  - **Guards that could not fire**, gone with the types that made that
+    plain: `addPlan` of no plan, `ResearchPlan`'s `researchTime` check.
+  - **A quirk kept** (§4): a dock whose best angle is exactly 0 is not
+    placed (`angle == false`).
+- **Left** (`PLAN.md` 3.5): 19 functions over 150 lines, the records keyed
+  by player or entity id (a `Map` reorders them), and 105 `declare` fields
+  (below). The 117 other `any` hits of the first scan are evolving
+  declarations (`let x;`, `const a = []`) that the compiler types from their
+  assignments: not holes.
 - **The `declare` fields (202)** fall in three groups. 133 are assigned in
   their own class's constructor: removing `declare` makes the compiler check
   that, and with the ES2022 target defines each field before the
   constructor body (own-property order can change, which matters where a
-  class iterates its own fields, as `Config.Serialize` does): planned for
-  stage 4. 12 are in subclasses, where a plain field would overwrite the
+  class iterates its own fields, as `Config.Serialize` does). Done for 115;
+  the compiler showed the other 18 assigned only on some paths (the attack
+  and transport plans' constructors return early), which join stage 5. 12 are in subclasses, where a plain field would overwrite the
   value `super()` set (`ResearchPlan`'s `category`, ...). 57 are set only in
   `init()`, `Deserialize` or later: the managers' and plans' two-step
   set-up, so no small change removes them. Both groups go with stage 5, as

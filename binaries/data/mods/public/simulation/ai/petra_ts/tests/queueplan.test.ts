@@ -19,9 +19,9 @@ import { commands, resetRecorder } from "./harness/engine.ts";
 
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
-import { type PlanMetadata, QueuePlan } from "../execution/queueplan.ts";
+import { type PlanMetadata, QueuePlan, type SerializedQueuePlan } from "../execution/queueplan.ts";
 
-/** The base plan on its own; saving is each subclass's own business. */
+/** The base plan on its own; it saves only the fields every plan saves. */
 class BarePlan extends QueuePlan<CommonTemplate>
 {
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata)
@@ -30,9 +30,10 @@ class BarePlan extends QueuePlan<CommonTemplate>
 		super(gameState, name, gameState.getTemplate(name), metadata);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedQueuePlan<CommonTemplate>
 	{
-		return {};
+		return { "category": this.category, "type": this.type, "ID": this.ID, "metadata": this.metadata,
+			"cost": this.cost.Serialize(), "number": this.number };
 	}
 
 	Deserialize(): void

@@ -64,14 +64,6 @@ describe("Queue", () =>
 		assert.equal(queue.getNext(), undefined);
 	});
 
-	it("drops an absent plan", () =>
-	{
-		const queue = new Queue();
-		queue.addPlan(null);
-		queue.addPlan(undefined);
-		assert.equal(queue.length(), 0);
-	});
-
 	it("clears its plans", () =>
 	{
 		const queue = new Queue();

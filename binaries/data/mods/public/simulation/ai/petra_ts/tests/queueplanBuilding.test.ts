@@ -15,7 +15,7 @@ import {
 	structureTemplate, TERRITORY_CELL, territoryCellAt
 } from "./harness/hqWorld.ts";
 
-import { seaRegion, worldPos } from "../adapter/brands.ts";
+import { landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
 import { BaseManager } from "../decision/baseManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
@@ -844,7 +844,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 		});
 		s.world.gameState.sharedScript.playersData ??= [];
 		if (withDock)
-			structure(s.world, 9701, [160, 160], ["Dock"], {}, "structures/athen/dock").setMetadata(PLAYER, "sea", 5);
+			structure(s.world, 9701, [160, 160], ["Dock"], {}, "structures/athen/dock").setMetadata(PLAYER, "sea", seaRegion(5));
 		const cc = card(s.world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
 		s.hq.findStrategicCCLocation = () => undefined;
 		const { laid } = builder(s.world, s.hq, [s.dock]);
@@ -893,7 +893,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	it("sends no dock to an island where we already have one", () =>
 	{
 		const { world, cc, laid } = islandWorld();
-		structure(world, 9721, [250, 300], ["Dock"], {}, "structures/athen/dock").setMetadata(PLAYER, "access", 3);
+		structure(world, 9721, [250, 300], ["Dock"], {}, "structures/athen/dock").setMetadata(PLAYER, "access", landRegion(3));
 
 		new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState);
 

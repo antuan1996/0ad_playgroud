@@ -413,7 +413,7 @@ describe("a trader sent on its way: updateTrader", () =>
 		world.addEntity(makeHqEntity({ "id": 900, "owner": 0, "position": [210, 200], "classes": ["Treasure"] },
 			{ "isTreasure": () => true }, { "sea": 2 }));
 		hq.treasures = world.gameState.getEntities().filter((e: CommonEntity) => e.isTreasure());
-		ship.ent.setMetadata(PlayerID, "sea", 2);
+		ship.ent.setMetadata(PlayerID, "sea", seaRegion(2));
 		world.ai.playedTurn = 5;
 
 		manager.updateTrader(world.gameState, ship.ent);

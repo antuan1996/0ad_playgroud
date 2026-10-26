@@ -607,7 +607,7 @@ describe("the relic game: raids on gaia relics", () =>
 		assert.deepEqual(weak.forced, [], "2.5 against 5000 points");
 
 		const declined = relicGame([60, 60]);
-		declined.hq.attackManager.raidTargetEntity = () => null;
+		declined.hq.attackManager.raidTargetEntity = () => undefined;
 		raids(declined.manager).set(entityId(701), []);
 		declined.manager.captureGaiaRelic(declined.world.gameState, declined.relic.ent);
 		assert.deepEqual(declined.forced, []);

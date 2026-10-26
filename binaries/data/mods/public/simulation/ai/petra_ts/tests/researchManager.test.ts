@@ -99,7 +99,8 @@ describe("the next phase: checkPhase", () =>
 
 	it("waits while a phase, a civic centre or a wonder is already in the queues, or when no phase is left", () =>
 	{
-		for (const queue of ["majorTech", "civilCentre", "wonder"])
+		const busy: PetraRuntime.ConfiguredQueueName[] = ["majorTech", "civilCentre", "wonder"];
+		for (const queue of busy)
 		{
 			const s = seat({ "population": 150, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
 			s.queues[queue].hasQueuedUnits = () => true;
@@ -194,7 +195,7 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 		assert.deepEqual(wanted(["gather_farming_chain_pump"]), { "name": "gather_farming_chain_pump", "increasePriority": false });
 		assert.deepEqual(wanted(["gather_capacity_basket"]), { "name": "gather_capacity_basket", "increasePriority": false });
 		assert.deepEqual(wanted(["archery_tradition"]), { "name": "archery_tradition", "increasePriority": false });
-		assert.equal(wanted(["fishing_boat_gather_rate"]), null, "no fishing on a land map");
+		assert.equal(wanted(["fishing_boat_gather_rate"]), undefined, "no fishing on a land map");
 		assert.deepEqual(wanted(["fishing_boat_gather_rate"], { "phase": 2 }, true),
 			{ "name": "fishing_boat_gather_rate", "increasePriority": true });
 		assert.equal(wanted(["gather_lumbering_sharpaxes"])?.increasePriority, false, "900 resources: not cheap");
@@ -211,13 +212,13 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 
 	it("techs of no use now, or with no modification at all, are not wanted", () =>
 	{
-		assert.equal(wanted(["hoplite_tradition", "barracks_batch_training", "phase_town_generic", "equine_transports"]), null);
+		assert.equal(wanted(["hoplite_tradition", "barracks_batch_training", "phase_town_generic", "equine_transports"]), undefined);
 	});
 
 	it("in the first phase, a tech the workforce cannot soon afford waits", () =>
 	{
 		// 300 wood short with no worker: 10 x 0 workers < 300
-		assert.equal(wanted(["gather_lumbering_ironaxes"], { "phase": 1 }), null);
+		assert.equal(wanted(["gather_lumbering_ironaxes"], { "phase": 1 }), undefined);
 		const s = seat({ "phase": 1, "stock": { "wood": 200, "metal": 100 } }, ["gather_lumbering_ironaxes"]);
 		const techs = s.world.gameState.findAvailableTech();
 		assert.equal(s.manager.researchWantedTechs(s.world.gameState, techs)?.name, "gather_lumbering_ironaxes", "affordable now");
@@ -241,12 +242,12 @@ describe("the techs preferred from the second phase: researchPreferredTechs", ()
 		assert.deepEqual(preferred(["tower_garrison"]), { "name": "tower_garrison", "increasePriority": false });
 		assert.deepEqual(preferred(["arsenal_philon"]), { "name": "arsenal_philon", "increasePriority": false });
 		assert.deepEqual(preferred(["health_regen_units"]), { "name": "health_regen_units", "increasePriority": false });
-		assert.equal(preferred(["hoplite_tradition", "unlock_champion_infantry"]), null);
+		assert.equal(preferred(["hoplite_tradition", "unlock_champion_infantry"]), undefined);
 	});
 
 	it("in the second phase, a tech the workforce cannot soon afford waits", () =>
 	{
-		assert.equal(preferred(["gather_mining_servants"], { "phase": 2 }), null);
+		assert.equal(preferred(["gather_mining_servants"], { "phase": 2 }), undefined);
 		const s = seat({ "phase": 2 }, ["gather_mining_servants"]);
 		workers(s.world, 30);
 		const techs = s.world.gameState.findAvailableTech();
@@ -326,7 +327,8 @@ describe("the research of a turn: update", () =>
 
 	it("nothing is queued while a tech is already waiting", () =>
 	{
-		for (const queue of ["minorTech", "majorTech"])
+		const busy: PetraRuntime.ConfiguredQueueName[] = ["minorTech", "majorTech"];
+		for (const queue of busy)
 		{
 			const s = seat({ "phase": 3 }, ["unlock_champion_infantry"]);
 			s.queues[queue].hasQueuedUnits = () => true;

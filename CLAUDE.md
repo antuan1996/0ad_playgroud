@@ -246,16 +246,23 @@ untested branches.
 - Ids, positions, regions, times, template names and grid cells are branded
   (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`, `SeaIndex`,
   `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName` (entity templates),
-  `TechName` (technologies), `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
+  `TechName` (technologies), `AttackPlanId`, `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
   grid): what the engine hands over carries the brand. `petra_ts/brands.ts`
   is the only place that gives it to a plain value (`entityId`, `playerId`,
   `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
-  `templateName`, `techName`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
+  `templateName`, `techName`, `attackPlanId`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
   `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`): its identity
   functions hold the port's only sanctioned casts. A loop over a map's cells
   brands its index once (`const j = cellIndex(map, jIndex)`). A loop over player indices brands its index once
   (`const i = playerId(iIndex)`); records keyed by a `for...in` key keep
   `number` keys.
+- Names and states that are a fixed set are typed as one: queue names
+  (`PetraRuntime.QueueName`: the configured ones and an attack plan's
+  `plan_<n>`, `_champ`, `_siege`), attack types (`AttackType`,
+  `ATTACK_TYPES`), a unit's `plan` metadata (`UnitPlan`; its states and
+  lending in `execution/unitPlan.ts`). Metadata reads and writes are typed
+  by key (`PetraEntityMetadata`). Template data is read through
+  `adapter/templateData.ts` (`Template.get()` returns `unknown`).
 - The attack plan's state changes only through `changeState(from, to)`
   (the moves are in `AttackTransitions`, `attackPlan.ts`).
 - What a unit is doing is read through `adapter/unitState.ts` (`isInState`,

@@ -266,7 +266,7 @@ describe("garrisonManager", () =>
 			world.addEntity(archer);
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 			// the worker's office reseated him on another structure, engine order too
-			archer.setMetadata(PLAYER, "garrisonHolder", 5001);
+			archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
 			archer.unitAIOrderData = () => [{ "target": entityId(5001) }];
 
 			manager.update(world.gameState, emptyEvents());
@@ -545,7 +545,7 @@ describe("garrisonManager", () =>
 				unload: (id: number) => { unloadCalls.push(id); }
 			});
 			world.addEntity(house);
-			house.setMetadata(PLAYER, "holderTimeUpdate", 100);
+			house.setMetadata(PLAYER, "holderTimeUpdate", seconds(100));
 			const healer = makeEntity({ id: 3023, owner: PLAYER, position: [40, 41],
 				classes: ["Unit", "Support", "Healer"] }, {
 				attackTypes: () => [],
@@ -657,7 +657,7 @@ describe("garrisonManager", () =>
 			const archer = walker(3000, tower.id(), { stopMoving: () => { stopCalls.push(3000); } });
 			// one more marcher booked with another office, whom our loss must not touch
 			const neighbor = walker(3001, 5001, { stopMoving: () => { stopCalls.push(3001); } });
-			neighbor.setMetadata(PLAYER, "garrisonHolder", 5001);
+			neighbor.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
 			world.addEntity(archer);
 			world.addEntity(neighbor);
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
@@ -683,7 +683,7 @@ describe("garrisonManager", () =>
 				world.addEntity(archer);
 				manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 				// the worker's office reseated him on another structure
-				archer.setMetadata(PLAYER, "garrisonHolder", 5001);
+				archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
 				archer.unitAIOrderData = () => [{ "target": entityId(5001) }];
 				let events = emptyEvents();
 				if (fall === "destroyed")

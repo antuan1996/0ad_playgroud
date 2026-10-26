@@ -2189,7 +2189,7 @@ describe("a hunter and a fisher through their turn: update", () =>
 	{
 		const { world, base, worker } = seat();
 		bookCentreSupplies(world, base);
-		storehouse(world, 7531, [170, 170], ["food"]).setMetadata(PlayerID, "access", 3);
+		storehouse(world, 7531, [170, 170], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		const returned: number[] = [];
 		const ent = rider(world, base, 7532, {}, {
 			"isIdle": () => false,
@@ -2301,7 +2301,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	{
 		const { world, base, worker } = seat();
 		const gs = world.gameState;
-		rawSupply(world, 7701, [30, 30], "wood", "tree", {}).setMetadata(PlayerID, "inaccessibleTime", world.ai.elapsedTime + 300);
+		rawSupply(world, 7701, [30, 30], "wood", "tree", {}).setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		rawSupply(world, 7702, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
@@ -2348,7 +2348,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	{
 		const { world, base, worker } = seat();
 		const gs = world.gameState;
-		herd(world, 7721, [40, 40]).setMetadata(PlayerID, "inaccessibleTime", world.ai.elapsedTime + 300);
+		herd(world, 7721, [40, 40]).setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		herd(world, 7722, [44, 40]);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
@@ -2379,7 +2379,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		const { world, base, worker } = seat();
 		world.accessAt.set("150,150", 3);
 		herd(world, 7741, [150, 150]);
-		storehouse(world, 7742, [160, 160], ["food"]).setMetadata(PlayerID, "access", 3);
+		storehouse(world, 7742, [160, 160], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		const ent = hand(world, base, 7743, { "gather-type": "food" }, {}, [140, 140]);
 		prime(worker, ent);
 
@@ -2564,7 +2564,7 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 	{
 		const { world, base, worker } = seat();
 		const gs = world.gameState;
-		rawSupply(world, 8001, [30, 30], "wood", "tree").setMetadata(PlayerID, "inaccessibleTime", world.ai.elapsedTime + 300);
+		rawSupply(world, 8001, [30, 30], "wood", "tree").setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		rawSupply(world, 8002, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
@@ -2585,7 +2585,7 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 		const { world, base, worker } = seat();
 		const gs = world.gameState;
 		const tree = rawSupply(world, 8011, [30, 30], "wood", "tree");
-		tree.setMetadata(PlayerID, "inaccessibleTime", world.ai.elapsedTime + 300);
+		tree.setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		let carrying = 0;
 		const ent = hand(world, base, 8012, {}, {
 			"unitAIOrderData": () => [{ "target": 8011 }],
@@ -2701,7 +2701,7 @@ describe("allies' dropsites, when shared", () =>
 	{
 		const { world, base, worker } = seat();
 		herd(world, 8221, [150, 150]);
-		storehouse(world, 8222, [170, 170], ["food"]).setMetadata(PlayerID, "access", 3);
+		storehouse(world, 8222, [170, 170], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		const ent = hand(world, base, 8223, { "gather-type": "food" }, {}, [140, 140]);
 		prime(worker, ent);
 
@@ -2719,7 +2719,7 @@ describe("allies' dropsites, when shared", () =>
 		herd(world, 8231, [250, 250]);
 		bookCentreSupplies(world, base);
 		// ours across the water, and an ally's it does not share, count for nothing
-		storehouse(world, 8232, [245, 245], ["food"]).setMetadata(PlayerID, "access", 3);
+		storehouse(world, 8232, [245, 245], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		world.addEntity(makeHqEntity({ "id": 8233, "owner": 4, "position": [240, 240], "classes": ["Structure", "Farmstead"] },
 			{ "isResourceDropsite": (r?: string) => !r || r === "food", "isSharedDropsite": () => false }));
 		world.addEntity(makeHqEntity({ "id": 8234, "owner": 4, "position": [255, 255], "classes": ["Structure", "Farmstead"] },

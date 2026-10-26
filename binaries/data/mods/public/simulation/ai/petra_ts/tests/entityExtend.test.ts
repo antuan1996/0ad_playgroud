@@ -13,7 +13,7 @@ import { logs, resetRecorder } from "./harness/engine.ts";
 import { makeEntity, makeTemplate, type Methods, override } from "./harness/fakes.ts";
 import { collectionOf, ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-import { entityId, templateName } from "../adapter/brands.ts";
+import { entityId, seaRegion, templateName } from "../adapter/brands.ts";
 import * as ext from "../adapter/entityExtend.ts";
 
 /** the real Config's damage weights */
@@ -225,8 +225,8 @@ describe("getAttackBonus", () =>
 	it("a bonus restricted to another civilization does not apply", () =>
 	{
 		const bonuses = {
-			"BonusCiv": { "Civ": "maur", "Multiplier": 2 },
-			"BonusStructure": { "Classes": "Structure", "Multiplier": 1.5 }
+			"BonusCiv": { "Civ": "maur", "Multiplier": "2" },
+			"BonusStructure": { "Classes": "Structure", "Multiplier": "1.5" }
 		};
 		const ent = makeEntity({ "id": 40, "owner": PLAYER, "classes": ["Unit"] }, {
 			"get": (path: string) => path === "Attack/Capture" ? {} : path === "Attack/Capture/Bonuses" ? bonuses : undefined
@@ -460,10 +460,10 @@ describe("gatherTreasure: sending a unit for treasure", () =>
 	it("a ship goes for treasure floating on its own sea only", () =>
 	{
 		const world = treasureWorld([{ "id": 150, "position": [110, 100] }, { "id": 151, "position": [130, 100] }]);
-		world.ents.get(150)!.setMetadata(PLAYER, "sea", 6);
-		world.ents.get(151)!.setMetadata(PLAYER, "sea", 5);
+		world.ents.get(150)!.setMetadata(PLAYER, "sea", seaRegion(6));
+		world.ents.get(151)!.setMetadata(PLAYER, "sea", seaRegion(5));
 		const { ent, went } = collector(world, 152, [100, 100]);
-		ent.setMetadata(PLAYER, "sea", 5);
+		ent.setMetadata(PLAYER, "sea", seaRegion(5));
 		assert.equal(ext.gatherTreasure(world.gameState, ent, true), true);
 		assert.deepEqual(went, [151]);
 	});

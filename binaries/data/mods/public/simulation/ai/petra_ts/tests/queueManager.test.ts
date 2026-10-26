@@ -7,7 +7,9 @@
  * fakes them — the manager only ever asks a plan for its `getCost()`, whether
  * it is `canStart`-able, and whether it says it is `go` — while the queues
  * themselves and the `ResourcesManager` accounts are the real ones the plans
- * flow through.
+ * flow through. The manager owns the 18 queues the configuration sets up, as
+ * in a game, and a test's plans sit in the queues it names; the others stay
+ * empty, which takes them out of the funding.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -22,7 +24,7 @@ import { seconds } from "../adapter/brands.ts";
 import { Config } from "../decision/config.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { Queue } from "../execution/queue.ts";
-import { QueueManager } from "../execution/queueManager.ts";
+import { QueueManager, configuredQueues, isQueueName } from "../execution/queueManager.ts";
 
 function food(amount: number): ResourcesManager
 {
@@ -35,18 +37,23 @@ function costOf(amount: number): () => ResourcesManager
 	return () => food(amount);
 }
 
-/** Petra's tuning, with the queue rates these tests reckon with. */
-function makeConfig(overrides: Partial<Config> = {}): Config
+type ConfigOverrides = Omit<Partial<Config>, "priorities"> & {
+	priorities?: Partial<Record<PetraRuntime.ConfiguredQueueName, number>>;
+};
+
+/** Petra's tuning, with the queue rates these tests reckon with and the priorities a test sets laid over the real ones. */
+function makeConfig(overrides: ConfigOverrides = {}): Config
 {
-	return Object.assign(new Config(), {
-		priorities: {},
+	const config = new Config();
+	return Object.assign(config, {
 		queues: {
 			firstTurn: { "food": 10, "default": 0 },
 			short: { "default": 100 },
 			medium: { "default": 0 },
 			long: { "default": 0 }
 		},
-		...overrides
+		...overrides,
+		priorities: { ...config.priorities, ...overrides.priorities }
 	});
 }
 
@@ -83,27 +90,37 @@ function account(manager: QueueManager, queue: string): Record<string, number>
 	return manager.accounts[queue];
 }
 
-/** A manager owning the given queues, each pre-loaded with its plans. */
-function makeManager(config: Config, plans: Record<string, PetraRuntime.ConcretePlan[]> = {}): QueueManager
+/** A manager over the configured queues (and the attack queues named), the named ones pre-loaded with their plans. */
+function makeManager(config: Config, plans: { [K in PetraRuntime.QueueName]?: PetraRuntime.ConcretePlan[] } = {}): QueueManager
 {
-	const queues: Record<string, Queue> = {};
+	const queues = configuredQueues();
 	for (const name in plans)
 	{
-		queues[name] = new Queue();
-		for (const plan of plans[name])
-			queues[name].addPlan(plan);
+		if (!isQueueName(config, name))
+			continue;
+		const queue = queues[name] ?? new Queue();
+		queues[name] = queue;
+		for (const plan of plans[name] ?? [])
+			queue.addPlan(plan);
 	}
 	return new QueueManager(config, queues);
+}
+
+/** The manager's order of the named queues, the others left out. */
+function orderOf(manager: QueueManager, names: string[]): string[]
+{
+	return manager.queueArrays.map((entry) => entry[0]).filter((name) => names.includes(name));
 }
 
 describe("QueueManager", () =>
 {
 	it("copies its priorities from the config", () =>
 	{
-		const config = makeConfig({ priorities: { villager: 300, military: 600 } });
+		const config = makeConfig({ priorities: { villager: 300, militaryBuilding: 600 } });
 		const manager = makeManager(config);
 
-		assert.deepEqual(manager.priorities, { villager: 300, military: 600 });
+		assert.deepEqual(manager.priorities, config.priorities);
+		assert.equal(manager.priorities.militaryBuilding, 600);
 
 		// The priorities are the manager's working copy, not the config's: a
 		// changePriority must not rewrite the config it was given.
@@ -113,44 +130,42 @@ describe("QueueManager", () =>
 
 	it("opens a zero account for every queue it is handed", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2 } }), { a: [], b: [] });
+		const manager = makeManager(makeConfig());
 
-		assert.deepEqual(Object.keys(manager.accounts).sort(), ["a", "b"]);
-		assert.equal(manager.accounts.a.Serialize().amounts.food, 0);
-		assert.equal(manager.accounts.b.Serialize().amounts.food, 0);
+		assert.deepEqual(Object.keys(manager.accounts), Object.keys(configuredQueues()));
+		for (const name in manager.accounts)
+			assert.equal(manager.accounts[name].Serialize().amounts.food, 0, name);
 	});
 
 	it("orders its queues by priority, highest first", () =>
 	{
-		// Queue names listed in construction order say which order they arrive in.
-		const manager = makeManager(makeConfig({ priorities: { c: 1, a: 300, b: 10 } }), { c: [] , a: [], b: [] });
+		const manager = makeManager(makeConfig({ priorities: { house: 1, villager: 300, trader: 10 } }));
 
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["a", "b", "c"]);
+		assert.deepEqual(orderOf(manager, ["house", "villager", "trader"]), ["villager", "trader", "house"]);
 	});
 
 	it("orders equally prioritised queues by name", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { beta: 100, alpha: 100 } }), { beta: [], alpha: [] });
+		// the field is set up before the dock (Config.priorities' order)
+		const manager = makeManager(makeConfig({ priorities: { field: 100, dock: 100 } }));
 
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["alpha", "beta"]);
+		assert.deepEqual(orderOf(manager, ["field", "dock"]), ["dock", "field"]);
 	});
 
 	it("breaks priority ties whichever way the record lists them", () =>
 	{
-		// Listed [bamboo, zebra, apple], sorting compares bamboo against zebra
-		// (bamboo sorts first, keeps its place) and then zebra against apple
-		// (zebra sorts after, moves down) — both arms of the name tie-break run.
-		const manager = makeManager(makeConfig({ priorities: { bamboo: 100, zebra: 100, apple: 100 } }),
-			{ bamboo: [], zebra: [], apple: [] });
+		// Set up house, corral, wonder: sorting meets the tied names in both
+		// orders, so both arms of the name tie-break run.
+		const manager = makeManager(makeConfig({ priorities: { house: 100, corral: 100, wonder: 100 } }));
 
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["apple", "bamboo", "zebra"]);
+		assert.deepEqual(orderOf(manager, ["house", "corral", "wonder"]), ["corral", "house", "wonder"]);
 	});
 
 	it("sees the world's resources that no account holds", () =>
 	{
 		const gameState = worldWithResources({ food: 100 });
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { a: [] });
-		account(manager, "a").food = 30;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 30;
 
 		assert.equal(manager.getAvailableResources(gameState).Serialize().amounts.food, 70);
 		assert.equal(manager.getTotalAccountedResources().Serialize().amounts.food, 30,
@@ -160,10 +175,9 @@ describe("QueueManager", () =>
 	it("needs what its queues' first plans cost, minus what the world holds", () =>
 	{
 		const gameState = worldWithResources({ food: 20 });
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2, c: 3 } }), {
-			a: [makePlan({ getCost: costOf(100) })],
-			b: [makePlan({ type: "no", getCost: costOf(999), isGo: () => false })],
-			c: []
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100) })],
+			citizenSoldier: [makePlan({ type: "no", getCost: costOf(999), isGo: () => false })]
 		});
 
 		const needs = manager.currentNeeds(gameState).Serialize();
@@ -187,7 +201,7 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources({ food: 500 });
 		gameState.ai.playedTurn = 2;   // any turn past the first
 		const manager = makeManager(makeConfig(), {
-			a: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(50) })]
+			villager: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(50) })]
 		});
 
 		const rates = manager.wantedGatherRates(gameState);
@@ -202,137 +216,129 @@ describe("QueueManager", () =>
 	it("hands scarce resources to the queues with the highest priority", () =>
 	{
 		const gameState = worldWithResources({ food: 400 });
-		const manager = makeManager(makeConfig({ priorities: { favourite: 300, other: 100 } }), {
-			favourite: [makePlan({ getCost: costOf(300) })],
-			other: [makePlan({ type: "other", getCost: costOf(300) })]
+		const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 300, trader: 100 } }), {
+			citizenSoldier: [makePlan({ getCost: costOf(300) })],
+			trader: [makePlan({ type: "other", getCost: costOf(300) })]
 		});
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "favourite").food, 300,
+		assert.equal(account(manager, "citizenSoldier").food, 300,
 			"the highest priority queue is funded for its whole item");
-		assert.equal(account(manager, "other").food, 100,
+		assert.equal(account(manager, "trader").food, 100,
 			"the low priority queue gets whatever is left");
 	});
 
 	it("relegates a queue that can already pay its first item", () =>
 	{
-		// Both queues want 200 food total. `settled` has already banked its
-		// first item's cost, so its share is halved despite the other having
-		// twice the priority.
+		// Both queues want 200 food total. The houses have already banked
+		// their first item's cost, so their share is halved although the
+		// fields have twice the priority.
 		const gameState = worldWithResources({ food: 200 });
-		const manager = makeManager(makeConfig({ priorities: { settled: 100, hungry: 200 } }), {
-			settled: [
+		const manager = makeManager(makeConfig({ priorities: { house: 100, field: 200 } }), {
+			house: [
 				makePlan({ getCost: costOf(100) }),
 				makePlan({ type: "second", getCost: costOf(100) })
 			],
-			hungry: [makePlan({ type: "other", getCost: costOf(200) })]
+			field: [makePlan({ type: "other", getCost: costOf(200) })]
 		});
-		account(manager, "settled").food = 100;
+		account(manager, "house").food = 100;
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "hungry").food, 80);
-		assert.equal(account(manager, "settled").food, 120,
+		assert.equal(account(manager, "field").food, 80);
+		assert.equal(account(manager, "house").food, 120,
 			"a queue whose first item is already paid shares at only half priority");
 	});
 
 	it("takes no share for a paused queue", () =>
 	{
 		const gameState = worldWithResources({ food: 200 });
-		const queues: Record<string, Queue> = {
-			active: Object.assign(new Queue(), {}),
-			paused: new Queue()
-		};
-		queues.active.addPlan(makePlan({ getCost: costOf(300) }));
-		queues.paused.addPlan(makePlan({ type: "other", getCost: costOf(300) }));
-		queues.paused.paused = true;
-		const manager = new QueueManager(makeConfig({ priorities: { active: 100, paused: 900 } }), queues);
+		const manager = makeManager(makeConfig({ priorities: { villager: 100, emergency: 900 } }), {
+			villager: [makePlan({ getCost: costOf(300) })],
+			emergency: [makePlan({ type: "other", getCost: costOf(300) })]
+		});
+		manager.queues.emergency.paused = true;
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "active").food, 200);
-		assert.equal(account(manager, "paused").food, 0, "a paused queue takes no resources");
+		assert.equal(account(manager, "villager").food, 200);
+		assert.equal(account(manager, "emergency").food, 0, "a paused queue takes no resources");
 	});
 
 	it("releases the resources of an overfunded account", () =>
 	{
 		// The queue's cap is the first item plus 60% of the next: 100 + 60 = 160.
 		const gameState = worldWithResources({ food: 500 });
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-			a: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(100) })]
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(100) })]
 		});
-		account(manager, "a").food = 300;
+		account(manager, "villager").food = 300;
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "a").food, 160,
+		assert.equal(account(manager, "villager").food, 160,
 			"the account keeps first item and 60% of the next, the rest is released");
 	});
 
 	it("compacts accounts so a higher priority queue can afford its item", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const queues: Record<string, Queue> = {
-			hungry: new Queue(),
-			donor: new Queue(),
-			// A queue the compaction never goes through: paused, or with plans.
-			parked: new Queue(),
-			drained: new Queue()
-		};
-		queues.hungry.addPlan(makePlan({ getCost: costOf(100) }));
-		queues.donor.addPlan(makePlan({ type: "other", getCost: costOf(100) }));
-		queues.parked.addPlan(makePlan({ type: "other", getCost: costOf(100) }));
-		queues.parked.paused = true;
-		const manager = new QueueManager(makeConfig({ priorities: { hungry: 300, donor: 100, parked: 10, drained: 10 } }), queues);
-		account(manager, "hungry").food = 0;
-		account(manager, "donor").food = 120;
-		account(manager, "parked").food = 30;
-		account(manager, "drained").food = 10;
+		// the soldiers are short, the traders can give; the healers' queue is
+		// paused with a plan, the wonder's empty: compaction passes both by
+		const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 300, trader: 100, healer: 10, wonder: 10 } }), {
+			citizenSoldier: [makePlan({ getCost: costOf(100) })],
+			trader: [makePlan({ type: "other", getCost: costOf(100) })],
+			healer: [makePlan({ type: "other", getCost: costOf(100) })]
+		});
+		manager.queues.healer.paused = true;
+		account(manager, "trader").food = 120;
+		account(manager, "healer").food = 30;
+		account(manager, "wonder").food = 10;
 
 		manager.switchResource(gameState, "food");
 
-		assert.equal(account(manager, "hungry").food, 100,
+		assert.equal(account(manager, "citizenSoldier").food, 100,
 			"the hungry queue takes what it needs to afford its item");
-		assert.equal(account(manager, "donor").food, 20);
-		assert.equal(manager.queues.donor.switched, 1, "the donor queue is marked as switched");
-		assert.equal(manager.queues.hungry.switched, 0);
-		assert.equal(account(manager, "parked").food, 30,
+		assert.equal(account(manager, "trader").food, 20);
+		assert.equal(manager.queues.trader.switched, 1, "the donor queue is marked as switched");
+		assert.equal(manager.queues.citizenSoldier.switched, 0);
+		assert.equal(account(manager, "healer").food, 30,
 			"a paused queue neither gives nor takes during compaction");
-		assert.equal(account(manager, "drained").food, 10,
+		assert.equal(account(manager, "wonder").food, 10,
 			"an empty queue keeps its account during compaction");
 	});
 
 	it("does not compact accounts from a higher priority queue", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const manager = makeManager(makeConfig({ priorities: { rich: 300, needy: 100 } }), {
-			rich: [makePlan({ getCost: costOf(100) })],
-			needy: [makePlan({ type: "other", getCost: costOf(100) })]
+		const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 300, trader: 100 } }), {
+			citizenSoldier: [makePlan({ getCost: costOf(100) })],
+			trader: [makePlan({ type: "other", getCost: costOf(100) })]
 		});
-		account(manager, "rich").food = 60;
+		account(manager, "citizenSoldier").food = 60;
 
 		manager.switchResource(gameState, "food");
 
-		assert.equal(account(manager, "needy").food, 0,
+		assert.equal(account(manager, "trader").food, 0,
 			"a lower priority queue cannot collect from the rich one");
-		assert.equal(account(manager, "rich").food, 60);
+		assert.equal(account(manager, "citizenSoldier").food, 60);
 	});
 
 	it("leaves a source alone when it cannot complete the item anyway", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const manager = makeManager(makeConfig({ priorities: { hungry: 300, donor: 100 } }), {
-			hungry: [makePlan({ getCost: costOf(200) })],
-			donor: [makePlan({ type: "other", getCost: costOf(100) })]
+		const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 300, trader: 100 } }), {
+			citizenSoldier: [makePlan({ getCost: costOf(200) })],
+			trader: [makePlan({ type: "other", getCost: costOf(100) })]
 		});
-		account(manager, "donor").food = 60;
+		account(manager, "trader").food = 60;
 
 		manager.switchResource(gameState, "food");
 
-		assert.equal(account(manager, "donor").food, 60,
+		assert.equal(account(manager, "trader").food, 60,
 			"a source that could not finish the item keeps its account");
-		assert.equal(manager.queues.donor.switched, 0);
+		assert.equal(manager.queues.trader.switched, 0);
 	});
 
 	it("starts the next item when the account can afford it", () =>
@@ -340,16 +346,16 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources();
 		gameState.ai.elapsedTime = seconds(20);
 		let started = 0;
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-			a: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
 		});
-		account(manager, "a").food = 100;
+		account(manager, "villager").food = 100;
 
 		manager.startNextItems(gameState);
 
 		assert.equal(started, 1);
-		assert.equal(manager.queues.a.length(), 0, "the started plan leaves the queue");
-		assert.equal(account(manager, "a").food, 0, "the account pays for what started");
+		assert.equal(manager.queues.villager.length(), 0, "the started plan leaves the queue");
+		assert.equal(account(manager, "villager").food, 0, "the account pays for what started");
 		assert.equal(manager.finishingTime, 20, "the finishing time marks when it started");
 	});
 
@@ -357,44 +363,44 @@ describe("QueueManager", () =>
 	{
 		const gameState = worldWithResources();
 		let started = 0;
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-			a: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
 		});
-		account(manager, "a").food = 50;
+		account(manager, "villager").food = 50;
 
 		manager.startNextItems(gameState);
 
 		assert.equal(started, 0);
-		assert.equal(manager.queues.a.length(), 1, "the plan stays queued");
-		assert.equal(account(manager, "a").food, 50, "the account keeps what it has");
+		assert.equal(manager.queues.villager.length(), 1, "the plan stays queued");
+		assert.equal(account(manager, "villager").food, 50, "the account keeps what it has");
 	});
 
 	it("leaves an item that cannot start", () =>
 	{
 		const gameState = worldWithResources();
 		let started = 0;
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-			a: [makePlan({ getCost: costOf(100), canStart: () => false, start: () => { ++started; } })]
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100), canStart: () => false, start: () => { ++started; } })]
 		});
-		account(manager, "a").food = 100;
+		account(manager, "villager").food = 100;
 
 		manager.startNextItems(gameState);
 
 		assert.equal(started, 0, "a plan that cannot start is not started");
-		assert.equal(manager.queues.a.length(), 1);
+		assert.equal(manager.queues.villager.length(), 1);
 	});
 
 	it("resets the account of a queue that finished", () =>
 	{
 		const gameState = worldWithResources();
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { a: [] });
-		account(manager, "a").food = 50;
-		manager.queues.a.switched = 2;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 50;
+		manager.queues.villager.switched = 2;
 
 		manager.startNextItems(gameState);
 
-		assert.equal(account(manager, "a").food, 0, "an empty queue keeps no account");
-		assert.equal(manager.queues.a.switched, 0, "and loses its switch debt");
+		assert.equal(account(manager, "villager").food, 0, "an empty queue keeps no account");
+		assert.equal(manager.queues.villager.switched, 0, "and loses its switch debt");
 	});
 
 	// only the port passes: the original re-sorts queueArrays in place while
@@ -417,8 +423,7 @@ describe("QueueManager", () =>
 		});
 		const manager = makeManager(makeConfig({ priorities: { house: 1000, field: 50, economicBuilding: 30 } }), {
 			house: [house(), house()],
-			field: [makePlan({ getCost: costOf(100), start: () => { ++fields; } })],
-			economicBuilding: []
+			field: [makePlan({ getCost: costOf(100), start: () => { ++fields; } })]
 		});
 		account(manager, "house").food = 100;
 		account(manager, "field").food = 100;
@@ -427,7 +432,7 @@ describe("QueueManager", () =>
 
 		assert.equal(fields, 1, "the funded field starts this turn");
 		assert.equal(houses, 1, "one house a turn, as for any queue");
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["field", "economicBuilding", "house"],
+		assert.deepEqual(orderOf(manager, ["house", "field", "economicBuilding"]), ["field", "economicBuilding", "house"],
 			"the next turn sees the new order");
 	});
 
@@ -435,169 +440,173 @@ describe("QueueManager", () =>
 	{
 		const gameState = worldWithResources();
 		let started = 0;
-		const queues: Record<string, Queue> = { a: new Queue() };
-		queues.a.addPlan(makePlan({ getCost: costOf(100), start: () => { ++started; } }));
-		queues.a.paused = true;
-		const manager = new QueueManager(makeConfig({ priorities: { a: 1 } }), queues);
-		account(manager, "a").food = 100;
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
+		});
+		manager.queues.villager.paused = true;
+		account(manager, "villager").food = 100;
 
 		manager.startNextItems(gameState);
 
 		assert.equal(started, 0, "a paused queue starts nothing");
-		assert.equal(account(manager, "a").food, 100, "a paused queue keeps its account");
+		assert.equal(account(manager, "villager").food, 100, "a paused queue keeps its account");
 	});
 
 	it("says whether a queue can afford a cost", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { a: [] });
-		account(manager, "a").food = 30;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 30;
 
-		assert.equal(manager.canAfford("a", food(20)), true);
-		assert.equal(manager.canAfford("a", food(40)), false);
-		assert.equal(manager.canAfford("unknown", food(1)), false,
-			"an account-less queue cannot afford anything");
+		assert.equal(manager.canAfford("villager", food(20)), true);
+		assert.equal(manager.canAfford("villager", food(40)), false);
+		assert.equal(manager.canAfford("plan_99", food(1)), false,
+			"an account-less queue (an attack plan's never added) cannot afford anything");
 	});
 
 	it("stops a queue from using its account when asked", () =>
 	{
 		const gameState = worldWithResources();
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2 } }), { a: [], b: [] });
-		account(manager, "a").food = 30;
-		account(manager, "b").food = 30;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 30;
+		account(manager, "citizenSoldier").food = 30;
 
-		manager.pauseQueue("a", true);
+		manager.pauseQueue("villager", true);
 
-		assert.equal(manager.queues.a.paused, true);
-		assert.equal(account(manager, "a").food, 0, "a scrapped account is emptied");
-		assert.equal(account(manager, "b").food, 30, "another queue's account is not touched");
+		assert.equal(manager.queues.villager.paused, true);
+		assert.equal(account(manager, "villager").food, 0, "a scrapped account is emptied");
+		assert.equal(account(manager, "citizenSoldier").food, 30, "another queue's account is not touched");
 
-		manager.unpauseQueue("a");
-		assert.equal(manager.queues.a.paused, false);
+		manager.unpauseQueue("villager");
+		assert.equal(manager.queues.villager.paused, false);
 
 		// Without scrapping, the account survives the pause.
-		manager.pauseQueue("a", false);
-		assert.equal(account(manager, "a").food, 0, "it was already scrapped");
-		account(manager, "a").food = 10;
-		manager.pauseQueue("a", false);
-		assert.equal(account(manager, "a").food, 10, "the account survives a non-scrapping pause");
+		manager.pauseQueue("villager", false);
+		assert.equal(account(manager, "villager").food, 0, "it was already scrapped");
+		account(manager, "villager").food = 10;
+		manager.pauseQueue("villager", false);
+		assert.equal(account(manager, "villager").food, 10, "the account survives a non-scrapping pause");
 
-		// A queue that does not exist can neither be paused nor resumed.
-		manager.pauseQueue("ghost", true);
-		manager.unpauseQueue("ghost");
-		assert.equal(manager.queues.ghost, undefined);
+		// A queue that does not exist (an attack plan's never added) can neither be paused nor resumed.
+		manager.pauseQueue("plan_99", true);
+		manager.unpauseQueue("plan_99");
+		assert.equal(manager.queues.plan_99, undefined);
 	});
 
 	it("pauses every queue but one, then lets every queue but one run", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2, c: 3 } }), { a: [], b: [], c: [] });
-		account(manager, "a").food = 10;
-		account(manager, "b").food = 20;
-		account(manager, "c").food = 30;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 10;
+		account(manager, "citizenSoldier").food = 20;
+		account(manager, "trader").food = 30;
 
-		manager.pauseAll(true, "b");
+		manager.pauseAll(true, "citizenSoldier");
 
-		assert.equal(manager.queues.a.paused, true);
-		assert.equal(manager.queues.c.paused, true);
-		assert.equal(manager.queues.b.paused, false, "the excepted queue keeps running");
-		assert.equal(account(manager, "a").food, 0, "scrapped accounts are emptied");
-		assert.equal(account(manager, "c").food, 0);
-		assert.equal(account(manager, "b").food, 20, "the excepted queue keeps its account");
+		assert.equal(manager.queues.villager.paused, true);
+		assert.equal(manager.queues.trader.paused, true);
+		assert.equal(manager.queues.citizenSoldier.paused, false, "the excepted queue keeps running");
+		assert.equal(account(manager, "villager").food, 0, "scrapped accounts are emptied");
+		assert.equal(account(manager, "trader").food, 0);
+		assert.equal(account(manager, "citizenSoldier").food, 20, "the excepted queue keeps its account");
 
-		manager.unpauseAll("a");
+		manager.unpauseAll("villager");
 
-		assert.equal(manager.queues.c.paused, false);
-		assert.equal(manager.queues.b.paused, false);
-		assert.equal(manager.queues.a.paused, true, "the excepted queue stays paused");
+		assert.equal(manager.queues.trader.paused, false);
+		assert.equal(manager.queues.citizenSoldier.paused, false);
+		assert.equal(manager.queues.villager.paused, true, "the excepted queue stays paused");
 	});
 
 	it("adds a queue with its priority and account", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 100 } }), { a: [] });
+		const manager = makeManager(makeConfig({ priorities: { villager: 100 } }));
 
-		manager.addQueue("emergency", 70);
+		// an attack plan's queue, as the plan adds it when it starts preparing
+		manager.addQueue("plan_3", 70);
 
-		assert.notEqual(manager.queues.emergency, undefined, "the queue exists");
-		assert.equal(manager.getPriority("emergency"), 70);
-		assert.equal(manager.accounts.emergency.Serialize().amounts.food, 0, "a fresh queue starts empty-handed");
-		const names = manager.queueArrays.map((entry) => entry[0]);
-		assert.deepEqual(names, ["a", "emergency"], "the new queue is sorted into place");
+		assert.notEqual(manager.queues.plan_3, undefined, "the queue exists");
+		assert.equal(manager.getPriority("plan_3"), 70);
+		assert.equal(manager.accounts.plan_3.Serialize().amounts.food, 0, "a fresh queue starts empty-handed");
+		assert.deepEqual(orderOf(manager, ["villager", "plan_3"]), ["villager", "plan_3"], "the new queue is sorted into place");
 
 		// Adding a queue that exists changes nothing.
-		manager.addQueue("emergency", 900);
-		assert.equal(manager.getPriority("emergency"), 70, "an existing queue keeps its priority");
+		manager.addQueue("plan_3", 900);
+		assert.equal(manager.getPriority("plan_3"), 70, "an existing queue keeps its priority");
 	});
 
 	it("removes a queue with its priority and account", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { old: 100, remaining: 300, newcomer: 50 } }), { old: [], remaining: [], newcomer: [] });
+		const manager = makeManager(makeConfig());
+		manager.addQueue("plan_1", 100);
+		manager.addQueue("plan_2", 300);
+		manager.addQueue("plan_3", 50);
 
-		manager.removeQueue("old");
+		manager.removeQueue("plan_1");
 
-		assert.equal(manager.queues.old, undefined);
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["remaining", "newcomer"],
+		assert.equal(manager.queues.plan_1, undefined);
+		assert.equal(manager.accounts.plan_1, undefined, "its account goes with it");
+		assert.deepEqual(orderOf(manager, ["plan_1", "plan_2", "plan_3"]), ["plan_2", "plan_3"],
 			"the rest re-sorts without the removed queue");
 
 		const before = Object.keys(manager.queues).length;
-		manager.removeQueue("never-had");
+		manager.removeQueue("plan_9");
 		assert.equal(Object.keys(manager.queues).length, before, "removing an unknown queue is a no-op");
 	});
 
 	it("re-orders the queues when a priority changes", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { low: 100, high: 200 } }), { low: [], high: [] });
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["high", "low"]);
+		const manager = makeManager(makeConfig({ priorities: { trader: 100, healer: 200 } }));
+		assert.deepEqual(orderOf(manager, ["trader", "healer"]), ["healer", "trader"]);
 
-		manager.changePriority("low", 500);
-		assert.deepEqual(manager.queueArrays.map((entry) => entry[0]), ["low", "high"]);
+		manager.changePriority("trader", 500);
+		assert.deepEqual(orderOf(manager, ["trader", "healer"]), ["trader", "healer"]);
 
 		// A queue that does not exist keeps its absent priority.
-		manager.changePriority("ghost", 999);
-		assert.equal(manager.priorities.ghost, undefined);
+		manager.changePriority("plan_99", 999);
+		assert.equal(manager.priorities.plan_99, undefined);
 	});
 
 	it("hands an exact amount over between two accounts", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2 } }), { a: [], b: [] });
-		account(manager, "a").food = 100;
+		const manager = makeManager(makeConfig());
+		account(manager, "villager").food = 100;
 
-		manager.transferAccounts(food(60), "a", "b");
-		assert.equal(account(manager, "a").food, 40);
-		assert.equal(account(manager, "b").food, 60);
+		manager.transferAccounts(food(60), "villager", "emergency");
+		assert.equal(account(manager, "villager").food, 40);
+		assert.equal(account(manager, "emergency").food, 60);
 
 		// A queue that already holds more than the cost asks for nothing.
-		manager.transferAccounts(food(10), "a", "b");
-		assert.equal(account(manager, "a").food, 40, "no transfer when the target has enough");
+		manager.transferAccounts(food(10), "villager", "emergency");
+		assert.equal(account(manager, "villager").food, 40, "no transfer when the target has enough");
 	});
 
 	it("caps a method-set account at what the world actually gives", () =>
 	{
 		const gameState = worldWithResources({ food: 30 });
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { a: [] });
+		const manager = makeManager(makeConfig());
 
-		manager.setAccounts(gameState, food(100), "a");
-		assert.equal(account(manager, "a").food, 30, "the account only takes what the world had");
+		manager.setAccounts(gameState, food(100), "emergency");
+		assert.equal(account(manager, "emergency").food, 30, "the account only takes what the world had");
 
 		const again = worldWithResources({ food: 90 });
-		manager.setAccounts(again, food(100), "a");
-		assert.equal(account(manager, "a").food, 90, "a second call tops up to the new world");
+		manager.setAccounts(again, food(100), "emergency");
+		assert.equal(account(manager, "emergency").food, 90, "a second call tops up to the new world");
 
 		// A cost the account already covers asks for nothing.
 		const rich = worldWithResources({ food: 0 });
-		manager.setAccounts(rich, food(50), "a");
-		assert.equal(account(manager, "a").food, 90, "the already-covered account takes nothing");
+		manager.setAccounts(rich, food(50), "emergency");
+		assert.equal(account(manager, "emergency").food, 90, "the already-covered account takes nothing");
 	});
 
 	it("empties every queue it owns", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { a: 1, b: 2 } }), {
-			a: [makePlan()],
-			b: [makePlan({ type: "other" })]
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan()],
+			citizenSoldier: [makePlan({ type: "other" })]
 		});
 
 		manager.clear();
 
-		assert.equal(manager.queues.a.length(), 0);
-		assert.equal(manager.queues.b.length(), 0);
+		assert.equal(manager.queues.villager.length(), 0);
+		assert.equal(manager.queues.citizenSoldier.length(), 0);
 	});
 
 	it("runs one full turn: fund, then start what the money bought", () =>
@@ -608,7 +617,7 @@ describe("QueueManager", () =>
 		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
 
 		let started = 0;
-		const manager = makeManager(makeConfig({ priorities: { villager: 100 } }), {
+		const manager = makeManager(makeConfig(), {
 			villager: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
 		});
 
@@ -625,11 +634,11 @@ describe("QueueManager", () =>
 		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
 		const logged = logs.length;
-		const manager = makeManager(makeConfig({ priorities: { military: 0 } }), { military: [] });
+		const manager = makeManager(makeConfig({ priorities: { militaryBuilding: 0 } }));
 
 		manager.update(gameState);
 
-		assert.equal(manager.priorities.military, 1, "the manager repairs the priority");
+		assert.equal(manager.priorities.militaryBuilding, 1, "the manager repairs the priority");
 		assert.ok(
 			logs.slice(logged).some((message) => message.includes("bad priorities")),
 			"the manager asks for a report about the broken priorities"
@@ -651,7 +660,7 @@ describe("QueueManager", () =>
 		gameState.ai.playedTurn = 50;
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
 		const logged = logs.length;
-		const manager = makeManager(makeConfig({ debug: 2, priorities: { a: 1 } }), { a: [] });
+		const manager = makeManager(makeConfig({ debug: 2 }));
 
 		manager.update(gameState);
 
@@ -663,36 +672,57 @@ describe("QueueManager", () =>
 
 	it("serializes its queues, accounts and priorities", () =>
 	{
-		const manager = makeManager(makeConfig({ priorities: { military: 500 } }), { military: [] });
-		manager.queues.military.paused = true;
-		manager.queues.military.switched = 2;
-		account(manager, "military").food = 55;
+		const manager = makeManager(makeConfig({ priorities: { militaryBuilding: 500 } }));
+		manager.queues.militaryBuilding.paused = true;
+		manager.queues.militaryBuilding.switched = 2;
+		account(manager, "militaryBuilding").food = 55;
 
 		const data = manager.Serialize();
 
-		assert.deepEqual(data.priorities, { military: 500 });
-		assert.equal(data.accounts.military.amounts.food, 55);
-		assert.equal(data.queues.military.paused, true);
-		assert.equal(data.queues.military.switched, 2);
+		assert.deepEqual(data.priorities, manager.priorities);
+		assert.equal(data.priorities.militaryBuilding, 500);
+		assert.equal(data.accounts.militaryBuilding.amounts.food, 55);
+		assert.equal(data.queues.militaryBuilding.paused, true);
+		assert.equal(data.queues.militaryBuilding.switched, 2);
 	});
 
 	it("restores its queues, accounts and priorities from a save", () =>
 	{
 		const gameState = worldWithResources();
-		const manager = makeManager(makeConfig({ priorities: { a: 100, b: 300 } }), { a: [], b: [] });
-		account(manager, "a").food = 55;
-		manager.queues.a.paused = true;
-		manager.queues.a.switched = 2;
+		const manager = makeManager(makeConfig({ priorities: { villager: 100, citizenSoldier: 300 } }));
+		manager.addQueue("plan_4", 200);
+		account(manager, "villager").food = 55;
+		manager.queues.villager.paused = true;
+		manager.queues.villager.switched = 2;
 
 		const restored = makeManager(makeConfig());
 		restored.Deserialize(gameState, manager.Serialize());
 
-		assert.deepEqual(restored.priorities, { a: 100, b: 300 });
-		assert.deepEqual(restored.queueArrays.map((entry) => entry[0]), ["b", "a"],
+		assert.deepEqual(restored.priorities, manager.priorities);
+		assert.deepEqual(Object.keys(restored.queues), Object.keys(manager.queues),
+			"the same queues, in the same order, an attack plan's included");
+		assert.deepEqual(orderOf(restored, ["villager", "citizenSoldier", "plan_4"]), ["citizenSoldier", "plan_4", "villager"],
 			"the queues come back in priority order");
-		assert.equal(account(restored, "a").food, 55);
-		assert.equal(restored.queues.a.paused, true, "the paused flag comes from the save");
-		assert.equal(restored.queues.a.switched, 2, "the switched flag comes from the save");
+		assert.equal(account(restored, "villager").food, 55);
+		assert.equal(restored.queues.villager.paused, true, "the paused flag comes from the save");
+		assert.equal(restored.queues.villager.switched, 2, "the switched flag comes from the save");
+	});
+
+	it("skips a saved queue it does not know, with a warning", () =>
+	{
+		const gameState = worldWithResources();
+		const saved = makeManager(makeConfig()).Serialize();
+		// a save from another version, or one a mod changed: a queue the bot has no name for
+		saved.queues["military"] = new Queue().Serialize();
+		saved.accounts["military"] = new ResourcesManager().Serialize();
+		const logged = logs.length;
+
+		const restored = makeManager(makeConfig());
+		restored.Deserialize(gameState, saved);
+
+		assert.deepEqual(Object.keys(restored.queues), Object.keys(configuredQueues()), "only the queues it knows");
+		assert.equal(restored.accounts["military"], undefined);
+		assert.ok(logs.slice(logged).some((message) => message.includes("queue unknown military")));
 	});
 
 	it("wants long-horizon rates for what it is not ready to start", () =>
@@ -700,7 +730,7 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources({ food: 200 });
 		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
-			a: [
+			villager: [
 				makePlan({ getCost: costOf(100) }),
 				makePlan({ type: "later", getCost: costOf(120), isGo: () => false })
 			]
@@ -722,9 +752,9 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources({ food: 0 });
 		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
-			a: [makePlan({ getCost: costOf(500) })]
+			villager: [makePlan({ getCost: costOf(500) })]
 		});
-		manager.queues.a.paused = true;
+		manager.queues.villager.paused = true;
 
 		const rates = manager.wantedGatherRates(gameState);
 
@@ -738,7 +768,7 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources({ food: 0 });
 		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
-			a: [
+			villager: [
 				makePlan({ type: "first", getCost: costOf(100) }),
 				makePlan({ type: "second", getCost: costOf(50) }),
 				makePlan({ type: "third", getCost: costOf(70) })
@@ -764,11 +794,10 @@ describe("QueueManager", () =>
 			"GetCurrentGatherRates": () => ({ food: 0.5 }),
 			"pickMostNeededResources": () => ["food"]
 		});
-		const manager = makeManager(makeConfig({ priorities: { military: 500, reserve: 1 } }),
+		// the other queues are momentarily empty: they still show in the overview
+		const manager = makeManager(makeConfig({ priorities: { militaryBuilding: 500 } }),
 		{
-			military: [makePlan({ number: 3 })],
-			// A queue that is momentarily empty still shows in the overview.
-			reserve: []
+			militaryBuilding: [makePlan({ number: 3 })]
 		});
 
 		const logged = logs.length;
@@ -777,7 +806,7 @@ describe("QueueManager", () =>
 		const written = logs.slice(logged);
 		assert.ok(written.some((message) => message.includes("---------- QUEUES ------------ with pop 42 and workers 1")),
 			"the header names the population and the free workers");
-		assert.ok(written.some((message) => message.includes("military: ( with priority 500 and accounts")),
+		assert.ok(written.some((message) => message.includes("militaryBuilding: ( with priority 500 and accounts")),
 			"the running queue and its priority");
 		assert.ok(written.some((message) => message.includes("test_unit x3")), "the plan with its count");
 		assert.ok(written.some((message) => message.includes("Accounts")), "the accounts section");
@@ -792,29 +821,30 @@ describe("QueueManager", () =>
 		// Bartering can spend resources already earmarked by accounts, leaving
 		// them overdrawn: each account keeps its share of what is left.
 		const gameState = worldWithResources({ food: 101 });
-		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { a: [makePlan({ getCost: costOf(100) })] });
-		account(manager, "a").food = 150;
+		const manager = makeManager(makeConfig(), { villager: [makePlan({ getCost: costOf(100) })] });
+		account(manager, "villager").food = 150;
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "a").food, 101,
+		assert.equal(account(manager, "villager").food, 101,
 			"the overdrawn account shrinks to the same fixed share of the world");
 	});
 
 	it("hands the rounding leftover to the first queue it looks at", () =>
 	{
 		// 3 food across two equal-priority queues floors to 1 each; the last
-		// unit goes to the queue walked first, whoever has the higher priority.
+		// unit goes to the queue walked first: the traders' queue is set up
+		// before the corral's, though "corral" sorts first by name.
 		const gameState = worldWithResources({ food: 3 });
-		const manager = makeManager(makeConfig({ priorities: { zulu: 100, alpha: 100 } }), {
-			zulu: [makePlan({ getCost: costOf(200) })],
-			alpha: [makePlan({ type: "other", getCost: costOf(200) })]
+		const manager = makeManager(makeConfig({ priorities: { trader: 100, corral: 100 } }), {
+			trader: [makePlan({ getCost: costOf(200) })],
+			corral: [makePlan({ type: "other", getCost: costOf(200) })]
 		});
 
 		manager.distributeResources(gameState);
 
-		assert.equal(account(manager, "zulu").food, 2, "the first-declared queue takes the leftover");
-		assert.equal(account(manager, "alpha").food, 1);
+		assert.equal(account(manager, "trader").food, 2, "the first-declared queue takes the leftover");
+		assert.equal(account(manager, "corral").food, 1);
 	});
 
 	it("names the queues and amount it switched, when the level asks for it", () =>
@@ -822,43 +852,43 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources({ food: 0 });
 		const manager = makeManager(makeConfig({
 			debug: 3,
-			priorities: { hungry: 300, donor: 100 }
+			priorities: { citizenSoldier: 300, trader: 100 }
 		}), {
-			hungry: [makePlan({ getCost: costOf(100) })],
-			donor: [makePlan({ type: "other", getCost: costOf(100) })]
+			citizenSoldier: [makePlan({ getCost: costOf(100) })],
+			trader: [makePlan({ type: "other", getCost: costOf(100) })]
 		});
-		account(manager, "donor").food = 120;
+		account(manager, "trader").food = 120;
 
 		const logged = logs.length;
 		manager.switchResource(gameState, "food");
 
 		assert.ok(
 			logs.slice(logged).some((message) => message.includes(
-				"switching queue food from donor to hungry in amount 100")),
+				"switching queue food from trader to citizenSoldier in amount 100")),
 			"the switch log names both queues and the exact amount"
 		);
 	});
 
 	it("logs a priority change when the level asks for it", () =>
 	{
-		const manager = makeManager(makeConfig({ debug: 2, priorities: { low: 100 } }), { low: [] });
+		const manager = makeManager(makeConfig({ debug: 2, priorities: { trader: 100 } }));
 
 		const logged = logs.length;
-		manager.changePriority("low", 500);
+		manager.changePriority("trader", 500);
 
 		assert.ok(logs.slice(logged).some((message) => message.includes(
-			">>> Priority of queue low changed from 100 to 500")));
+			">>> Priority of queue trader changed from 100 to 500")));
 	});
 
 	it("logs its own serialization when asked to", () =>
 	{
-		const manager = makeManager(makeConfig({ debug: -100, priorities: { a: 1 } }), { a: [] });
+		const manager = makeManager(makeConfig({ debug: -100 }));
 
 		const logged = logs.length;
 		manager.Serialize();
 
 		assert.ok(logs.slice(logged).some((message) => message.includes(
-			"queueManager serialization: queue a")));
+			"queueManager serialization: queue villager")));
 	});
 
 	// checkPausedQueues reads the workforce against a target: with the config
@@ -887,7 +917,7 @@ describe("QueueManager", () =>
 		it("pauses everything but the dock and the civil centre when baseless", () =>
 		{
 			const gameState = workerWorld(100, { "hasPotentialBase": () => false });
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
+			const manager = makeManager(makeConfig(), {
 				dock: [],
 				civilCentre: [],
 				economicBuilding: [makePlan({ type: "other" })]
@@ -906,7 +936,7 @@ describe("QueueManager", () =>
 		it("pauses the buildings and technologies while at a third of the workers", () =>
 		{
 			const gameState = workerWorld(5, {});
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
+			const manager = makeManager(makeConfig(), {
 				citizenSoldier: [],
 				villager: [],
 				emergency: [],
@@ -925,12 +955,8 @@ describe("QueueManager", () =>
 		it("pauses buildings and technologies while below two-thirds of the workers", () =>
 		{
 			const gameState = workerWorld(15, {});
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-				citizenSoldier: [],
-				economicBuilding: [],
-				healer: [],
-				minorTech: [],
-				plan_breakthrough: [makePlan({ getCost: costOf(10) })]
+			const manager = makeManager(makeConfig(), {
+				plan_4: [makePlan({ getCost: costOf(10) })]
 			});
 
 			manager.checkPausedQueues(gameState);
@@ -939,21 +965,16 @@ describe("QueueManager", () =>
 			assert.equal(manager.queues.economicBuilding.paused, true, "buildings wait");
 			assert.equal(manager.queues.healer.paused, true, "healers wait");
 			assert.equal(manager.queues.minorTech.paused, true, "research waits");
-			assert.equal(manager.queues.plan_breakthrough.paused, true, "attack queues wait");
+			assert.equal(manager.queues.plan_4?.paused, true, "attack queues wait");
 		});
 
 		it("keeps only the squads on while short of the full workforce", () =>
 		{
 			// 20 workers is short of the 24 target but above two-thirds of it.
 			const gameState = workerWorld(20, {});
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-				civilCentre: [],
-				defenseBuilding: [],
-				majorTech: [],
-				plan_siege: [],
-				plan_champ: [],
-				villager: [],
-				healer: []
+			const manager = makeManager(makeConfig(), {
+				plan_4_siege: [],
+				plan_4_champ: []
 			});
 
 			manager.checkPausedQueues(gameState);
@@ -961,8 +982,8 @@ describe("QueueManager", () =>
 			assert.equal(manager.queues.civilCentre.paused, true, "a new centre waits");
 			assert.equal(manager.queues.defenseBuilding.paused, true, "defense wait");
 			assert.equal(manager.queues.majorTech.paused, true, "the new phase waits");
-			assert.equal(manager.queues.plan_siege.paused, true, "siege plans wait");
-			assert.equal(manager.queues.plan_champ.paused, true, "champ plans wait");
+			assert.equal(manager.queues.plan_4_siege?.paused, true, "siege plans wait");
+			assert.equal(manager.queues.plan_4_champ?.paused, true, "champ plans wait");
 			assert.equal(manager.queues.villager.paused, false, "villagers keep training");
 			assert.equal(manager.queues.healer.paused, false, "healers are kept above this tier");
 		});
@@ -970,29 +991,26 @@ describe("QueueManager", () =>
 		it("shrinks an attack queue to single units while workers are scarce", () =>
 		{
 			const gameState = workerWorld(15, {});
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
-				plan_breakthrough: [
+			const manager = makeManager(makeConfig(), {
+				plan_4: [
 					makePlan({ type: "first" }),
 					makePlan({ type: "second" }),
 					makePlan({ type: "third" })
 				]
 			});
-			manager.queues.plan_breakthrough.plans.forEach((plan) => { plan.number = 5; });
+			const attack = manager.queues.plan_4?.plans ?? [];
+			attack.forEach((plan) => { plan.number = 5; });
 
 			manager.checkPausedQueues(gameState);
 
-			assert.equal(manager.queues.plan_breakthrough.plans[0].number, 1,
-				"the leading plan loses its batch");
-			assert.equal(manager.queues.plan_breakthrough.plans[1].number, 1,
-				"the second plan loses its batch too");
-			assert.equal(manager.queues.plan_breakthrough.plans[2].number, 5,
-				"only the first two plans are shrunk");
+			assert.deepEqual(attack.map((plan) => plan.number), [1, 1, 5],
+				"the first two plans lose their batch, the third keeps it");
 		});
 
 		it("lets a queue run again once the workers are back", () =>
 		{
 			const gameState = workerWorld(100, {});
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { defenseBuilding: [] });
+			const manager = makeManager(makeConfig(), { defenseBuilding: [] });
 			manager.queues.defenseBuilding.paused = true;
 
 			manager.checkPausedQueues(gameState);
@@ -1012,7 +1030,7 @@ describe("QueueManager", () =>
 				"needFish": true,
 				"navalManager": { "ships": { "filter": () => ({ "hasEntities": () => false }) } }
 			}, { ownStructures: [] });
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
+			const manager = makeManager(makeConfig(), {
 				field: [],
 				corral: [],
 				dock: [],
@@ -1032,7 +1050,7 @@ describe("QueueManager", () =>
 		it("pauses the farm when there is one to run", () =>
 		{
 			const gameState = workerWorld(5, { "needFarm": false });
-			const manager = makeManager(makeConfig({ priorities: { a: 1 } }), { field: [] });
+			const manager = makeManager(makeConfig(), { field: [] });
 
 			manager.checkPausedQueues(gameState);
 

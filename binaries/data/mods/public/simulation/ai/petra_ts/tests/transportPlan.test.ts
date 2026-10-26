@@ -483,7 +483,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const { a, carrier, p } = arrived(s);
 		p.update(s.world.gameState);
 		disembark(a, carrier, [250, 160]);
-		a.ent.setMetadata(PlayerID, "endPos", [300, 160]);
+		a.ent.setMetadata(PlayerID, "endPos", worldPos(300, 160));
 
 		p.update(s.world.gameState);
 

@@ -30,7 +30,7 @@ import {
 } from "../adapter/brands.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../decision/difficultyLevel.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
-import { AttackPlan, type AttackUnitStat } from "../execution/attackPlan.ts";
+import { AttackPlan, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
 import type { Queue } from "../execution/queue.ts";
 
 /** the relic raids a victory manager books, its own private record */
@@ -43,7 +43,7 @@ function raids(manager: VictoryManager): Map<EntityId, number[]>
 interface PlanOptions
 {
 	name?: number;
-	type?: string;
+	type?: AttackType;
 	deserialized?: boolean;
 	data?: ConstructorParameters<typeof AttackPlan>[4];
 	init?: boolean;
@@ -56,9 +56,9 @@ function makePlan(world: World, options: PlanOptions = {}): AttackPlan
 	if (options.init)
 	{
 		const name = options.name ?? 1;
-		world.ai.queueManager.addQueue("plan_" + name, 70);
-		world.ai.queueManager.addQueue("plan_" + name + "_champ", 71);
-		world.ai.queueManager.addQueue("plan_" + name + "_siege", 70);
+		world.ai.queueManager.addQueue(`plan_${name}`, 70);
+		world.ai.queueManager.addQueue(`plan_${name}_champ`, 71);
+		world.ai.queueManager.addQueue(`plan_${name}_siege`, 70);
 		plan.init(world.gameState);
 	}
 	return plan;
@@ -124,8 +124,8 @@ describe("construction", () =>
 		resetRecorder();
 		makePlan(world, { name: 2, deserialized: false });
 
-		assert.deepEqual(Object.keys(world.ai.queues).sort(), ["plan_2", "plan_2_champ", "plan_2_siege"].sort(),
-			"the plan queues exist");
+		assert.deepEqual(Object.keys(world.ai.queues).filter((name) => name.startsWith("plan_")),
+			["plan_2", "plan_2_champ", "plan_2_siege"], "the plan queues exist");
 		assert.equal(world.ai.queueManager.getPriority("plan_2"), 70, "the main queue's priority");
 		assert.equal(world.ai.queueManager.getPriority("plan_2_champ"), 71, "the champion queue runs after");
 		assert.equal(world.ai.queueManager.getPriority("plan_2_siege"), 70, "the siege queue keeps up");
@@ -1395,7 +1395,7 @@ describe("obstructions along the path", () =>
 		world.addEntity(makeObstacle(world, 2100, [12, 30],
 			{ "Obstruction": 1 }, ["Structure", "Field"]));
 		const wall = world.addEntity(makeObstacle(world, 2101, [12, 30],
-			{ "Obstruction": 1, "Obstruction/Static": 1, "Obstruction/Static/@width": 4, "Obstruction/Static/@depth": 4 }));
+			{ "Obstruction": 1, "Obstruction/Static": 1, "Obstruction/Static/@width": "4", "Obstruction/Static/@depth": "4" }));
 		wall.angle = () => Math.PI / 2;
 		const plan = makePlan(world, { name: 1, init: true });
 
@@ -1415,9 +1415,9 @@ describe("obstructions along the path", () =>
 		const gate = world.addEntity(makeObstacle(world, 2100, [20, 25],
 			{
 				"Obstruction": 1, "Obstruction/Obstructions": 1,
-				"Obstruction/Obstructions/Door/@width": 4, "Obstruction/Obstructions/Door/@depth": 2,
-				"Obstruction/Obstructions/Left/@width": 0, "Obstruction/Obstructions/Left/@depth": 0,
-				"Obstruction/Obstructions/Right/@width": 0, "Obstruction/Obstructions/Right/@depth": 0
+				"Obstruction/Obstructions/Door/@width": "4", "Obstruction/Obstructions/Door/@depth": "2",
+				"Obstruction/Obstructions/Left/@width": "0", "Obstruction/Obstructions/Left/@depth": "0",
+				"Obstruction/Obstructions/Right/@width": "0", "Obstruction/Obstructions/Right/@depth": "0"
 			}, ["Structure", "Gate"]));
 		gate.angle = () => Math.PI / 2;
 		const plan = makePlan(world, { name: 1, init: true });
@@ -1439,9 +1439,9 @@ describe("obstructions along the path", () =>
 		const gate = world.addEntity(makeObstacle(world, 2100, [20, 25],
 			{
 				"Obstruction": 1, "Obstruction/Obstructions": 1,
-				"Obstruction/Obstructions/Door/@width": 4, "Obstruction/Obstructions/Door/@depth": 2,
-				"Obstruction/Obstructions/Left/@width": 2, "Obstruction/Obstructions/Left/@depth": 4,
-				"Obstruction/Obstructions/Right/@width": 2, "Obstruction/Obstructions/Right/@depth": 4
+				"Obstruction/Obstructions/Door/@width": "4", "Obstruction/Obstructions/Door/@depth": "2",
+				"Obstruction/Obstructions/Left/@width": "2", "Obstruction/Obstructions/Left/@depth": "4",
+				"Obstruction/Obstructions/Right/@width": "2", "Obstruction/Obstructions/Right/@depth": "4"
 			}, ["Structure", "Gate"]));
 		gate.angle = () => Math.PI / 2;
 		const plan = makePlan(world, { name: 1, init: true });
@@ -1462,7 +1462,7 @@ describe("obstructions along the path", () =>
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		const blocker = world.addEntity(makeObstacle(world, 2100, [12, 30],
-			{ "Obstruction": 1, "Obstruction/Unit": 1, "Obstruction/Unit/@radius": 5 }));
+			{ "Obstruction": 1, "Obstruction/Unit": 1, "Obstruction/Unit/@radius": "5" }));
 		const plan = makePlan(world, { name: 1, init: true });
 
 		withPath([{ "x": 12, "y": 30 }, { "x": 30, "y": 40 }], () =>
@@ -3728,7 +3728,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		return world.addEntity(makeEntity({ id, owner: ENEMY, position: at, classes },
 			{ get: (path: string) => queries[path], angle: () => angle }));
 	}
-	const wallQueries = { "Obstruction": 1, "Obstruction/Static": 1, "Obstruction/Static/@width": 4, "Obstruction/Static/@depth": 4 };
+	const wallQueries = { "Obstruction": 1, "Obstruction/Static": 1, "Obstruction/Static/@width": "4", "Obstruction/Static/@depth": "4" };
 
 	it("a path that ends at the target is not blocked by a wall elsewhere, nor by a structure without obstruction", () =>
 	{
@@ -3759,9 +3759,9 @@ describe("second pass: obstructions, starting and shipping", () =>
 		const gateTarget = makeTarget(gated, {}, 2005);
 		const gate = obstacle(gated, 2102, [21, 25], {
 			"Obstruction": 1, "Obstruction/Obstructions": 1,
-			"Obstruction/Obstructions/Door/@width": 4, "Obstruction/Obstructions/Door/@depth": 2,
-			"Obstruction/Obstructions/Left/@width": 2, "Obstruction/Obstructions/Left/@depth": 4,
-			"Obstruction/Obstructions/Right/@width": 2, "Obstruction/Obstructions/Right/@depth": 4
+			"Obstruction/Obstructions/Door/@width": "4", "Obstruction/Obstructions/Door/@depth": "2",
+			"Obstruction/Obstructions/Left/@width": "2", "Obstruction/Obstructions/Left/@depth": "4",
+			"Obstruction/Obstructions/Right/@width": "2", "Obstruction/Obstructions/Right/@depth": "4"
 		}, 0, ["Structure", "Gate"]);
 		const gatePlan = makePlan(gated, { name: 1, init: true });
 		withPath([{ "x": 21, "y": 25 }, { "x": 30, "y": 40 }], () =>

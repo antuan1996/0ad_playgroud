@@ -28,7 +28,7 @@ import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
@@ -377,9 +377,8 @@ describe("checkEvents: training finished — landing and stale plans", () => {
 	it("a plan still waiting keeps its recruit", async () => {
 				const { world, hq } = seat();
 		// a raid plan that never started: the recruit recorded under its name
-		hq.attackManager.upcomingAttacks = {
-			"Raid": [fake<AttackPlan>({ "getName": () => 12, "state": AttackPlan.STATE_UNEXECUTED })]
-		};
+		hq.attackManager.upcomingAttacks = byAttackType((type) =>
+			type === "Raid" ? [fake<AttackPlan>({ "getName": () => 12, "state": AttackPlan.STATE_UNEXECUTED })] : []);
 		const unit = world.addEntity(makeHqEntity({
 			id: 85, owner: PLAYER, position: centerOfCell(21, 20),
 			classes: ["Unit"], templateName: "units/athen/infantry_spearman_b"
@@ -946,7 +945,7 @@ function hand(world: HqWorld, id: number, soldier: boolean): CommonEntity
 }
 
 /** seed a live training order on a queue, as a started TrainingPlan sits */
-function trainingOrder(world: HqWorld, queueName: string, template: string,
+function trainingOrder(world: HqWorld, queueName: PetraRuntime.ConfiguredQueueName, template: string,
 	number: number, metadata: Record<string, unknown>, count = 1)
 {
 	const queues = world.ai.queues;
@@ -1075,9 +1074,9 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
 		// every queue stays empty and untouched
-		for (const queue of ["economicBuilding", "militaryBuilding", "wonder", "majorTech"])
-			assert.equal((world.ai.queues[queue] ??
-				{ plans: [] }).plans.length, 0, queue);
+		const untouched: PetraRuntime.ConfiguredQueueName[] = ["economicBuilding", "militaryBuilding", "wonder", "majorTech"];
+		for (const queue of untouched)
+			assert.equal(world.ai.queues[queue].plans.length, 0, queue);
 		// no priority was lifted
 		const priorities = hq.Config.priorities;
 		assert.equal(priorities.economicBuilding, 700);
@@ -2958,7 +2957,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world);
 		const unit = capturer(world, 2611, {
 			"strength": 5,
-			"bonus": { "siege": { "Classes": "Structure", "Multiplier": 2 } }
+			"bonus": { "siege": { "Classes": "Structure", "Multiplier": "2" } }
 		});
 		const commands: Array<[number, boolean]> = [];
 		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });

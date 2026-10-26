@@ -25,6 +25,7 @@ import {
 
 import type { Headquarters } from "../decision/headquarters.ts";
 import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
+import { entityId, landRegion } from "../adapter/brands.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
@@ -548,7 +549,7 @@ describe("game start without a civil centre", () =>
 			"templateName": "structures/athen/civil_centre"
 		}, { "footprintRadius": () => 20 }));
 		// the common-api books a structure's access in its metadata
-		world.ents.get(100)!.setMetadata(PLAYER, "access", 4);
+		world.ents.get(100)!.setMetadata(PLAYER, "access", landRegion(4));
 		const moves: Array<[number, unknown[]]> = [];
 		soldier(world, 101, [100, 100], ["Infantry", "Ranged"], moverAnswers(moves, 101));
 		soldier(world, 102, [100, 100], ["Infantry", "Melee"], moverAnswers(moves, 102));
@@ -807,7 +808,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			"templateName": "units/athen/ship_merchant"
 		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [266] }));
 		villager(world, 267, [100, 100]);
-		world.ents.get(267)!.setMetadata(PLAYER, "treasure", 999);
+		world.ents.get(267)!.setMetadata(PLAYER, "treasure", entityId(999));
 		const hq = freshHQ(world);
 		initBuilders(world, hq);
 

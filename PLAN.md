@@ -191,37 +191,49 @@ execution/  plans with typestates (3.1): turns decisions into commands,
 
 The port compiles under `strict`, but strict mode lets some holes through.
 A review in stage 4 (`FINDINGS.md` §17) closed most of them: no `as` cast
-outside `adapter/brands.ts`, no `!`, no reads of common-api's private
-fields, typed save data, `TechName` apart from `TemplateName`. What it left,
-in order:
+outside `adapter/brands.ts`, no `!`, no `any` (written or inferred), no reads
+of common-api's private fields, typed save data, `TechName` apart from
+`TemplateName`. The second round, in this order, is done too (every step
+with the integration match's fingerprint unchanged, and a 24-game batch
+identical game for game before and after):
 
-1. `Template.get(path)` returns `any` (55 uses: footprint, obstruction,
-   attack bonuses): typed readers in `adapter/`, `get` declared `unknown`.
-2. The other `any` of the declarations: the resource index, the
-   `getMetadata` string-key fallback, `queryInterface`.
-3. The `plan` metadata's magic numbers (−1 out of plan, −2 guard, −3
-   defense army; 31 uses): named constants and a `PlanId` type.
-4. Queue names as a union of the configured ones, not `string`.
+1. **Done.** `Template.get(path)` returns `unknown`; the footprint (seven
+   copies of the same code), the obstruction shapes and the attack bonuses
+   are read by `adapter/templateData.ts`. The bonuses' declared type was
+   wrong (an array of numbers; the template holds an object of strings).
+2. **Done.** No `any` left in the declarations: `ResourcesManager` is its
+   methods intersected with `{ [resource: string]: number }` (a class whose
+   methods share its object cannot type its string index), the metadata
+   writes are typed by key as the reads were (which found `transporter`
+   declared an entity id: it is a transport plan's), `queryInterface` is
+   `unknown`.
+3. **Done.** `UnitPlan` (`AttackPlanId | -1 | -2 | -3`) for the `plan`
+   metadata, `AttackPlanId` a brand; `execution/unitPlan.ts` names the
+   three states (out of any plan; lent while it had one; lent while it had
+   none) and the lend and release the defense army and the garrison
+   manager each wrote out.
+4. **Done.** Queue names: `ConfiguredQueueName`, the attack plans'
+   `` `plan_${number}` `` (with `_champ`, `_siege`), the collection typed
+   by them; the queue manager walks its queues lazily in their own order.
 5. Long functions (19 over 150 lines): split with the behaviour work of
    stages 4-5, not on their own.
-6. Mechanical passes, each its own commit: `===`, `CommonEntity` for the
-   inline `import()` types, `for...in`/`delete` where a `Map` fits.
-7. Leftovers: `raidTargetEntity`'s `null`, the untyped `QueuePlan`
-   save signatures, the useless `eslint-disable` comments.
-8. `declare` fields (202). A `declare` field is not checked for being
-   assigned before it is read. **Stage 4:** the 133 assigned in their own
-   class's constructor lose `declare` (the compiler then checks the
-   assignment; with the ES2022 target each such field is also defined
-   before the constructor body runs, which can reorder own properties, so
-   the integration match's fingerprint is the check). **Stage 5:** the 12
-   in subclasses (a plain field would overwrite what `super()` set; the
-   value goes to the base constructor instead) and the 57 set only in
-   `init()`, `Deserialize` or later (the two-step set-up of managers and
-   plans: a constructor that can compute them, or a type that admits their
-   absence), as each class is rewritten.
-
-Each item is a pure refactor: typecheck, both test targets and an unchanged
-fingerprint.
+6. **Done.** `===` throughout (531 by the checker's types, where the two
+   operators cannot differ; the rest read one by one), the aliases for the
+   inline `import()` types, no `for...in` over arrays, the attack records
+   keyed by `AttackType`. The records keyed by player or entity id stay
+   objects: a `Map` would change their iteration order (stage 5).
+7. **Done.** "Nothing found" is `undefined`, not `null`; the plans' saves
+   typed in `QueuePlan`; module constants `const` (an importer cannot
+   reassign another module's `let`, so the mods' reason did not hold).
+8. `declare` fields. A `declare` field is not checked for being assigned
+   before it is read. **Done in stage 4:** 115 of the 133 assigned in their
+   own constructor lost it; the other 18 are assigned only on some paths
+   (the attack and transport plans' constructors return early when a plan
+   fails). **Stage 5:** those 18, the 12 in subclasses (a plain field would
+   overwrite what `super()` set; the value goes to the base constructor
+   instead) and the 57 set only in `init()`, `Deserialize` or later (the
+   two-step set-up of managers and plans: a constructor that can compute
+   them, or a type that admits their absence), as each class is rewritten.
 
 ## 4. Performance: measure first
 
@@ -345,8 +357,8 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 | 1. Parity proof (**done** 2026-10-25, `FINDINGS.md` §14) | Command-log diffs on a seed set (5.1), starting with the 6 seed pairs where the baselines differ (`FINDINGS.md` §13); explain every difference | Identical logs, or each difference in `FINDINGS.md` §3. Met: identical in 26 of 26 pairs (52 games) once three more original bugs went into the patch |
 | 2. Types in place (**done** 2026-10-25) | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor). Met: fingerprint `2164cc14d7c5e28f` before and after; 1533 tests pass. Every brand of 3.3: `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex` (`RegionIndex` for either), `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<"territory" \| "passability">`; the attack plan's state kind is a typestate (3.1); the data-carrying states move to stage 4, records keyed by `for...in` keys to stage 3 |
 | 3. Layers (**done** 2026-10-26, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). Met: the layer folders; `unitState.ts`, `commands.ts`, `SAVE_VERSION`; the execution layer reaches the HQ only through a read-only view (`execution/hq.ts`) and reads bases as `BaseView`s; the maps and regions (`world/geography.ts`) and the bases' resource model (`world/baseResources.ts`) moved out of the managers. Fingerprint unchanged throughout; the same games as `petra_parity` in every paired check, within the budget. The decision layer still changes the world objects it owns; read-only views for decisions come with stages 4–5, as they are rewritten |
-| 4. Fix the known weaknesses (under way, `FINDINGS.md` §16) | In order of what each costs, as replays showed it: withdrawal to a reachable point (**done**: past the anchor's footprint); idle workers (**done**: they were mercenaries, booked as workers by class though they cannot gather); attacks that never end (**done**: units garrisoned in our buildings leave the plan; a stuck plan held up every later attack); attacks that cannot fill are cancelled or merged; first field by food income, not fruit left, and the town-phase population: not what loses games (`FINDINGS.md` §16: in 139 of 196 games the loser was beaten in a fight at minutes 10-15, far below the threshold, starving after it). Measured with the four fixes: 50.3% vs `petra_parity` (CI 43-57%): the fixes help the economy (+12% gathered), not the result. Games are decided by a border skirmish at minutes 1-11 that both bots fight with the same opening, so the start decides; an earlier army (`alpha` 0.6) gave 52.2% (CI 49.1-55.3%, 975 games) and was reverted; calling back workers that chase into enemy land, 47.7% (reverted: the chases hurt the enemy's economy); six small original bugs fixed (`FINDINGS.md` §1, stage-4 rows), 50.5%. The first fight is stage 5's first domain. Type hygiene (3.5): items 1-4, 6-7 and the 133 `declare` fields set in their own constructor | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
-| 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data; with each rewritten class, its remaining `declare` fields (3.5: the 12 in subclasses, the 57 set outside the constructor) | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed` |
+| 4. Fix the known weaknesses (under way, `FINDINGS.md` §16) | In order of what each costs, as replays showed it: withdrawal to a reachable point (**done**: past the anchor's footprint); idle workers (**done**: they were mercenaries, booked as workers by class though they cannot gather); attacks that never end (**done**: units garrisoned in our buildings leave the plan; a stuck plan held up every later attack); attacks that cannot fill are cancelled or merged; first field by food income, not fruit left, and the town-phase population: not what loses games (`FINDINGS.md` §16: in 139 of 196 games the loser was beaten in a fight at minutes 10-15, far below the threshold, starving after it). Measured with the four fixes: 50.3% vs `petra_parity` (CI 43-57%): the fixes help the economy (+12% gathered), not the result. Games are decided by a border skirmish at minutes 1-11 that both bots fight with the same opening, so the start decides; an earlier army (`alpha` 0.6) gave 52.2% (CI 49.1-55.3%, 975 games) and was reverted; calling back workers that chase into enemy land, 47.7% (reverted: the chases hurt the enemy's economy); six small original bugs fixed (`FINDINGS.md` §1, stage-4 rows), 50.5%. The first fight is stage 5's first domain. Type hygiene (3.5): items 1-4 and 6-8 done, without a change to any game | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT) |
+| 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data; with each rewritten class, its remaining `declare` fields (3.5: the 18 set on some paths, the 12 in subclasses, the 57 set outside the constructor) and long functions | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed` |
 | 6. Narrow search | Build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
 
 Running throughout: determinism and save/load checks (5.2), `FINDINGS.md`

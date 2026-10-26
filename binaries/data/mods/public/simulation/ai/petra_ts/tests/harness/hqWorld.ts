@@ -33,8 +33,7 @@ import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
 import { Config } from "../../decision/config.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
-import type { Queue } from "../../execution/queue.ts";
-import { QueueManager } from "../../execution/queueManager.ts";
+import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 
 /** re-exported so the suites draw every name from one place */
 export { ENEMY, GAIA, PLAYER };
@@ -690,11 +689,9 @@ const doorFields: Record<string, Record<string, unknown>> = {
 export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarters
 {
 	const config = options.config ?? makeHQConfig();
-	// the town's queues, as queueManager builds them from the real priorities
-	const queues: Record<string, Queue> = {};
+	// the town's queues, as the bot builds them from the real priorities
+	const queues = configuredQueues();
 	const queueManager = new QueueManager(config, queues);
-	for (const [name, priority] of Object.entries(config.priorities))
-		queueManager.addQueue(name, priority);
 	world.ai.queues = queues;
 	world.ai.queueManager = queueManager;
 	world.ai.Config = config;

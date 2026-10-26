@@ -14,8 +14,7 @@ import { byClass } from "simulation/ai/common-api/filters.js";
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import { Config } from "../../decision/config.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
-import type { Queue } from "../../execution/queue.ts";
-import { QueueManager } from "../../execution/queueManager.ts";
+import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 
 /** A base as the stub HQ hands them out: an anchor structure and the land it sits on. */
 export interface BaseLike
@@ -221,10 +220,9 @@ export function makeWorld(options: WorldOptions = {}): World
 	config.debug = options.debug ?? 0;
 	config.popScaling = options.popScaling ?? 1;
 	config.personality = { aggressive: 1, defensive: options.defensive ?? 1, cooperative: 0.5 };
-	config.priorities = {};
 	config.chat = false;
 
-	const queues: Record<string, Queue> = {};
+	const queues = configuredQueues();
 	const ai = fake<PetraRuntime.AIState>({
 		playedTurn: 0,
 		elapsedTime: 100,
