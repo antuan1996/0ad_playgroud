@@ -782,7 +782,9 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		assert.equal(base.workers.length, 5, "the town's own roll is unchanged; the hands are only set aside");
 	});
 
-	it("a neighbour borrows the idle hands of a plan first; among the town's own hands, idle or busy, no preference", () =>
+	// only the port passes: in the original every hand without a plan scores
+	// -20, which overrides its idle (-50) and builder (100) scores
+	it("a neighbour borrows idle hands first, never a builder", () =>
 	{
 		const { world, base } = seat();
 		const worker = (id: number, metadata: Record<string, unknown>) =>
@@ -791,7 +793,8 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		override(worker(2921, { "subrole": Worker.SUBROLE_GATHERER }), { "position": () => undefined });
 		worker(2922, { "subrole": Worker.SUBROLE_GATHERER, "plan": -2 });
 		worker(2923, { "subrole": Worker.SUBROLE_GATHERER, "transport": 4 });
-		// the town's own: a gatherer, then an idle hand
+		// the town's own: a builder, a gatherer, then an idle hand
+		worker(2929, { "subrole": Worker.SUBROLE_BUILDER });
 		worker(2924, { "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" });
 		worker(2925, { "subrole": Worker.SUBROLE_IDLE });
 		// hands kept for an attack plan: a builder, a gatherer, an idle one
@@ -802,10 +805,8 @@ describe("the workers' trade: what they bring in and where they go", () =>
 
 		base.pickBuilders(world.gameState, lent, 2);
 
-		// five available hands, three stay: two lent. The plan's idle hand
-		// first (-50), then the town's first hand (every hand without a plan
-		// scores -20, which overrides its idle score), never the plan's builder
-		assert.deepEqual([...lent.values()].map((e) => e.id()).sort(), [2924, 2928]);
+		// six available hands, three stay: two lent, the two idle ones
+		assert.deepEqual([...lent.values()].map((e) => e.id()).sort(), [2925, 2928]);
 	});
 
 	it("a town of three builders lends none", () =>

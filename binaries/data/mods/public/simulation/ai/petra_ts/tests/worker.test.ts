@@ -2099,6 +2099,30 @@ describe("a builder through its turn: update", () =>
 		assert.deepEqual(repaired, [[7461, true]], "the building is queued after the drop");
 	});
 
+	// only the port passes: the original sends the drop and the building
+	// again at every update until the builder arrives
+	it("a builder walking its load home with the building queued is left on its way", () =>
+	{
+		const { world, base, worker } = seat();
+		bookCentreSupplies(world, base);
+		scaffold(world, 7465, [40, 40]);
+		const returned: number[] = [];
+		const repaired: number[] = [];
+		const ent = builder(world, base, 7466, 7465, "INDIVIDUAL.RETURNRESOURCE.APPROACHING", undefined, {
+			"isIdle": () => false,
+			// UnitAI's queue: the drop at the centre, then the building
+			"unitAIOrderData": () => [{ "target": 1000 }, { "target": 7465 }],
+			"resourceCarrying": () => [{ "type": "wood", "amount": 10 }],
+			"returnResources": ids(returned),
+			"repair": (t: CommonEntity) => repaired.push(t.id())
+		});
+
+		worker.update(world.gameState, ent);
+
+		assert.deepEqual(returned, [], "no new walk home");
+		assert.deepEqual(repaired, []);
+	});
+
 	it("an idle builder whose foundation is across the water books a passage", () =>
 	{
 		const { world, hq, base, worker } = islandSeat();

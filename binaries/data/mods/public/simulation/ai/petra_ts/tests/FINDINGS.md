@@ -19,8 +19,10 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (20 tests in all; the
-original fails exactly these). Each row says whether a game can reach it.
+Each is pinned by a test that only the port passes (26 tests in all; the
+original failed exactly the first 20 when last run, the six stage-4 rows
+were fixed after the original stopped being a test target). Each row says
+whether a game can reach it.
 
 | Where | Original behaviour | Port | Test |
 |---|---|---|---|
@@ -40,6 +42,12 @@ original fails exactly these). Each row says whether a game can reach it.
 | `defenseArmy` foe ledger | `removeFoe` and a foe's rename leave the foe's `assignedAgainst` row as `undefined`; a merge then appends that `undefined` to the other army's row for the same foe (`concat(undefined)`), so the foe looks fought by one defender more and `assignUnit` passes him over (§14) | deletes the row | defenseArmy: "counts only real defenders against a raider the merged army had let go" |
 | `attackPlan.Deserialize` (stage 2) | restores any saved string as the state: a started plan in a state `update()` does not know does nothing more | parses the tag; an unknown one sends the plan back to preparation, with a warning | attackPlan: "prepares again when its save names no state it knows" |
 | `queueManager.changePriority` | sorts `queueArrays` in place, while `startNextItems` walks it: a started plan resetting its queue's priority (`queueToReset`) reorders the array mid-loop, so a queue is skipped that turn and another visited twice. Reached in most games, from minute 3 on (§14) | sorts into a new array | queueManager: "visits every queue once in a turn…" |
+| `attackPlan.checkTargetObstruction` (stage 4) | `if (!angle) continue` reads a rotation of exactly 0 as "no angle": a wall or gate set square to the map never blocks | skips only an undefined angle | attackPlan: "a wall or a gate standing square to the map (rotation 0) blocks too" |
+| `attackPlan.reassignFastUnit` (stage 4) | the class list `["FastMoving", "CitizenSoldier"]` is an any-of: any citizen soldier, fast or not, or a fast champion, is handed to a raid | `"FastMoving+CitizenSoldier"` | attackPlan: "a unit boarding a ship, a foot soldier and a fast champion stay…" |
+| `baseManager.pickBuilders` (stage 4) | every worker without a plan scores −20, overriding its idle (−50) and builder (100) scores: idle hands are not lent first, and the town's own builders can be | one score: builder, idle, no plan, plan | baseManager: "a neighbour borrows idle hands first, never a builder" |
+| `worker` builders (stage 4) | a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home it is sent the pair again at every update: 37 times in two minutes for one worker in a mirror match | leaves it alone while it returns resources with the building in its queue | worker: "a builder walking its load home with the building queued…" |
+| `researchManager` (stage 4) | the filter of techs for units the AI does not use matches the class list exactly, so `cost_healer` (`"Healer !Champion !Hero"`) is researched | reads the list's first class | researchManager: "from the third phase, any other tech may be researched…" |
+| `victoryManager.tryAssignMilitaryGuard` (stage 4) | refuses any unit with a plan, so the units out of any plan (−1) it is offered from the attack manager's `outOfPlan` are never taken | takes a unit of plan −1 | victoryManager: "guards are drawn from the champions first, then units out of any plan…" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -71,17 +79,11 @@ All are harmless or never reached in a game; kept on purpose.
 Behaviour that looks unintended but is identical in both; tests pin it where
 noted. Worth raising upstream rather than changing in the port alone.
 
-- **`attackPlan.checkTargetObstruction`**: `if (!angle) continue` treats a rotation of exactly 0 as "no angle", so a wall or gate placed square to the map is never seen as blocking. *(pinned)*
-- **`attackPlan.reassignFastUnit`**: the class list `["FastMoving", "CitizenSoldier"]` is an any-of, so any infantry citizen soldier is handed to a raid, not only fast units. *(pinned)*
-- **`baseManager.pickBuilders`**: any worker without a plan scores −20, which overrides its idle (−50) score: idle villagers are not preferred over busy gatherers when builders are lent. *(pinned)*
 - **`_petrabot`**: `gameFinished` is never set anywhere, so its check is dead. A bot that cannot play (`canPlay` false) never clears its saved events, and its turn counter stops advancing.
-- **`researchManager`**: the healer tech's affects string is `"Healer !Champion !Hero"`; the exact-match filter misses it.
-- **`victoryManager`**: a guard request from `outOfPlan` (plan −1) is always refused by `tryAssignMilitaryGuard`.
 - **`entityExtend.getMaxStrength`**: a template with no attack returns 0 before its armour is counted.
 - **`baseManager.assignToFoundations`**: `if (target.hasClass("Field")) continue` cannot fire (fields are filtered out of the foundations before the loop).
 - **`baseManager`**: a worker already mending one building but still marked as a gatherer can be taken by the next repair (only `builder` subroles are kept).
 - **`defenseManager.checkEvents`**: a structure it gives up (capture ratio between 0.5 and 0.7 where it cannot be defended) is destroyed once per `Attacked` event on it that turn: 69 `delete-entities` for one tower in one turn in a mirror match. Harmless, the engine deletes it once.
-- **`worker` builders**: a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home its UnitAI state is not REPAIR, so every update sends the pair again until it arrives: 37 times in two minutes for one worker in a mirror match. The orders keep the same goal; whether each new one delays the walk (a fresh path) is not measured.
 - **`attackPlan.Abort` withdrawal**: fixed in stage 4, §16.
 - **`baseManager.checkResourceLevels`**: the first field is queued only once the base's fruit within reach (nearby, and medium before town phase; animals not counted) falls below 600, whatever the food income. The code's own TODO names the gap ("add a check on time used/lost"). The game once blamed on it was lost to an early fight (§16).
 
@@ -479,3 +481,20 @@ attacks up (`PLAN.md` §6).
   is null` in UnitAI's gather state (UnitAI.js 2920), a unit without a
   gatherer entering it, as a gatherer promoted into a champion would.
 
+- **Calling back workers that chase a fight into enemy land does not help.**
+  In control game 9 (seeds 524146979/819546117) player 1 stayed at 120 of
+  300 population for 40 minutes, losing 1282 units by minute 65, a few
+  gatherers in each snapshot chasing foes into the enemy's towers
+  (`COMBAT.APPROACHING` in enemy territory). A rule in `worker.update`
+  sending them back to work (as a hunter drawn into enemy land already is)
+  won that game with 292 lost, but the batch (`stage4-d-recall`, the same
+  pool) read 47.7% (CI 40.7-54.7%) against the control's 50.3%, and the
+  opponent gathered 11% more (75.7k against 68.1k): the chases cost the
+  enemy's economy more than they cost ours. Reverted, as was the defensive
+  stance for workers tried before it (it lost game 9 at 26:24).
+- **The six small fixes of §1 (stage 4) change nothing measurable.** With
+  them (batch `stage4-e-small`, the same pool): 50.5% (CI 43.5-57.5%), no
+  game error or warning, 93 of 96 pairs split. The economy lead is smaller
+  than the control's (72.8k gathered against 69.5k, +5%, against +12%);
+  one batch does not tell that from noise. They are kept as bug fixes, not
+  as strength.

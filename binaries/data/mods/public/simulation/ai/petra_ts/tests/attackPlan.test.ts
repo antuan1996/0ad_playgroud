@@ -3588,22 +3588,24 @@ describe("second pass: preparing and choosing", () =>
 		assert.deepEqual([...plan.unitCollection.values()].map((e) => e.id()), [1032]);
 	});
 
-	// same in the original: the class list is an any-of, so any citizen
-	// soldier (not only a fast one) is handed over to the raid
-	it("a unit boarding a ship stays; the next citizen soldier, fast or not, goes to the raid", () =>
+	// only the port passes: the original's class list is an any-of, so any
+	// citizen soldier (not only a fast one) is handed over to the raid
+	it("a unit boarding a ship, a foot soldier and a fast champion stay; the next fast citizen soldier goes to the raid", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"] },
 			{}, { "plan": 1, "transport": 3 }));
 		world.addEntity(makeEntity({ id: 1011, owner: PLAYER, position: [11, 12], classes: ["Unit", "Infantry", "CitizenSoldier"] },
 			{}, { "plan": 1 }));
-		world.addEntity(makeEntity({ id: 1012, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"] },
+		world.addEntity(makeEntity({ id: 1012, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "Champion"] },
+			{}, { "plan": 1 }));
+		world.addEntity(makeEntity({ id: 1013, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"] },
 			{}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true });
 		const raid = makePlan(world, { name: 42, type: "Raid", init: true });
 		world.ai.HQ.attackManager.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
 		plan.reassignFastUnit(world.gameState);
-		assert.deepEqual(world.units.filter((u) => u.id() >= 1010).map((u) => u.getMetadata(PLAYER, "plan")), [1, 42, 1]);
+		assert.deepEqual(world.units.filter((u) => u.id() >= 1010).map((u) => u.getMetadata(PLAYER, "plan")), [1, 1, 1, 42]);
 	});
 
 	it("with no enemy player left, or its single target gone, no target is chosen", () =>
@@ -3738,18 +3740,30 @@ describe("second pass: obstructions, starting and shipping", () =>
 		assert.equal(plan.isBlocked, false);
 	});
 
-	// same in the original: a rotation of exactly 0 reads as "no angle", so a
-	// wall or gate set square to the map is never seen as blocking
-	it("a wall standing square to the map (rotation 0) is not seen as blocking", () =>
+	// only the port passes: the original reads a rotation of exactly 0 as
+	// "no angle", so a wall or gate set square to the map never blocks
+	it("a wall or a gate standing square to the map (rotation 0) blocks too", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		obstacle(world, 2101, [12, 30], wallQueries, 0);
-		obstacle(world, 2102, [12, 30], { "Obstruction": 1, "Obstruction/Obstructions": 1 }, 0, ["Structure", "Gate"]);
+		const wall = obstacle(world, 2101, [12, 30], wallQueries, 0);
 		const plan = makePlan(world, { name: 1, init: true });
 		withPath([{ "x": 12, "y": 30 }, { "x": 10, "y": 10 }], () =>
-			assert.equal(plan.checkTargetObstruction(world.gameState, target, worldPos(10, 10)), target));
-		assert.equal(plan.isBlocked, false);
+			assert.equal(plan.checkTargetObstruction(world.gameState, target, worldPos(10, 10)), wall));
+		assert.equal(plan.isBlocked, true);
+
+		const gated = makeWorld();
+		const gateTarget = makeTarget(gated, {}, 2005);
+		const gate = obstacle(gated, 2102, [21, 25], {
+			"Obstruction": 1, "Obstruction/Obstructions": 1,
+			"Obstruction/Obstructions/Door/@width": 4, "Obstruction/Obstructions/Door/@depth": 2,
+			"Obstruction/Obstructions/Left/@width": 2, "Obstruction/Obstructions/Left/@depth": 4,
+			"Obstruction/Obstructions/Right/@width": 2, "Obstruction/Obstructions/Right/@depth": 4
+		}, 0, ["Structure", "Gate"]);
+		const gatePlan = makePlan(gated, { name: 1, init: true });
+		withPath([{ "x": 21, "y": 25 }, { "x": 30, "y": 40 }], () =>
+			assert.equal(gatePlan.checkTargetObstruction(gated.gameState, gateTarget, worldPos(10, 10)), gate));
+		assert.equal(gatePlan.isBlocked, true);
 	});
 
 	it("when the first waypoint already lies outside our land, the rally point is that waypoint", () =>

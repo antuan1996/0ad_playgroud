@@ -237,8 +237,9 @@ untested branches.
   Check new tests actually reach the branch they name (run `coverage:petra --file`).
 - Tests run on the port's sources (`src`) and on the built bot (`out`); the
   original is no target since stage 3. A test with `// only the port passes:
-  ...` pins one of the original's bugs; the original failed exactly those 20
-  when last run (19 bugs; one pins the attack plan's save validation).
+  ...` pins one of the original's bugs; the original failed exactly the first 20
+  when last run (19 bugs; one pins the attack plan's save validation); six
+  more pin stage-4 fixes, 26 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

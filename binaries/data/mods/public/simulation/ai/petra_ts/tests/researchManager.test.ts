@@ -300,7 +300,9 @@ describe("the research of a turn: update", () =>
 		third.manager.update(third.world.gameState, third.queues);
 		assert.deepEqual(queued(third.queues.minorTech), ["hoplite_tradition"]);
 
-		const nothing = seat({ "phase": 3 }, ["outpost_vision", "long_walls"]);
+		// only the port passes: the original matches the class list exactly,
+		// so cheaper healers ("Healer !Champion !Hero") were researched
+		const nothing = seat({ "phase": 3 }, ["outpost_vision", "long_walls", "cost_healer"]);
 		nothing.manager.update(nothing.world.gameState, nothing.queues);
 		assert.deepEqual(queued(nothing.queues.minorTech), []);
 	});

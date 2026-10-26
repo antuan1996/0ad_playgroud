@@ -103,7 +103,22 @@ export class PetraBotState extends PetraBot
 			if (role == "worker")
 				count(workersByBase[ent.getMetadata(PlayerID, "base") ?? "none"] ??= {}, subrole ?? "none");
 		}
-		return { workers, gathering, workersByBase, idleWorkers };
+		// where our units stand: those in an enemy's territory, by role and what the engine has them do
+		const inEnemyLand = {};
+		const territory = this.HQ.geography?.territoryMap ?? this.HQ.territoryMap;
+		for (const ent of this.gameState.getOwnUnits().values())
+		{
+			const pos = ent.position();
+			if (!pos || !territory)
+				continue;
+			const owner = territory.getOwner(pos);
+			if (owner == 0 || owner == PlayerID || !this.gameState.isPlayerEnemy(owner))
+				continue;
+			const role = ent.getMetadata(PlayerID, "role") ?? "none";
+			const subrole = ent.getMetadata(PlayerID, "subrole");
+			count(inEnemyLand, (subrole ? role + "/" + subrole : role) + " " + (ent.unitAIState() ?? "-").split(".").slice(1, 3).join("."));
+		}
+		return { workers, gathering, workersByBase, idleWorkers, inEnemyLand };
 	}
 
 	/** Each base's resource lists, by distance band, and the amount within reach. */

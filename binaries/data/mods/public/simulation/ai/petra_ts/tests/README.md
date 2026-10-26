@@ -64,8 +64,8 @@ Until stage 3 (`PLAN.md`) the suite also ran against the original
 port's folders and names, so that target is gone. The parity of the port as it
 was frozen is shown in games instead (stage 1, `FINDINGS.md` §14). A test with
 an `// only the port passes: ...` comment pins one of the original's bugs
-(`FINDINGS.md` §1); the original failed exactly those 20 tests when it was last
-run.
+(`FINDINGS.md` §1); the original failed exactly the first 20 of them when it was last
+run; six more pin stage-4 fixes (26 in all).
 
 Type checking:
 

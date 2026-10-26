@@ -454,7 +454,9 @@ describe("healers and guards for the critical entities", () =>
 		assert.equal(champion.ent.getMetadata(PlayerID, "plan"), -2);
 		assert.equal(free.ent.getMetadata(PlayerID, "base"), 2, "a guard of a structure joins its town");
 		assert.equal(data.guardsAssigned.has(entityId(1202)), false, "a unit busy in an attack is left to it");
-		void reserve;
+		// only the port passes: the original refuses a unit out of any plan (-1)
+		assert.ok(data.guardsAssigned.has(entityId(1201)), "the unit out of any plan");
+		assert.equal(reserve.ent.getMetadata(PlayerID, "plan"), -2);
 		// forty workers allow 25 + 3 per guard: at most five guards
 		assert.ok(data.guardsAssigned.size <= 5);
 	});
