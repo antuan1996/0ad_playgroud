@@ -1189,12 +1189,30 @@ describe("updatePreparation: unexecuted plans", () =>
 		assert.equal(assigned.length, 1, "only the third fast soldier joined");
 	});
 
-	it("aborts when the population is full and the plan has nothing", () =>
+	// only the port passes: the original aborts it, and the attack manager
+	// creates it again on its next turn, which takes the same units back
+	// (FINDINGS §16: 120 such plans in 200 games, 80 in one)
+	it("waits when the population is full and the plan has nothing", () =>
 	{
 		const world = makeWorld({ population: 396, populationMax: 400 });
 		const plan = makePlan(world, { name: 1, init: true });
-		assert.equal(plan.updatePreparation(world.gameState), 0, "the plan aborts");
+		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING, "the plan waits");
 		assert.equal(plan.state, "unexecuted", "still listed as unexecuted");
+	});
+
+	// only the port passes: as above
+	it("waits with its few units when the population is full", () =>
+	{
+		const world = makeWorld({ population: 396, populationMax: 400 });
+		// three horsemen: below every minimum, and far from the crowd of 16 that would start anyway
+		for (let i = 0; i < 3; ++i)
+			world.addEntity(makeEntity({
+				id: 1030 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
+			}, { moveToRange: () => undefined }, { "plan": 1 }));
+		const plan = makePlan(world, { name: 1, init: true });
+		assert.equal(plan.unitCollection.length, 3);
+		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING, "the plan waits");
+		assert.equal(plan.unitCollection.length, 3, "and keeps its units");
 	});
 
 	it("pushes on when the population is full but the crowd is big enough", () =>
@@ -2468,19 +2486,6 @@ describe("difficulties, dumps and init corners", () =>
 		assert.equal(plan.unitStat.RangedInfantry.targetSize, 10, "the ranged infantry shrank predictably");
 		assert.equal(plan.unitStat.FastMoving.targetSize, 4, "the fast movers shrank too");
 		assert.equal(plan.unitStat.RangedInfantry.minSize, 6, "the min size only follows its target");
-	});
-
-	it("spells out the attack situation when aborting for lack of men", () =>
-	{
-		const world = makeWorld({ population: 396, populationMax: 400, debug: 2 });
-		world.ai.HQ.attackManager.upcomingAttacks.Raid = [1, 2] as unknown as AttackPlan[];
-		world.ai.HQ.attackManager.startedAttacks.Attack = [1] as unknown as AttackPlan[];
-		resetRecorder();
-		const plan = makePlan(world, { name: 1, init: true });
-
-		assert.equal(plan.updatePreparation(world.gameState), 0, "the plan aborts");
-		assert.ok(logs.some((entry) => /attacks upcoming: raid 2 rush 0/.test(entry)), "upcoming was logged");
-		assert.ok(logs.some((entry) => /attacks started: .*attack 1/.test(entry)), "started was logged");
 	});
 
 	it("dumps the build order every fifty turns and keeps tied categories", () =>

@@ -98,7 +98,14 @@ told the bots: refused orders, their chat; `maps/scripts/MatchNotices.js`),
 workers by role, each base's resource lists, queues and reserved resources,
 attack plans, HQ flags; `build/petra_ts/bot-state.js`, which
 `prepare-bot.ts state` adds to the `petra_out` build only, so the port stays
-1:1 and the game is the same), the replay's `metadata.json` (each
+1:1 and the game is the same), `attacks.txt` with `-b` (the attack plans'
+lives from the same file: each plan's creation, start, abort and end as they
+happen, and every minute while it prepares a snapshot of its units per
+category against minimum and target, queued units, paused queues, free
+population, workers and stock; `node build/petra_ts/attack-log.ts <batch or
+match dir>` summarises them per attack type, why plans were aborted, what the
+long preparations lacked, and won against lost sides), the replay's
+`metadata.json` (each
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's
 `mainlog.html`/`interestinglog.html`.
@@ -174,6 +181,15 @@ interval, an SPRT of 50% against `--h1` (0.55), slot advantage, seed pairs won
 from both slots, errors, game lengths, mean statistics, and determinism: games
 played twice by `--twice` must share a fingerprint). Time-limit games are
 draws, outside the win-rate. An existing `--out` resumes the batch.
+`--bot-state` builds Petra TS with the state dump and plays every game with
+`-b` (each game's `botstate.txt` and `attacks.txt`; the games are the same,
+checked on 196 games). `--game-timeout M` (default 15) kills a game still
+running after M minutes of wall time and marks it failed: the engine can
+deadlock, rarely and not reproducibly (`FINDINGS.md` §16); a resumed batch,
+and the smoke test, play it again. For analyses across a batch, the paired
+games of `--slots both` compare the same map from both slots; the replays'
+`metadata.json` hold each statistic by unit class every 30 game seconds
+(`total` is recorded as 0 for units lost and killed: use the `Unit` class).
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see
 `autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
@@ -257,8 +273,8 @@ untested branches.
 - Tests run on the port's sources (`src`) and on the built bot (`out`); the
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
-  when last run (19 bugs; one pins the attack plan's save validation); six
-  more pin stage-4 fixes, 26 in all.
+  when last run (19 bugs; one pins the attack plan's save validation); eight
+  more pin stage-4 fixes, 28 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

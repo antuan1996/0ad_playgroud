@@ -22,7 +22,8 @@
  *
  * It fails on any game that differs from the reference, has a script error
  * or warning, or could not be played: an engine abort (status 134, about one
- * game in fifty) is played again, up to twice, before it counts as failed.
+ * game in fifty) or hang (killed by batch.ts after 15 minutes) is played
+ * again, up to twice, before it counts as failed.
  * --from checks (or, with --update, records) an existing batch instead of
  * playing one, e.g. a batch played with the reference's pairs by hand.
  * Exit status: 0 identical, 1 different or failed, 2 bad use.

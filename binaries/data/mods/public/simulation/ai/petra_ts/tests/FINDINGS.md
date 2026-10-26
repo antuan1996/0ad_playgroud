@@ -19,8 +19,8 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (26 tests in all; the
-original failed exactly the first 20 when last run, the six stage-4 rows
+Each is pinned by a test that only the port passes (28 tests in all; the
+original failed exactly the first 20 when last run, the seven stage-4 rows
 were fixed after the original stopped being a test target). Each row says
 whether a game can reach it.
 
@@ -48,6 +48,7 @@ whether a game can reach it.
 | `worker` builders (stage 4) | a builder carrying resources is sent "return resources, then repair (queued)", and while it walks home it is sent the pair again at every update: 37 times in two minutes for one worker in a mirror match | leaves it alone while it returns resources with the building in its queue | worker: "a builder walking its load home with the building queued…" |
 | `researchManager` (stage 4) | the filter of techs for units the AI does not use matches the class list exactly, so `cost_healer` (`"Healer !Champion !Hero"`) is researched | reads the list's first class | researchManager: "from the third phase, any other tech may be researched…" |
 | `victoryManager.tryAssignMilitaryGuard` (stage 4) | refuses any unit with a plan, so the units out of any plan (−1) it is offered from the attack manager's `outOfPlan` are never taken | takes a unit of plan −1 | victoryManager: "guards are drawn from the champions first, then units out of any plan…" |
+| `attackPlan.updatePreparation` at the population cap (stage 4) | aborts a plan that cannot start yet "so that its units serve other plans"; the attack manager creates the next one at once, which takes the same reserve back and is aborted in turn: 124 plans aborted within 30 s of creation in 200 games, 81 in one (§16) | the plan waits, gathering units as below the cap | attackPlan: "waits when the population is full…", "waits with its few units…" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -499,6 +500,59 @@ attacks up (`PLAN.md` §6).
   than the control's (72.8k gathered against 69.5k, +5%, against +12%);
   one batch does not tell that from noise. They are kept as bug fixes, not
   as strength.
+
+- **The attack plans' lives, measured** (bot-state.js logs each plan's
+  creation, start, abort and end, with a snapshot every minute; attack-log.ts
+  reads a batch; batch `stage4-f-attacklog`, the pool above, which played the
+  same 196 games as `stage4-e-small` game for game: the log changes nothing).
+  789 plans in 200 sides. Two things the plan named are not what they looked
+  like:
+  - **Churn at the population cap.** 124 plans, nearly all huge attacks, were
+    aborted within 30 s of creation, in 25 sides, every one a game Petra TS
+    won, from a median minute 30: a winner at 300 population whose reserve was
+    under the 16 units a plan needs there. The cap rule aborted the plan to free
+    its units; the next plan took them back (§1). Fixed (the plan waits):
+    churn 124 to 29, huge attacks started 62 to 74, the same 200 games
+    otherwise; 22 games moved, all wins: 21 still won, ending 13.6 minutes
+    sooner in all (game 27: 48 to 43, game 52: 45 to 42), one won at 86.8
+    reached the time limit (batch `stage4-h-capwait`: 50.3%, as before).
+    The rest is another loop, also of winners near the end: a huge attack
+    takes the reserve (about 110 units), finds no target to start on, aborts,
+    and the next does the same every attack-manager turn until a target turns
+    up (10 sides; game 72 had 20). Left for stage 5 (target choice).
+  - **Attacks that never fill** (78 plans prepared over 10 minutes without
+    starting) are a side that already lost: at their last snapshot a median
+    1 worker, 299 free population, queues paused (99%) because workers are
+    short. A symptom, nothing to fix in the plan.
+- **What decides the games, from the logs and the replays' statistics** (the
+  95 seed pairs Petra TS won from one slot and lost from the other, the same
+  map, the slots swapped):
+  - The two games are the same until minute 6. The side that will win is
+    ahead in units trained from minute 7 (50 against 46; 59 against 55 at 8),
+    before anyone fights.
+  - Wood leads: ahead in 58 of 95 pairs at minute 2, 65 at minute 7 (4363
+    against 3664). Not a slower woodcutter (wood per woodcutter is the same)
+    but fewer of them (18 against 16 at minute 7): the losing slot puts more
+    on food (17 against 14 gatherers at minute 5) because its food comes
+    slower (27.5 against 31.1 per gatherer-minute). The bases' supply lists
+    (counts and amounts per distance class) do not tell the two starts apart:
+    the layout does (where the berries, the hunt and the farmstead are).
+  - The first losses come at minutes 8.5-9, about even (22 against 25 units
+    by minute 10); the side behind then trains less (77 against 87 at 10),
+    loses its civilians (20 against 2 by minute 14) and never launches an
+    attack in half the losses (50 of 95): its rush, the same 20 units as the
+    winner's at minute 8, falls to 4 by minute 11 and waits until the end.
+  - So the game is decided by a production lead of a few units at minutes 7-8,
+    from where the food and wood are, amplified by the first fight: the
+    economy of minutes 2-8 and the first fight (when to fight, when to stay
+    under the town's arrows) are where stage 5 can win games.
+- **The engine can deadlock**, rarely and not reproducibly: one game of 200
+  stopped at turn 4030 with every thread waiting on a lock (main and task
+  workers); played again it ran to the end with the same fingerprint as in an
+  earlier batch. batch.ts now kills a game after 15 minutes of wall time
+  (`--game-timeout`), so a resumed batch, and the smoke test, play it again.
+- **A quirk of the game's statistics**: the replays' `sequences` record
+  `total` as 0 for units lost and killed; the `Unit` class holds all units.
 
 ## 17. Type review (2026-10-26)
 

@@ -24,6 +24,14 @@
  *   --twice N         also play the first N games a second time: the summary
  *                     checks each pair has the same fingerprint (determinism,
  *                     and that parallel games do not disturb each other)
+ *   --bot-state       build Petra TS with its state dump and play every game
+ *                     with match.sh -b (botstate.txt, attacks.txt per game;
+ *                     attack-log.ts reads a batch's attacks); the games are the
+ *                     same as without
+ *   --game-timeout M  kill a game still running after M minutes of wall time
+ *                     (default 15; the longest games take 4): the engine can
+ *                     deadlock, rarely and not reproducibly (FINDINGS §17); the
+ *                     game is marked failed and a resumed batch plays it again
  *   --keep-replays    keep each game's replay (by default deleted: the rerun
  *                     line of its match.txt plays the same game again)
  *
@@ -75,6 +83,9 @@ interface Options
 	victory: string;
 	out: string;
 	keepReplays: boolean;
+	botState: boolean;
+	/** wall-clock minutes a game may take before it counts as hung */
+	gameTimeout: number;
 	twice: number;
 	/** explicit [map seed, AI seed] pairs (--pairs) */
 	pairs?: [number, number][];
@@ -88,13 +99,16 @@ function parseOptions(args: string[]): Options
 	const own = split == -1 ? args : args.slice(0, split);
 	const values = new Map<string, string>();
 	let keepReplays = false;
+	let botState = false;
 	for (let i = 0; i < own.length; ++i)
 	{
 		const arg = own[i];
 		if (arg == "--keep-replays")
 			keepReplays = true;
+		else if (arg == "--bot-state")
+			botState = true;
 		else if (["--blue", "--red", "--games", "--slots", "--seed", "--jobs", "--map", "--civ",
-			"--difficulty", "--victory", "--out", "--twice", "--pairs"].includes(arg) && i + 1 < own.length)
+			"--difficulty", "--victory", "--out", "--twice", "--pairs", "--game-timeout"].includes(arg) && i + 1 < own.length)
 			values.set(arg.slice(2), own[++i]);
 		else
 			fail(`unknown option ${arg} (see the header of build/petra_ts/batch.ts)`);
@@ -138,6 +152,8 @@ function parseOptions(args: string[]): Options
 		"victory": values.get("victory") ?? "conquest",
 		"out": resolve(values.get("out") ?? join(repoRoot, "build/petra_ts/batches", stamp)),
 		keepReplays,
+		botState,
+		"gameTimeout": count("game-timeout", 15),
 		"twice": count("twice", 0, 0),
 		pairs,
 		extra
@@ -188,6 +204,8 @@ function build(options: Options): void
 	const baselines = [...bots].flatMap(bot => bot == "petra_parity" ? ["parity"] : bot == "petra_fixed" ? ["fixed"] : []);
 	if (baselines.length)
 		steps.push([process.execPath, [join(repoRoot, "build/petra_ts/baselines.ts"), ...baselines]]);
+	if (options.botState)
+		steps.push([process.execPath, [join(repoRoot, "build/petra_ts/prepare-bot.ts"), "state"]]);
 	for (const [command, args] of steps)
 		if (spawnSync(command, args, { "cwd": repoRoot, "stdio": "inherit" }).status !== 0)
 			fail(`${command} ${args.join(" ")} failed`);
@@ -219,6 +237,7 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 		"-d", options.difficulty, "-c", options.civ, "-w", options.victory,
 		"-o", options.blue, "-p", options.red,
 		...(game.swapped ? ["-x"] : []),
+		...(options.botState ? ["-b"] : []),
 		...options.extra,
 		"-r", game.dir
 	];
@@ -228,13 +247,45 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 		const child = spawn(matchScript, args, { env, "cwd": repoRoot, "stdio": ["ignore", "ignore", "pipe"] });
 		let stderr = "";
 		child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-20000); });
+		let hung = false;
+		const timer = setTimeout(() =>
+		{
+			hung = true;
+			if (child.pid !== undefined)
+				killTree(child.pid);
+		}, options.gameTimeout * 60000);
 		child.on("close", status =>
 		{
+			clearTimeout(timer);
 			if (stderr)
 				writeFileSync(join(game.dir, "stderr.txt"), stderr);
-			done(row(options, game, status, (Date.now() - started) / 1000, job, root));
+			const wall = (Date.now() - started) / 1000;
+			if (hung)
+			{
+				done({ ...row(options, game, status, wall, job, root), "outcome": "failed",
+					"problem": `the engine hung: still running after ${options.gameTimeout} minutes, killed (resume the batch to play it again)` });
+			}
+			else
+				done(row(options, game, status, wall, job, root));
 		});
 	});
+}
+
+/** Kills a process and everything it started (match.sh runs the engine as its child). */
+function killTree(pid: number): void
+{
+	const children = spawnSync("ps", ["-o", "pid=", "--ppid", String(pid)], { "encoding": "utf8" }).stdout
+		.split("\n").map(Number).filter((child) => child > 0);
+	for (const child of children)
+		killTree(child);
+	try
+	{
+		process.kill(pid, "SIGKILL");
+	}
+	catch
+	{
+		// already gone
+	}
 }
 
 function row(options: Options, game: Game, status: number | null, wall: number, job: number, workerRoot: string): BatchRow
