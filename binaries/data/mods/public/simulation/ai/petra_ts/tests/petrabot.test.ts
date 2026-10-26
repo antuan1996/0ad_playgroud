@@ -12,37 +12,23 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { logs, resetRecorder } from "./harness/engine.ts";
-import { makeHqWorld, PLAYER, type HqWorld, type HqWorldOptions } from "./harness/hqWorld.ts";
 import { setPlayers } from "./harness/diplomacy.ts";
-import { restoreEngine, stubGlobal } from "./harness/attackWorld.ts";
+import { logs, resetRecorder } from "./harness/engine.ts";
+import { emptyEvents, eventsWith, fake, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import { ENEMY, type HqWorld, type HqWorldOptions, makeHqWorld, PLAYER } from "./harness/hqWorld.ts";
 
-type Bot = Record<string, any> & {
-	Init(player: number, shared: unknown): void;
-	OnUpdate(shared: unknown): void;
-	Serialize(): Record<string, any>;
-	Deserialize(data: unknown, shared: unknown): void;
-};
-const { PetraBot } = await loadPetraModule<{ PetraBot: new (settings: Record<string, unknown>) => Bot }>("_petrabot");
-
-/** the event names the engine's AIInterface sends every turn */
-const EVENT_NAMES = [
-	"Create", "Destroy", "Attacked", "ConstructionFinished", "DiplomacyChanged", "TrainingStarted",
-	"TrainingFinished", "AIMetadata", "PlayerDefeated", "EntityRenamed", "ValueModification", "OwnershipChanged",
-	"Garrison", "UnGarrison", "TerritoriesChanged", "TerritoryDecayChanged", "TributeExchanged", "AttackRequest",
-	"CeasefireEnded", "DiplomacyRequest", "TributeRequest"
-];
+import { PetraBot } from "../_petrabot.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 
 interface Game
 {
 	world: HqWorld;
 	/** the shared script the engine hands every AI each turn */
-	shared: { events: Record<string, unknown[]>; [key: string]: unknown };
+	shared: CommonSharedScript;
 	/** the game time, in milliseconds */
 	time: { value: number };
 	/** advance one simulation turn of 200 ms, with the given events */
-	turn(bot: Bot, events?: Record<string, unknown[]>): void;
+	turn(bot: PetraBot, events?: Partial<EngineAIEvents>): void;
 }
 
 let modifiers: unknown[] = [];
@@ -71,38 +57,33 @@ function game(options: HqWorldOptions = {}): Game
 	setPlayers(world, [{}, {}, {}]);
 	const time = { "value": 0 };
 	const gs = world.gameState as unknown as Record<string, unknown>;
-	(gs.playerData as Record<string, unknown>).state = "active";
+	world.gameState.playerData.state = "active";
 	gs.getTimeElapsed = () => time.value;
 	// no technology to research on this plain map
 	gs.findAvailableTech = () => [];
 	// as GameState.countOwnEntitiesAndQueuedWithRole: our units of the role (nothing is in training here)
 	gs.countOwnEntitiesAndQueuedWithRole = (role: string) =>
 		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.getMetadata(PLAYER, "role") === role).length;
-	const shared = {
-		"territoryMap": (world.ai as unknown as Record<string, unknown>).territoryMap,
+	const shared = fake<CommonSharedScript>({
+		"territoryMap": world.ai.territoryMap,
 		"accessibility": world.ai.accessibility,
 		"gameState": { [PLAYER]: world.gameState },
 		"timeElapsed": 0,
-		"events": noEvents()
-	};
+		"events": emptyEvents()
+	});
 	return {
 		world, shared, time,
-		turn(bot: Bot, events: Record<string, unknown[]> = {})
+		turn(bot: PetraBot, events: Partial<EngineAIEvents> = {})
 		{
-			shared.events = { ...noEvents(), ...events };
+			shared.events = eventsWith({ ...events });
 			bot.OnUpdate(shared);
 			time.value += 200;
 		}
 	};
 }
 
-function noEvents(): Record<string, unknown[]>
-{
-	return Object.fromEntries(EVENT_NAMES.map((name) => [name, []]));
-}
-
 /** A bot of the given behavior for our player, initialised on the game. */
-function startBot(g: Game, behavior = "balanced"): Bot
+function startBot(g: Game, behavior = "balanced"): PetraBot
 {
 	const bot = new PetraBot({ "player": PLAYER, "difficulty": 3, behavior });
 	bot.Init(PLAYER, g.shared);
@@ -110,7 +91,7 @@ function startBot(g: Game, behavior = "balanced"): Bot
 }
 
 /** the event the engine sends when a player changes its diplomacy towards us */
-const diplomacyChanged = { "DiplomacyChanged": [{ "player": 2, "otherPlayer": PLAYER }] };
+const diplomacyChanged: Partial<EngineAIEvents> = { "DiplomacyChanged": [{ "player": ENEMY, "otherPlayer": PLAYER }] };
 
 describe("the bot at game start", () =>
 {
@@ -123,7 +104,7 @@ describe("the bot at game start", () =>
 		assert.ok(bot.Config.personality.aggressive > 0.7);
 		assert.deepEqual(Object.keys(bot.queues).sort(), Object.keys(bot.Config.priorities).sort());
 		// the town's civil centre is its first base
-		assert.equal(bot.HQ.baseManagers().length, 1);
+		assert.equal(requireValue(bot.HQ).baseManagers().length, 1);
 		// the difficulty's AI bonus is applied once
 		assert.equal(modifiers.length, 1);
 	});
@@ -200,7 +181,7 @@ describe("the bot's turns", () =>
 describe("saving and loading", () =>
 {
 	/** a bot that played a few turns and holds an event for its next turn (turn 12) */
-	function playedBot(g: Game): Bot
+	function playedBot(g: Game): PetraBot
 	{
 		const bot = startBot(g);
 		for (let t = 0; t < 6; ++t)
@@ -254,11 +235,11 @@ describe("saving and loading", () =>
 		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
 		loaded.Deserialize({ ...saved, "saveVersion": 0 }, g.shared);
 		assert.ok(logs.some((entry) => entry.includes("version 0") && entry.includes("starts afresh")), "the refusal is said");
-		assert.deepEqual((g.shared["_entityMetadata"] as Record<number, unknown>)[PLAYER], {}, "the old notes on our units are dropped");
+		assert.deepEqual(g.shared["_entityMetadata"][PLAYER], {}, "the old notes on our units are dropped");
 
 		loaded.Init(PLAYER, g.shared);
 		assert.equal(loaded.isDeserialized, false, "it plays as in a new game");
-		assert.equal(loaded.HQ.baseManagers().length, 1, "with the town's centre as its first base");
+		assert.equal(requireValue(loaded.HQ).baseManagers().length, 1, "with the town's centre as its first base");
 	});
 
 	it("saving the loaded bot again, before anything happened, gives the same game", () =>

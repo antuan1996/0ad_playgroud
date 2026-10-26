@@ -10,101 +10,33 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { makeFakeGameState } from "./harness/bareState.ts";
 import { logs } from "./harness/engine.ts";
-import { loadCommonModule, loadPetraModule } from "./harness/target.ts";
-import { makeFakeGameState } from "./harness/world.ts";
+import { fake } from "./harness/fakes.ts";
 
-interface ResourcesManagerLike
-{
-	add(other: ResourcesManagerLike): void;
-	multiply(factor: number): void;
-	Serialize(): { amounts: Record<string, number>; population: number };
-}
+import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
-type ResourcesManagerCtor = new (amounts?: Record<string, number>, population?: number) => ResourcesManagerLike;
+import { templateName } from "../adapter/brands.ts";
+import { type PlanSerialize, Queue } from "../execution/queue.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { ResearchPlan } from "../execution/queueplanResearch.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
 
-/** The part of a plan a Queue actually touches. */
-interface FakePlan
-{
-	category: string;
-	type: string;
-	number: number;
-	/** Only some plans set a merge limit; QueuePlan declares it optional. */
-	maxMerge?: number;
-	metadata: Record<string, unknown>;
-	template?: { hasClass(name: string): boolean };
-	addItem?(amount: number): void;
-	isInvalid(): boolean;
-	isGo(): boolean;
-	getCost(): ResourcesManagerLike;
-	start(): void;
-	Serialize(): Record<string, unknown>;
-	queueToReset?: string;
-}
-
-/** The save shape a Queue exchanges: one entry per plan, plus its own flags. */
-interface SavedQueue
-{
-	plans: Record<string, unknown>[];
-	paused: boolean;
-	switched: number;
-}
-
-interface QueueLike
-{
-	plans: FakePlan[];
-	paused: boolean;
-	switched: number;
-	empty(): void;
-	addPlan(plan: FakePlan | null | undefined): void;
-	check(gameState: CommonGameState): void;
-	getNext(): FakePlan | null;
-	startNext(gameState: CommonGameState): boolean;
-	maxAccountWanted(gameState: CommonGameState, fraction: number): ResourcesManagerLike;
-	queueCost(): ResourcesManagerLike;
-	length(): number;
-	hasQueuedUnits(): boolean;
-	countQueuedUnits(): number;
-	hasQueuedUnitsWithClass(name: string): boolean;
-	countQueuedUnitsWithClass(name: string): number;
-	countQueuedUnitsWithMetadata(key: string, value: unknown): number;
-	Serialize(): SavedQueue;
-	/** Restore the plans from a save; see the "restoring a saved queue" block. */
-	Deserialize(gameState: CommonGameState, data: SavedQueue): void;
-}
-
-const { Queue } = await loadPetraModule<{ Queue: new () => QueueLike }>("queue");
-const { ResourcesManager } = await loadCommonModule<{ ResourcesManager: ResourcesManagerCtor }>("resources");
-
-/**
- * Restoring a save is the one place the queue builds plans itself: it
- * constructs a real TrainingPlan/ConstructionPlan/ResearchPlan from each
- * saved entry rather than reusing the entry, so the restore tests need the
- * plan classes and templates that answer what those constructors ask.
- */
-interface SavedPlan
-{
-	Serialize(): Record<string, unknown>;
-}
-
-const { TrainingPlan } = await loadPetraModule<{ TrainingPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanTraining");
-const { ConstructionPlan } = await loadPetraModule<{ ConstructionPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanBuilding");
-const { ResearchPlan } = await loadPetraModule<{ ResearchPlan: new (gameState: CommonGameState, type: string) => SavedPlan }>("queueplanResearch");
-
-function food(amount: number): ResourcesManagerLike
+function food(amount: number): ResourcesManager
 {
 	return new ResourcesManager({ food: amount }, 0);
 }
 
-function costOf(amount: number): () => ResourcesManagerLike
+function costOf(amount: number): () => ResourcesManager
 {
 	// A fresh object each call: maxAccountWanted multiplies what it is given.
 	return () => food(amount);
 }
 
-function makePlan(overrides: Partial<FakePlan> = {}): FakePlan
+/** The part of a plan a Queue actually touches. */
+function makePlan(overrides: Record<string, unknown> = {}): PetraRuntime.ConcretePlan
 {
-	const plan = {
+	const plan = fake<PetraRuntime.ConcretePlan>({
 		category: "unit",
 		type: "test_unit",
 		number: 1,
@@ -116,12 +48,9 @@ function makePlan(overrides: Partial<FakePlan> = {}): FakePlan
 		start: () => undefined,
 		// Reads the plan itself so an overridden type or count is reflected.
 		Serialize: () => ({ category: plan.category, type: plan.type, number: plan.number }),
+		addItem: (amount: number) => { plan.number += amount; },
 		...overrides
-	} as FakePlan;
-
-	plan.addItem ??= function addItem(this: FakePlan, amount: number) {
-		this.number += amount;
-	};
+	});
 	return plan;
 }
 
@@ -179,8 +108,7 @@ describe("Queue", () =>
 	it("keeps a unit plan whose match sets no merge limit", () =>
 	{
 		const queue = new Queue();
-		const existing = makePlan({ number: 1 });
-		delete existing.maxMerge;
+		const existing = makePlan({ number: 1, maxMerge: undefined });
 		queue.addPlan(existing);
 		queue.addPlan(makePlan({ number: 2 }));
 
@@ -250,8 +178,8 @@ describe("Queue", () =>
 	it("counts queued units by class", () =>
 	{
 		const queue = new Queue();
-		queue.addPlan(makePlan({ number: 2, template: { hasClass: name => name === "Worker" } }));
-		queue.addPlan(makePlan({ type: "other", number: 5, template: { hasClass: name => name === "Soldier" } }));
+		queue.addPlan(makePlan({ number: 2, template: { hasClass: (name: string) => name === "Worker" } }));
+		queue.addPlan(makePlan({ type: "other", number: 5, template: { hasClass: (name: string) => name === "Soldier" } }));
 		queue.addPlan(makePlan({ type: "bare", number: 1 }));
 
 		assert.equal(queue.hasQueuedUnitsWithClass("Worker"), true);
@@ -364,7 +292,7 @@ describe("restoring a saved queue", () =>
 	});
 
 	/** One save entry, written by the plan class that would have produced it. */
-	function savedEntry(category: string, type: string): Record<string, unknown>
+	function savedEntry(category: string, type: string): PlanSerialize
 	{
 		const plan = category === "unit" ? new TrainingPlan(gameState, type)
 			: category === "building" ? new ConstructionPlan(gameState, type)
@@ -415,7 +343,7 @@ describe("restoring a saved queue", () =>
 				savedEntry("unit", "units/athenians_soldier"),
 				// A category the queue has no plan class for: an old save, or a
 				// plan class the queue never learned about.
-				{ category: "garrison", type: "units/athenians_soldier" }
+				fake<PlanSerialize>({ category: "garrison", type: templateName("units/athenians_soldier") })
 			],
 			paused: false,
 			switched: 0

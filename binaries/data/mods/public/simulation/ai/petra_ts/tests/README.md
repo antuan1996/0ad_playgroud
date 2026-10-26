@@ -10,7 +10,13 @@ runs on the port's sources and on the bot built from them.
 npm run test:petra                 # the port: simulation/ai/petra_ts/**/*.ts
 npm run test:petra:out             # builds the "Petra TS" bot, then runs on simulation/ai/petra_out/**/*.js
 npm run test:petra:coverage        # the port, plus Node's coverage report
+npm run test:petra -- queue.test.ts --test-name-pattern="restor"   # one file, some of its tests
+npm run test:petra:out -- queue.test.ts                            # the same on the built bot
 ```
+
+Both run `tests/run.ts`, which starts `node --test` with `--import
+harness/setup.ts`, the preload every test process needs (see "How it works"): a
+bare `node --test <file>` cannot load the port.
 
 Coverage counts the code under test only: the report takes the target's own
 modules and leaves `tests/` out, so a class that reads 0% is a class no test
@@ -49,8 +55,9 @@ A module no test loads is marked `*`.
 suite on that output: it is the port again, and checks that the build the game
 loads still works.
 
-A test names a module, not its place: `loadPetraModule("queue")` finds
-`execution/queue.ts` in whichever layer folder holds it (`harness/paths.ts`).
+A test imports the port's sources like any module (`../execution/queue.ts`),
+with their types; for the `out` target `harness/hooks.ts` loads the built module
+(`petra_out/execution/queue.js`) in its place, so the same imports test either.
 
 Until stage 3 (`PLAN.md`) the suite also ran against the original
 `simulation/ai/petra/*.js`, the `ref` target; its modules no longer match the
@@ -85,12 +92,21 @@ supplies both.
 
 | file | role |
 |---|---|
-| `harness/target.ts` | loads a module under test from the selected target |
+| `harness/setup.ts` | preloaded into every test process: the hooks and the engine's globals |
 | `harness/paths.ts` | where the targets live, and which one is selected |
-| `harness/hooks.ts` | resolves `simulation/...` specifiers to real files |
-| `harness/engine.ts` | the engine's global scope |
-| `harness/world.ts` | fake game state builders |
+| `harness/hooks.ts` | resolves `simulation/...` specifiers, and the port's sources to the built bot for `out` |
+| `harness/engine.ts` | the engine's global scope; records commands (`commands`, `sent(type)`) and warnings (`logs`) |
+| `harness/fakes.ts` | fake entities and templates, the turn's events, engine stubs, `fake`/`override` |
+| `harness/world.ts` | a world of entities around a stub headquarters (`makeWorld`) |
+| `harness/hqWorld.ts` | a real Headquarters on a small map, its co-managers as recorded doors (`makeHqWorld`, `seatHQ`) |
+| `harness/navalWorld.ts` | the hq world split by a sea, with ships and transports |
+| `harness/bareState.ts` | a game state with only a config, queues and templates (`makeFakeGameState`) |
+| `harness/diplomacy.ts` | the players' table and its diplomacy (`setPlayers`) |
 | `harness/persistence.ts` | the save/reload checks |
+
+The hooks have to be in place before a test file's own imports are resolved,
+and the globals before the port's modules run, so `setup.ts` is a preload
+(`--import`), not something a test imports.
 
 `harness/engine.ts` evaluates the mod's real `globalscripts/*.js` rather than
 reimplementing them, and answers `ReadJSONFile`/`ListDirectoryFiles` from the
@@ -104,18 +120,31 @@ unprepared — a test cannot pass because a missing global quietly returned
 ```ts
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { loadPetraModule } from "./harness/target.ts";
 
-const { Queue } = await loadPetraModule<{ Queue: new () => QueueLike }>("queue");
+import { makeEntity } from "./harness/fakes.ts";
+import { makeWorld, PLAYER } from "./harness/world.ts";
+
+import { entityId } from "../adapter/brands.ts";
+import { DefenseArmy } from "../execution/defenseArmy.ts";
 ```
+
+The tests are typed by the port itself: a test uses the port's classes and
+types (and, where it needs one the port does not export, exports it there)
+rather than declaring its own copy of them. Ids, positions and the other
+branded values go through `adapter/brands.ts` (`entityId(2000)`,
+`worldPos(40, 40)`), as the port's own code does. A fake that stands in for an
+engine or port object is typed as that object through `fake<T>()` (the
+harness's one sanctioned cast), and a fake's answers are changed with
+`override(target, { method })`, which, like a fake's declared methods, does
+not check them against the real signatures.
 
 Two rules keep the suite useful as a check on the port:
 
 - **Assert behaviour, not implementation.** "A queued technology is not
   duplicated", not "the loop compares `plan.type`". A test that restates the
   source cannot tell a rewrite from a regression.
-- **Fake the smallest thing that works.** `harness/world.ts` throws on any method
-  a test did not declare, so a test only depends on what it asked for. When the
+- **Fake the smallest thing that works.** A fake entity (`harness/fakes.ts`)
+  throws on any method a test did not declare, so a test only depends on what it asked for. When the
   code under test needs more of the world, add that method in the test — do not
   widen the shared fake by default.
 

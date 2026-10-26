@@ -17,25 +17,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
 import { logs, resetRecorder } from "./harness/engine.ts";
 import {
-	makeHqEntity, makeHQConfig, makeHqWorld, seatHQ, structureTemplate, GAIA, PLAYER, MAP_CELLS, PASS_RATIO,
-	type HqInstance, type HqWorld, type HqWorldOptions
+	doorCalls, doorManagers, GAIA, type HqWorld, type HqWorldOptions, makeHQConfig, makeHqEntity,
+	makeHqWorld, MAP_CELLS, PASS_RATIO, PLAYER, seatHQ, structureTemplate
 } from "./harness/hqWorld.ts";
-import type { FakeEnt } from "./harness/attackWorld.ts";
 
-const { gameAnalysis, buildFirstBase } = await loadPetraModule<{
-	gameAnalysis(hq: unknown, gameState: unknown): boolean;
-	buildFirstBase(hq: unknown, gameState: unknown): void;
-}>("startingStrategy");
+import type { Headquarters } from "../decision/headquarters.ts";
+import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
-
-/** the managers gameAnalysis initialises that have their own campaigns */
-const doors = ["navalManager", "tradeManager", "diplomacyManager", "researchManager", "victoryManager", "defenseManager"];
-
 interface StartOptions extends HqWorldOptions
 {
 	/** the regions terrain analysis found, keyed by id: their type and cell count */
@@ -82,14 +74,15 @@ function startWorld(options: StartOptions = {}): HqWorld
 }
 
 /** Seat a fresh HQ the way the bot holds it before its first turn: no region known yet. */
-function freshHQ(world: HqWorld, config = makeHQConfig()): HqInstance
+function freshHQ(world: HqWorld, config = makeHQConfig()): Headquarters
 {
-	const hq = seatHQ(world, { "stubs": doors, "seatBases": false, config });
+	const hq = seatHQ(world, { "stubs": doorManagers, "seatBases": false, config });
 	hq.landRegions = {};
 	hq.navalRegions = {};
 	hq.navalMap = false;
-	hq.canBuildUnits = undefined;
-	hq.canExpand = undefined;
+	// as constructed: gameAnalysis decides whether the AI builds and expands
+	Reflect.deleteProperty(hq, "canBuildUnits");
+	Reflect.deleteProperty(hq, "canExpand");
 	// the naval manager's docks, as its init collects them
 	hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false);
 	return hq;
@@ -111,7 +104,7 @@ const unitAnswers = {
 
 /** a starting villager; without a position it is garrisoned somewhere */
 function villager(world: HqWorld, id: number, position: [number, number] | undefined,
-	methods: Record<string, unknown> = {}): FakeEnt
+	methods: Record<string, unknown> = {}): CommonEntity
 {
 	return world.addEntity(makeHqEntity({
 		id, "owner": PLAYER, position,
@@ -125,8 +118,8 @@ function villager(world: HqWorld, id: number, position: [number, number] | undef
 }
 
 /** a citizen soldier of the given classes */
-function soldier(world: HqWorld, id: number, position: [number, number], classes: string[],
-	methods: Record<string, unknown> = {}): FakeEnt
+function soldier(world: HqWorld, id: number, position: [number, number] | undefined, classes: string[],
+	methods: Record<string, unknown> = {}): CommonEntity
 {
 	return world.addEntity(makeHqEntity({
 		id, "owner": PLAYER, position,
@@ -146,11 +139,6 @@ function addFoundingTemplates(world: HqWorld, ccCost = { "wood": 500, "stone": 5
 		"classes": ["Structure", "Dock", "Naval"], "cost": { "wood": 200 },
 		"territories": ["own", "neutral"], "placement": "shore"
 	});
-}
-
-function plansOf(world: HqWorld, queue: string): Array<Record<string, any>>
-{
-	return (world.ai.queues[queue] as unknown as { plans: Array<Record<string, any>> }).plans;
 }
 
 /** the moves recorded on a unit sent to defend an ally */
@@ -314,14 +302,9 @@ describe("game start: which regions of the map Petra plays on", () =>
 		// gameAnalysis stopped before initialising the staff: nothing was assigned
 		assert.notEqual(hq.firstBaseConfig, true);
 		assert.equal(hq.canBuildUnits, undefined);
-		assert.equal(doorsCalled(hq, "tradeManager"), 0);
+		assert.deepEqual(doorCalls(hq.tradeManager), []);
 	});
 });
-
-function doorsCalled(hq: HqInstance, name: string): number
-{
-	return (hq[name + "Calls"] as unknown[]).length;
-}
 
 //
 // the first turn's bookkeeping
@@ -405,9 +388,9 @@ describe("game start: what the first turn books", () =>
 
 		gameAnalysis(hq, world.gameState);
 
-		const assigned = (hq.tradeManagerCalls as Array<[string, unknown[]]>)
+		const assigned = doorCalls(hq.tradeManager)
 			.filter(([name]) => name === "assignTrader")
-			.map(([, args]) => (args[0] as FakeEnt).id());
+			.map(([, args]) => (args[0] as CommonEntity).id());
 		assert.deepEqual(assigned, [60]);
 	});
 
@@ -435,7 +418,7 @@ describe("game start: what the first turn books", () =>
 		resetRecorder();
 		const world = startWorld();
 		// a ram (holding a soldier) carried inside a ship
-		soldier(world, 82, undefined as unknown as [number, number], ["Infantry", "Melee"]);
+		soldier(world, 82, undefined, ["Infantry", "Melee"]);
 		world.addEntity(makeHqEntity({
 			"id": 81, "owner": PLAYER, "position": undefined, "classes": ["Unit", "Siege", "Ram"],
 			"templateName": "units/athen/siege_ram"
@@ -512,7 +495,7 @@ describe("game start without a civil centre", () =>
 
 		assert.equal(hq.canBuildUnits, false);
 		assert.deepEqual(moves, []);
-		assert.equal(plansOf(world, "civilCentre").length, 0);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 		// no town: no day-one policy either
 		assert.notEqual(hq.firstBaseConfig, true);
 	});
@@ -520,7 +503,7 @@ describe("game start without a civil centre", () =>
 	it("an army without a base sends a share to guard the allied civil centre, ranged and melee first, all support with them", () =>
 	{
 		const world = startWorld({ "cc": false });
-		(world.gameState.playerData as { isMutualAlly: boolean[] }).isMutualAlly[ALLY] = true;
+		world.gameState.playerData.isMutualAlly[ALLY] = true;
 		world.addEntity(makeHqEntity({
 			"id": 100, "owner": ALLY, "position": [200, 200], "classes": ["Structure", "CivCentre"],
 			"templateName": "structures/athen/civil_centre"
@@ -559,7 +542,7 @@ describe("game start without a civil centre", () =>
 			"landPassMap": (px) => px < 80 ? 2 : 4,
 			"regions": { 2: { "type": "land", "size": 12800 }, 4: { "type": "land", "size": 12800 } }
 		});
-		(world.gameState.playerData as { isMutualAlly: boolean[] }).isMutualAlly[ALLY] = true;
+		world.gameState.playerData.isMutualAlly[ALLY] = true;
 		world.addEntity(makeHqEntity({
 			"id": 100, "owner": ALLY, "position": [250, 250], "classes": ["Structure", "CivCentre"],
 			"templateName": "structures/athen/civil_centre"
@@ -591,7 +574,7 @@ describe("game start without a civil centre", () =>
 		gameAnalysis(hq, world.gameState);
 
 		assert.equal(hq.canBuildUnits, true);
-		const plans = plansOf(world, "civilCentre");
+		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0].type, "structures/athen/civil_centre");
 		assert.deepEqual(plans[0].metadata, { "base": -1, "resource": "wood", "proximity": [100, 100] });
@@ -603,7 +586,7 @@ describe("game start without a civil centre", () =>
 //
 
 /** A world with no civil centre left, and an HQ that has run its first turn. */
-function homeless(options: StartOptions = {}): { world: HqWorld; hq: HqInstance }
+function homeless(options: StartOptions = {}): { world: HqWorld; hq: Headquarters }
 {
 	const world = startWorld({ "cc": false, ...options });
 	addFoundingTemplates(world);
@@ -611,7 +594,7 @@ function homeless(options: StartOptions = {}): { world: HqWorld; hq: HqInstance 
 }
 
 /** builders known to the build manager, as its init counts them */
-function initBuilders(world: HqWorld, hq: HqInstance): void
+function initBuilders(world: HqWorld, hq: Headquarters): void
 {
 	hq.buildManager.init(world.gameState);
 }
@@ -633,11 +616,11 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		const plans = plansOf(world, "civilCentre");
+		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1);
 		// 203-205 are within 50 map units of the first of them
-		assert.deepEqual(plans[0].metadata.proximity, [100, 100]);
-		assert.equal(plansOf(world, "dock").length, 0);
+		assert.deepEqual(plans[0].metadata?.proximity, [100, 100]);
+		assert.equal(world.ai.queues.dock.plans.length, 0);
 	});
 
 	it("villagers on two lands are two groups, however close", () =>
@@ -655,7 +638,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.deepEqual(plansOf(world, "civilCentre")[0].metadata.proximity, [104, 100]);
+		assert.deepEqual(world.ai.queues.civilCentre.plans[0].metadata?.proximity, [104, 100]);
 	});
 
 	it("villagers aboard a ship count where the ship floats", () =>
@@ -672,7 +655,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.deepEqual(plansOf(world, "civilCentre")[0].metadata.proximity, [60, 60]);
+		assert.deepEqual(world.ai.queues.civilCentre.plans[0].metadata?.proximity, [60, 60]);
 	});
 
 	it("a centre already queued is not doubled", () =>
@@ -684,7 +667,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 		buildFirstBase(hq, world.gameState);
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "civilCentre").length, 1);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 1);
 	});
 
 	it("nothing is planned when the centre is disabled, or nobody can build it", () =>
@@ -695,14 +678,14 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			villager(world, 241, [100, 100]);
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
-			assert.equal(plansOf(world, "civilCentre").length, 0);
+			assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 		}
 		{
 			const { world, hq } = homeless({ "stock": { "food": 0, "wood": 2000, "stone": 2000, "metal": 2000 } });
 			villager(world, 242, [100, 100], { "buildableEntities": () => ["structures/athen/house"] });
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
-			assert.equal(plansOf(world, "civilCentre").length, 0);
+			assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 		}
 	});
 
@@ -715,7 +698,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "civilCentre").length, 0);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 	});
 
 	it("too poor, but a treasure in reach pays the difference: the villager goes for it and the town waits", () =>
@@ -728,7 +711,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			"templateName": "gaia/treasure/wood"
 		}, { "isTreasure": () => true, "treasureResources": () => ({ "wood": 300 }) }));
 		const collected: unknown[] = [];
-		villager(world, 261, [100, 100], { "isIdle": () => true, "collectTreasure": (t: FakeEnt) => collected.push(t.id()) });
+		villager(world, 261, [100, 100], { "isIdle": () => true, "collectTreasure": (t: CommonEntity) => collected.push(t.id()) });
 		const hq = freshHQ(world);
 		initBuilders(world, hq);
 
@@ -736,8 +719,8 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		assert.deepEqual(collected, [260]);
 		assert.equal(world.ents.get(261)!.getMetadata(PLAYER, "treasure"), 260);
-		assert.equal(plansOf(world, "civilCentre").length, 0);
-		assert.equal(plansOf(world, "dock").length, 0);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
+		assert.equal(world.ai.queues.dock.plans.length, 0);
 	});
 
 	it("too poor and no treasure that pays enough: a dock first, to fish and trade the money in", () =>
@@ -748,8 +731,8 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "civilCentre").length, 0);
-		const docks = plansOf(world, "dock");
+		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
+		const docks = world.ai.queues.dock.plans;
 		assert.equal(docks.length, 1);
 		assert.equal(docks[0].type, "structures/athen/dock");
 		// the villager stands on dry land (naval region 1): no sea is named
@@ -768,7 +751,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "dock")[0].metadata.sea, 3);
+		assert.equal(world.ai.queues.dock.plans[0].metadata?.sea, 3);
 	});
 
 	it("too poor even for a dock, or a dock already queued: wait", () =>
@@ -778,8 +761,8 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			villager(world, 291, [100, 100]);
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
-			assert.equal(plansOf(world, "dock").length, 0);
-			assert.equal(plansOf(world, "civilCentre").length, 0);
+			assert.equal(world.ai.queues.dock.plans.length, 0);
+			assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 		}
 		{
 			const { world, hq } = homeless({ "stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 } });
@@ -787,7 +770,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
 			buildFirstBase(hq, world.gameState);
-			assert.equal(plansOf(world, "dock").length, 1);
+			assert.equal(world.ai.queues.dock.plans.length, 1);
 		}
 		{
 			const { world, hq } = homeless({ "stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 },
@@ -795,7 +778,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			villager(world, 293, [100, 100]);
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
-			assert.equal(plansOf(world, "dock").length, 0);
+			assert.equal(world.ai.queues.dock.plans.length, 0);
 		}
 	});
 
@@ -808,8 +791,8 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "civilCentre").length, 0);
-		assert.equal(plansOf(world, "dock").length, 0);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
+		assert.equal(world.ai.queues.dock.plans.length, 0);
 	});
 
 	it("counting treasures: villagers aboard a ship cannot fetch one, and a treasure already picked up counts for nothing", () =>
@@ -831,7 +814,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 		buildFirstBase(hq, world.gameState);
 
 		// nothing to wait for: the dock comes first
-		assert.equal(plansOf(world, "dock").length, 1);
+		assert.equal(world.ai.queues.dock.plans.length, 1);
 	});
 
 	it("too poor with a dock already standing: the centre is planned anyway and waits for the money", () =>
@@ -847,7 +830,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 
 		buildFirstBase(hq, world.gameState);
 
-		assert.equal(plansOf(world, "civilCentre").length, 1);
-		assert.equal(plansOf(world, "dock").length, 0);
+		assert.equal(world.ai.queues.civilCentre.plans.length, 1);
+		assert.equal(world.ai.queues.dock.plans.length, 0);
 	});
 });

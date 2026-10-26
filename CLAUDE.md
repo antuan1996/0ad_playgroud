@@ -48,9 +48,9 @@ npm run build:petra:baselines       # the baseline bots petra_parity and petra_f
 npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
 npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
 npm run coverage:petra -- [src|out] [--file <module>]   # real per-module coverage
-# one file / one test:
-PETRA_TARGET=src node --test binaries/data/mods/public/simulation/ai/petra_ts/tests/<name>.test.ts
-PETRA_TARGET=out node --test --test-name-pattern="<regex>" <same path>
+# one file / one test (tests/run.ts preloads harness/setup.ts; a bare node --test cannot load the port):
+npm run test:petra -- <name>.test.ts --test-name-pattern="<regex>"
+npm run test:petra:out -- <name>.test.ts
 ```
 Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
 built-in line figure counts never-run branches as covered.
@@ -205,14 +205,24 @@ Read `tests/README.md` before writing tests; `tests/FINDINGS.md` records the
 known bugs, port/original differences, shared quirks, unreachable code and
 untested branches.
 
-- The harness (`tests/harness/`) recreates the engine: `hooks.ts` resolves VFS
-  specifiers, `engine.ts` evaluates the real `globalscripts` and records
-  `Engine.PostCommand`/warnings (`commands`, `logs`), `target.ts` loads a module
-  from the selected target (`PETRA_TARGET`).
-- Fake worlds: `attackWorld.ts` (`makeWorld`, `makeEntity`, `makeTemplate`, a stub HQ),
-  `hqWorld.ts` (`makeHqWorld`/`seatHQ`: a real Headquarters on real InfoMaps,
-  with out-of-scope managers swapped for recording `doorStub`s), `navalWorld.ts`,
-  `diplomacy.ts` (`setPlayers`), `world.ts`, `persistence.ts` (save/reload round trips).
+- The harness (`tests/harness/`) recreates the engine. `setup.ts` is preloaded
+  into every test process (`--import`, by `tests/run.ts`): `hooks.ts` resolves
+  VFS specifiers and, for `PETRA_TARGET=out`, loads the built `petra_out/` module
+  for each import of a port source; `engine.ts` evaluates the real
+  `globalscripts` and records `Engine.PostCommand`/warnings (`commands`,
+  `sent(type)`, `logs`).
+- Tests import the port directly (`../execution/queue.ts`) and are typed by it:
+  no local copies of the port's classes or types (export a type from the port
+  when a test needs it), branded values through `adapter/brands.ts`.
+- Fakes: `fakes.ts` (`makeEntity`, `makeTemplate`, `emptyEvents`/`eventsWith`,
+  `stubGlobal`/`restoreEngine`; `fake<T>()` types a fake as the real object, the
+  harness's one cast, and `override(target, { method })` changes a fake's
+  answers), `world.ts` (`makeWorld`: entities around a stub HQ), `hqWorld.ts`
+  (`makeHqWorld`/`seatHQ`: a real Headquarters on real InfoMaps, with
+  out-of-scope managers swapped for recording `doorStub`s, `doorManagers`),
+  `navalWorld.ts`, `bareState.ts` (`makeFakeGameState`: config, queues,
+  templates), `diplomacy.ts` (`setPlayers`), `persistence.ts` (save/reload
+  round trips).
 - Fake entities and stubs **throw on any undeclared method**: declare what the
   code under test asks for in the test itself.
 - Every test fails if a plan moved from a state its caller did not expect
@@ -260,7 +270,7 @@ untested branches.
   (`HQ.geography.territoryMap`, `base.resources.dropsiteSupplies`): an accessor
   on a hot path cost measurable turn time. The owners keep get/set accessors with
   the old names (`HQ.territoryMap`, `HQ.landRegions`, `base.dropsiteSupplies`,
-  ...) for the save format and the tests; the stub HQ of `attackWorld.ts` is
+  ...) for the save format and the tests; the stub HQ of `harness/world.ts` is
   its own `geography`.
 - Execution code (`execution/`) reaches the headquarters only through
   `hqOf(gameState)` (`execution/hq.ts`): a read-only view of the members it

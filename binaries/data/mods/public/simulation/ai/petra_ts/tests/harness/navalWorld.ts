@@ -21,15 +21,18 @@
  * - SharedScript.ApplyEntitiesDelta puts a new entity into every updating
  *   collection whose filters it passes.
  */
+import type { Methods } from "./fakes.ts";
 import {
-	makeHqEntity, makeHqWorld, seatHQ, MAP_CELLS, PASS_RATIO, PLAYER, passLand, passShore, passWater,
-	type HqInstance, type HqWorld, type HqWorldOptions
+	type HqWorld, type HqWorldOptions, layNavalPassMap, makeHqEntity, makeHqWorld, MAP_CELLS,
+	PASS_RATIO, passLand, passShore, passWater, PLAYER, seatHQ
 } from "./hqWorld.ts";
-import type { FakeEnt, Methods } from "./attackWorld.ts";
 
-export const WEST = 2;
-export const ISLAND = 3;
-export const SEA = 5;
+import { landRegion, playerId, seaRegion, worldPos } from "../../adapter/brands.ts";
+import type { Headquarters } from "../../decision/headquarters.ts";
+
+export const WEST = landRegion(2);
+export const ISLAND = landRegion(3);
+export const SEA = seaRegion(5);
 
 const WIDTH = MAP_CELLS * PASS_RATIO;	// passability cells across, 2 map units each
 const SHORE_WEST = 76;	// first shallow cell of our coast
@@ -53,16 +56,10 @@ function seaOf(px: number, island: boolean): number
 	return px >= SHORE_WEST && (!island || px < SHORE_ISLAND) ? SEA : 1;
 }
 
-interface Collection
-{
-	dynamicProperties(): string[];
-	updateEnt(ent: FakeEnt): unknown;
-}
-
 export interface NavalWorld
 {
 	world: HqWorld;
-	hq: HqInstance;
+	hq: Headquarters;
 }
 
 /**
@@ -88,16 +85,14 @@ export function navalWorld(options: {
 		"regionLinks": { [WEST]: [SEA], [ISLAND]: [SEA], [SEA]: [WEST, ISLAND] },
 		"trajectories": { "2,3": [WEST, SEA, ISLAND], "3,2": [ISLAND, SEA, WEST] },
 		...options.worldOptions
-	} as HqWorldOptions);
+	});
 
 	const naval = new Uint8Array(WIDTH * WIDTH);
 	for (let k = 0; k < naval.length; ++k)
 		naval[k] = sea(k % WIDTH);
-	const access = world.ai.accessibility as unknown as {
-		landPassMap: Uint8Array; gamePosToMapPos(p: [number, number]): [number, number];
-	};
-	Object.assign(world.ai.accessibility as Record<string, unknown>, {
-		"navalPassMap": naval,
+	layNavalPassMap(world, naval);
+	const access = world.ai.accessibility;
+	Object.assign(world.ai.accessibility, {
 		"height": WIDTH,
 		// map units per passability cell, as the accessibility map's cellSize
 		"cellSize": 2,
@@ -106,33 +101,31 @@ export function navalWorld(options: {
 		// as Accessibility.getAccessValue: the land (or, onWater, the sea) region under a position
 		"getAccessValue": (pos: [number, number], onWater?: boolean) =>
 		{
-			const [px, pz] = access.gamePosToMapPos(pos);
+			const [px, pz] = access.gamePosToMapPos(worldPos(pos[0], pos[1]));
 			if (px < 0 || px >= WIDTH || pz < 0 || pz >= WIDTH)
 				return 0;
-			return onWater ? naval[px + pz * WIDTH] : access.landPassMap[px + pz * WIDTH];
+			return onWater ? naval[px + pz * WIDTH] : world.map.landPassMap[px + pz * WIDTH];
 		}
 	});
-	(world.ai.uniqueIDs as Record<string, number>).transports = 1;
+	world.ai.uniqueIDs.transports = 1;
 
 	// the updating collections, as the shared script keeps them
-	const shared = world.gameState.sharedScript as unknown as {
-		registerUpdatingEntityCollection(c: Collection): void;
-	};
-	const registered: Collection[] = [];
+	const shared = world.gameState.sharedScript;
+	const registered: CommonEntityCollection[] = [];
 	const register = shared.registerUpdatingEntityCollection.bind(shared);
-	shared.registerUpdatingEntityCollection = (collection: Collection) =>
+	shared.registerUpdatingEntityCollection = (collection: CommonEntityCollection) =>
 	{
 		register(collection);
 		registered.push(collection);
 	};
 	const addEntity = world.addEntity.bind(world);
-	world.addEntity = (ent: FakeEnt) =>
+	world.addEntity = (ent: CommonEntity) =>
 	{
 		addEntity(ent);
 		const setMetadata = ent.setMetadata.bind(ent);
-		(ent as unknown as { setMetadata: typeof setMetadata }).setMetadata = (player: number, key: string, value: unknown) =>
+		ent.setMetadata = (player: number, key: string, value: unknown) =>
 		{
-			setMetadata(player, key, value);
+			setMetadata(playerId(player), key, value);
 			for (const collection of registered)
 				if (collection.dynamicProperties().some((p) => p === "metadata" || p === "metadata." + key))
 					collection.updateEnt(ent);
@@ -217,7 +210,7 @@ export function soldier(world: HqWorld, id: number, position: [number, number] |
 	}, {
 		"position": () => state.pos ? [...state.pos] : undefined,
 		"canGarrison": () => true,
-		"garrison": (target: FakeEnt, queued?: boolean) => state.garrisons.push([target.id(), queued]),
+		"garrison": (target: CommonEntity, queued?: boolean) => state.garrisons.push([target.id(), queued]),
 		"moveToRange": (x: number, z: number, min: number, max: number) => state.ranges.push([x, z, min, max]),
 		"stopMoving": () => { ++state.stops; },
 		"destroy": () => { state.destroyed = true; },
@@ -227,17 +220,17 @@ export function soldier(world: HqWorld, id: number, position: [number, number] |
 }
 
 /** the engine garrisons the soldier in the ship: it leaves the map */
-export function board(unit: { ent: FakeEnt; state: UnitState }, carrier: { state: ShipState }): void
+export function board(unit: { ent: CommonEntity; state: UnitState }, carrier: { state: ShipState }): void
 {
 	unit.state.pos = undefined;
 	carrier.state.garrisoned.push(unit.ent.id());
 }
 
 /** the engine unloads the soldier from the ship onto the given spot */
-export function disembark(unit: { ent: FakeEnt; state: UnitState }, carrier: { state: ShipState }, at: [number, number]): void
+export function disembark(unit: { ent: CommonEntity; state: UnitState }, carrier: { state: ShipState }, at: [number, number]): void
 {
 	unit.state.pos = at;
 	carrier.state.garrisoned = carrier.state.garrisoned.filter((id) => id !== unit.ent.id());
 }
 
-export type { HqWorld, HqInstance };
+export type { HqWorld, Headquarters };

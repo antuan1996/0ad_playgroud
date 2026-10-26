@@ -10,24 +10,22 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { restoreEngine, stubGlobal } from "./harness/attackWorld.ts";
+import { fake, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 
-type ConfigInstance = Record<string, any> & { setConfig(gameState: unknown): void };
-const { Config } = await loadPetraModule<{ Config: new (difficulty?: number, behavior?: string) => ConfigInstance }>("config");
+import { Config } from "../decision/config.ts";
 
 const PLAYER_ENTITY = 7;
 
 /** the game settings setConfig reads */
-function game(options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[] } = {}): unknown
+function game(options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[] } = {}): CommonGameState
 {
-	return {
+	return fake<CommonGameState>({
 		"playerData": { "teamLocked": options.teamLocked ?? false, "entity": PLAYER_ENTITY },
 		"getAlliedVictory": () => options.alliedVictory ?? false,
 		"getPopulationMax": () => options.maxPop ?? 300,
 		"getVictoryConditions": () => new Set(options.victory ?? ["conquest"])
-	};
+	});
 }
 
 /** the modifiers the bonus asked the simulation for, as [name, modifiers, player entity] */

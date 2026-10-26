@@ -29,9 +29,9 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { petraModuleDir, type PetraTarget } from "./harness/paths.ts";
+import { testArgs } from "./run.ts";
 
 interface V8Range { startOffset: number; endOffset: number; count: number }
 interface V8Function { functionName: string; ranges: V8Range[]; isBlockCoverage: boolean }
@@ -59,14 +59,11 @@ interface TargetCoverage
 	modules: ModuleCoverage[];
 }
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-
 /** Run the whole suite against one target with V8 coverage written to a fresh directory. */
 function runSuite(target: PetraTarget): { dir: string; tests: TargetCoverage["tests"] }
 {
 	const dir = mkdtempSync(path.join(os.tmpdir(), `petra-cov-${target}-`));
-	const pattern = `${here.split(path.sep).join("/")}/**/*.test.ts`;
-	const result = spawnSync(process.execPath, ["--test", pattern], {
+	const result = spawnSync(process.execPath, testArgs(), {
 		"env": { ...process.env, "PETRA_TARGET": target, "NODE_V8_COVERAGE": dir },
 		"encoding": "utf8",
 		"maxBuffer": 256 * 1024 * 1024

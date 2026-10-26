@@ -8,42 +8,31 @@
  */
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
+import { makeFakeGameState } from "./harness/bareState.ts";
 import { assertRoundTrip } from "./harness/persistence.ts";
-import { makeFakeGameState } from "./harness/world.ts";
 
-/**
- * A Petra class, seen as the harness uses it: constructed with whatever the
- * class wants, then saved. The port's own types describe what each constructor
- * takes; here the point is that a save round-trips whatever object comes out.
- */
-type AnyClass = new (...args: unknown[]) => Record<string, unknown>;
-
-/** A base, with the one method this file has to call on it. */
-type BaseLike = Record<string, unknown> & { init(gameState: CommonGameState, state: string): void };
-
-const { Config } = await loadPetraModule<{ Config: AnyClass }>("config");
-const { Queue } = await loadPetraModule<{ Queue: AnyClass }>("queue");
-const { BuildManager } = await loadPetraModule<{ BuildManager: AnyClass }>("buildManager");
-const { GarrisonManager } = await loadPetraModule<{ GarrisonManager: AnyClass }>("garrisonManager");
-const { EmergencyManager } = await loadPetraModule<{ EmergencyManager: AnyClass }>("emergencyManager");
-const { DiplomacyManager } = await loadPetraModule<{ DiplomacyManager: AnyClass }>("diplomacyManager");
-const { VictoryManager } = await loadPetraModule<{ VictoryManager: AnyClass }>("victoryManager");
-const { ResearchManager } = await loadPetraModule<{ ResearchManager: AnyClass }>("researchManager");
-const { TradeManager } = await loadPetraModule<{ TradeManager: AnyClass }>("tradeManager");
-const { DefenseManager } = await loadPetraModule<{ DefenseManager: AnyClass }>("defenseManager");
-const { AttackManager } = await loadPetraModule<{ AttackManager: AnyClass }>("attackManager");
-const { NavalManager } = await loadPetraModule<{ NavalManager: AnyClass }>("navalManager");
-const { QueueManager } = await loadPetraModule<{ QueueManager: AnyClass }>("queueManager");
-const { BaseManager } = await loadPetraModule<{ BaseManager: AnyClass }>("baseManager");
-const { BasesManager } = await loadPetraModule<{ BasesManager: AnyClass }>("basesManager");
-const { Headquarters } = await loadPetraModule<{ Headquarters: AnyClass }>("headquarters");
-const { TrainingPlan } = await loadPetraModule<{ TrainingPlan: AnyClass }>("queueplanTraining");
-const { ConstructionPlan } = await loadPetraModule<{ ConstructionPlan: AnyClass }>("queueplanBuilding");
-const { ResearchPlan } = await loadPetraModule<{ ResearchPlan: AnyClass }>("queueplanResearch");
+import { AttackManager } from "../decision/attackManager.ts";
+import { BaseManager } from "../decision/baseManager.ts";
+import { BasesManager } from "../decision/basesManager.ts";
+import { BuildManager } from "../decision/buildManager.ts";
+import { Config } from "../decision/config.ts";
+import { DefenseManager } from "../decision/defenseManager.ts";
+import { DiplomacyManager } from "../decision/diplomacyManager.ts";
+import { EmergencyManager } from "../decision/emergencyManager.ts";
+import { GarrisonManager } from "../decision/garrisonManager.ts";
+import { Headquarters } from "../decision/headquarters.ts";
+import { NavalManager } from "../decision/navalManager.ts";
+import { ResearchManager } from "../decision/researchManager.ts";
+import { TradeManager } from "../decision/tradeManager.ts";
+import { VictoryManager } from "../decision/victoryManager.ts";
+import { Queue } from "../execution/queue.ts";
+import { QueueManager } from "../execution/queueManager.ts";
+import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { ResearchPlan } from "../execution/queueplanResearch.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
 
 /** Petra's own tuning, as it is at game start. */
-function makeConfig(): Record<string, unknown>
+function makeConfig(): Config
 {
 	return new Config(3, "balanced");
 }
@@ -244,19 +233,19 @@ describe("save and reload", () =>
 	it("keeps a bases manager holding one base", () =>
 	{
 		const world = emptyWorldWithMap();
-		const states = BaseManager as unknown as { STATE_WITH_ANCHOR: string };
+		const states = BaseManager;
 		const build = () =>
 		{
 			const bases = new BasesManager(makeConfig());
 			// The game always runs init() on a bases manager (fresh game and
 			// restore alike) before using or saving it, which is what creates
 			// its baseless base, so build this one the same way.
-			(bases as { init(gameState: CommonGameState, deserialize: boolean): void })
+			bases
 				.init(world, false);
 			// A base only holds its entity collections after init, and
 			// restoring runs init as well, so a base that skipped it would
 			// differ for a reason that has nothing to do with the save.
-			const base = new BaseManager(world, bases) as BaseLike;
+			const base = new BaseManager(world, bases);
 			base.init(world, states.STATE_WITH_ANCHOR);
 			bases["baseManagers"] = [base];
 			return bases;
@@ -286,7 +275,7 @@ describe("save and reload", () =>
 				original: () =>
 				{
 					const hq = new Headquarters(makeConfig(), false);
-					(hq["basesManager"] as { init(gameState: CommonGameState, deserialize: boolean): void })
+					hq["basesManager"]
 						.init(world, false);
 					return hq;
 				},
@@ -302,7 +291,7 @@ describe("save and reload", () =>
 				},
 				// Rebuilding the managers reaches back for the headquarters they
 				// belong to, so the world has to be holding the one being restored.
-				prepare: hq => { (world as unknown as { ai: Record<string, unknown> }).ai["HQ"] = hq; }
+				prepare: hq => { world.ai["HQ"] = hq; }
 			},
 			world
 		);
@@ -319,7 +308,7 @@ describe("save and reload", () =>
 				original: () =>
 				{
 					const hq = new Headquarters(makeConfig(), false);
-					(hq["basesManager"] as { init(gameState: CommonGameState, deserialize: boolean): void })
+					hq["basesManager"]
 						.init(world, false);
 					return hq;
 				},
@@ -340,7 +329,7 @@ describe("save and reload", () =>
 					capturableTargets: new Map([[401, { strength: 3, ents: new Set([402, 403]) }]]),
 					lastFailedGather: { wood: 40, food: 12 }
 				},
-				prepare: hq => { (world as unknown as { ai: Record<string, unknown> }).ai["HQ"] = hq; }
+				prepare: hq => { world.ai["HQ"] = hq; }
 			},
 			world
 		);

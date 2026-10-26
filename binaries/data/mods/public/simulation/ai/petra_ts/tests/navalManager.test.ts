@@ -7,104 +7,34 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { navalWorld, ship, soldier, board, ISLAND, SEA, WEST, type HqWorld, type HqInstance } from "./harness/navalWorld.ts";
-import { makeGaiaSupply, makeHqEntity, structureTemplate, ENEMY, MAP_CELLS, PLAYER } from "./harness/hqWorld.ts";
-import { emptyEvents, makeTemplate, type FakeEnt } from "./harness/attackWorld.ts";
+import { emptyEvents, eventsWith, fake, makeTemplate, override } from "./harness/fakes.ts";
+import {
+	ENEMY, makeGaiaSupply, makeHqEntity, MAP_CELLS, PLAYER, structureTemplate
+} from "./harness/hqWorld.ts";
+import { board, type HqWorld, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
+
+import { landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
+import * as baseModule from "../decision/baseManager.ts";
+import { NavalManager } from "../decision/navalManager.ts";
+import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
-
-interface Collection { length: number; values(): Iterable<FakeEnt>; toEntityArray(): FakeEnt[] }
-
-interface Plan
-{
-	ID: number;
-	state: string;
-	startIndex: number;
-	endIndex: number;
-	sea: number;
-	needTransportShips: boolean;
-	needSplit: FakeEnt[];
-	boardingPos: Record<string, [number, number] | undefined>;
-	boardingRange: number;
-	units: Collection;
-	transportShips: Collection;
-	update(gs: unknown): number;
-}
-
-interface Naval
-{
-	ships: Collection;
-	transportShips: Collection;
-	warShips: Collection;
-	fishShips: Collection;
-	docks: Collection;
-	seaShips: Array<Collection | undefined>;
-	seaTransportShips: Array<Collection | undefined>;
-	seaFishShips: Array<Collection | undefined>;
-	wantedTransportShips: number[];
-	wantedFishShips: number[];
-	neededTransportShips: number[];
-	transportPlans: Plan[];
-	landingZones: Record<number, Record<number, Set<number>>>;
-	init(gs: unknown, deserializing?: boolean): void;
-	updateFishingBoats(sea: number, num: number): void;
-	resetFishingBoats(gs: unknown, sea?: number): void;
-	getFishSea(gs: unknown, fish: FakeEnt): number;
-	canFishSafely(gs: unknown, fish: FakeEnt): boolean;
-	getUnconnectedSeas(gs: unknown, region: number): number[];
-	checkEvents(gs: unknown, queues: unknown, events: unknown): void;
-	getPlan(id: number | undefined): Plan | undefined;
-	requireTransport(gs: unknown, ent: FakeEnt, start: number, end: number, endPos: [number, number]): boolean;
-	splitTransport(gs: unknown, plan: Plan): boolean;
-	createTransportIfNeeded(gs: unknown, from: [number, number], to: [number, number], toAccess: number | undefined): void;
-	setMinimalTransportShips(gs: unknown, sea: number, number: number): void;
-	checkLevels(gs: unknown, queues: unknown): void;
-	maintainFleet(gs: unknown, queues: unknown): void;
-	assignShipsToPlans(gs: unknown): void;
-	isShipBoarding(ship: FakeEnt): boolean;
-	moveApart(gs: unknown): void;
-	buildNavalStructures(gs: unknown, queues: unknown): void;
-	getBestShip(gs: unknown, sea: number, goal: string): string | undefined;
-	update(gs: unknown, queues: unknown, events: unknown): void;
-	Serialize(): { properties: Record<string, unknown>; transports: Record<string, Record<string, unknown>> };
-	Deserialize(gs: unknown, data: unknown): void;
-}
-
-interface QueueLike
-{
-	plans: Array<{ type: string; metadata: Record<string, unknown> }>;
-	addPlan(plan: unknown): void;
-	hasQueuedUnits(): boolean;
-}
-
-const { NavalManager } = await loadPetraModule<{ NavalManager: new (config: unknown) => Naval }>("navalManager");
-const { TransportPlan } = await loadPetraModule<{ TransportPlan: { BOARDING: string; SAILING: string } }>("transportPlan");
-const baseModule = await loadPetraModule<{
-	BaseManager: { STATE_ANCHORLESS: string; STATE_UNCONSTRUCTED: string; STATE_WITH_ANCHOR: string };
-}>("baseManager");
-const { TrainingPlan } = await loadPetraModule<{
-	TrainingPlan: new (gs: unknown, type: string, metadata: Record<string, unknown>, number: number, max: number) => unknown;
-}>("queueplanTraining");
 
 /** the naval board, its naval manager not yet initialised */
 function seat(options: Parameters<typeof navalWorld>[0] = {})
 {
 	const s = navalWorld(options);
 	// the trade office's merchants, as TradeManager.init collects them (role trader)
-	const traders = (s.world.gameState as unknown as {
-		getOwnUnits(): { filter(f: (e: FakeEnt) => boolean): { registerUpdates(): void } };
-	}).getOwnUnits().filter((e: FakeEnt) => e.getMetadata(PlayerID, "role") === "trader");
+	const traders = s.world.gameState.getOwnUnits().filter((e: CommonEntity) => e.getMetadata(PlayerID, "role") === "trader");
 	traders.registerUpdates();
-	(s.hq.tradeManager as Record<string, unknown>).traders = traders;
-	return { ...s, "naval": s.hq.navalManager as unknown as Naval };
+	s.hq.tradeManager.traders = traders;
+	return { ...s, "naval": s.hq.navalManager };
 }
 
 const init = (s: ReturnType<typeof seat>, deserializing = false) => s.naval.init(s.world.gameState, deserializing);
 
-const queues = (world: HqWorld) => world.ai.queues as unknown as Record<string, QueueLike>;
-
-const ai = (world: HqWorld) => world.gameState.ai as unknown as { elapsedTime: number; playedTurn: number };
+const queues = (world: HqWorld) => world.ai.queues;
 
 /** a shoal of fish */
 function fish(world: HqWorld, id: number, position: [number, number], amount = 1000)
@@ -131,13 +61,13 @@ function shipCard(world: HqWorld, name: string, detail: {
 	classes?: string[]; capacity?: number; arrows?: number; garrisonable?: string[]; available?: boolean; category?: string;
 } = {}): string
 {
-	world.templates[name] = {
+	world.templates[name] = fake<CommonTemplate>({
 		...makeTemplate(name, { "classes": detail.classes ?? ["Unit", "Ship"], "available": detail.available ?? true,
 			"trainingCategory": detail.category }),
 		"getDefaultArrow": () => detail.arrows,
 		"garrisonMax": () => detail.capacity,
 		"garrisonableClasses": () => detail.garrisonable ?? ["Infantry"]
-	} as unknown as HqWorld["templates"][string];
+	});
 	return name;
 }
 
@@ -198,7 +128,7 @@ describe("the fleet counted at the start: init", () =>
 		const s = seat();
 		// a single flooded cell inside our land: land 2 and sea 5 at once
 		const width = MAP_CELLS * 4;
-		const naval = (s.world.ai.accessibility as unknown as { navalPassMap: Uint8Array }).navalPassMap;
+		const naval = s.world.map.navalPassMap;
 		const lone = 20 + 80 * width;
 		naval[lone] = SEA;
 		init(s);
@@ -232,7 +162,7 @@ describe("how many fishing boats a sea gets", () =>
 		init(s);
 
 		s.naval.updateFishingBoats(SEA, 4);
-		s.naval.updateFishingBoats(WEST, 4);
+		s.naval.updateFishingBoats(seaRegion(WEST), 4);
 
 		assert.equal(s.naval.wantedFishShips[SEA], 4);
 		assert.equal(s.naval.wantedFishShips[WEST], 0);
@@ -349,7 +279,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160], {}, { "canGarrison": () => false });
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]), false);
+		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
 		assert.equal(s.naval.transportPlans.length, 0);
 	});
 
@@ -359,7 +289,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160], { "transport": 7 });
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]), false);
+		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
 	});
 
 	it("the first unit opens a passage, the next on the same route joins it, the way back is another", () =>
@@ -370,9 +300,9 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const c = soldier(s.world, 102, [260, 170]);
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]), true);
-		assert.equal(s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, [290, 160]), true);
-		assert.equal(s.naval.requireTransport(s.world.gameState, c.ent, ISLAND, WEST, [100, 160]), true);
+		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), true);
+		assert.equal(s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(290, 160)), true);
+		assert.equal(s.naval.requireTransport(s.world.gameState, c.ent, ISLAND, WEST, worldPos(100, 160)), true);
 
 		assert.equal(s.naval.transportPlans.length, 2);
 		assert.equal(s.naval.transportPlans[0].units.length, 2);
@@ -394,7 +324,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 			const open = (units: Array<ReturnType<typeof soldier>>) =>
 			{
 				for (const u of units)
-					s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, [280, 160]);
+					s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 				// close it to newcomers while the other one opens
 				s.naval.transportPlans.at(-1)!.state = "opening";
 			};
@@ -411,7 +341,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 			for (const p of s.naval.transportPlans)
 				p.state = TransportPlan.BOARDING;
 
-			s.naval.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, [280, 160]);
+			s.naval.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
 
 			assert.equal(newcomer.ent.getMetadata(PlayerID, "transport"), lone.ent.getMetadata(PlayerID, "transport"),
 				smallFirst ? "the small passage opened first" : "the small passage opened second");
@@ -424,10 +354,10 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		const b = soldier(s.world, 101, [140, 170]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		s.naval.transportPlans[0].state = TransportPlan.SAILING;
 
-		s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(280, 160));
 
 		assert.equal(s.naval.transportPlans.length, 2);
 	});
@@ -441,7 +371,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		init(s);
 
 		for (const ram of rams)
-			s.naval.requireTransport(s.world.gameState, ram.ent, WEST, ISLAND, [280, 160]);
+			s.naval.requireTransport(s.world.gameState, ram.ent, WEST, ISLAND, worldPos(280, 160));
 
 		assert.equal(s.naval.transportPlans.length, 2);
 		assert.equal(s.naval.transportPlans[0].units.length, 4);
@@ -453,7 +383,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, 7, [280, 160]), false);
+		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)), false);
 		assert.equal(s.naval.transportPlans.length, 0);
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
@@ -463,7 +393,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const s = seat();
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		a.ent.setMetadata(PlayerID, "onBoard", 202);
 		p.needSplit = [a.ent];
@@ -491,7 +421,7 @@ describe("a ship that starts the game with units aboard: createTransportIfNeeded
 		ship(s.world, 201, [200, 200]);	// an empty ship has nothing to carry
 		init(s);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, [200, 160], [280, 160], ISLAND);
+		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
 
 		assert.equal(s.naval.transportPlans.length, 1);
 		const p = s.naval.transportPlans[0];
@@ -508,12 +438,12 @@ describe("a ship that starts the game with units aboard: createTransportIfNeeded
 		loaded(s, 201);
 		init(s);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, [140, 160], [280, 160], ISLAND);
+		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(140, 160), worldPos(280, 160), ISLAND);
 		// (the first building's caller always knows its land: ConstructionPlan.start sets it)
-		s.naval.createTransportIfNeeded(s.world.gameState, [200, 160], [200, 160], 1);
+		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(200, 160), landRegion(1));
 		assert.equal(s.naval.transportPlans.length, 0);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, [200, 160], [280, 160], ISLAND);
+		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
 		assert.equal(s.naval.transportPlans.length, 1, "only the free ship");
 	});
 });
@@ -527,7 +457,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 
 		s.naval.setMinimalTransportShips(s.world.gameState, SEA, 2);
 		s.naval.setMinimalTransportShips(s.world.gameState, SEA, 1);
-		s.naval.setMinimalTransportShips(s.world.gameState, 0, 5);
+		s.naval.setMinimalTransportShips(s.world.gameState, seaRegion(0), 5);
 
 		assert.equal(s.naval.wantedTransportShips[SEA], 2);
 		assert.equal(s.naval.wantedTransportShips[0], 0);
@@ -538,7 +468,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	{
 		for (const k of [0, 1])
 			s.naval.requireTransport(s.world.gameState, soldier(s.world, first + k, [140, 150 + 10 * k]).ent,
-				WEST, ISLAND, [280, 160]);
+				WEST, ISLAND, worldPos(280, 160));
 	}
 
 	it("a passage of several units waiting with no ship wanted makes the sea want one", () =>
@@ -556,14 +486,14 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	{
 		const lone = seat();
 		init(lone);
-		lone.naval.requireTransport(lone.world.gameState, soldier(lone.world, 100, [140, 160]).ent, WEST, ISLAND, [280, 160]);
+		lone.naval.requireTransport(lone.world.gameState, soldier(lone.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
 		lone.naval.checkLevels(lone.world.gameState, queues(lone.world));
 		assert.equal(lone.naval.wantedTransportShips[SEA], 0, "one unit");
 
 		const training = seat();
 		init(training);
 		waiting(training);
-		(training.world.gameState as unknown as { countOwnQueuedEntitiesWithMetadata: () => number })
+		training.world.gameState
 			.countOwnQueuedEntitiesWithMetadata = () => 1;
 		training.naval.checkLevels(training.world.gameState, queues(training.world));
 		assert.equal(training.naval.wantedTransportShips[SEA], 0, "a ship in training");
@@ -571,7 +501,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 		const busy = seat();
 		init(busy);
 		waiting(busy);
-		(queues(busy.world).ships as unknown as { hasQueuedUnits: () => boolean }).hasQueuedUnits = () => true;
+		queues(busy.world).ships.hasQueuedUnits = () => true;
 		busy.naval.checkLevels(busy.world.gameState, queues(busy.world));
 		assert.equal(busy.naval.wantedTransportShips[SEA], 0, "the ship queue is busy");
 	});
@@ -645,13 +575,13 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		yard(t, [card]);
 		init(t);
 		t.naval.wantedTransportShips[SEA] = 1;
-		(t.world.gameState as unknown as { countOwnQueuedEntitiesWithMetadata: () => number })
+		t.world.gameState
 			.countOwnQueuedEntitiesWithMetadata = () => 1;
 		t.naval.maintainFleet(t.world.gameState, queues(t.world));
 		assert.equal(queues(t.world).ships.plans.length, 0, "a ship already in training there");
 
 		queues(t.world).ships.addPlan(new TrainingPlan(t.world.gameState, card, { "sea": SEA }, 1, 1));
-		(t.world.gameState as unknown as { countOwnQueuedEntitiesWithMetadata: () => number })
+		t.world.gameState
 			.countOwnQueuedEntitiesWithMetadata = () => 0;
 		t.naval.maintainFleet(t.world.gameState, queues(t.world));
 		assert.equal(queues(t.world).ships.plans.length, 1, "the queue is busy");
@@ -707,7 +637,7 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		const s = seat();
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
 
 		s.naval.assignShipsToPlans(s.world.gameState);
 
@@ -722,7 +652,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	{
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		s.naval.assignShipsToPlans(s.world.gameState);
 		p.update(s.world.gameState);
@@ -758,11 +688,11 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const idle = ship(s.world, 201, [210, 165], { "metadata": { "sea": SEA } });
 		const otherTransport = ship(s.world, 202, [205, 170], { "metadata": { "transporter": 99, "sea": SEA } });
 		const ranged: Array<[number, number[]]> = [];
-		for (const [ent, id] of [[carrier.ent, 200], [idle.ent, 201], [otherTransport.ent, 202]] as Array<[FakeEnt, number]>)
-			(ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push([id, args]);
+		for (const [ent, id] of [[carrier.ent, 200], [idle.ent, 201], [otherTransport.ent, 202]] as Array<[CommonEntity, number]>)
+			override(ent, { "moveToRange": (...args: number[]) => ranged.push([id, args]) });
 
 		s.naval.moveApart(s.world.gameState);	// position noted
-		ai(s.world).playedTurn += 2;
+		s.world.ai.playedTurn += 2;
 		otherTransport.state.pos = [204, 170];	// that one is under way
 		s.naval.moveApart(s.world.gameState);	// the first is still there two turns later
 
@@ -778,15 +708,15 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const { carrier, p } = boarding(s);
 		const ranged: number[][] = [];
-		(carrier.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(carrier.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 
 		s.naval.moveApart(s.world.gameState);
 		carrier.state.pos = [195, 160];
 		s.naval.moveApart(s.world.gameState);	// it moved
-		ai(s.world).playedTurn += 1;
+		s.world.ai.playedTurn += 1;
 		s.naval.moveApart(s.world.gameState);	// stuck one turn only
 		carrier.state.pos = p.boardingPos[200];
-		ai(s.world).playedTurn += 5;
+		s.world.ai.playedTurn += 5;
 		s.naval.moveApart(s.world.gameState);	// boarding at the shore
 		s.naval.moveApart(s.world.gameState);
 
@@ -798,7 +728,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const parked = ship(s.world, 201, [200, 160]);
 		const ranged: number[][] = [];
-		(parked.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		const near = dock(s.world, 300, [180, 160]);
 		const far = dock(s.world, 301, [156, 40]);
 		init(s);
@@ -819,7 +749,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const parked = ship(s.world, 201, [170, 160]);
 		const ranged: number[][] = [];
-		(parked.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		dock(s.world, 300, [156, 160]);
 		init(s);
 
@@ -839,11 +769,11 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const other = ship(s.world, 211, [210, 165], merchant);
 		init(s);
 		const ranged: Array<[number, number[]]> = [];
-		for (const [ent, id] of [[stuck.ent, 210], [other.ent, 211]] as Array<[FakeEnt, number]>)
-			(ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push([id, args]);
+		for (const [ent, id] of [[stuck.ent, 210], [other.ent, 211]] as Array<[CommonEntity, number]>)
+			override(ent, { "moveToRange": (...args: number[]) => ranged.push([id, args]) });
 
 		s.naval.moveApart(s.world.gameState);
-		ai(s.world).playedTurn += 2;
+		s.world.ai.playedTurn += 2;
 		s.naval.moveApart(s.world.gameState);
 
 		assert.ok(ranged.some(([id, args]) => id === 210 && args[2] === 30), "the stuck merchant");
@@ -863,10 +793,10 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		init(s);
 		const ranged: Array<[number, number[]]> = [];
 		for (const c of [stuck, sailing, foreign])
-			(c.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push([c.ent.id(), args]);
+			override(c.ent, { "moveToRange": (...args: number[]) => ranged.push([c.ent.id(), args]) });
 
 		s.naval.moveApart(s.world.gameState);
-		ai(s.world).playedTurn += 2;
+		s.world.ai.playedTurn += 2;
 		sailing.state.pos = [204, 170];
 		s.naval.moveApart(s.world.gameState);
 
@@ -880,15 +810,15 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const merchant = ship(s.world, 210, [200, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
 		merchant.state.aiState = "INDIVIDUAL.TRADE.APPROACHINGMARKET";
 		const ranged: number[][] = [];
-		(merchant.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(merchant.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		init(s);
 
 		s.naval.moveApart(s.world.gameState);	// position noted
-		ai(s.world).playedTurn += 1;
+		s.world.ai.playedTurn += 1;
 		s.naval.moveApart(s.world.gameState);	// one turn: it may just be turning
 		assert.deepEqual(ranged, []);
 
-		ai(s.world).playedTurn += 1;
+		s.world.ai.playedTurn += 1;
 		s.naval.moveApart(s.world.gameState);	// two turns: stuck
 		assert.equal(ranged.length, 1);
 	});
@@ -898,7 +828,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const parked = ship(s.world, 210, [200, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
 		const ranged: number[][] = [];
-		(parked.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		const near = dock(s.world, 300, [180, 160]);	// near, but on another sea
 		dock(s.world, 301, [156, 40]);	// on its sea, but far
 		init(s);
@@ -915,7 +845,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const parked = ship(s.world, 210, [170, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
 		const ranged: number[][] = [];
-		(parked.ent as unknown as { moveToRange: (...a: number[]) => void }).moveToRange = (...args: number[]) => ranged.push(args);
+		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		dock(s.world, 300, [156, 160]);
 		init(s);
 
@@ -1023,12 +953,12 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 		// a second town on the island, with its own sea to reach, and a colony still being raised
 		const colony = s.world.addEntity(makeHqEntity({ "id": 320, "owner": PLAYER, "position": [280, 160],
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre" }));
-		const BaseManagerModule = s.hq.basesManager as { createBase(gs: unknown, ent: unknown, state: string): { constructing: boolean } };
+		const BaseManagerModule = s.hq.basesManager;
 		BaseManagerModule.createBase(s.world.gameState, colony, "withAnchor");
 		const rising = BaseManagerModule.createBase(s.world.gameState, colony, "withAnchor");
 		rising.constructing = true;
 		s.hq.navalRegions = { [SEA]: true };
-		(s.world.ai.accessibility as unknown as { regionLinks: Record<number, number[]> }).regionLinks[WEST] = [9, SEA];
+		s.world.ai.accessibility.regionLinks[WEST] = [landRegion(9), SEA];
 
 		s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
 
@@ -1046,11 +976,11 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 			const s = harbourTown(40);
 			dock(s.world, 300, [156, 160]).setMetadata(PlayerID, "sea", SEA);
 			s.hq.navalRegions = { [SEA]: true, 9: true };
-			(s.world.ai.accessibility as unknown as { regionLinks: Record<number, number[]> }).regionLinks[ISLAND] = [SEA, 9];
+			s.world.ai.accessibility.regionLinks[ISLAND] = [SEA, landRegion(9)];
 			const islandDock = dock(s.world, 301, [244, 160]);
 			islandDock.setMetadata(PlayerID, "sea", SEA);
-			const create = (ent: FakeEnt, state: string) =>
-				(s.hq.basesManager as { createBase(gs: unknown, e: unknown, st: string): unknown }).createBase(s.world.gameState, ent, state);
+			const create = (ent: CommonEntity, state: string) =>
+				s.hq.basesManager.createBase(s.world.gameState, ent, state);
 			if (kind === "anchorless")
 				create(islandDock, BaseManager.STATE_ANCHORLESS);
 			else
@@ -1094,7 +1024,7 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 
 describe("the fleet hearing the turn's events: checkEvents", () =>
 {
-	const events = (extra: Record<string, unknown[]>) => ({ ...emptyEvents(), ...extra });
+	const events = (extra: Record<string, unknown[]>) => (eventsWith({ ...extra }));
 
 	it("a new dock foundation, a ship just trained and a dock captured learn their sea", () =>
 	{
@@ -1140,7 +1070,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		ship(s.world, 200, [200, 160]);
 		const aboard = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		p.state = TransportPlan.SAILING;
 		aboard.state.pos = undefined;	// aboard the plan's other ship
@@ -1159,7 +1089,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		const carrier = ship(s.world, 200, [200, 160]);
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		s.naval.assignShipsToPlans(s.world.gameState);
 		p.update(s.world.gameState);
@@ -1182,7 +1112,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		const b = soldier(s.world, 101, [140, 170]);
 		init(s);
 		for (const u of [a, b])
-			s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, [280, 160]);
+			s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		p.state = TransportPlan.SAILING;
 		b.state.pos = [250, 160];	// already landed on the island
@@ -1207,14 +1137,14 @@ describe("the fleet through its turn: update", () =>
 		const done = ship(s.world, 201, [200, 260]);
 		init(s);
 		const a = soldier(s.world, 100, [140, 160]);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const finished = soldier(s.world, 101, [140, 260]);
-		s.naval.requireTransport(s.world.gameState, finished.ent, ISLAND, WEST, [100, 260]);
+		s.naval.requireTransport(s.world.gameState, finished.ent, ISLAND, WEST, worldPos(100, 260));
 		const old = s.naval.transportPlans[1];
 		done.ent.setMetadata(PlayerID, "transporter", old.ID);
 		s.world.removeEntity(101);	// its last unit died
 
-		ai(s.world).playedTurn = 3;
+		s.world.ai.playedTurn = 3;
 		s.naval.update(s.world.gameState, queues(s.world), emptyEvents());
 
 		assert.equal(s.naval.transportPlans.length, 1, "the empty passage is closed");
@@ -1229,12 +1159,12 @@ describe("the fleet saved and loaded", () =>
 	{
 		const s = seat();
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, [280, 160]);
+		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
 		s.naval.wantedTransportShips[SEA] = 2;
 		const saved = s.naval.Serialize();
 
 		const loaded = new NavalManager(s.hq.Config);
-		(s.hq as HqInstance).navalManager = loaded;
+		s.hq.navalManager = loaded;
 		loaded.init(s.world.gameState, true);
 		loaded.Deserialize(s.world.gameState, saved);
 

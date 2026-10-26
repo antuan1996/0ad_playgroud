@@ -1,122 +1,28 @@
 /**
- * Builders for the game state the AI queries.
+ * The smallest game state, for the code that only needs Petra's own config,
+ * its queue manager and a few templates (the queues, the plans, the saves).
  *
  * `GameState` in common-api is a thin layer over a `SharedScript` full of live
- * engine data, which is not something a unit test can hand it. What the AI
- * actually calls, though, is a small set of methods, so tests get a plain
- * object that answers exactly those and records what it was asked. Anything
- * else throws with the missing method's name, so a test cannot pass because a
- * call quietly returned undefined.
+ * engine data, which is not something a unit test can hand it. What these
+ * paths call, though, is a small set of methods, so tests get a plain object
+ * that answers exactly those; calling anything else fails. The managers that
+ * need a world of entities run in world.ts and hqWorld.ts instead.
  */
-
-/** A call recorded by a stub method. */
-export type Call = unknown[];
-
-export interface Recorder
-{
-	/** Calls recorded per method name, in order. */
-	readonly calls: Record<string, Call[]>;
-	/** Forget everything recorded so far. */
-	reset(): void;
-}
+import { fake, makeTemplate } from "./fakes.ts";
 
 /**
- * Wrap an object so every function on it also records its arguments.
- * Methods the test did not define raise instead of returning undefined.
- */
-export function record<T extends object>(methods: T): T & Recorder
-{
-	const calls: Record<string, Call[]> = {};
-
-	const proxy = new Proxy(methods, {
-		get(target, property, receiver)
-		{
-			if (property === "calls")
-				return calls;
-			if (property === "reset")
-				return () => {
-					for (const key of Object.keys(calls))
-						delete calls[key];
-				};
-			if (typeof property === "symbol")
-				return Reflect.get(target, property, receiver);
-			if (!(property in target))
-				throw new Error(`game state stub has no "${String(property)}" — define it in the test`);
-
-			const value = Reflect.get(target, property, receiver);
-			if (typeof value !== "function")
-				return value;
-
-			return (...args: unknown[]) => {
-				(calls[property] ??= []).push(args);
-				return value.apply(target, args);
-			};
-		}
-	});
-
-	return proxy as T & Recorder;
-}
-
-/**
- * A template as the AI sees it: `CommonTemplate` is a lazy wrapper over the
- * template JSON, and Petra only asks it a few questions. Tests name the answers
- * instead of loading real template files, so a test says what a thing costs
- * rather than inheriting a balance value it never meant to depend on.
+ * What a template costs, as a test names it instead of loading a real
+ * template file, so a test says what a thing costs rather than inheriting a
+ * balance value it never meant to depend on.
  */
 export interface FakeTemplateOptions
 {
 	/** What `cost()` returns, per resource code. */
 	cost?: Record<string, number>;
-	/** `Cost.Population` in the template JSON. */
+	/** `Cost/Population` in the template JSON. */
 	population?: number;
-	/** `Research.Time`; leave undefined for anything that is not a technology. */
+	/** `Research/Time`; leave undefined for anything that is not a technology. */
 	researchTime?: number;
-}
-
-export interface FakeTemplate
-{
-	cost(): Record<string, number>;
-	costSum(): number;
-	_template: { Cost: { Population: number } };
-	/** A value from the template JSON, by path, e.g. "Cost/Population". */
-	get(path: "Cost/Population"): number | undefined;
-	get(path: string): unknown;
-	researchTime?: number;
-}
-
-export function makeFakeTemplate(options: FakeTemplateOptions = {}): FakeTemplate
-{
-	const cost = options.cost ?? {};
-	const _template = { Cost: { Population: options.population ?? 0 } };
-	return {
-		cost: () => ({ ...cost }),
-		costSum: () => Object.values(cost).reduce((sum, amount) => sum + amount, 0),
-		_template,
-		// Plans read a few values straight off the template JSON, so the fake
-		// answers the same way the real one walks it. Only the paths the fake
-		// declares above answer - the costs themselves stay with `cost`.
-		get: (path: string) => templateValue(_template, path),
-		researchTime: options.researchTime
-	};
-}
-
-/** Read a template value by path, the way the real template walks its JSON. */
-function templateValue(_template: Record<string, unknown>, path: string): any
-{
-	let value: any = _template;
-	for (const part of path.split("/"))
-	{
-		value = value?.[part];
-		if (value == undefined)
-			break;
-	}
-	return value;
-}
-
-/** A built template, as opposed to the options to build one from. */
-function isFakeTemplate(value: FakeTemplate | FakeTemplateOptions): value is FakeTemplate
-{
-	return typeof (value as FakeTemplate).cost === "function";
 }
 
 /**
@@ -129,7 +35,7 @@ function isFakeTemplate(value: FakeTemplate | FakeTemplateOptions): value is Fak
  * that cares which entities a call selects passes exactly those in, or filters
  * on the state it was given.
  */
-function fakeEntityList(items: readonly unknown[] = [])
+function fakeEntityList(items: readonly unknown[] = []): object
 {
 	return {
 		hasEntities: () => items.length > 0,
@@ -152,7 +58,7 @@ export interface FakeGameStateOptions
 	 * enables `getTemplate`/`applyCiv`: without it those still throw, so a test
 	 * that never meant to build a plan cannot start depending on one.
 	 */
-	templates?: Record<string, FakeTemplate | FakeTemplateOptions>;
+	templates?: Record<string, FakeTemplateOptions>;
 	/**
 	 * A map, so code that builds an `InfoMap` has dimensions to copy. Nothing
 	 * here is a real terrain: the default is a handful of cells, which is right
@@ -180,7 +86,7 @@ export interface FakeGameState
 {
 	gameState: CommonGameState;
 	/** changePriority calls, as [queue, priority] pairs. */
-	readonly priorityChanges: Call[];
+	readonly priorityChanges: Array<[string, number]>;
 }
 
 /**
@@ -190,8 +96,7 @@ export interface FakeGameState
  */
 export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameState
 {
-	const priorities = options.priorities ?? {};
-	const priorityChanges: Call[] = [];
+	const priorityChanges: Array<[string, number]> = [];
 
 	const ai: Record<string, unknown> = {
 		queueManager: {
@@ -199,7 +104,7 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 				priorityChanges.push([queue, priority]);
 			}
 		},
-		Config: { priorities },
+		Config: { priorities: options.priorities ?? {} },
 		// Petra's own id counters, not engine state: a base or a plan takes its
 		// number from here, so anything constructing one needs them.
 		uniqueIDs: { plans: 1, bases: 1 }
@@ -216,7 +121,12 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 			const found = templates[template];
 			if (found === undefined)
 				throw new Error(`no fake template "${template}" — add it to the test's templates`);
-			return isFakeTemplate(found) ? found : makeFakeTemplate(found);
+			// plans read the population cost straight off the template JSON
+			const population = found.population ?? 0;
+			return makeTemplate(template, {
+				"cost": found.cost, "popCost": population, "getPaths": { "Cost": { "Population": population } },
+				"researchTime": found.researchTime
+			});
 		};
 		// Plans look for trainers/researchers in their constructor. Answering
 		// "none" keeps them on the cheap path; a test that wants trainers
@@ -248,7 +158,5 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		ai["accessibility"] = { regionSize: [], regionType: [], numRegions: 0 };
 	}
 
-	const gameState = state;
-
-	return { gameState: gameState as unknown as CommonGameState, priorityChanges };
+	return { "gameState": fake<CommonGameState>(state), priorityChanges };
 }

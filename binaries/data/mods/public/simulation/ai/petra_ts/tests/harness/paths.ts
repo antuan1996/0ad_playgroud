@@ -1,103 +1,55 @@
 /**
- * Locations the test harness needs, and which implementation under test is
- * selected.
+ * Where the code under test lives, and which build of it is selected.
  *
- * Two implementations of the same AI sit side by side in the mod, and the
- * suite runs against either one, chosen with the PETRA_TARGET environment
- * variable (see the npm scripts):
+ * The tests import the port's sources (`../decision/headquarters.ts`). The
+ * PETRA_TARGET environment variable picks what those imports load (see the
+ * npm scripts and hooks.ts):
  *
- *   src  simulation/ai/petra_ts/*.ts  the port, run by Node directly
- *   ref  simulation/ai/petra/*.js     the original hand-written AI the port
- *                                     was derived from, and what the game
- *                                     loads today
- *   out  simulation/ai/petra_out/*.js the port as the game loads it, the
- *                                     "Petra TS" bot (npm run build:petra:out):
- *                                     not another implementation, a check
- *                                     that the build output still works
- *
- * `ref` is the game's own copy. The harness only ever imports it, so running
- * the suite cannot change it — but nothing here should either.
+ *   src  simulation/ai/petra_ts/**\/*.ts  the port, run by Node directly
+ *   out  simulation/ai/petra_out/**\/*.js the port as the game loads it, the
+ *                                        "Petra TS" bot (npm run build:petra:out):
+ *                                        a check that the build output works
  */
-import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * What the tests run against: the port's sources (src) or the bot built from
- * them (out). The original petra/*.js is no longer a target (stage 3, PLAN.md:
- * the port's folders and modules no longer match it).
- */
 export type PetraTarget = "src" | "out";
 
-const VALID: PetraTarget[] = ["src", "out"];
+const TARGETS: readonly string[] = ["src", "out"] satisfies PetraTarget[];
 
-function findRepoRoot(): string
+function isTarget(name: string): name is PetraTarget
 {
-	let dir = path.dirname(fileURLToPath(import.meta.url));
-	for (;;)
-	{
-		if (existsSync(path.join(dir, "package.json")))
-			return dir;
-		const parent = path.dirname(dir);
-		if (parent === dir)
-			throw new Error("could not locate the repository root above " + path.dirname(fileURLToPath(import.meta.url)));
-		dir = parent;
-	}
+	return TARGETS.includes(name);
 }
 
-export const repoRoot = findRepoRoot();
+/** The port's sources: simulation/ai/petra_ts. */
+export const portRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+const aiRoot = path.dirname(portRoot);
+
+/** The bot built from the port: simulation/ai/petra_out. */
+export const outRoot = path.join(aiRoot, "petra_out");
 
 /** VFS root of the public mod: an engine path "simulation/x.js" is this plus that. */
-export const modsPublic = path.join(repoRoot, "binaries/data/mods/public");
+export const modsPublic = path.resolve(aiRoot, "../..");
 
 /**
  * VFS root of the base "mod" mod, which the engine stacks under every other
  * mod. Its `globalscripts/` (l10n, sprintf) are therefore globals too, even
  * though they are not in the public mod.
  */
-export const modsBase = path.join(repoRoot, "binaries/data/mods/mod");
-
-export const aiRoot = path.join(modsPublic, "simulation/ai");
-
-export const commonApiRoot = path.join(aiRoot, "common-api");
-
-export function vfsToDisk(vfsPath: string): string
-{
-	return path.join(modsPublic, vfsPath);
-}
+export const modsBase = path.join(path.dirname(modsPublic), "mod");
 
 export function petraTarget(): PetraTarget
 {
 	const raw = process.env["PETRA_TARGET"] ?? "src";
-	if (!VALID.includes(raw as PetraTarget))
-		throw new Error(`PETRA_TARGET must be one of ${VALID.join(", ")} (got "${raw}")`);
-	return raw as PetraTarget;
+	if (!isTarget(raw))
+		throw new Error(`PETRA_TARGET must be one of ${TARGETS.join(", ")} (got "${raw}")`);
+	return raw;
 }
 
 /** Directory holding the modules under test, and the extension they use. */
 export function petraModuleDir(target = petraTarget()): { dir: string; ext: string }
 {
-	switch (target)
-	{
-	case "src":
-		return { dir: path.join(aiRoot, "petra_ts"), ext: ".ts" };
-	case "out":
-		return { dir: path.join(aiRoot, "petra_out"), ext: ".js" };
-	}
-}
-
-/**
- * The file of module `name` (like "queue", "headquarters") in the target, in
- * whichever layer folder it lives (adapter/, world/, decision/, execution/),
- * so a test names a module and not its place.
- */
-export function petraModuleFile(name: string, target = petraTarget()): string
-{
-	const { dir, ext } = petraModuleDir(target);
-	const matches = (readdirSync(dir, { "recursive": true }) as string[])
-		.map((file) => file.split(path.sep).join("/"))
-		.filter((file) => !file.startsWith("tests/") && path.posix.basename(file) === name + ext);
-	if (matches.length !== 1)
-		throw new Error(`module "${name}": ${matches.length ? `${matches.length} files (${matches.join(", ")})` : "no file"} in ${dir}`);
-	return path.join(dir, matches[0]);
+	return target === "src" ? { "dir": portRoot, "ext": ".ts" } : { "dir": outRoot, "ext": ".js" };
 }

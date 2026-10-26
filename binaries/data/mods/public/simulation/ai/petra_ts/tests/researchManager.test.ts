@@ -11,58 +11,33 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { makeHqEntity, makeHqWorld, seatHQ, PLAYER, type HqWorld, type HqWorldOptions } from "./harness/hqWorld.ts";
+import { fake } from "./harness/fakes.ts";
+import {
+	doorManagers, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, PLAYER, seatHQ
+} from "./harness/hqWorld.ts";
 import { modsPublic } from "./harness/paths.ts";
 
-interface Choice { name: string; increasePriority: boolean }
-
-interface Manager
-{
-	checkPhase(gs: unknown, queues: unknown): void;
-	researchPopulationBonus(gs: unknown, queues: unknown): void;
-	researchTradeBonus(gs: unknown, queues: unknown): void;
-	researchWantedTechs(gs: unknown, techs: Tech[]): Choice | null;
-	researchPreferredTechs(gs: unknown, techs: Tech[]): Choice | null;
-	update(gs: unknown, queues: unknown): void;
-	CostSum(cost: Record<string, number>): number;
-	Serialize(): unknown;
-	Deserialize(data: unknown): void;
-}
-
-interface QueueLike
-{
-	plans: Array<{ type: string; rush?: boolean; queueToReset?: string }>;
-	addPlan(plan: unknown): void;
-}
-
-/** a tech as GameState.findAvailableTech lists it: its name and its template */
-type Tech = [string, { _template: Record<string, unknown>; researchTime: number; cost(): Record<string, number> }];
-
-const { ResearchManager } = await loadPetraModule<{ ResearchManager: new (config: unknown) => Manager }>("researchManager");
-
-/** the town's doors kept outside the walls, as the other campaigns do */
-const doorManagers = [
-	"navalManager", "tradeManager", "researchManager", "diplomacyManager", "victoryManager", "defenseManager"
-];
+import { ResearchManager } from "../decision/researchManager.ts";
+import type { Queue } from "../execution/queue.ts";
+import { ResearchPlan } from "../execution/queueplanResearch.ts";
 
 /** a game tech, read from its file as the engine's TechnologyTemplates does */
-function tech(world: HqWorld, name: string): Tech
+function tech(world: HqWorld, name: string): [string, CommonTemplate]
 {
-	const json = JSON.parse(readFileSync(path.join(modsPublic, "simulation/data/technologies", name + ".json"), "utf8")) as Record<string, unknown>;
-	const template = {
+	const json = JSON.parse(readFileSync(path.join(modsPublic, "simulation/data/technologies", name + ".json"), "utf8"));
+	const template = fake<CommonTemplate>({
 		"_template": json,
-		"researchTime": (json.researchTime as number | undefined) ?? 40,
-		"cost": () => ({ ...(json.cost as Record<string, number> | undefined ?? {}) })
-	};
-	world.templates[name] = template as unknown as HqWorld["templates"][string];
+		"researchTime": json.researchTime ?? 40,
+		"cost": () => ({ ...(json.cost ?? {}) })
+	});
+	world.templates[name] = template;
 	return [name, template];
 }
 
 /** a town on the plain; `techs` are what its buildings could research now */
 function seat(options: Partial<HqWorldOptions> = {}, techs: string[] = [])
 {
-	const world = makeHqWorld(options as HqWorldOptions);
+	const world = makeHqWorld(options);
 	const hq = seatHQ(world, { "stubs": doorManagers });
 	const listed = techs.map((name) => tech(world, name));
 	const gs = world.gameState as unknown as Record<string, unknown>;
@@ -72,7 +47,7 @@ function seat(options: Partial<HqWorldOptions> = {}, techs: string[] = [])
 	gs.hasResearchers = () => true;
 	gs.hasAllies = () => false;
 	const manager = new ResearchManager(hq.Config);
-	return { world, hq, manager, "queues": world.ai.queues as unknown as Record<string, QueueLike> };
+	return { world, hq, manager, "queues": world.ai.queues };
 }
 
 /** our workers, as GameState.getOwnEntitiesByRole counts them */
@@ -84,20 +59,22 @@ function workers(world: HqWorld, count: number): void
 			{}, { "role": "worker" }));
 }
 
-const queued = (queue: QueueLike): string[] => queue.plans.map((p) => p.type);
+const queued = (queue: Queue): string[] => queue.plans.map((p) => p.type);
 
 describe("the next phase: checkPhase", () =>
 {
 	it("a town with the people for it researches the next phase, in a hurry", () =>
 	{
 		const { world, hq, manager, queues } = seat({ "population": 150, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
-		const queueManager = world.ai.queueManager as unknown as { priorities: Record<string, number>; changePriority(q: string, p: number): void };
+		const queueManager = world.ai.queueManager;
 		queueManager.changePriority("majorTech", 1);
 
 		manager.checkPhase(world.gameState, queues);
 
 		assert.deepEqual(queued(queues.majorTech), ["phase_town_generic"]);
-		assert.equal(queues.majorTech.plans[0].rush, true);
+		const phase = queues.majorTech.plans[0];
+		assert.ok(phase instanceof ResearchPlan);
+		assert.equal(phase.rush, true);
 		assert.equal(hq.phasing, 2);
 		assert.equal(queueManager.priorities.majorTech, hq.Config.priorities.majorTech, "the queue priority is reset");
 	});
@@ -109,7 +86,7 @@ describe("the next phase: checkPhase", () =>
 		assert.deepEqual(queued(small.queues.majorTech), []);
 
 		const noResearcher = seat({ "population": 150, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
-		(noResearcher.world.gameState as unknown as { hasResearchers: () => boolean }).hasResearchers = () => false;
+		noResearcher.world.gameState.hasResearchers = () => false;
 		noResearcher.manager.checkPhase(noResearcher.world.gameState, noResearcher.queues);
 		assert.deepEqual(queued(noResearcher.queues.majorTech), []);
 	});
@@ -119,7 +96,7 @@ describe("the next phase: checkPhase", () =>
 		for (const queue of ["majorTech", "civilCentre", "wonder"])
 		{
 			const s = seat({ "population": 150, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
-			(s.queues[queue] as unknown as { hasQueuedUnits: () => boolean }).hasQueuedUnits = () => true;
+			s.queues[queue].hasQueuedUnits = () => true;
 			s.manager.checkPhase(s.world.gameState, s.queues);
 			assert.equal(s.hq.phasing, 0, `with ${queue} busy`);
 		}
@@ -171,7 +148,7 @@ describe("the techs asked for by the other managers", () =>
 	it("a busy minor queue takes neither", () =>
 	{
 		const { world, manager, queues } = seat({}, ["pop_house_01", "trade_gain_01"]);
-		(queues.minorTech as unknown as { hasQueuedUnits: () => boolean }).hasQueuedUnits = () => true;
+		queues.minorTech.hasQueuedUnits = () => true;
 		manager.researchPopulationBonus(world.gameState, queues);
 		manager.researchTradeBonus(world.gameState, queues);
 		assert.deepEqual(queued(queues.minorTech), []);
@@ -184,7 +161,7 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 	{
 		const s = seat(options, names);
 		s.hq.navalMap = naval;
-		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		const techs = s.world.gameState.findAvailableTech();
 		return s.manager.researchWantedTechs(s.world.gameState, techs);
 	};
 
@@ -220,7 +197,7 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 	it("a gathering tech with no cost at all counts as cheap, as in the original", () =>
 	{
 		const s = seat({ "phase": 2 }, ["gather_lumbering_ironaxes"]);
-		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		const techs = s.world.gameState.findAvailableTech();
 		// the same tech, as a civ bonus that costs nothing would be written
 		delete techs[0][1]._template.cost;
 		assert.deepEqual(s.manager.researchWantedTechs(s.world.gameState, techs),
@@ -237,7 +214,7 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 		// 300 wood short with no worker: 10 x 0 workers < 300
 		assert.equal(wanted(["gather_lumbering_ironaxes"], { "phase": 1 }), null);
 		const s = seat({ "phase": 1, "stock": { "wood": 200, "metal": 100 } }, ["gather_lumbering_ironaxes"]);
-		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		const techs = s.world.gameState.findAvailableTech();
 		assert.equal(s.manager.researchWantedTechs(s.world.gameState, techs)?.name, "gather_lumbering_ironaxes", "affordable now");
 	});
 });
@@ -247,7 +224,7 @@ describe("the techs preferred from the second phase: researchPreferredTechs", ()
 	const preferred = (names: string[], options: Partial<HqWorldOptions> = { "phase": 3 }) =>
 	{
 		const s = seat(options, names);
-		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		const techs = s.world.gameState.findAvailableTech();
 		return s.manager.researchPreferredTechs(s.world.gameState, techs);
 	};
 
@@ -267,7 +244,7 @@ describe("the techs preferred from the second phase: researchPreferredTechs", ()
 		assert.equal(preferred(["gather_mining_servants"], { "phase": 2 }), null);
 		const s = seat({ "phase": 2 }, ["gather_mining_servants"]);
 		workers(s.world, 30);
-		const techs = (s.world.gameState as unknown as { findAvailableTech(): Tech[] }).findAvailableTech();
+		const techs = s.world.gameState.findAvailableTech();
 		assert.equal(s.manager.researchPreferredTechs(s.world.gameState, techs)?.name, "gather_mining_servants",
 			"thirty workers make up 300 resources soon enough");
 	});
@@ -283,7 +260,7 @@ describe("the research of a turn: update", () =>
 
 		assert.deepEqual(queued(queues.minorTech), ["unlock_champion_infantry"]);
 		assert.equal(queues.minorTech.plans[0].queueToReset, "minorTech");
-		assert.equal((world.ai.queueManager as unknown as { priorities: Record<string, number> }).priorities.minorTech,
+		assert.equal(world.ai.queueManager.priorities.minorTech,
 			2 * hq.Config.priorities.minorTech);
 	});
 
@@ -293,7 +270,7 @@ describe("the research of a turn: update", () =>
 		manager.update(world.gameState, queues);
 		assert.deepEqual(queued(queues.minorTech), ["gather_farming_chain_pump"]);
 		assert.equal(queues.minorTech.plans[0].queueToReset, undefined);
-		assert.equal((world.ai.queueManager as unknown as { priorities: Record<string, number> }).priorities.minorTech,
+		assert.equal(world.ai.queueManager.priorities.minorTech,
 			hq.Config.priorities.minorTech);
 	});
 
@@ -335,7 +312,7 @@ describe("the research of a turn: update", () =>
 		assert.deepEqual(queued(alone.queues.minorTech), []);
 
 		const allied = seat({ "phase": 3 }, ["unlock_shared_los"]);
-		(allied.world.gameState as unknown as { hasAllies: () => boolean }).hasAllies = () => true;
+		allied.world.gameState.hasAllies = () => true;
 		allied.manager.update(allied.world.gameState, allied.queues);
 		assert.deepEqual(queued(allied.queues.minorTech), ["unlock_shared_los"]);
 	});
@@ -345,7 +322,7 @@ describe("the research of a turn: update", () =>
 		for (const queue of ["minorTech", "majorTech"])
 		{
 			const s = seat({ "phase": 3 }, ["unlock_champion_infantry"]);
-			(s.queues[queue] as unknown as { hasQueuedUnits: () => boolean }).hasQueuedUnits = () => true;
+			s.queues[queue].hasQueuedUnits = () => true;
 			s.manager.update(s.world.gameState, s.queues);
 			assert.deepEqual(queued(s.queues.minorTech), [], queue);
 		}

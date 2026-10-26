@@ -8,46 +8,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
+import { fake, type Methods, override } from "./harness/fakes.ts";
 import {
-	makeHqEntity, makeHqWorld, seatHQ, structureTemplate, TERRITORY_CELL, MAP_CELLS, PASS_RATIO, PLAYER, ENEMY,
-	passLand, passShore, passWater,
-	type HqInstance, type HqWorld, type HqWorldOptions
+	doorCalls, doorManagers, ENEMY, type HqWorld, type HqWorldOptions, layNavalPassMap, makeHqEntity,
+	makeHqWorld, MAP_CELLS, PASS_RATIO, passLand, passShore, passWater, PLAYER, seatHQ,
+	structureTemplate, TERRITORY_CELL, territoryCellAt
 } from "./harness/hqWorld.ts";
-import type { Methods } from "./harness/attackWorld.ts";
 
-interface Position { x: number; z: number; angle: number; base: number; access?: number }
-
-interface Plan
-{
-	type: string;
-	metadata: Record<string, unknown> | undefined;
-	queueToReset: string | undefined;
-	goRequirement: unknown;
-	template: { templateName(): string };
-	canStart(gs: unknown): boolean;
-	start(gs: unknown): void;
-	isGo(gs: unknown): boolean;
-	findGoodPosition(gs: unknown): Position | false;
-	getDockAngle(gs: unknown, x: number, z: number, size: number): number | false;
-}
-
-const { ConstructionPlan } = await loadPetraModule<{
-	ConstructionPlan: new (gs: unknown, type: string, metadata?: Record<string, unknown>, position?: [number, number]) => Plan;
-}>("queueplanBuilding");
-const { BaseManager } = await loadPetraModule<{ BaseManager: { STATE_WITH_ANCHOR: string } }>("baseManager");
-const mapMask = await loadPetraModule<{ border: number; fullBorder: number }>("mapMask");
-
-// the co-managers kept outside the walls, as the other campaigns do
-const doorManagers = [
-	"navalManager", "tradeManager", "researchManager", "diplomacyManager",
-	"victoryManager", "defenseManager"
-];
+import { seaRegion, worldPos } from "../adapter/brands.ts";
+import { BaseManager } from "../decision/baseManager.ts";
+import type { Headquarters } from "../decision/headquarters.ts";
+import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { type BuildingPosition, ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import * as mapMask from "../world/mapMask.ts";
 
 /** a town seated on the plain, its territory read once */
 function seat(worldOptions: Partial<HqWorldOptions> = {})
 {
-	const world = makeHqWorld(worldOptions as HqWorldOptions);
+	const world = makeHqWorld(worldOptions);
 	const hq = seatHQ(world, { "stubs": doorManagers });
 	hq.updateTerritories(world.gameState);
 	// as GameState.findBuilder (common-api gamestate.js 846): the first unit of
@@ -65,13 +43,13 @@ function card(world: HqWorld, name: string, detail: Parameters<typeof structureT
 	const full = "structures/athen/" + name;
 	// a common-api Template also answers its own name (and keeps it raw, as
 	// _templateName, which the original reads) and its generic name
-	world.templates[full] = { ...structureTemplate(full, { "classes": ["Structure"], ...detail }),
-		"templateName": () => full, "_templateName": full, "genericName": () => name } as unknown as HqWorld["templates"][string];
+	world.templates[full] = fake<CommonTemplate>({ ...structureTemplate(full, { "classes": ["Structure"], ...detail }),
+		"templateName": () => full, "_templateName": full, "genericName": () => name });
 	return full;
 }
 
 /** a builder of ours who knows the named cards and records what it lays */
-function builder(world: HqWorld, hq: HqInstance, buildable: string[], laid: unknown[][] = [])
+function builder(world: HqWorld, hq: Headquarters, buildable: string[], laid: unknown[][] = [])
 {
 	const ent = world.addEntity(makeHqEntity({
 		"id": 9001, "owner": PLAYER, "position": [30, 30], "classes": ["Unit", "Support", "Worker"]
@@ -91,13 +69,10 @@ function structure(world: HqWorld, id: number, position: [number, number], class
 		methods));
 }
 
-const distance = (pos: Position | false, to: [number, number]): number =>
+const distance = (pos: BuildingPosition | false, to: [number, number]): number =>
 	pos ? Math.hypot(pos.x - to[0], pos.z - to[1]) : NaN;
 
 /** the territory cell under a map position */
-const cellOf = (pos: [number, number]): number =>
-	Math.floor(pos[0] / TERRITORY_CELL) + Math.floor(pos[1] / TERRITORY_CELL) * MAP_CELLS;
-
 describe("a building plan asked whether it may start: canStart", () =>
 {
 	it("waits while another building already started this turn", () =>
@@ -232,7 +207,7 @@ describe("a building plan laying its foundation: start", () =>
 		assert.equal(type, barracks);
 		assert.ok(x > 0 && z > 0);
 		assert.equal(angle, 3 * Math.PI / 4);
-		assert.deepEqual(metadata, { "base": hq.baseAtIndex(cellOf([x, z])), "access": 2 },
+		assert.deepEqual(metadata, { "base": hq.baseAtIndex(territoryCellAt([x, z])), "access": 2 },
 			"the foundation answers to the town it stands in, on its land");
 		assert.equal(hq.turnCache.buildingBuilt, true, "no other building starts this turn");
 	});
@@ -278,9 +253,7 @@ describe("a building plan laying its foundation: start", () =>
 		const { world, hq } = seat();
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
-		const queueManager = world.ai.queueManager as unknown as {
-			priorities: Record<string, number>; changePriority(q: string, p: number): void;
-		};
+		const queueManager = world.ai.queueManager;
 		const usual = queueManager.priorities.villager;
 		queueManager.changePriority("villager", 0);
 		const plan = new ConstructionPlan(world.gameState, barracks);
@@ -298,13 +271,13 @@ describe("a building plan laying its foundation: start", () =>
 		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
 		const { laid } = builder(world, hq, [market]);
 		structure(world, 9201, [200, 200], ["Trade", "Market"]);
-		(hq.tradeManager as Record<string, unknown>).isNewMarketWorth = () => false;
+		hq.tradeManager.isNewMarketWorth = () => false;
 		const plan = new ConstructionPlan(world.gameState, market, { "expectedGain": 12 });
 
 		plan.start(world.gameState);
 
 		assert.deepEqual(laid, []);
-		assert.ok((hq.tradeManagerCalls as Array<[string]>).some(([m]) => m === "checkRoutes"), "the routes are reckoned anew");
+		assert.ok(doorCalls(hq.tradeManager).some(([m]) => m === "checkRoutes"), "the routes are reckoned anew");
 	});
 
 	it("builds a first market without second-guessing its gain", () =>
@@ -312,7 +285,7 @@ describe("a building plan laying its foundation: start", () =>
 		const { world, hq } = seat();
 		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
 		const { laid } = builder(world, hq, [market]);
-		(hq.tradeManager as Record<string, unknown>).isNewMarketWorth = () => false;
+		hq.tradeManager.isNewMarketWorth = () => false;
 
 		new ConstructionPlan(world.gameState, market, { "expectedGain": 12 }).start(world.gameState);
 
@@ -325,9 +298,9 @@ describe("a building plan laying its foundation: start", () =>
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
 
-		new ConstructionPlan(world.gameState, barracks, { "proximity": [300, 300] }).start(world.gameState);
+		new ConstructionPlan(world.gameState, barracks, { "proximity": worldPos(300, 300) }).start(world.gameState);
 
-		assert.ok((hq.navalManagerCalls as Array<[string]>).some(([m]) => m === "createTransportIfNeeded"));
+		assert.ok(doorCalls(hq.navalManager).some(([m]) => m === "createTransportIfNeeded"));
 	});
 });
 
@@ -338,11 +311,11 @@ describe("where the special buildings go: findGoodPosition", () =>
 		const { world, hq } = seat();
 		const store = card(world, "storehouse", { "classes": ["Structure", "Storehouse"], "dropsiteTypes": ["wood", "stone", "metal"] });
 		builder(world, hq, [store]);
-		const wood = (world.gameState.sharedScript as unknown as { resourceMaps: Record<string, { map: Float32Array }> })
+		const wood = world.gameState.sharedScript
 			.resourceMaps.wood.map;
 		for (const dx of [-8, 0, 8])
 			for (const dz of [-8, 0, 8])
-				wood[cellOf([200 + dx, 200 + dz])] = 100;
+				wood[territoryCellAt([200 + dx, 200 + dz])] = 100;
 
 		const pos = new ConstructionPlan(world.gameState, store, { "base": 2, "type": "wood" }).findGoodPosition(world.gameState);
 
@@ -354,7 +327,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const cc = card(world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
-		hq.findStrategicCCLocation = () => [120, 240];
+		hq.findStrategicCCLocation = () => worldPos(120, 240);
 
 		assert.deepEqual(new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState),
 			{ "x": 120, "z": 240, "angle": 3 * Math.PI / 4, "base": 0 });
@@ -368,10 +341,10 @@ describe("where the special buildings go: findGoodPosition", () =>
 		hq.findEconomicCCLocation = (_g: unknown, _t: unknown, resource: unknown, proximity: unknown) =>
 		{
 			asked.push([resource, proximity]);
-			return [250, 60];
+			return worldPos(250, 60);
 		};
 
-		const pos = new ConstructionPlan(world.gameState, cc, { "resource": "stone", "proximity": [240, 70] })
+		const pos = new ConstructionPlan(world.gameState, cc, { "resource": "stone", "proximity": worldPos(240, 70) })
 			.findGoodPosition(world.gameState);
 
 		assert.deepEqual(asked, [["stone", [240, 70]]]);
@@ -435,7 +408,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
-		hq.findMarketLocation = () => undefined;
+		hq.findMarketLocation = () => false;
 		assert.equal(new ConstructionPlan(world.gameState, market).findGoodPosition(world.gameState), false);
 
 		hq.findMarketLocation = () => [280, 40, 0, 17];
@@ -457,7 +430,7 @@ function colonyBoard()
 		"id": 9501, "owner": PLAYER, "position": [260, 260],
 		"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 	}));
-	const colony = s.hq.basesManager.createBase(s.world.gameState, cc, BaseManager.STATE_WITH_ANCHOR) as { ID: number };
+	const colony = s.hq.basesManager.createBase(s.world.gameState, cc, BaseManager.STATE_WITH_ANCHOR);
 	for (let ix = 28; ix < MAP_CELLS; ++ix)
 		for (let iz = 28; iz < MAP_CELLS; ++iz)
 			s.world.map.setTerritoryOwner(ix, iz, PLAYER);
@@ -472,7 +445,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		const { world } = seat();
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
 
-		const pos = new ConstructionPlan(world.gameState, barracks, undefined, [200, 120]).findGoodPosition(world.gameState);
+		const pos = new ConstructionPlan(world.gameState, barracks, undefined, worldPos(200, 120)).findGoodPosition(world.gameState);
 
 		assert.ok(distance(pos, [200, 120]) < 2 * TERRITORY_CELL, JSON.stringify(pos));
 	});
@@ -504,7 +477,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a farmstead stays out of the woods", () =>
 	{
 		const { world } = seat();
-		const wood = (world.gameState.sharedScript as unknown as { resourceMaps: Record<string, { map: Float32Array }> })
+		const wood = world.gameState.sharedScript
 			.resourceMaps.wood.map;
 		// woods cover the whole west half, where it would otherwise stand
 		for (let j = 0; j < wood.length; ++j)
@@ -525,7 +498,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		const pos = new ConstructionPlan(world.gameState, barracks, { "base": colony.ID }).findGoodPosition(world.gameState);
 
 		assert.ok(pos, "the colony has room");
-		assert.equal(hq.baseAtIndex(cellOf([pos.x, pos.z])), colony.ID);
+		assert.equal(hq.baseAtIndex(territoryCellAt([pos.x, pos.z])), colony.ID);
 	});
 
 	it("a building with a favoured town goes there when it can", () =>
@@ -535,7 +508,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 
 		const pos = new ConstructionPlan(world.gameState, barracks, { "favoredBase": colony.ID }).findGoodPosition(world.gameState);
 
-		assert.ok(pos && hq.baseAtIndex(cellOf([pos.x, pos.z])) === colony.ID, JSON.stringify(pos));
+		assert.ok(pos && hq.baseAtIndex(territoryCellAt([pos.x, pos.z])) === colony.ID, JSON.stringify(pos));
 	});
 
 	it("a military building goes to the town the office picks for its army", () =>
@@ -546,7 +519,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 
 		const pos = new ConstructionPlan(world.gameState, barracks, { "militaryBase": true }).findGoodPosition(world.gameState);
 
-		assert.ok(pos && hq.baseAtIndex(cellOf([pos.x, pos.z])) === colony.ID, JSON.stringify(pos));
+		assert.ok(pos && hq.baseAtIndex(territoryCellAt([pos.x, pos.z])) === colony.ID, JSON.stringify(pos));
 	});
 
 	it("a market is pushed to the town's border, to stretch the trade route", () =>
@@ -558,7 +531,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 
 		const pos = new ConstructionPlan(world.gameState, market, { "base": 2 }).findGoodPosition(world.gameState);
 
-		assert.ok(pos && hq.borderMap.map[cellOf([pos.x, pos.z])] & mapMask.border, JSON.stringify(pos));
+		assert.ok(pos && hq.borderMap.map[territoryCellAt([pos.x, pos.z])] & mapMask.border, JSON.stringify(pos));
 	});
 
 	it("past the first phase, a building with no arrows keeps off the town's border", () =>
@@ -568,14 +541,14 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 
 		const pos = new ConstructionPlan(world.gameState, barracks).findGoodPosition(world.gameState);
 
-		assert.ok(pos && !(hq.borderMap.map[cellOf([pos.x, pos.z])] & mapMask.fullBorder), JSON.stringify(pos));
+		assert.ok(pos && !(hq.borderMap.map[territoryCellAt([pos.x, pos.z])] & mapMask.fullBorder), JSON.stringify(pos));
 	});
 
 	it("a building is kept away from an invading army", () =>
 	{
 		const { world, hq } = seat();
 		const foe: [number, number] = [60, 20];
-		(hq.defenseManager as { armies: unknown[] }).armies.push({ "foePosition": foe });
+		hq.defenseManager.armies.push(fake<DefenseArmy>({ "foePosition": foe }));
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks).findGoodPosition(world.gameState);
@@ -587,7 +560,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const foe: [number, number] = [60, 20];
-		(hq.defenseManager as { armies: unknown[] }).armies.push({ "foePosition": foe });
+		hq.defenseManager.armies.push(fake<DefenseArmy>({ "foePosition": foe }));
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks, { "base": 2 }).findGoodPosition(world.gameState);
@@ -662,9 +635,8 @@ function coast(options: { island?: boolean; phase?: number; territoryOwner?: (ix
 		const px = k % width;
 		naval[k] = landOf(px) < 2 ? 5 : 0;
 	}
-	Object.assign(s.world.ai.accessibility as Record<string, unknown>, {
-		"navalPassMap": naval, "height": width, "regionSize": { 2: 20000, 3: 6000, 5: 20000 }
-	});
+	layNavalPassMap(s.world, naval);
+	Object.assign(s.world.ai.accessibility, { "height": width, "regionSize": { 2: 20000, 3: 6000, 5: 20000 } });
 	s.hq.landRegions = options.island ? { 2: true, 3: true } : { 2: true };
 	s.hq.navalMap = true;
 	const dock = card(s.world, "dock", {
@@ -732,7 +704,7 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a dock goes by the trees along the coast", () =>
 	{
 		const { world, dock } = coast();
-		const wood = (world.gameState.sharedScript as unknown as { resourceMaps: Record<string, { map: Float32Array }> })
+		const wood = world.gameState.sharedScript
 			.resourceMaps.wood.map;
 		for (let ix = 16; ix < 20; ++ix)
 			for (let iz = 30; iz < 34; ++iz)
@@ -750,12 +722,11 @@ describe("where a dock goes: findDockPosition", () =>
 			const s = coast({ phase });
 			// the sea is only 24 m wide: land again from x = 184
 			const width = MAP_CELLS * PASS_RATIO;
-			const access = s.world.ai.accessibility as unknown as { landPassMap: Uint8Array; navalPassMap: Uint8Array };
-			for (let k = 0; k < access.landPassMap.length; ++k)
+			for (let k = 0; k < s.world.map.landPassMap.length; ++k)
 				if (k % width >= 92)
 				{
-					access.landPassMap[k] = 3;
-					access.navalPassMap[k] = 0;
+					s.world.map.landPassMap[k] = 3;
+					s.world.map.navalPassMap[k] = 0;
 				}
 			return s;
 		};
@@ -776,11 +747,10 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a first dock with no ships yet goes as near the landing point as it can", () =>
 	{
 		const { world, dock } = coast();
-		(world.ai.accessibility as unknown as { getAccessValue: (p: [number, number]) => number }).getAccessValue =
-			(p: [number, number]) => p[0] < 160 ? 2 : 0;
+		override(world.ai.accessibility, { "getAccessValue": (p: [number, number]) => p[0] < 160 ? 2 : 0 });
 
-		const north = new ConstructionPlan(world.gameState, dock, { "sea": 5, "proximity": [100, 280] }).findGoodPosition(world.gameState);
-		const south = new ConstructionPlan(world.gameState, dock, { "sea": 5, "proximity": [100, 40] }).findGoodPosition(world.gameState);
+		const north = new ConstructionPlan(world.gameState, dock, { "sea": seaRegion(5), "proximity": worldPos(100, 280) }).findGoodPosition(world.gameState);
+		const south = new ConstructionPlan(world.gameState, dock, { "sea": seaRegion(5), "proximity": worldPos(100, 40) }).findGoodPosition(world.gameState);
 
 		// (the map's edge costs a little, so neither reaches the corner itself)
 		assert.ok(north && south && north.z - south.z > 120, `${JSON.stringify(north)} vs ${JSON.stringify(south)}`);
@@ -789,11 +759,10 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a first dock is not put on a land too small to settle", () =>
 	{
 		const { world, dock } = coast();
-		(world.ai.accessibility as unknown as { getAccessValue: (p: [number, number]) => number }).getAccessValue =
-			(p: [number, number]) => p[0] < 160 ? 2 : 0;
-		(world.ai.accessibility as unknown as { regionSize: Record<number, number> }).regionSize[2] = 3000;
+		override(world.ai.accessibility, { "getAccessValue": (p: [number, number]) => p[0] < 160 ? 2 : 0 });
+		world.ai.accessibility.regionSize[2] = 3000;
 
-		assert.equal(new ConstructionPlan(world.gameState, dock, { "sea": 5, "proximity": [100, 280] })
+		assert.equal(new ConstructionPlan(world.gameState, dock, { "sea": seaRegion(5), "proximity": worldPos(100, 280) })
 			.findGoodPosition(world.gameState), false);
 	});
 
@@ -852,13 +821,12 @@ describe("which way a dock faces: getDockAngle", () =>
 	it("a puddle with no water around it gets no angle", () =>
 	{
 		const { world, dock } = coast();
-		const accessibility = world.ai.accessibility as unknown as { navalPassMap: Uint8Array; width: number };
+		const accessibility = world.ai.accessibility;
 		// one cell of the sea's region inland, at (100, 100), with land all around
-		accessibility.navalPassMap[50 + 50 * accessibility.width] = 5;
+		world.map.navalPassMap[50 + 50 * accessibility.width] = 5;
 		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).getDockAngle(world.gameState, 100, 100, 9), false);
 	});
 });
-
 
 describe("a town out of ground sends a dock to an island: buildOverseaDock", () =>
 {
@@ -870,11 +838,11 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	function islandWorld(withDock = true)
 	{
 		const s = coast({ "island": true, "territoryOwner": (ix: number) => ix < 28 ? PLAYER : 0 });
-		Object.assign(s.world.ai.accessibility as Record<string, unknown>, {
+		Object.assign(s.world.ai.accessibility, {
 			// the engine's per-region sizes, an array indexed by region
 			"regionSize": [0, 0, 20000, 6000, 0, 20000]
 		});
-		(s.world.gameState.sharedScript as unknown as { playersData: unknown[] }).playersData ??= [];
+		s.world.gameState.sharedScript.playersData ??= [];
 		if (withDock)
 			structure(s.world, 9701, [160, 160], ["Dock"], {}, "structures/athen/dock").setMetadata(PLAYER, "sea", 5);
 		const cc = card(s.world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
@@ -935,7 +903,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	it("sends a dock to an island an ally holds", () =>
 	{
 		const { world, cc, laid } = islandWorld();
-		const pd = world.gameState.playerData as unknown as { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[] };
+		const pd = world.gameState.playerData;
 		pd.isAlly[3] = true;
 		pd.isMutualAlly[3] = true;
 		pd.isEnemy[3] = false;

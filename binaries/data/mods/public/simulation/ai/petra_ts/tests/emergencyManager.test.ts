@@ -10,21 +10,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { commands, resetRecorder } from "./harness/engine.ts";
-import { makeEntity, makeWorld, PLAYER, type World } from "./harness/attackWorld.ts";
+import { resetRecorder, sent } from "./harness/engine.ts";
+import { makeEntity } from "./harness/fakes.ts";
+import { makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-const { EmergencyManager } = await loadPetraModule<{
-	EmergencyManager: new (config: unknown) => {
-		hasEmergency: boolean;
-		referencePopulation: number;
-		referenceStructureCount: number;
-		numRoots: number;
-		init(gameState: unknown): void;
-		update(gameState: unknown): void;
-	};
-}>("emergencyManager");
-const { Config } = await loadPetraModule<{ Config: new (difficulty?: number) => Record<string, unknown> }>("config");
+import { Config } from "../decision/config.ts";
+import { EmergencyManager } from "../decision/emergencyManager.ts";
 
 /** the chat lines setConfig's factors lead to, as chatHelper lists them */
 const ENTER_LINES = [
@@ -59,7 +50,7 @@ function town(population: number, roots: number, others: number): Town
 	// the seed civil centre of the world is not part of this town's count
 	world.removeEntity(1000);
 	const pop = { "value": population };
-	(world.gameState as unknown as Record<string, unknown>).getPopulation = () => pop.value;
+	world.gameState.getPopulation = () => pop.value;
 	const rootIds: number[] = [];
 	const otherIds: number[] = [];
 	const add = (root: boolean) =>
@@ -102,8 +93,7 @@ function town(population: number, roots: number, others: number): Town
 /** the ally chats the manager posted, as their message text */
 function chats(): string[]
 {
-	return (commands as Array<{ type: string; message: string; translateMessage: boolean }>)
-		.filter((c) => c.type === "aichat")
+	return sent("aichat")
 		.map((c) =>
 		{
 			assert.equal(c.translateMessage, true);

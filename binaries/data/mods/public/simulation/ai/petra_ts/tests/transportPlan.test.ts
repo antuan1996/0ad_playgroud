@@ -9,50 +9,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { navalWorld, ship, soldier, board, disembark, ISLAND, SEA, WEST, type HqWorld } from "./harness/navalWorld.ts";
-import { makeHqEntity, ENEMY, PLAYER } from "./harness/hqWorld.ts";
-import type { FakeEnt } from "./harness/attackWorld.ts";
+import { override } from "./harness/fakes.ts";
+import { ENEMY, makeHqEntity, PLAYER } from "./harness/hqWorld.ts";
+import { board, disembark, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
 
-interface Plan
-{
-	ID: number;
-	failed: boolean;
-	sea: number;
-	state: string;
-	startIndex: number;
-	endIndex: number;
-	endPos: [number, number];
-	needTransportShips: boolean;
-	needSplit: FakeEnt[];
-	boardingPos: Record<string, [number, number] | undefined>;
-	nTry: Record<number, number>;
-	units: { length: number; toEntityArray(): FakeEnt[] };
-	ships: { length: number };
-	transportShips: { length: number };
-	init(gs: unknown): void;
-	update(gs: unknown): number;
-	assignShip(gs: unknown): boolean;
-	assignUnitToShip(gs: unknown, ent: FakeEnt): void;
-	countFreeSlots(): number;
-	countFreeSlotsOnShip(ship: FakeEnt): number;
-	addUnit(unit: FakeEnt, endPos: [number, number]): void;
-	removeUnit(gs: unknown, unit: FakeEnt): void;
-	releaseShip(ship: FakeEnt): void;
-	releaseAll(): void;
-	getBoardingPos(gs: unknown, ship: FakeEnt, land: number, sea: number, destination?: [number, number], avoidEnemy?: boolean): [number, number] | undefined;
-	resetUnit(gs: unknown, ent: FakeEnt): void;
-	Serialize(): Record<string, unknown>;
-	Deserialize(data: Record<string, unknown>): void;
-}
-
-const { TransportPlan } = await loadPetraModule<{
-	TransportPlan: {
-		new (gs: unknown, units: FakeEnt[], start: number, end: number, endPos: [number, number], ship?: FakeEnt): Plan;
-		BOARDING: string;
-		SAILING: string;
-	};
-}>("transportPlan");
+import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
+import { TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
 
@@ -69,7 +32,7 @@ function initNaval(s: ReturnType<typeof seat>): void
 }
 
 /** a plan, initialised and handed to the naval manager, as requireTransport makes one */
-function plan(s: ReturnType<typeof seat>, units: FakeEnt[], end: [number, number] = [280, 160], start = WEST, endIndex = ISLAND): Plan
+function plan(s: ReturnType<typeof seat>, units: CommonEntity[], end = worldPos(280, 160), start: AccessIndex = WEST, endIndex: AccessIndex = ISLAND): TransportPlan
 {
 	const p = new TransportPlan(s.world.gameState, units, start, endIndex, end);
 	if (!p.failed)
@@ -79,8 +42,6 @@ function plan(s: ReturnType<typeof seat>, units: FakeEnt[], end: [number, number
 	}
 	return p;
 }
-
-const gs = (world: HqWorld) => world.gameState as unknown as { ai: { elapsedTime: number; playedTurn: number } };
 
 describe("a transport plan made: the sea between the two lands", () =>
 {
@@ -107,7 +68,7 @@ describe("a transport plan made: the sea between the two lands", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		initNaval(s);
 
-		const p = new TransportPlan(s.world.gameState, [a.ent], WEST, 7, [280, 160]);
+		const p = new TransportPlan(s.world.gameState, [a.ent], WEST, landRegion(7), worldPos(280, 160));
 
 		assert.equal(p.failed, true);
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
@@ -121,7 +82,7 @@ describe("a transport plan made: the sea between the two lands", () =>
 		board(a, carrier);
 		initNaval(s);
 
-		const p = new TransportPlan(s.world.gameState, [a.ent], 1, ISLAND, [280, 160], carrier.ent);
+		const p = new TransportPlan(s.world.gameState, [a.ent], landRegion(1), ISLAND, worldPos(280, 160), carrier.ent);
 
 		assert.equal(p.failed, undefined);
 		assert.equal(p.sea, SEA, "the ship's sea, set when the fleet was counted");
@@ -226,7 +187,6 @@ describe("a transport plan boarding its units: update", () =>
 	});
 });
 
-
 /** a plan of one ship and the given units, its ship assigned */
 function shipped(s: ReturnType<typeof seat>, units: Array<ReturnType<typeof soldier>>, capacity = 20)
 {
@@ -256,7 +216,7 @@ describe("a transport plan counting room aboard", () =>
 		const s = seat();
 		const a = soldier(s.world, 100, [140, 160]);
 		const { carrier, p } = shipped(s, [a]);
-		(carrier.ent as unknown as { hitpoints: () => number }).hitpoints = () => 50;
+		carrier.ent.hitpoints = () => 50;
 
 		assert.equal(p.countFreeSlotsOnShip(carrier.ent), 0, "below the eject health");
 	});
@@ -270,7 +230,7 @@ describe("a transport plan counting room aboard", () =>
 
 		p.update(s.world.gameState);
 
-		const plans = s.hq.navalManager.transportPlans as Plan[];
+		const plans = s.hq.navalManager.transportPlans;
 		assert.equal(plans.length, 2);
 		const [first, second] = [a, b].map((u) => u.ent.getMetadata(PlayerID, "transport"));
 		assert.equal(first, p.ID);
@@ -290,7 +250,7 @@ describe("a transport plan counting room aboard", () =>
 		p.update(s.world.gameState);
 
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
-		assert.equal((s.hq.navalManager.transportPlans as Plan[]).length, 1, "no unit is put aside for a second plan");
+		assert.equal(s.hq.navalManager.transportPlans.length, 1, "no unit is put aside for a second plan");
 	});
 });
 
@@ -373,10 +333,10 @@ describe("a transport plan letting units and ships go", () =>
 	{
 		const s = seat();
 		const left: string[] = [];
-		(s.hq.attackManager as Record<string, unknown>).getPlan = (id: number) =>
-			id === 4 ? { "removeUnit": () => left.push("attack") } : undefined;
-		(s.hq.defenseManager as Record<string, unknown>).getArmy = (id: number) =>
-			id === 6 ? { "removeOwn": () => left.push("army") } : undefined;
+		override(s.hq.attackManager, { "getPlan": (id: number) =>
+			id === 4 ? { "removeUnit": () => left.push("attack") } : undefined });
+		override(s.hq.defenseManager, { "getArmy": (id: number) =>
+			id === 6 ? { "removeOwn": () => left.push("army") } : undefined });
 		const a = soldier(s.world, 100, [140, 160], { "plan": 4, "PartOfArmy": 6 });
 		initNaval(s);
 		const p = plan(s, [a.ent]);
@@ -412,10 +372,10 @@ describe("a transport plan when boarding goes wrong", () =>
 		const first = carrier.state.moves[0];
 		carrier.state.aiState = "INDIVIDUAL.WALKING";
 
-		gs(s.world).ai.elapsedTime += 3;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 		assert.deepEqual(carrier.state.moves.at(-1), first, "first retry: the same spot");
-		gs(s.world).ai.elapsedTime += 3;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 
 		assert.equal(carrier.state.moves.length, 3);
@@ -430,7 +390,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		p.update(s.world.gameState);
 		carrier.state.aiState = "INDIVIDUAL.IDLE";
 
-		gs(s.world).ai.elapsedTime += 6;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 6);
 		p.update(s.world.gameState);
 
 		assert.equal(carrier.state.moves.length, 2);
@@ -446,7 +406,7 @@ describe("a transport plan when boarding goes wrong", () =>
 
 		for (let turn = 1; turn <= 6; ++turn)
 		{
-			gs(s.world).ai.elapsedTime += 3;
+			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 			p.update(s.world.gameState);
 		}
 
@@ -464,7 +424,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		p.update(s.world.gameState);
 
 		a.state.pos = [100, 160];
-		gs(s.world).ai.elapsedTime += 3;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 
 		assert.deepEqual(a.state.ranges, []);
@@ -477,7 +437,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const { p } = shipped(s, [a]);
 		p.update(s.world.gameState);
 
-		gs(s.world).ai.elapsedTime += 3;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 
 		const bp = p.boardingPos[202] as [number, number];
@@ -722,8 +682,8 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, 9, SEA, [10, 10]), [10, 10]);
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, 9, [10, 10]), [10, 10]);
+		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, landRegion(9), SEA, worldPos(10, 10)), [10, 10]);
+		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, seaRegion(9), worldPos(10, 10)), [10, 10]);
 	});
 
 	it("lands units outside enemy territory when it can", () =>
@@ -736,9 +696,9 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const carrier = ship(s.world, 202, [200, 100]);
 		const a = soldier(s.world, 100, [140, 100]);
 		initNaval(s);
-		const p = plan(s, [a.ent], [280, 100]);
+		const p = plan(s, [a.ent], worldPos(280, 100));
 
-		const bp = p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, [280, 100], true) as [number, number];
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
 
 		assert.ok(bp[1] >= 200, `north of the enemy's ground, got ${bp}`);
 	});
@@ -754,7 +714,7 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, [244, 160]) as [number, number];
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(244, 160)));
 
 		assert.ok(Math.hypot(bp[0] - 244, bp[1] - 160) > 40, `away from the dock, got ${bp}`);
 	});
@@ -770,7 +730,7 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, [244, 160]) as [number, number];
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(244, 160)));
 		const d = Math.hypot(bp[0] - 244, bp[1] - 160);
 
 		assert.ok(d > 20 && d < 40, `30 m from a foundation rather than 70, got ${d}`);

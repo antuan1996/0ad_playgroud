@@ -8,77 +8,32 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { emptyEvents } from "./harness/attackWorld.ts";
 import { logs, resetRecorder } from "./harness/engine.ts";
+import { emptyEvents, fake, override } from "./harness/fakes.ts";
 import {
-	makeGaiaSupply, makeHqEntity, makeHqWorld, seatHQ, structureTemplate, PLAYER, ENEMY,
-	type HqSeatOptions, type HqWorldOptions
+	doorManagers, dropsiteCC, ENEMY, type HqSeatOptions, type HqWorld, type HqWorldOptions,
+	makeGaiaSupply, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate, territoryCellAt
 } from "./harness/hqWorld.ts";
-import type { HqInstance, HqWorld } from "./harness/hqWorld.ts";
-import { loadCommonModule } from "./harness/target.ts";
 
-const { EntityCollection } = await loadCommonModule<{
-	EntityCollection: new (sharedAI: unknown) => unknown;
-}>("entitycollection");
+import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
+
+import { entityId, templateName, worldPos } from "../adapter/brands.ts";
+import { BaseManager } from "../decision/baseManager.ts";
+import { EASY, HARD, MEDIUM } from "../decision/difficultyLevel.ts";
+import type { Headquarters } from "../decision/headquarters.ts";
+import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { Worker } from "../execution/worker.ts";
 
 // the player id the common-api reads metadata under
-const PlayerID = 1;
-
-const { BaseManager } = await loadPetraModule<{
-	BaseManager: { STATE_WITH_ANCHOR: string; STATE_UNCONSTRUCTED: string; STATE_CAPTURED: string; STATE_ANCHORLESS: string };
-}>("baseManager");
-const { EASY, MEDIUM, HARD } = await loadPetraModule<{ EASY: number; MEDIUM: number; HARD: number }>("difficultyLevel");
-const { Worker } = await loadPetraModule<{ Worker: { ROLE_WORKER: string; SUBROLE_GATHERER: string; SUBROLE_BUILDER: string; SUBROLE_IDLE: string; SUBROLE_HUNTER: string; SUBROLE_FISHER: string } }>("worker");
-
-// the co-managers a base suite keeps outside its walls, as the headquarters suites do
-const doorManagers = [
-	"navalManager", "tradeManager", "researchManager", "diplomacyManager",
-	"victoryManager", "defenseManager"
-];
-
-/** the base manager members the suites read and drive, as the office's town holds them */
-interface Base
-{
-	ID: number;
-	constructing: boolean;
-	neededDefenders: number;
-	anchor: unknown;
-	anchorId: number | undefined;
-	accessIndex: number | undefined;
-	gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
-	dropsites: Record<number, boolean | undefined>;
-	dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>>;
-	workers: { length: number };
-	reset(gs: unknown, state: string): void;
-	anchorLost(gs: unknown): void;
-	assignEntity(gs: unknown, ent: unknown): void;
-	assignResourceToDropsite(gs: unknown, ent: unknown, deserialized: boolean): void;
-	removeDropsite(gs: unknown, id: number): void;
-	findBestDropsiteAndLocation(gs: unknown, resource: string): { quality: number; pos: number[]; templateName: string };
-	findBestDropsiteLocation(gs: unknown, resource: string, templateName: string): { quality: number; pos: number[] };
-	checkResourceLevels(gs: unknown, queues: unknown): void;
-	addGatherRates(gs: unknown, rates: Record<string, number>): void;
-	assignRolelessUnits(gs: unknown): void;
-	switchGatherer(gs: unknown, from: string, to: string, n: number): number;
-	reassignIdleWorkers(gs: unknown): void;
-	pickBuilders(gs: unknown, workers: unknown, n: number): void;
-	setWorkersIdleByPriority(gs: unknown): void;
-	assignToFoundations(gs: unknown, noRepair?: boolean): void;
-	update(gs: unknown, queues: unknown, events: unknown): boolean;
-	AddTCGatherer(id: number): void;
-	GetTCGatherer(id: number): number;
-	RemoveTCGatherer(id: number): void;
-}
-
+const PlayerID = PLAYER;
 /** a seated office on the standard board, and its own town */
 function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<HqSeatOptions> = {})
 {
-	const world = makeHqWorld(worldOptions as HqWorldOptions);
+	const world = makeHqWorld(worldOptions);
 	const hq = seatHQ(world, { stubs: doorManagers, ...seatOptions });
 	// the game books the town's ground before any plan is made (gameAnalysis)
 	hq.updateTerritories(world.gameState);
-	const base = hq.baseManagers()[0] as unknown as Base;
+	const base = hq.baseManagers()[0];
 	return { world, hq, base };
 }
 
@@ -231,7 +186,7 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		world.addEntity(makeGaiaSupply({ "id": 2651, "position": [60, 40], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
 		base.assignResourceToDropsite(world.gameState, dropsite, false);
 
-		base.removeDropsite(world.gameState, 2501);
+		base.removeDropsite(world.gameState, entityId(2501));
 
 		assert.deepEqual(booked(base, "wood", "nearby"), []);
 		assert.equal(base.dropsites[2501], undefined, "the dropsite is off the town's list");
@@ -246,8 +201,7 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		const { world, base } = seat();
 		const store = storehouse(world, 3701, [40, 40]);
 		// the seed centre takes food and wood as well, and carries supplies of its own
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
-		centre.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
+		const centre = dropsiteCC(world);
 		world.addEntity(makeGaiaSupply({
 			"id": 3702, "position": [10, 30], "generic": "food", "specific": "berry", "classes": ["Fruit"]
 		}));
@@ -258,7 +212,7 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 		base.assignResourceToDropsite(world.gameState, centre, false);
 		base.assignResourceToDropsite(world.gameState, store, false);
 
-		base.removeDropsite(world.gameState, 3701);
+		base.removeDropsite(world.gameState, entityId(3701));
 
 		assert.deepEqual(booked(base, "food", "nearby"), [3702], "the centre keeps its berries");
 		assert.deepEqual(booked(base, "wood", "nearby"), [3703], "the centre keeps its own wood note");
@@ -266,9 +220,8 @@ describe("the dropsites: what each one reaches, by distance band", () =>
 	});
 });
 
-
 /** the storehouse card the town knows, and a builder who books it */
-function storehouseCard(world: HqWorld, hq: HqInstance): void
+function storehouseCard(world: HqWorld, hq: Headquarters): void
 {
 	world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
 		"classes": ["Structure", "Storehouse"], "dropsiteTypes": ["wood", "stone", "metal"]
@@ -277,7 +230,7 @@ function storehouseCard(world: HqWorld, hq: HqInstance): void
 }
 
 /** a builder of ours who knows the named cards */
-function bookBuilder(world: HqWorld, hq: HqInstance, buildable: string[]): void
+function bookBuilder(world: HqWorld, hq: Headquarters, buildable: string[]): void
 {
 	world.addEntity(makeHqEntity({
 		"id": 2206, "owner": PLAYER, "position": [152, 152],
@@ -289,12 +242,6 @@ function bookBuilder(world: HqWorld, hq: HqInstance, buildable: string[]): void
 }
 
 /** the resource map cell of a map position, as the board reads it */
-function cellOf(world: HqWorld, position: [number, number]): number
-{
-	const { width } = world.map.territory;
-	return Math.floor(position[0] / 8) + width * Math.floor(position[1] / 8);
-}
-
 /** the resource map of a resource, as the office's gatherers' estimate reads it */
 function resourceMap(world: HqWorld, type: string): Float32Array
 {
@@ -308,7 +255,7 @@ function woodCluster(world: HqWorld, centre: [number, number]): void
 	const map = resourceMap(world, "wood");
 	for (const dx of [-8, 0, 8])
 		for (const dz of [-8, 0, 8])
-			map[cellOf(world, [centre[0] + dx, centre[1] + dz])] = 100;
+			map[territoryCellAt([centre[0] + dx, centre[1] + dz])] = 100;
 }
 
 describe("finding where a new dropsite should stand", () =>
@@ -348,7 +295,7 @@ describe("finding where a new dropsite should stand", () =>
 			const { world, hq, base } = seat();
 			storehouseCard(world, hq);
 			// one rich cell, whose centre is [148, 148]
-			resourceMap(world, "wood")[cellOf(world, [150, 150])] = 100;
+			resourceMap(world, "wood")[territoryCellAt([150, 150])] = 100;
 			if (withStorehouse)
 				storehouse(world, 2502, [220, 148]);
 			return base.findBestDropsiteAndLocation(world.gameState, "wood").quality;
@@ -374,9 +321,9 @@ describe("finding where a new dropsite should stand", () =>
 				"hasDefensiveFire": () => true, "attackRange": () => ({ "max": 60, "min": 0 })
 			}));
 			const map = resourceMap(world, "wood");
-			map[cellOf(world, [150, 150])] = 100;			// under the tower
-			map[cellOf(world, [214, 150])] = 90;			// 64 from the tower
-			map[cellOf(world, [150, 246])] = 50;			// 96 from the tower
+			map[territoryCellAt([150, 150])] = 100;			// under the tower
+			map[territoryCellAt([214, 150])] = 90;			// 64 from the tower
+			map[territoryCellAt([150, 246])] = 50;			// 96 from the tower
 			const { pos } = base.findBestDropsiteAndLocation(world.gameState, "wood");
 			// the stand the chosen spot belongs to
 			const stands: Record<string, [number, number]> = { "under": [148, 148], "near": [212, 148], "far": [148, 244] };
@@ -408,7 +355,7 @@ describe("finding where a new dropsite should stand", () =>
 		});
 		woodCluster(world, [150, 150]);
 
-		const found = base.findBestDropsiteLocation(world.gameState, "wood", "structures/athen/civil_centre");
+		const found = base.findBestDropsiteLocation(world.gameState, "wood", templateName("structures/athen/civil_centre"));
 
 		assert.equal(found.quality, 0);
 	});
@@ -420,7 +367,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 	const CORRAL = "structures/athen/corral";
 
 	/** the fields and pens the town may plant, as the civ knows them */
-	function farmCards(world: HqWorld, hq: HqInstance, withField = true): void
+	function farmCards(world: HqWorld, hq: Headquarters, withField = true): void
 	{
 		if (withField)
 			world.templates[FIELD] = structureTemplate(FIELD, { "classes": ["Structure", "Economic", "Field"] });
@@ -431,8 +378,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 	/** berries of the given amount near the seated centre, booked by it */
 	function berries(world: HqWorld, base: { assignResourceToDropsite(gs: unknown, ent: unknown, d: boolean): void }, amount: number): void
 	{
-		const centre = world.ents.get(1000) as unknown as { resourceDropsiteTypes: () => string[] };
-		centre.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
+		const centre = dropsiteCC(world);
 		if (amount > 0)
 			world.addEntity(makeGaiaSupply({
 				"id": 2701, "position": [30, 10], "generic": "food", "specific": "berry",
@@ -447,9 +393,9 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		farmCards(world, hq);
 		berries(world, base, 700);
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "field").length, 0, "the bushes feed the town for now");
+		assert.equal(world.ai.queues.field.plans.length, 0, "the bushes feed the town for now");
 		assert.ok(!hq.needFarm, "no field asked for while the bushes last");
 	});
 
@@ -459,12 +405,12 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		farmCards(world, hq);
 		berries(world, base, 200);
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		const plans = queuedPlans(world, "field");
+		const plans = world.ai.queues.field.plans;
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, FIELD);
-		assert.equal((plans[0]?.metadata as Record<string, unknown>)?.favoredBase, base.ID);
+		assert.equal(plans[0]?.metadata?.favoredBase, base.ID);
 		assert.equal(hq.needFarm, true);
 	});
 
@@ -479,9 +425,9 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
 		}));
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "field").length, 1);
+		assert.equal(world.ai.queues.field.plans.length, 1);
 	});
 
 	it("once the town's fields reach the provisioned goal, no further field is planned", () =>
@@ -495,16 +441,16 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
 		}));
 		// the goal is the civ's provisioned count; the ground already carries that many field foundations
-		const goal = hq.Config.Economy.provisionFields as number;
+		const goal = hq.Config.Economy.provisionFields;
 		for (let i = 0; i < goal; ++i)
 			world.addEntity(makeHqEntity({
 				"id": 2710 + i, "owner": PLAYER, "position": [70 + 4 * i, 70],
 				"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
 			}, { "foundationProgress": () => 0.2 }));
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "field").length, 0);
+		assert.equal(world.ai.queues.field.plans.length, 0);
 	});
 
 	it("a town saving its resources makes do with one field foundation fewer", () =>
@@ -526,10 +472,10 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 				"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
 			}, { "foundationProgress": () => 0.2 }));
 
-			base.checkResourceLevels(world.gameState, world.ai.queues as never);
+			base.checkResourceLevels(world.gameState, world.ai.queues);
 
 			// provisionFields is 2: one more while not saving, none when saving
-			assert.equal(queuedPlans(world, "field").length, saving ? 0 : 1, `saving ${saving}`);
+			assert.equal(world.ai.queues.field.plans.length, saving ? 0 : 1, `saving ${saving}`);
 		}
 	});
 
@@ -545,10 +491,10 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		hq.maxFields = 1;
 		hq.needCorral = true;
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "field").length, 0, "the cap is reached");
-		assert.equal(queuedPlans(world, "corral").length, 1, "the herd gets its pen");
+		assert.equal(world.ai.queues.field.plans.length, 0, "the cap is reached");
+		assert.equal(world.ai.queues.corral.plans.length, 1, "the herd gets its pen");
 	});
 
 	it("a civ with no field card keeps a pen while the fruit runs short", () =>
@@ -557,9 +503,9 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		farmCards(world, hq, false);
 		berries(world, base, 100);
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "corral").length, 1);
+		assert.equal(world.ai.queues.corral.plans.length, 1);
 		assert.equal(hq.needCorral, true);
 	});
 
@@ -572,7 +518,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			"classes": ["Structure", "Storehouse"], "templateName": "structures/athen/storehouse"
 		}, { "foundationProgress": () => 0.3 }));
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.deepEqual(base.gatherers.stone, { "nextCheck": 0, "used": 0, "lost": 0 });
 	});
@@ -581,7 +527,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 	{
 		const { world, base } = seat();
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.equal(base.gatherers.stone.nextCheck, 10);
 	});
@@ -592,12 +538,12 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		storehouseCard(world, hq);
 		// the tally accumulates across turns: most of the stone gatherers are walking home empty
 		base.gatherers.stone = { "nextCheck": 0, "used": 30, "lost": 40 };
-		resourceMap(world, "stone")[cellOf(world, [150, 150])] = 100;
+		resourceMap(world, "stone")[territoryCellAt([150, 150])] = 100;
 		woodCluster(world, [150, 150]);
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		const plans = queuedPlans(world, "dropsites");
+		const plans = world.ai.queues.dropsites.plans;
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, "structures/athen/storehouse");
 		assert.deepEqual(plans[0]?.metadata, { "base": base.ID, "type": "stone" });
@@ -613,13 +559,13 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		});
 		bookBuilder(world, hq, ["structures/{civ}/civil_centre", "structures/{civ}/storehouse"]);
 		base.gatherers.stone = { "nextCheck": 0, "used": 30, "lost": 40 };
-		resourceMap(world, "stone")[cellOf(world, [150, 150])] = 20;
+		resourceMap(world, "stone")[territoryCellAt([150, 150])] = 20;
 		hq.canExpand = true;
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "dropsites").length, 0, "the weak patch is not worth a storehouse here");
-		assert.equal(queuedPlans(world, "civilCentre").length, 1, "the new ground is asked for instead");
+		assert.equal(world.ai.queues.dropsites.plans.length, 0, "the weak patch is not worth a storehouse here");
+		assert.equal(world.ai.queues.civilCentre.plans.length, 1, "the new ground is asked for instead");
 	});
 
 	it("a poor patch the town cannot expand on still gets a storehouse, less strictly chosen", () =>
@@ -627,20 +573,14 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		const { world, hq, base } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
 		storehouseCard(world, hq);
 		base.gatherers.stone = { "nextCheck": 0, "used": 30, "lost": 40 };
-		resourceMap(world, "stone")[cellOf(world, [150, 150])] = 20;
+		resourceMap(world, "stone")[territoryCellAt([150, 150])] = 20;
 		hq.canExpand = false;
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
-		assert.equal(queuedPlans(world, "dropsites").length, 1, "the less strict storehouse is planned");
+		assert.equal(world.ai.queues.dropsites.plans.length, 1, "the less strict storehouse is planned");
 	});
 });
-
-/** the plans a queue holds */
-function queuedPlans(world: HqWorld, queue: string): Array<Record<string, unknown>>
-{
-	return (world.ai.queues[queue] as unknown as { plans: Array<Record<string, unknown>> }).plans;
-}
 
 /** a worker of ours at a position, on the base's payroll with the given metadata */
 function hand(world: HqWorld, base: { assignEntity(gs: unknown, ent: unknown): void }, id: number,
@@ -759,7 +699,7 @@ describe("the workers' trade: what they bring in and where they go", () =>
 	{
 		const { world, base } = seat();
 		const repaired: unknown[] = [];
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		const builder = hand(world, base, 2861, SOLDIER,
 			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_IDLE },
@@ -817,7 +757,7 @@ describe("the workers' trade: what they bring in and where they go", () =>
 			hand(world, base, 2901 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true });
-		const lent = new EntityCollection(world.gameState.sharedScript as never) as unknown as
+		const lent = new EntityCollection(world.gameState.sharedScript) as unknown as
 			{ length: number; values(): Iterable<{ getMetadata(p: number, k: string): unknown }> };
 
 		base.pickBuilders(world.gameState, lent as never, 2);
@@ -834,7 +774,7 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		const worker = (id: number, metadata: Record<string, unknown>) =>
 			hand(world, base, id, SOLDIER, { "role": Worker.ROLE_WORKER, ...metadata }, { "isBuilder": () => true });
 		// out of reach: gone inside a building, defending, boarding a ship
-		(worker(2921, { "subrole": Worker.SUBROLE_GATHERER }) as unknown as Record<string, unknown>).position = () => undefined;
+		override(worker(2921, { "subrole": Worker.SUBROLE_GATHERER }), { "position": () => undefined });
 		worker(2922, { "subrole": Worker.SUBROLE_GATHERER, "plan": -2 });
 		worker(2923, { "subrole": Worker.SUBROLE_GATHERER, "transport": 4 });
 		// the town's own: a gatherer, then an idle hand
@@ -844,10 +784,9 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		worker(2926, { "subrole": Worker.SUBROLE_BUILDER, "plan": 5 });
 		worker(2927, { "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood", "plan": 5 });
 		worker(2928, { "subrole": Worker.SUBROLE_IDLE, "plan": 5 });
-		const lent = new EntityCollection(world.gameState.sharedScript as never) as unknown as
-			{ length: number; values(): Iterable<{ id(): number }> };
+		const lent = new EntityCollection(world.gameState.sharedScript);
 
-		base.pickBuilders(world.gameState, lent as never, 2);
+		base.pickBuilders(world.gameState, lent, 2);
 
 		// five available hands, three stay: two lent. The plan's idle hand
 		// first (-50), then the town's first hand (every hand without a plan
@@ -862,9 +801,9 @@ describe("the workers' trade: what they bring in and where they go", () =>
 			hand(world, base, 2911 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true });
-		const lent = new EntityCollection(world.gameState.sharedScript as never) as unknown as { length: number };
+		const lent = new EntityCollection(world.gameState.sharedScript);
 
-		base.pickBuilders(world.gameState, lent as never, 2);
+		base.pickBuilders(world.gameState, lent, 2);
 
 		assert.equal(lent.length, 0, "the last three hands stay at home");
 	});
@@ -932,7 +871,7 @@ describe("the builders: who raises and mends the town's ground", () =>
 			hand(world, base, 3041 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true }, [20 + i, 20]);
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		centre.healthLevel = () => 0.9;
 
@@ -948,7 +887,7 @@ describe("the builders: who raises and mends the town's ground", () =>
 			hand(world, base, 3051 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true }, [20 + i, 20]);
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		centre.healthLevel = () => 0.2;
 
@@ -978,7 +917,7 @@ describe("the builders: who raises and mends the town's ground", () =>
 			hand(world, base, 3081 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true }, [20 + i, 20]);
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		centre.decaying = () => true;
 
@@ -994,7 +933,7 @@ describe("the builders: who raises and mends the town's ground", () =>
 			hand(world, base, 3091 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true }, [20 + i, 20]);
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		centre.healthLevel = () => 0.9;
 		const barracks = foundation(world, base, 3100, [40, 40], ["Barracks"], {}, {
@@ -1012,7 +951,7 @@ describe("the builders: who raises and mends the town's ground", () =>
 describe("the builders: crews by kind of building, and what holds them back", () =>
 {
 	/** a woodcutter of ours at a position */
-	function woodcutter(world: HqWorld, base: Base, id: number, position: [number, number], metadata: Record<string, unknown> = {},
+	function woodcutter(world: HqWorld, base: BaseManager, id: number, position: [number, number], metadata: Record<string, unknown> = {},
 		classes = SOLDIER): ReturnType<typeof makeHqEntity>
 	{
 		return hand(world, base, id, classes,
@@ -1066,7 +1005,7 @@ describe("the builders: crews by kind of building, and what holds them back", ()
 	it("a foundation beside an invading army waits, unless it is a wall", () =>
 	{
 		const { world, hq, base } = seat({ "stock": RICH });
-		hq.defenseManager.armies = [{ "foePosition": [75, 60] }];
+		hq.defenseManager.armies = [fake<DefenseArmy>({ "foePosition": worldPos(75, 60) })];
 		for (let i = 0; i < 6; ++i)
 			woodcutter(world, base, 3701 + i, [60 + i, 60]);
 		foundation(world, base, 3710, [70, 60], ["House"]);
@@ -1121,7 +1060,7 @@ describe("the builders: crews by kind of building, and what holds them back", ()
 		};
 		damaged(3770, [80, 60], ["Fortress"]);
 		damaged(3771, [200, 200], ["Barracks"]);
-		hq.defenseManager.armies = [{ "foePosition": [205, 200] }];
+		hq.defenseManager.armies = [fake<DefenseArmy>({ "foePosition": worldPos(205, 200) })];
 
 		base.assignToFoundations(world.gameState);
 
@@ -1132,13 +1071,13 @@ describe("the builders: crews by kind of building, and what holds them back", ()
 	it("menders already at work are enough; hands defending, boarding or inside a building are not called", () =>
 	{
 		const { world, base } = seat({ "stock": RICH });
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.needsRepair = () => true;
 		centre.healthLevel = () => 0.9;
 		// four hands out of reach, and one already mending the barracks
 		woodcutter(world, base, 3781, [20, 20], { "plan": -2 });
 		woodcutter(world, base, 3782, [20, 21], { "transport": 3 });
-		(woodcutter(world, base, 3783, [20, 22]) as unknown as Record<string, unknown>).position = () => undefined;
+		override(woodcutter(world, base, 3783, [20, 22]), { "position": () => undefined });
 		woodcutter(world, base, 3784, [21, 20], { "plan": -3 });
 		woodcutter(world, base, 3785, [60, 60]);
 		woodcutter(world, base, 3786, [61, 60], { "subrole": Worker.SUBROLE_BUILDER });
@@ -1170,9 +1109,9 @@ describe("a ground that changes hands: the centre's ring and the anchorless dock
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 		let destroyed = false;
-		(world.ents.get(1000) as unknown as Record<string, unknown>).destroy = () => { destroyed = true; };
+		override(world.ents.get(1000)!, { "destroy": () => { destroyed = true; } });
 
-		base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(destroyed, true, "a centre raised under the rival's walls cannot be held");
 	});
@@ -1182,9 +1121,9 @@ describe("a ground that changes hands: the centre's ring and the anchorless dock
 		const { world, base } = seat({ "stock": RICH });
 		base.reset(world.gameState, BaseManager.STATE_UNCONSTRUCTED);
 		let destroyed = false;
-		(world.ents.get(1000) as unknown as Record<string, unknown>).destroy = () => { destroyed = true; };
+		override(world.ents.get(1000)!, { "destroy": () => { destroyed = true; } });
 
-		base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(destroyed, false);
 	});
@@ -1211,7 +1150,7 @@ describe("a ground that changes hands: the centre's ring and the anchorless dock
 	{
 		const { world, base } = seat({ "stock": RICH });
 
-		const active = base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		const active = base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(active, true);
 	});
@@ -1220,18 +1159,12 @@ describe("a ground that changes hands: the centre's ring and the anchorless dock
 	{
 		const { base } = seat();
 
-		base.AddTCGatherer(2801);
-		assert.equal(base.GetTCGatherer(2801), 1);
-		base.RemoveTCGatherer(2801);
-		assert.equal(base.GetTCGatherer(2801), 0);
+		base.AddTCGatherer(entityId(2801));
+		assert.equal(base.GetTCGatherer(entityId(2801)), 1);
+		base.RemoveTCGatherer(entityId(2801));
+		assert.equal(base.GetTCGatherer(entityId(2801)), 0);
 	});
 });
-
-/** the engine's per-turn events, empty, as a turn with nothing to report carries them */
-function emptyEventsFor(): never
-{
-	return emptyEvents() as never;
-}
 
 describe("the dropsites and gatherers, read turn by turn", () =>
 {
@@ -1250,7 +1183,7 @@ describe("the dropsites and gatherers, read turn by turn", () =>
 			"isResourceDropsite": () => false
 		}));
 
-		const best = base.findBestDropsiteLocation(world.gameState, "wood", "structures/athen/storehouse");
+		const best = base.findBestDropsiteLocation(world.gameState, "wood", templateName("structures/athen/storehouse"));
 
 		const dx = best.pos[0] - 150, dz = best.pos[1] - 150;
 		assert.ok(dx * dx + dz * dz >= 3600, "the foundation's spot is not doubled");
@@ -1267,7 +1200,7 @@ describe("the dropsites and gatherers, read turn by turn", () =>
 			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "stone" },
 			{ "unitAIState": () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING" });
 
-		base.checkResourceLevels(world.gameState, world.ai.queues as never);
+		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.equal(base.gatherers.stone.used, 3);
 		assert.equal(base.gatherers.stone.lost, 1);
@@ -1321,7 +1254,7 @@ describe("the builders on the foundations, in the cases not yet read", () =>
 	it("a town with no finished centre puts all its hands to raising that centre", () =>
 	{
 		const { world, hq, base } = seat({ "stock": RICH });
-		const centre = world.ents.get(1000) as unknown as Record<string, unknown>;
+		const centre = world.ents.get(1000)!;
 		centre.foundationProgress = () => 0.5;
 		centre.buildTime = () => 150;
 		hq.basesManager.resetBaseCache();
@@ -1380,7 +1313,7 @@ describe("the builders on the foundations, in the cases not yet read", () =>
 				{ "isBuilder": () => true }, [60 + i, 60]);
 		const baseless = hq.basesManager.baselessBase();
 		for (let i = 0; i < 4; ++i)
-			hand(world, baseless as never, 3401 + i, SOLDIER,
+			hand(world, baseless, 3401 + i, SOLDIER,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 				{ "isBuilder": () => true }, [80 + i, 80]);
 
@@ -1397,12 +1330,12 @@ describe("the turn of a town: workers out of a base, and a town whose centre fel
 	{
 		const { world, hq, base } = seat({ "stock": RICH });
 		const baseless = hq.basesManager.baselessBase();
-		const stray = hand(world, baseless as never, 3501, SOLDIER,
+		const stray = hand(world, baseless, 3501, SOLDIER,
 			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
 			{}, [60, 60]);
 
-		(baseless as unknown as { update(gs: unknown, q: unknown, e: unknown): boolean })
-			.update(world.gameState, world.ai.queues, emptyEventsFor());
+		baseless
+			.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(stray.getMetadata(PLAYER, "base"), base.ID, "the stray joins the town nearest it");
 	});
@@ -1419,7 +1352,7 @@ describe("the turn of a town: workers out of a base, and a town whose centre fel
 		base.anchorLost(world.gameState);
 		assert.equal(hq.numActiveBases(), 0);
 
-		const active = base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		const active = base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(active, true, "the storehouse and its workers still keep the ground");
 	});
@@ -1430,7 +1363,7 @@ describe("the turn of a town: workers out of a base, and a town whose centre fel
 		world.removeEntity(1000);
 		base.anchorLost(world.gameState);
 
-		const active = base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		const active = base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(active, false, "a town with nothing left on the ground does not work it");
 	});
@@ -1450,7 +1383,7 @@ describe("the turn of a town: workers out of a base, and a town whose centre fel
 		world.removeEntity(1000);
 		base.anchorLost(world.gameState);
 
-		const active = base.update(world.gameState, world.ai.queues as never, emptyEventsFor());
+		const active = base.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(active, false, "the old town hands its ground over");
 		assert.equal(dropsite.getMetadata(PLAYER, "base"), heir.ID, "the storehouse answers to the new centre");
@@ -1505,8 +1438,8 @@ describe("the rest of the turn: idle hands already spoken for, docks with no tow
 		baseless.assignEntity(world.gameState, dock);
 		resetRecorder();
 
-		(baseless as unknown as { update(gs: unknown, q: unknown, e: unknown): boolean })
-			.update(world.gameState, world.ai.queues, emptyEventsFor());
+		baseless
+			.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.ok(logs.some((line: string) => line.includes("dock in 'noBase' baseManager")),
 			"the dock is noted as sitting outside every town");
@@ -1515,13 +1448,13 @@ describe("the rest of the turn: idle hands already spoken for, docks with no tow
 	it("with no finished centre anywhere, the baseless pool sorts its idle hands into roles and waits", () =>
 	{
 		const { world, hq } = seat({ "stock": RICH });
-		(world.ents.get(1000) as unknown as Record<string, unknown>).foundationProgress = () => 0.5;
+		override(world.ents.get(1000)!, { "foundationProgress": () => 0.5 });
 		hq.basesManager.resetBaseCache();
 		const baseless = hq.basesManager.baselessBase();
-		const recruit = hand(world, baseless as never, 3621, SOLDIER, {});
+		const recruit = hand(world, baseless, 3621, SOLDIER, {});
 
-		const active = (baseless as unknown as { update(gs: unknown, q: unknown, e: unknown): boolean })
-			.update(world.gameState, world.ai.queues, emptyEventsFor());
+		const active = baseless
+			.update(world.gameState, world.ai.queues, emptyEvents());
 
 		assert.equal(active, false, "the pool is not an active town");
 		assert.equal(recruit.getMetadata(PLAYER, "role"), Worker.ROLE_WORKER, "the recruit is put to work");
@@ -1534,7 +1467,7 @@ describe("the rest of the turn: idle hands already spoken for, docks with no tow
 			hand(world, base, 3631 + i, CIVILIAN,
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" });
 		// the office's turn cache holds what the queues ask of each resource this turn
-		(hq as unknown as { turnCache: { wantedRates: Record<string, number> } }).turnCache.wantedRates =
+		hq.turnCache.wantedRates =
 			{ "food": 0.5, "wood": 3, "stone": 0, "metal": 0 };
 
 		base.setWorkersIdleByPriority(world.gameState);

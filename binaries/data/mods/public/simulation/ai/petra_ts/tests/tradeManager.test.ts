@@ -8,46 +8,24 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import { doorCalls, makeHqEntity, makeHqWorld, seatHQ, ENEMY, PLAYER, type HqWorld, type HqWorldOptions } from "./harness/hqWorld.ts";
-import { emptyEvents, makeTemplate, restoreEngine, stubGlobal, type FakeEnt, type Methods } from "./harness/attackWorld.ts";
-import { commands, resetRecorder } from "./harness/engine.ts";
+import { resetRecorder, sent } from "./harness/engine.ts";
+import { eventsWith, fake, makeTemplate, type Methods, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import {
+	doorCalls, doorManagers, ENEMY, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld,
+	PLAYER, seatHQ
+} from "./harness/hqWorld.ts";
+import { collectionOf } from "./harness/world.ts";
 
-interface Route { source: number; target: number; gain: number; land?: number; sea?: number }
-
-interface Trade
-{
-	tradeRoute: Route | undefined;
-	potentialTradeRoute: Route | undefined;
-	routeProspection: boolean;
-	targetNumTraders: number;
-	warnedAllies: Record<number, boolean>;
-	minimalGain: number;
-	traders: { length: number };
-	init(gs: unknown): void;
-	hasTradeRoute(): boolean;
-	assignTrader(ent: FakeEnt): void;
-	trainMoreTraders(gs: unknown, queues: unknown): void;
-	updateTrader(gs: unknown, ent: FakeEnt): void;
-	setTradingGoods(gs: unknown): void;
-	performBarter(gs: unknown): boolean;
-	checkEvents(gs: unknown, events: unknown): boolean;
-	checkRoutes(gs: unknown, access?: number): Route | boolean;
-	checkTrader(gs: unknown, ent: FakeEnt): void;
-	prospectForNewMarket(gs: unknown, queues: unknown): void;
-	isNewMarketWorth(gain: number): boolean;
-	update(gs: unknown, events: unknown, queues: unknown): void;
-	Serialize(): Record<string, unknown>;
-	Deserialize(gs: unknown, data: unknown): void;
-}
-
-const { TradeManager } = await loadPetraModule<{ TradeManager: new (config: unknown) => Trade }>("tradeManager");
+import { entityId, landRegion, playerId, seaRegion } from "../adapter/brands.ts";
+import type { Headquarters } from "../decision/headquarters.ts";
+import { type SerializedTradeManager, TradeManager, type TradeRoute } from "../decision/tradeManager.ts";
 
 const PlayerID = PLAYER;
 
 afterEach(() => restoreEngine());
 
-const doorManagers = ["navalManager", "researchManager", "diplomacyManager", "victoryManager", "defenseManager"];
+/** every door but the trade office, which is under test */
+const tradeDoors = doorManagers.filter((name) => name !== "tradeManager");
 
 /** the gain of a route between two positions, as checkRoutes reckons it */
 const gainOf = (a: [number, number], b: [number, number], multiplier: number): number =>
@@ -56,8 +34,8 @@ const gainOf = (a: [number, number], b: [number, number], multiplier: number): n
 /** an office on the plain with its real trade manager and both trader cards */
 function seat(options: Partial<HqWorldOptions> = {}, cards: { land?: boolean; sea?: boolean } = { "land": true, "sea": true })
 {
-	const world = makeHqWorld(options as HqWorldOptions);
-	const hq = seatHQ(world, { "stubs": doorManagers });
+	const world = makeHqWorld(options);
+	const hq = seatHQ(world, { "stubs": tradeDoors });
 	hq.updateTerritories(world.gameState);
 	stubGlobal("pickRandom", (list: unknown[]) => list?.[0]);
 	for (const [kind, name, classes] of [["land", "support_trader", ["Unit", "Support", "Trader"]],
@@ -72,7 +50,7 @@ function seat(options: Partial<HqWorldOptions> = {}, cards: { land?: boolean; se
 	hq.tradeManager = manager;
 	manager.init(world.gameState);
 	resetRecorder();
-	return { world, hq, manager, "queues": world.ai.queues as unknown as Record<string, { plans: Array<{ type: string; metadata: Record<string, unknown> }>; addPlan(p: unknown): void }> };
+	return { world, hq, manager, "queues": world.ai.queues };
 }
 
 /** a market (or, with `dock`, a dock that trades) at the given spot */
@@ -96,7 +74,7 @@ function trader(world: HqWorld, id: number, position: [number, number] | undefin
 		"position": () => position,
 		"isIdle": () => options.idle ?? true,
 		"unitAIState": () => "INDIVIDUAL.IDLE",
-		"tradeRoute": (first: FakeEnt, second: FakeEnt) => orders.push(["trade", first.id(), second.id()]),
+		"tradeRoute": (first: CommonEntity, second: CommonEntity) => orders.push(["trade", first.id(), second.id()]),
 		"moveToRange": (x: number, z: number, min: number, max: number) => orders.push(["range", x, z, min, max]),
 		"stopMoving": () => orders.push(["stop"]),
 		...options.methods
@@ -104,10 +82,13 @@ function trader(world: HqWorld, id: number, position: [number, number] | undefin
 	return { ent, orders };
 }
 
-const ai = (world: HqWorld) => world.gameState.ai as unknown as { elapsedTime: number; playedTurn: number };
-
-type Command = Record<string, unknown> & { type: string };
-const of = (type: string): Command[] => (commands as Command[]).filter((c) => c.type === type);
+/** the transport ships the fleet keeps on one sea, as navalManager.seaTransportShips holds them */
+function fleetOn(world: HqWorld, sea: number, ships: CommonEntity[]): Array<CommonEntityCollection | undefined>
+{
+	const seas: Array<CommonEntityCollection | undefined> = [];
+	seas[sea] = collectionOf(world, ships);
+	return seas;
+}
 
 describe("the trade office opening: init and traders", () =>
 {
@@ -122,7 +103,7 @@ describe("the trade office opening: init and traders", () =>
 		assert.equal(t.ent.getMetadata(PlayerID, "role"), "trader");
 
 		const world = makeHqWorld();
-		const hq = seatHQ(world, { "stubs": doorManagers, "navalMap": true });
+		const hq = seatHQ(world, { "stubs": tradeDoors, "navalMap": true });
 		const naval = new TradeManager(hq.Config);
 		naval.init(world.gameState);
 		assert.equal(naval.minimalGain, 3);
@@ -168,7 +149,7 @@ describe("the best trade route: checkRoutes", () =>
 	it("with an ally's markets, routes run between ours and theirs, and the ally is told once", () =>
 	{
 		const { world, manager } = seat();
-		const pd = world.gameState.playerData as unknown as { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[] };
+		const pd = world.gameState.playerData;
 		pd.isAlly[3] = pd.isMutualAlly[3] = true;
 		pd.isEnemy[3] = false;
 		market(world, 400, [40, 40]);
@@ -181,7 +162,7 @@ describe("the best trade route: checkRoutes", () =>
 		assert.equal(manager.tradeRoute?.target, 402);
 		assert.equal(manager.tradeRoute?.source, 401, "the longer of our two routes to the ally");
 		assert.deepEqual(manager.warnedAllies, { 3: true });
-		assert.equal(of("aichat").length, 1);
+		assert.equal(sent("aichat").length, 1);
 	});
 
 	it("a route crossing enemy ground is not taken", () =>
@@ -214,7 +195,7 @@ describe("the best trade route: checkRoutes", () =>
 		assert.equal(manager.checkRoutes(world.gameState), true);
 		assert.equal(manager.tradeRoute?.sea, 5);
 		assert.equal(manager.tradeRoute?.gain, gainOf([40, 300], [280, 300], 0.35));
-		assert.deepEqual(manager.checkRoutes(world.gameState, 5), manager.tradeRoute, "the best route on that sea");
+		assert.deepEqual(manager.checkRoutes(world.gameState, seaRegion(5)), manager.tradeRoute, "the best route on that sea");
 
 		const noShips = seat({ "regionTypes": { 2: "land", 5: "water" } }, { "land": true });
 		noShips.world.accessAt.set("40,300", 3);
@@ -230,9 +211,9 @@ describe("the best trade route: checkRoutes", () =>
 		market(world, 400, [40, 40]);
 		market(world, 401, [280, 40]);
 
-		assert.equal((manager.checkRoutes(world.gameState, 2) as Route).land, 2);
-		assert.equal((manager.checkRoutes(world.gameState, 3) as Route).land, 2, "land 3 has no route of its own");
-		assert.equal(manager.checkRoutes(world.gameState, 5), false, "a sea with no route");
+		assert.equal((manager.checkRoutes(world.gameState, landRegion(2)) as TradeRoute).land, 2);
+		assert.equal((manager.checkRoutes(world.gameState, landRegion(3)) as TradeRoute).land, 2, "land 3 has no route of its own");
+		assert.equal(manager.checkRoutes(world.gameState, seaRegion(5)), false, "a sea with no route");
 	});
 
 	it("among several markets the farthest pair wins, whatever order they were built in; markets on two lands make no pair", () =>
@@ -247,10 +228,10 @@ describe("the best trade route: checkRoutes", () =>
 
 		manager.checkRoutes(world.gameState);
 		assert.deepEqual([manager.tradeRoute?.source, manager.tradeRoute?.target], [400, 401]);
-		const land2 = manager.checkRoutes(world.gameState, 2) as Route;
+		const land2 = manager.checkRoutes(world.gameState, landRegion(2)) as TradeRoute;
 		assert.deepEqual([land2.source, land2.target], [400, 401]);
 		// land 3 has a single market: the best land route anywhere
-		const land3 = manager.checkRoutes(world.gameState, 3) as Route;
+		const land3 = manager.checkRoutes(world.gameState, landRegion(3)) as TradeRoute;
 		assert.deepEqual([land3.source, land3.target], [400, 401]);
 	});
 });
@@ -295,21 +276,21 @@ describe("traders trained: trainMoreTraders", () =>
 	it("a sea route takes over a merchant ship serving as transport, or trains a new one", () =>
 	{
 		const { world, hq, manager, queues } = seat();
-		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "sea": 5 };
+		manager.tradeRoute = { "source": entityId(400), "target": entityId(401), "gain": 100, "sea": seaRegion(5) };
 		const free = world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [200, 200], "classes": ["Unit", "Ship", "Trader"] }));
 		const carrying = world.addEntity(makeHqEntity({ "id": 311, "owner": PLAYER, "position": [200, 220], "classes": ["Unit", "Ship", "Trader"] },
 			{}, { "transporter": 4 }));
-		hq.navalManager.seaTransportShips = { 5: { "forEach": (f: (s: FakeEnt) => void) => [free].forEach(f) } };
+		hq.navalManager.seaTransportShips = fleetOn(world, 5, [free]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(free.getMetadata(PlayerID, "role"), "trader");
 
-		hq.navalManager.seaTransportShips = { 5: { "forEach": (f: (s: FakeEnt) => void) => [carrying].forEach(f) } };
+		hq.navalManager.seaTransportShips = fleetOn(world, 5, [carrying]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(carrying.getMetadata(PlayerID, "role"), "switchToTrader", "after its passage");
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(queues.trader.plans.length, 0, "one already switching");
 
-		hq.navalManager.seaTransportShips = { 5: { "forEach": () => undefined } };	// no merchant ship among them
+		hq.navalManager.seaTransportShips = fleetOn(world, 5, []);	// no merchant ship among them
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.deepEqual(queues.trader.plans.map((p) => [p.type, p.metadata]),
 			[["units/athen/ship_merchant", { "role": "trader", "sea": 5 }]]);
@@ -318,7 +299,7 @@ describe("traders trained: trainMoreTraders", () =>
 	it("a sea route with enough merchant ships, counting those being built, trains no more", () =>
 	{
 		const { world, manager, queues } = seat();
-		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "sea": 5 };
+		manager.tradeRoute = { "source": entityId(400), "target": entityId(401), "gain": 100, "sea": seaRegion(5) };
 		manager.targetNumTraders = 4;
 		for (let i = 0; i < 2; ++i)
 			manager.assignTrader(trader(world, 320 + i, [200, 200], { "ship": true }).ent);
@@ -332,10 +313,10 @@ describe("traders trained: trainMoreTraders", () =>
 	it("a warship in the transport fleet is passed over; the merchant ship beside it is taken", () =>
 	{
 		const { world, hq, manager, queues } = seat();
-		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "sea": 5 };
+		manager.tradeRoute = { "source": entityId(400), "target": entityId(401), "gain": 100, "sea": seaRegion(5) };
 		const warship = world.addEntity(makeHqEntity({ "id": 312, "owner": PLAYER, "position": [200, 200], "classes": ["Unit", "Ship", "Warship"] }));
 		const merchant = world.addEntity(makeHqEntity({ "id": 313, "owner": PLAYER, "position": [200, 210], "classes": ["Unit", "Ship", "Trader"] }));
-		hq.navalManager.seaTransportShips = { 5: { "forEach": (f: (s: FakeEnt) => void) => [warship, merchant].forEach(f) } };
+		hq.navalManager.seaTransportShips = fleetOn(world, 5, [warship, merchant]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(warship.getMetadata(PlayerID, "role"), undefined);
 		assert.equal(merchant.getMetadata(PlayerID, "role"), "trader");
@@ -347,7 +328,7 @@ describe("traders trained: trainMoreTraders", () =>
 		const { world, manager, queues } = seat({}, { "sea": true });
 		market(world, 400, [40, 40]);
 		market(world, 401, [280, 40]);
-		manager.tradeRoute = { "source": 400, "target": 401, "gain": 100, "land": 2 };
+		manager.tradeRoute = { "source": entityId(400), "target": entityId(401), "gain": 100, "land": landRegion(2) };
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(queues.trader.plans.length, 0);
 	});
@@ -382,12 +363,12 @@ describe("a trader sent on its way: updateTrader", () =>
 	{
 		const { world, hq, manager } = routed();
 		world.accessAt.set("260,200", 3);
-		(world.ai.accessibility as unknown as { regionType: Record<number, string> }).regionType[3] = "land";
+		world.ai.accessibility.regionType[3] = "land";
 		const far = trader(world, 300, [260, 200]);
 
 		manager.updateTrader(world.gameState, far.ent);
 
-		const call = doorCalls(hq.navalManager as never).find(([m]) => m === "requireTransport");
+		const call = doorCalls(hq.navalManager).find(([m]) => m === "requireTransport");
 		assert.deepEqual(call?.[1].slice(2), [3, 2, [280, 40]]);
 	});
 
@@ -395,12 +376,12 @@ describe("a trader sent on its way: updateTrader", () =>
 	{
 		const { world, hq, manager } = routed();
 		world.accessAt.set("60,200", 3);
-		(world.ai.accessibility as unknown as { regionType: Record<number, string> }).regionType[3] = "land";
+		world.ai.accessibility.regionType[3] = "land";
 		const far = trader(world, 300, [60, 200]);
 
 		manager.updateTrader(world.gameState, far.ent);
 
-		const call = doorCalls(hq.navalManager as never).find(([m]) => m === "requireTransport");
+		const call = doorCalls(hq.navalManager).find(([m]) => m === "requireTransport");
 		assert.deepEqual(call?.[1].slice(2), [3, 2, [40, 40]]);
 	});
 
@@ -427,14 +408,13 @@ describe("a trader sent on its way: updateTrader", () =>
 		const { world, hq, manager } = routed();
 		const collected: number[] = [];
 		const ship = trader(world, 310, [200, 200], { "ship": true, "methods": {
-			"isTreasureCollector": () => true, "collectTreasure": (t: FakeEnt) => collected.push(t.id())
+			"isTreasureCollector": () => true, "collectTreasure": (t: CommonEntity) => collected.push(t.id())
 		} });
 		world.addEntity(makeHqEntity({ "id": 900, "owner": 0, "position": [210, 200], "classes": ["Treasure"] },
 			{ "isTreasure": () => true }, { "sea": 2 }));
-		hq.treasures = (world.gameState as unknown as { getEntities(): { filter(f: (e: FakeEnt) => boolean): unknown } })
-			.getEntities().filter((e: FakeEnt) => (e as unknown as { isTreasure(): boolean }).isTreasure());
+		hq.treasures = world.gameState.getEntities().filter((e: CommonEntity) => e.isTreasure());
 		ship.ent.setMetadata(PlayerID, "sea", 2);
-		ai(world).playedTurn = 5;
+		world.ai.playedTurn = 5;
 
 		manager.updateTrader(world.gameState, ship.ent);
 
@@ -450,13 +430,13 @@ describe("what traders carry and what the market barters", () =>
 		const { world, hq, manager } = seat();
 		hq.getTotalResourceLevel = () => ({ "food": 5000, "wood": 100, "stone": 300, "metal": 2000 });
 		hq.GetWantedGatherRates = () => ({ "food": 10, "wood": 30, "stone": 0, "metal": 0 });
-		hq.pickMostNeededResources = () => [{ "type": "wood", "wanted": 30 }, { "type": "food", "wanted": 10 }];
+		hq.pickMostNeededResources = () => [{ "type": "wood", "wanted": 30, "current": 0 }, { "type": "food", "wanted": 10, "current": 0 }];
 		const base = hq.Config.Economy.targetNumTraders;
 
 		manager.setTradingGoods(world.gameState);
 
 		// wood scarce and wanted 20, stone low 10, metal plenty 0: 70 left, 49 to wood and 21 to food
-		assert.deepEqual(of("set-trading-goods"), [{ "type": "set-trading-goods",
+		assert.deepEqual(sent("set-trading-goods"), [{ "type": "set-trading-goods",
 			"tradingGoods": { "food": 21, "wood": 69, "stone": 10, "metal": 0 } }]);
 		assert.equal(manager.targetNumTraders, Math.round(hq.Config.popScaling * (base + 4 + 2)));
 	});
@@ -466,9 +446,9 @@ describe("what traders carry and what the market barters", () =>
 		const { world, hq, manager } = seat();
 		hq.getTotalResourceLevel = () => ({ "food": 5000, "wood": 5000, "stone": 5000, "metal": 5000 });
 		hq.GetWantedGatherRates = () => ({ "food": 0, "wood": 0, "stone": 0, "metal": 0 });
-		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10 }, { "type": "food", "wanted": 0 }];
+		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10, "current": 0 }, { "type": "food", "wanted": 0, "current": 0 }];
 		manager.setTradingGoods(world.gameState);
-		assert.deepEqual(of("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 0, "stone": 0, "metal": 100 });
+		assert.deepEqual(sent("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 0, "stone": 0, "metal": 100 });
 	});
 
 	it("a resource of which we hold 500 to 1000 is carried a little, and wants one more trader", () =>
@@ -476,16 +456,15 @@ describe("what traders carry and what the market barters", () =>
 		const { world, hq, manager } = seat();
 		hq.getTotalResourceLevel = () => ({ "food": 5000, "wood": 700, "stone": 5000, "metal": 5000 });
 		hq.GetWantedGatherRates = () => ({ "food": 0, "wood": 0, "stone": 0, "metal": 0 });
-		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10 }, { "type": "food", "wanted": 0 }];
+		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10, "current": 0 }, { "type": "food", "wanted": 0, "current": 0 }];
 		const base = hq.Config.Economy.targetNumTraders;
 		manager.setTradingGoods(world.gameState);
-		assert.deepEqual(of("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 10, "stone": 0, "metal": 90 });
+		assert.deepEqual(sent("set-trading-goods")[0].tradingGoods, { "food": 0, "wood": 10, "stone": 0, "metal": 90 });
 		assert.equal(manager.targetNumTraders, Math.round(hq.Config.popScaling * (base + 1)));
 	});
 
 	/** a market that barters, and what the town has, needs and gathers */
-	function barter(available: Record<string, number>, needs: Record<string, number>, prices = { "buy": {}, "sell": {} } as {
-		buy: Record<string, number>; sell: Record<string, number> })
+	function barter(available: Record<string, number>, needs: Record<string, number>, prices = { "buy": {}, "sell": {} })
 	{
 		const s = seat();
 		const done: unknown[] = [];
@@ -594,7 +573,7 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 		for (const t of [a, b, c, d])
 			manager.assignTrader(t.ent);
 
-		assert.equal(manager.checkEvents(world.gameState, { ...emptyEvents(), "EntityRenamed": [{ "entity": 400, "newentity": 410 }] }), false);
+		assert.equal(manager.checkEvents(world.gameState, eventsWith({ "EntityRenamed": [{ "entity": entityId(400), "newentity": entityId(410) }] })), false);
 
 		assert.deepEqual(a.ent.getMetadata(PlayerID, "route"), { "source": 410, "target": 401 });
 		assert.deepEqual(b.ent.getMetadata(PlayerID, "route"), { "source": 401, "target": 410 });
@@ -602,18 +581,19 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 
 	it("a route's market destroyed, a market built or captured, or a change of diplomacy: look for a better route", () =>
 	{
-		for (const evts of [
-			{ "Destroy": [{ "entity": 401 }] },
-			{ "Create": [{ "entity": 420 }] },
-			{ "OwnershipChanged": [{ "entity": 420, "from": ENEMY, "to": PLAYER }] },
-			{ "DiplomacyChanged": [{}] }
-		])
+		const cases: Array<Partial<EngineAIEvents>> = [
+			{ "Destroy": [{ "entity": entityId(401) }] },
+			{ "Create": [{ "entity": entityId(420) }] },
+			{ "OwnershipChanged": [{ "entity": entityId(420), "from": ENEMY, "to": PLAYER }] },
+			{ "DiplomacyChanged": [{ "player": ENEMY, "otherPlayer": PLAYER }] }
+		];
+		for (const evts of cases)
 		{
 			const { world, hq, manager } = routed();
 			market(world, 420, [160, 200]);
 			manager.routeProspection = false;
 			hq.buildManager.setUnbuildable(world.gameState, "structures/athen/market", 1000);
-			assert.equal(manager.checkEvents(world.gameState, { ...emptyEvents(), ...evts }), true, Object.keys(evts)[0]);
+			assert.equal(manager.checkEvents(world.gameState, eventsWith(evts)), true, Object.keys(evts)[0]);
 			assert.equal(manager.routeProspection, true);
 			assert.equal(hq.buildManager.isUnbuildable(world.gameState, "structures/athen/market"), false);
 		}
@@ -625,7 +605,7 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 		world.addEntity(makeHqEntity({ "id": 470, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "House"] }));
 		const a = trader(world, 300, [60, 40], { "metadata": { "route": { "source": 400, "target": 401 } } });
 		manager.assignTrader(a.ent);
-		assert.equal(manager.checkEvents(world.gameState, { ...emptyEvents(), "EntityRenamed": [{ "entity": 469, "newentity": 470 }] }), false);
+		assert.equal(manager.checkEvents(world.gameState, eventsWith({ "EntityRenamed": [{ "entity": entityId(469), "newentity": entityId(470) }] })), false);
 		assert.deepEqual(a.ent.getMetadata(PlayerID, "route"), { "source": 400, "target": 401 });
 	});
 
@@ -634,10 +614,9 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 		const { world, manager } = routed();
 		market(world, 420, [160, 200], { "owner": ENEMY });
 		market(world, 421, [160, 220], { "foundation": true });
-		assert.equal(manager.checkEvents(world.gameState, { ...emptyEvents(),
-			"Create": [{ "entity": 420 }, { "entity": 421 }, { "entity": 999 }],
-			"OwnershipChanged": [{ "entity": 420, "from": ENEMY, "to": 0 }, { "entity": 999, "from": PLAYER, "to": ENEMY }],
-			"Destroy": [{ "entity": 999 }] }), false);
+		assert.equal(manager.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(420) }, { "entity": entityId(421) }, { "entity": entityId(999) }],
+			"OwnershipChanged": [{ "entity": entityId(420), "from": ENEMY, "to": playerId(0) }, { "entity": entityId(999), "from": PLAYER, "to": ENEMY }],
+			"Destroy": [{ "entity": entityId(999) }] })), false);
 	});
 
 	it("a trader whose route still stands keeps it; one whose route is gone heads home or stops", () =>
@@ -668,7 +647,7 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 {
 	/** a town that can build markets, with one already standing */
-	function prospecting(options: { route?: boolean; position?: number[] | undefined } = {})
+	function prospecting(options: { route?: boolean; position?: ReturnType<Headquarters["findMarketLocation"]> } = {})
 	{
 		const s = seat();
 		s.world.templates["structures/athen/market"] = makeTemplate("structures/athen/market",
@@ -680,7 +659,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 			market(s.world, 401, [280, 40]);
 			s.manager.checkRoutes(s.world.gameState);
 		}
-		s.hq.findMarketLocation = () => "position" in options ? options.position : [200, 200, 2, 50000];
+		s.hq.findMarketLocation = () => options.position ?? [200, 200, 2, 50000];
 		s.manager.routeProspection = true;
 		return s;
 	}
@@ -690,7 +669,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 		const { world, hq, manager, queues } = prospecting();
 		manager.prospectForNewMarket(world.gameState, queues);
 		assert.deepEqual(queues.economicBuilding.plans.map((p) => p.type), ["structures/athen/market"]);
-		assert.equal((world.ai.queueManager as unknown as { priorities: Record<string, number> }).priorities.economicBuilding,
+		assert.equal(world.ai.queueManager.priorities.economicBuilding,
 			2 * hq.Config.priorities.economicBuilding);
 		assert.equal(manager.routeProspection, false);
 	});
@@ -704,7 +683,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 
 	it("no spot found: the market is put aside if we have one, else the search stops", () =>
 	{
-		const { world, hq, manager, queues } = prospecting({ "position": undefined });
+		const { world, hq, manager, queues } = prospecting({ "position": false });
 		manager.prospectForNewMarket(world.gameState, queues);
 		assert.equal(hq.buildManager.isUnbuildable(world.gameState, "structures/athen/market"), true);
 
@@ -721,7 +700,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 	it("no market queued while one is queued, when markets cannot be built, or with no trading building at all", () =>
 	{
 		const queued = prospecting();
-		(queued.queues.economicBuilding as unknown as { hasQueuedUnitsWithClass: () => boolean }).hasQueuedUnitsWithClass = () => true;
+		queued.queues.economicBuilding.hasQueuedUnitsWithClass = () => true;
 		queued.manager.prospectForNewMarket(queued.world.gameState, queued.queues);
 		assert.equal(queued.manager.routeProspection, true);
 
@@ -741,10 +720,10 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 	{
 		const { manager } = seat();
 		assert.equal(manager.isNewMarketWorth(4), false, "under the minimal gain");
-		manager.potentialTradeRoute = { "source": 1, "target": 2, "gain": 100 };
+		manager.potentialTradeRoute = { "source": entityId(1), "target": entityId(2), "gain": 100 };
 		assert.equal(manager.isNewMarketWorth(119), false);
 		assert.equal(manager.isNewMarketWorth(120), true);
-		manager.potentialTradeRoute = { "source": 1, "target": 2, "gain": 10 };
+		manager.potentialTradeRoute = { "source": entityId(1), "target": entityId(2), "gain": 10 };
 		assert.equal(manager.isNewMarketWorth(20), true);
 		stubGlobal("Resources", Object.assign(Object.create(Resources), { "GetTradableCodes": () => [] }));
 		assert.equal(manager.isNewMarketWorth(1000), false);
@@ -764,18 +743,18 @@ describe("the trade office through its turn: update", () =>
 		hq.canBarter = true;
 		hq.getTotalResourceLevel = () => ({ "food": 5000, "wood": 5000, "stone": 5000, "metal": 5000 });
 		hq.GetWantedGatherRates = () => ({ "food": 0, "wood": 0, "stone": 0, "metal": 0 });
-		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10 }];
-		hq.findMarketLocation = () => undefined;
+		hq.pickMostNeededResources = () => [{ "type": "metal", "wanted": 10, "current": 0 }];
+		hq.findMarketLocation = () => false;
 		hq.canBuild = () => false;
 		manager.targetNumTraders = 6;
-		ai(world).playedTurn = 60;
+		world.ai.playedTurn = 60;
 
-		manager.update(world.gameState, { ...emptyEvents(), "DiplomacyChanged": [{}] }, queues);
+		manager.update(world.gameState, eventsWith({ "DiplomacyChanged": [{ "player": ENEMY, "otherPlayer": PLAYER }] }), queues);
 
 		assert.deepEqual(t1.orders, [["trade", 401, 400]]);
 		assert.equal(queues.trader.plans.length, 1, "trained on the fifth turn");
-		assert.ok(doorCalls(hq.researchManager as never).some(([m]) => m === "researchTradeBonus"), "researched on the twentieth");
-		assert.equal(of("set-trading-goods").length, 1, "goods set on the sixtieth");
+		assert.ok(doorCalls(hq.researchManager).some(([m]) => m === "researchTradeBonus"), "researched on the twentieth");
+		assert.equal(sent("set-trading-goods").length, 1, "goods set on the sixtieth");
 	});
 
 	it("at the easiest difficulty, it only barters", () =>
@@ -784,7 +763,7 @@ describe("the trade office through its turn: update", () =>
 		hq.Config.difficulty = 0;
 		market(world, 400, [40, 40]);
 		market(world, 401, [280, 40]);
-		manager.update(world.gameState, { ...emptyEvents(), "DiplomacyChanged": [{}] }, queues);
+		manager.update(world.gameState, eventsWith({ "DiplomacyChanged": [{ "player": ENEMY, "otherPlayer": PLAYER }] }), queues);
 		assert.equal(manager.routeProspection, false);
 		assert.equal(manager.tradeRoute, undefined);
 	});
@@ -796,7 +775,7 @@ describe("the trade office saved and loaded", () =>
 	{
 		const { world, manager } = seat();
 		const defaults = manager.Serialize();
-		manager.Deserialize(world.gameState, { "tradeRoute": undefined, "potentialTradeRoute": undefined });
+		manager.Deserialize(world.gameState, fake<SerializedTradeManager>({ "tradeRoute": undefined, "potentialTradeRoute": undefined }));
 		assert.deepEqual(manager.Serialize(), defaults);
 	});
 });

@@ -9,31 +9,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadCommonModule, loadPetraModule } from "./harness/target.ts";
 import { logs, resetRecorder } from "./harness/engine.ts";
-import {
-	ENEMY, GAIA, makeEntity, makeTemplate, makeWorld, mapOf, PLAYER, type FakeEnt, type World
-} from "./harness/attackWorld.ts";
+import { makeEntity, makeTemplate, type Methods, override } from "./harness/fakes.ts";
+import { collectionOf, ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-type Ent = FakeEnt;
-const ext = await loadPetraModule<{
-	getMaxStrength(ent: unknown, debugLevel: number, importance: Record<string, number>, againstClass?: string): number;
-	getLandAccess(gameState: unknown, ent: Ent): number | undefined;
-	getSeaAccess(gameState: unknown, ent: Ent): number | undefined;
-	requireTemplate(gameState: unknown, type: string): unknown;
-	requireMetadata(ent: Ent, key: string): unknown;
-	requireValue<T>(value: T | undefined): T;
-	allowCapture(gameState: unknown, ent: Ent, target: Ent): boolean;
-	getAttackBonus(ent: Ent, target: Ent, type: string): number;
-	returnResources(gameState: unknown, ent: Ent): boolean;
-	getBestBase(gameState: unknown, ent: Ent, onlyConstructedBase?: boolean, exclude?: number | false): unknown;
-	isNotWorthBuilding(gameState: unknown, ent: Ent): boolean;
-	gatherTreasure(gameState: unknown, ent: Ent | undefined, water?: boolean): boolean;
-	dumpEntity(ent: Ent | undefined): void;
-}>("entityExtend");
-const { EntityCollection } = await loadCommonModule<{
-	EntityCollection: new (sharedAI: unknown, ents?: Map<number, Ent>) => unknown;
-}>("entitycollection");
+import { entityId, templateName } from "../adapter/brands.ts";
+import * as ext from "../adapter/entityExtend.ts";
 
 /** the real Config's damage weights */
 const IMPORTANCE = { "Hack": 0.075, "Pierce": 0.085, "Crush": 0.045, "Fire": 0.001 };
@@ -44,26 +25,17 @@ function close(actual: number, expected: number): void
 	assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 }
 
-function collection(world: World, ents: Ent[]): unknown
-{
-	return new EntityCollection(world.gameState.sharedScript, mapOf(ents));
-}
-
 describe("getMaxStrength: how strong a unit template is", () =>
 {
 	/** an archer as the game ships it: a ranged attack, a slaughter attack for hunting */
-	const archer = (extra: Record<string, unknown> = {}) => ({
-		...makeTemplate("units/athen/infantry_archer_b", {
+	const archer = (extra: Methods = {}) => override(makeTemplate("units/athen/infantry_archer_b", {
 			"attackTypes": ["Ranged", "Slaughter"],
 			"attackStrengths": { "Ranged": { "Pierce": 6 }, "Slaughter": { "Hack": 100 } },
 			"attackRanges": { "Ranged": { "max": 60 } },
 			"attackTimes": { "Ranged": { "prepare": 500, "repeat": 1000 } },
 			"resistanceStrengths": { "Hack": 1, "Pierce": 1, "Crush": 1 },
 			"maxHitpoints": 50
-		}),
-		"getMultiplierAgainst": () => 1,
-		...extra
-	});
+		}), { "getMultiplierAgainst": () => 1, ...extra });
 
 	it("weighs damage, range, rate of fire and armour by hitpoints; the hunting attack does not count", () =>
 	{
@@ -136,7 +108,7 @@ describe("land and sea access", () =>
 	});
 
 	/** a dock standing in the water at [100,100], facing north (angle 0) */
-	function dock(world: World, id: number, footprint: Record<string, string>): Ent
+	function dock(world: World, id: number, footprint: Record<string, string>): CommonEntity
 	{
 		return world.addEntity(makeEntity({ id, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Dock"] }, {
 			"buildPlacementType": () => "shore",
@@ -178,8 +150,8 @@ describe("land and sea access", () =>
 	{
 		const world = makeWorld();
 		const sea = new Map<string, number>([["100,100", 1], ["100,103", 1], ["100,106", 5]]);
-		(world.ai.accessibility as Record<string, unknown>).getAccessValue = (pos: [number, number], onWater?: boolean) =>
-			onWater ? sea.get(`${pos[0]},${pos[1]}`) ?? 1 : 2;
+		override(world.ai.accessibility, { "getAccessValue": (pos: [number, number], onWater?: boolean) =>
+			onWater ? sea.get(`${pos[0]},${pos[1]}`) ?? 1 : 2 });
 		const harbour = dock(world, 17, {});
 		assert.equal(ext.getSeaAccess(world.gameState, harbour), 5);
 		assert.equal(harbour.getMetadata(PLAYER, "sea"), 5);
@@ -193,14 +165,14 @@ describe("the require helpers: values Petra relies on", () =>
 	{
 		const world = makeWorld();
 		world.templates["units/athen/support_female_citizen"] = makeTemplate("units/athen/support_female_citizen");
-		assert.equal(ext.requireTemplate(world.gameState, "units/athen/support_female_citizen"),
+		assert.equal(ext.requireTemplate(world.gameState, templateName("units/athen/support_female_citizen")),
 			world.templates["units/athen/support_female_citizen"]);
 		const ship = makeEntity({ "id": 20, "owner": PLAYER, "classes": ["Unit", "Ship"] }, {}, { "sea": 4 });
 		assert.equal(ext.requireMetadata(ship, "sea"), 4);
 		assert.equal(ext.requireValue(0), 0);
 
 		resetRecorder();
-		assert.throws(() => ext.requireTemplate(world.gameState, "units/athen/nothing"), /template units\/athen\/nothing not found/);
+		assert.throws(() => ext.requireTemplate(world.gameState, templateName("units/athen/nothing")), /template units\/athen\/nothing not found/);
 		assert.throws(() => ext.requireMetadata(ship, "base"), /metadata base not found on entity 20/);
 		assert.throws(() => ext.requireValue(undefined), /required value was unexpectedly undefined/);
 		assert.equal(logs.length, 3);
@@ -210,7 +182,7 @@ describe("the require helpers: values Petra relies on", () =>
 describe("allowCapture: capture or destroy", () =>
 {
 	/** an enemy house of 500 capture points, at full health */
-	function house(world: World, extra: Record<string, unknown> = {}): Ent
+	function house(world: World, extra: Record<string, unknown> = {}): CommonEntity
 	{
 		return world.addEntity(makeEntity({ "id": 30, "owner": ENEMY, "position": [100, 100], "classes": ["Structure", "House"] }, {
 			"isCapturable": () => true,
@@ -218,7 +190,7 @@ describe("allowCapture: capture or destroy", () =>
 			...extra
 		}));
 	}
-	function capturer(world: World, id: number, strength: number): Ent
+	function capturer(world: World, id: number, strength: number): CommonEntity
 	{
 		return world.addEntity(makeEntity({ id, "owner": PLAYER, "position": [100, 90], "classes": ["Unit", "Infantry"] }, {
 			"canCapture": () => true, "captureStrength": () => strength
@@ -236,7 +208,7 @@ describe("allowCapture: capture or destroy", () =>
 		// 2.5 + 4 = 6.5
 		assert.equal(ext.allowCapture(world.gameState, second, target), true);
 		assert.equal(ext.allowCapture(world.gameState, first, target), true);
-		assert.deepEqual(world.ai.HQ.capturableTargets.get(30), { "strength": 6.5, "ents": new Set([31, 32]) });
+		assert.deepEqual(world.ai.HQ.capturableTargets.get(entityId(30)), { "strength": 6.5, "ents": new Set([31, 32]) });
 	});
 
 	it("a decaying building gives way faster", () =>
@@ -269,23 +241,23 @@ describe("getAttackBonus", () =>
 describe("returnResources: where a worker drops its load", () =>
 {
 	/** a world with shared dropsites (the allies researched it) and a loaded woodcutter at [100,100] */
-	function sharedWorld(): { world: World; worker: Ent; dropped: Ent[] }
+	function sharedWorld(): { world: World; worker: CommonEntity; dropped: CommonEntity[] }
 	{
 		const world = makeWorld();
 		world.gameState.playerData.hasSharedDropsites = true;
-		(world.gameState.playerData as { isAlly: boolean[] }).isAlly[ALLY] = true;
-		(world.gameState.playerData as { isMutualAlly: boolean[] }).isMutualAlly[ALLY] = true;
-		(world.gameState.playerData as { isAlly: boolean[] }).isAlly[ENEMY] = true;	// we ally them, they do not ally us
-		(world.gameState as unknown as Record<string, unknown>).getAnyDropsites = () => collection(world,
+		world.gameState.playerData.isAlly[ALLY] = true;
+		world.gameState.playerData.isMutualAlly[ALLY] = true;
+		world.gameState.playerData.isAlly[ENEMY] = true;	// we ally them, they do not ally us
+		world.gameState.getAnyDropsites = () => collectionOf(world,
 			world.structures.filter((s) => s.hasClass("Storehouse")));
-		const dropped: Ent[] = [];
+		const dropped: CommonEntity[] = [];
 		const worker = world.addEntity(makeEntity({ "id": 50, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Worker"] }, {
 			"resourceCarrying": () => [{ "type": "wood", "amount": 10 }],
-			"returnResources": (dropsite: Ent) => dropped.push(dropsite)
+			"returnResources": (dropsite: CommonEntity) => dropped.push(dropsite)
 		}));
 		return { world, worker, dropped };
 	}
-	function storehouse(world: World, id: number, owner: number, position: [number, number], access = 2): Ent
+	function storehouse(world: World, id: number, owner: number, position: [number, number], access = 2): CommonEntity
 	{
 		return world.addEntity(makeEntity({ id, owner, position, "classes": ["Structure", "Storehouse"] },
 			{ "isSharedDropsite": () => true }, { "access": access }));
@@ -316,25 +288,25 @@ describe("returnResources: where a worker drops its load", () =>
 
 describe("getBestBase: the base an entity belongs to", () =>
 {
-	interface FakeBase { ID: number; anchor: Ent | undefined; accessIndex: number; buildings: unknown }
+	interface FakeBase { ID: number; anchor: CommonEntity | undefined; accessIndex: number; buildings: unknown }
 
 	/** bases replace the world's default one; the first is the baseless base */
 	function withBases(world: World, bases: FakeBase[]): FakeBase
 	{
-		const baseless: FakeBase = { "ID": 0, "anchor": undefined, "accessIndex": 0, "buildings": collection(world, []) };
+		const baseless: FakeBase = { "ID": 0, "anchor": undefined, "accessIndex": 0, "buildings": collectionOf(world, []) };
 		const all = [baseless, ...bases];
 		const hq = world.ai.HQ as unknown as Record<string, unknown>;
 		hq.baseManagers = () => all;
 		hq.basesManager = { "baselessBase": () => baseless };
 		return baseless;
 	}
-	function anchor(world: World, id: number, position: [number, number], foundation = false): Ent
+	function anchor(world: World, id: number, position: [number, number], foundation = false): CommonEntity
 	{
 		return world.addEntity(makeEntity({ id, "owner": PLAYER, position, "classes": ["Structure", "CivCentre"] },
 			{ "foundationProgress": () => foundation ? 40 : undefined }));
 	}
-	const base = (world: World, ID: number, a: Ent | undefined, accessIndex = 2, buildings: Ent[] = []): FakeBase =>
-		({ ID, "anchor": a, accessIndex, "buildings": collection(world, buildings) });
+	const base = (world: World, ID: number, a: CommonEntity | undefined, accessIndex = 2, buildings: CommonEntity[] = []): FakeBase =>
+		({ ID, "anchor": a, accessIndex, "buildings": collectionOf(world, buildings) });
 
 	it("the nearest base wins; excluded and unfinished ones are passed over when asked", () =>
 	{
@@ -419,15 +391,15 @@ describe("gatherTreasure: sending a unit for treasure", () =>
 		for (const spot of spots)
 			if (spot.access)
 				world.accessAt.set(`${spot.position[0]},${spot.position[1]}`, spot.access);
-		(world.ai.HQ as unknown as Record<string, unknown>).treasures = collection(world, treasures);
+		world.ai.HQ.treasures = collectionOf(world, treasures);
 		return world;
 	}
-	function collector(world: World, id: number, position: [number, number] | undefined, collects = true): { ent: Ent; went: number[] }
+	function collector(world: World, id: number, position: [number, number] | undefined, collects = true): { ent: CommonEntity; went: number[] }
 	{
 		const went: number[] = [];
 		const ent = world.addEntity(makeEntity({ id, "owner": PLAYER, position, "classes": ["Unit", "Cavalry"] }, {
 			"isTreasureCollector": () => collects,
-			"collectTreasure": (t: Ent) => went.push(t.id())
+			"collectTreasure": (t: CommonEntity) => went.push(t.id())
 		}));
 		return { ent, went };
 	}

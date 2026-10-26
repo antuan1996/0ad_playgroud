@@ -9,7 +9,7 @@
  * hasEnemies, hasNeutrals, getEnemies, getMutualAllies, isPlayerAlly, ...)
  * exactly as defined there.
  */
-import type { World } from "./attackWorld.ts";
+import type { World } from "./world.ts";
 
 export type Stance = "ally" | "neutral" | "enemy";
 
@@ -60,11 +60,8 @@ export function setPlayers(world: World, players: PlayerSpec[], us = 1): PlayerR
 		"isEnemy": [...Array(n).keys()].map((j) => stance(i, j) === "enemy")
 	}));
 
-	const gs = world.gameState as unknown as Record<string, unknown> & {
-		playerData: Record<string, unknown>;
-		sharedScript: { playersData: PlayerRow[] };
-	};
-	gs.sharedScript.playersData = rows;
+	const gs = world.gameState;
+	Object.assign(gs.sharedScript, { "playersData": rows });
 	Object.assign(gs.playerData, {
 		"civ": rows[us].civ, "isAlly": rows[us].isAlly, "isMutualAlly": rows[us].isMutualAlly,
 		"isNeutral": rows[us].isNeutral, "isEnemy": rows[us].isEnemy, "teamLocked": rows[us].teamLocked

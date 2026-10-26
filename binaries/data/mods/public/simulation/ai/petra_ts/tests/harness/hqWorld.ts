@@ -22,11 +22,19 @@
  *  - the base CC the seat provides sits at [10,10] — inside the border ring,
  *    so CC-placement tests find free interior ground.
  */
-import {
-	ENEMY, GAIA, makeEntity, makeTemplate, makeWorld, mapOf, PLAYER,
-	type FakeEnt, type FakeTemplateLike, type Methods, type World, type WorldOptions
-} from "./attackWorld.ts";
-import { loadCommonModule, loadPetraModule } from "./target.ts";
+import { fake, makeEntity, makeTemplate, type Methods, override } from "./fakes.ts";
+import { collectionOf, ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from "./world.ts";
+
+import * as apiFilters from "simulation/ai/common-api/filters.js";
+import { ResourcesManager } from "simulation/ai/common-api/resources.js";
+
+import { cellIndex, templateName, worldPos } from "../../adapter/brands.ts";
+import { requireValue } from "../../adapter/entityExtend.ts";
+import type { BaseManager } from "../../decision/baseManager.ts";
+import { Config } from "../../decision/config.ts";
+import { Headquarters } from "../../decision/headquarters.ts";
+import type { Queue } from "../../execution/queue.ts";
+import { QueueManager } from "../../execution/queueManager.ts";
 
 /** re-exported so the suites draw every name from one place */
 export { ENEMY, GAIA, PLAYER };
@@ -75,7 +83,10 @@ export interface HqMap
 	/** the raw grids, also installed on sharedScript and ai */
 	territory: MapGrid;
 	passability: MapGrid;
+	/** the land and sea regions per passability cell, as accessibility holds
+	 * them; on the plain the sea map is the land map itself */
 	landPassMap: Uint8Array;
+	navalPassMap: Uint8Array;
 	ccResourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array }>;
 	/** the gather-estimation maps (wood/metal/stone) as HQ.updateResources keeps them */
 	resourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array }>;
@@ -160,6 +171,7 @@ export function makeHqMap(options: MapOptions = {}): HqMap
 		territory,
 		passability,
 		landPassMap,
+		navalPassMap: landPassMap,
 		ccResourceMaps,
 		resourceMaps,
 		setTerritoryOwner(ix: number, iy: number, owner: number)
@@ -184,45 +196,22 @@ export function makeHqMap(options: MapOptions = {}): HqMap
 }
 
 /** The center position of a territory cell, as the code reads back from indices. */
-export function centerOfCell(ix: number, iy: number): [number, number]
+export function centerOfCell(ix: number, iy: number): WorldPos
 {
-	return [TERRITORY_CELL * (ix + 0.5), TERRITORY_CELL * (iy + 0.5)];
+	return worldPos(TERRITORY_CELL * (ix + 0.5), TERRITORY_CELL * (iy + 0.5));
 }
 
-/** the passability index a position falls in, as map-module rounds it */
-export function passIndexAt(pos: [number, number]): number
+/** A territory cell of the board, by its column and row. */
+export function territoryCell(ix: number, iy: number): CellIndex<"territory">
 {
-	const px = Math.min(MAP_CELLS * PASS_RATIO - 1, Math.floor(pos[0] / 2));
-	const pz = Math.min(MAP_CELLS * PASS_RATIO - 1, Math.floor(pos[1] / 2));
-	return px + pz * MAP_CELLS * PASS_RATIO;
+	return cellIndex<"territory">({}, ix + iy * MAP_CELLS);
 }
 
-const { Headquarters } = await loadPetraModule<{
-	Headquarters: new (config: unknown, deserialized?: boolean) => HqInstance;
-}>("headquarters");
-const { Config } = await loadPetraModule<{ Config: new (difficulty?: number) => unknown; }>("config");
-const { QueueManager } = await loadPetraModule<{
-	QueueManager: new (config: unknown, queues: Record<string, unknown>) => {
-		addQueue(name: string, priority: number): void;
-		getPriority(name: string): number;
-		changePriority(name: string, priority: number, metadata: unknown): void;
-		[key: string]: unknown;
-	};
-}>("queueManager");
-const EntityCollection = (await loadCommonModule<{
-	EntityCollection: new (sharedAI: unknown, ents?: Map<number, FakeEnt>, filters?: unknown[]) => unknown;
-}>("entitycollection")).EntityCollection;
-const ResourcesManager = (await loadCommonModule<{
-	ResourcesManager: new (amounts?: Record<string, number>) =>
-		Record<string, number> & { canAfford(that: unknown): boolean; subtract(that: unknown): void };
-}>("resources")).ResourcesManager;
-const apiFilters = await loadCommonModule<{
-	byResource(resourceType: string): { func: (ent: FakeEnt) => boolean };
-	isHuntable(): { func: (ent: FakeEnt) => boolean };
-	isFishable(): { func: (ent: FakeEnt) => boolean };
-}>("filters");
-
-export type HqConfig = Record<string, any>;
+/** The territory cell a position falls in, as the territory map rounds it. */
+export function territoryCellAt(pos: readonly [number, number] | WorldPos): CellIndex<"territory">
+{
+	return territoryCell(Math.floor(pos[0] / TERRITORY_CELL), Math.floor(pos[1] / TERRITORY_CELL));
+}
 
 /**
  * The real Config, with the emergency factors setConfig computes for MEDIUM
@@ -233,21 +222,19 @@ export function makeHQConfig(options: {
 	difficulty?: number;
 	debug?: number;
 	popScaling?: number;
-	personality?: Partial<{ aggressive: number; defensive: number; cooperative: number; military: number }>;
-} = {}): HqConfig
+	personality?: Partial<PetraRuntime.Personality>;
+} = {}): Config
 {
-	const config = new Config(options.difficulty ?? 3) as HqConfig;
+	const config = new Config(options.difficulty ?? 3);
 	// setConfig's outcome for difficulty MEDIUM: the entries of
 	// factors.criticalRootRatio etc. indexed by 3
 	config.emergencyValues = { "population": 0.6, "structures": 0.6, "roots": 0.5 };
 	config.personality = {
-		"aggressive": 0.4, "defensive": 0.6, "cooperative": 0.5, "military": 0.5,
+		"aggressive": 0.4, "defensive": 0.6, "cooperative": 0.5,
 		...options.personality
 	};
 	// what setConfig books at a game start: the cuts that read discontinuous
-	// behavior off the personality. (The port's Config shoulders the cuts as
-	// a class field; the ref only creates them inside setConfig, so a
-	// production seat — and this harness — must have them set.)
+	// behavior off the personality
 	config.personalityCut = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
 	if (options.debug !== undefined)
 		config.debug = options.debug;
@@ -284,10 +271,10 @@ export function structureTemplate(name: string, detail: {
 	defensiveFire?: boolean;
 	/** the gatherers a supply-building feeds (ResourceSupply/MaxGatherers); default 0 */
 	maxGatherers?: number;
-} = {}): FakeTemplateLike
+} = {}): CommonTemplate
 {
 	const base = makeTemplate(name, detail);
-	return {
+	return fake<CommonTemplate>({
 		...base,
 		buildPlacementType: () => detail.placement === undefined ? "land" : detail.placement,
 		// as common-api Template.getPopulationBonus: zero for a template with no
@@ -324,7 +311,7 @@ export function structureTemplate(name: string, detail: {
 		resourceDropsiteTypes: () => detail.dropsiteTypes,
 		isResourceDropsite: (resource: string) =>
 			detail.dropsiteTypes !== undefined && (!resource || detail.dropsiteTypes.includes(resource))
-	} as unknown as FakeTemplateLike;
+	});
 }
 
 /** An entity as the world makes them, plus the pair of methods the common-api
@@ -335,14 +322,15 @@ export function makeHqEntity(spec: {
 	position?: [number, number] | undefined;
 	classes?: string[];
 	templateName?: string;
-}, methods: Methods = {}, metadata: Record<string, unknown> = {}): FakeEnt
+}, methods: Methods = {}, metadata: Record<string, unknown> = {}): CommonEntity
 {
-	const ent = makeEntity(spec, methods, metadata) as FakeEnt & Record<string, (...args: any[]) => unknown>;
-	if (!("isOwn" in methods))
-		ent.isOwn = (player: number) => player === ent.owner();
-	if (!("isTreasure" in methods))
-		ent.isTreasure = () => false;
-	return ent;
+	return makeEntity(spec, { ...hqEntityAnswers(spec.owner), ...methods }, metadata);
+}
+
+/** What the common-api gameState asks every entity, and the manager campaigns never needed. */
+function hqEntityAnswers(owner: number): Methods
+{
+	return { "isOwn": (player: number) => player === owner, "isTreasure": () => false };
 }
 
 /**
@@ -363,7 +351,7 @@ export function makeGaiaSupply(spec: {
 	classes?: string[];
 	/** the remaining amount; the map places full stocks, default 1000 */
 	amount?: number;
-}, methods: Methods = {}, metadata: Record<string, unknown> = {}): FakeEnt
+}, methods: Methods = {}, metadata: Record<string, unknown> = {}): CommonEntity
 {
 	return makeHqEntity({
 		id: spec.id,
@@ -378,6 +366,38 @@ export function makeGaiaSupply(spec: {
 		isHuntable: () => true,
 		...methods,
 	}, metadata);
+}
+
+/** The resources a civil centre takes, as every civil centre template lists them. */
+const ALL_RESOURCES = ["food", "wood", "stone", "metal"];
+
+/** The world's civil centre (the seat's anchor), answering as a dropsite for every resource. */
+export function dropsiteCC(world: World): CommonEntity
+{
+	return override(requireValue(world.ents.get(1000)), { "resourceDropsiteTypes": () => [...ALL_RESOURCES] });
+}
+
+/**
+ * The town's centre as the universal dropsite every civil centre template is,
+ * with the map's supplies around it booked into the base's books.
+ */
+export function bookCentreSupplies(world: World, base: BaseManager): void
+{
+	override(dropsiteCC(world), {
+		// a dropsite is no supply: the common-api answers undefined (entity.js)
+		"resourceSupplyType": () => undefined,
+		"resourceSupplyNumGatherers": () => undefined,
+		"resourceSupplyAmount": () => undefined,
+		"isResourceDropsite": (resource?: string) => !resource || ALL_RESOURCES.includes(resource)
+	});
+	base.assignResourceToDropsite(world.gameState, requireValue(base.anchor), false);
+}
+
+/** Lay a sea region map of the test's own over the board. */
+export function layNavalPassMap(world: HqWorld, naval: Uint8Array): void
+{
+	world.map.navalPassMap = naval;
+	Object.assign(world.ai.accessibility, { "navalPassMap": naval });
 }
 
 /** Extra world-level state the Headquarters tests stop in. */
@@ -420,33 +440,32 @@ export interface HqWorld extends World
 	trajectories: Record<string, number[]>;
 	/** the resets gameState.resetOnDiplomacyChanged recorded */
 	diplomacyResets: number[];
+	/** counts the town is queued for, by template (countEntitiesAndQueuedByType) */
+	hqKnobs: { queuedTypes: Record<string, number> };
 }
 
 /** Build a manager world, then lay the map and the engine answers over it. */
 export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 {
-	const world = makeWorld(options) as UnknownWorld;
+	const world = makeWorld(options);
 	const map = makeHqMap(options);
 	const diplomacyResets: number[] = [];
 	const trajectories: Record<string, number[]> = options.trajectories ?? {};
 	const disabled = new Set(options.disabledTemplates ?? []);
 	// mutable knobs the suites poke: counts the town is queued for by template
-	const hqKnobs: { queuedTypes: Record<string, number> } = { queuedTypes: {} };
+	const hqKnobs: HqWorld["hqKnobs"] = { queuedTypes: {} };
 
 	// the seed CC came with the manager world, before this file's entity
 	// defaults — give it the same answers (no treasure, its own owner)
-	const seedCC = world.ents.get(1000) as FakeEnt & Record<string, (...args: any[]) => unknown> | undefined;
+	const seedCC = world.ents.get(1000);
 	if (seedCC)
-	{
-		seedCC.isTreasure = () => false;
-		seedCC.isOwn = (player: number) => player === seedCC.owner();
-	}
+		Object.assign(seedCC, hqEntityAnswers(seedCC.owner()));
 
 	// the raw grids, where InfoMap and the map-module functions read them
-	Object.assign(world.ai as unknown as Record<string, unknown>, { "territoryMap": map.territory });
+	Object.assign(world.ai, { "territoryMap": map.territory });
 	Object.assign(world.ai.accessibility, {
 		landPassMap: map.landPassMap,
-		navalPassMap: map.landPassMap,
+		navalPassMap: map.navalPassMap,
 		// the passability grid: its width, and the map-module cell of a map position
 		width: MAP_CELLS * PASS_RATIO,
 		gamePosToMapPos: (p: [number, number]) =>
@@ -455,7 +474,7 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		regionType: options.regionTypes ?? { 2: "land", 3: "land" },
 		"getTrajectToIndex": (from: number, to: number) => trajectories[`${from},${to}`] ?? null
 	});
-	Object.assign(world.gameState.sharedScript as unknown as Record<string, unknown>, {
+	Object.assign(world.gameState.sharedScript, {
 		"territoryMap": map.territory,
 		"passabilityMap": map.passability,
 		"ccResourceMaps": map.ccResourceMaps,
@@ -463,256 +482,184 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		"mapSize": MAP_CELLS * TERRITORY_CELL
 	});
 
-	const gs = world.gameState as unknown as Record<string, unknown>;
-	gs.getPassabilityMap = () => map.passability;
-	gs.getPassabilityClassMask = (name: string) =>
-	{
-		const mask = (passMask as Record<string, number>)[name];
-		if (mask === undefined)
-			throw new Error(`passability class "${name}" is not defined in tests/harness/hqWorld.ts`);
-		return mask;
-	};
-	gs.circularMap = options.circularMap ?? false;
-	// as GameState.prototype.getEnemyStructures (gamestate.js 538): with no
-	// owner, the structures of everyone this player's diplomacy calls an
-	// enemy; with one, that player's structures
-	gs.getEnemyStructures = (owner?: number) =>
-		new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-			world.gameState.sharedScript,
-			mapOf(world.structures.filter((s) => owner === undefined ?
-				(world.gameState.playerData as { isEnemy: boolean[] }).isEnemy[s.owner()] : s.owner() === owner)));
-	gs.getNeutralStructures = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript,
-		mapOf(world.structures.filter((s) =>
-			(world.gameState.playerData as { isNeutral: boolean[] }).isNeutral[s.owner()])));
-	// as GameState.prototype.getOwnDropsites (gamestate.js 702): the own
-	// entities that accept the resource, or any resource when none is named
-	gs.getOwnDropsites = (resource?: string) =>
-	{
-		const owns = [...world.ents.values()].filter((e) => e.owner() === PLAYER &&
-			(e.isResourceDropsite ? e.isResourceDropsite(resource ?? "") : false));
-		return new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-			world.gameState.sharedScript, mapOf(owns));
-	};
-	gs.getExclusiveAllyEntities = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript,
-		mapOf([...world.ents.values()].filter((e) =>
-			(world.gameState.playerData as { isMutualAlly: boolean[] }).isMutualAlly[e.owner()] && e.owner() !== PLAYER)));
-	gs.getAlliedVictory = () => options.alliedVictory ?? false;
-	gs.getResources = () => new (ResourcesManager as new (amounts?: Record<string, number>) => unknown)({
-		"food": 0, "wood": 0, "stone": 0, "metal": 0, ...options.stock } as Record<string, number>);
-	// as GameState.prototype.getResourceSupplies: the supplies of one resource
-	// type, found over the whole world
-	gs.getResourceSupplies = (resource: string) =>
-		(gs.updatingGlobalCollection as (key: string, filter: unknown, collection: unknown) => unknown)(
-			`resource-${resource}`, apiFilters.byResource(resource), (gs.getEntities as () => unknown)());
-	// as GameState.prototype.getHuntableSupplies (gamestate.js 725): the world's
-	// cached "resource-hunt" collection — the huntable animals' supplies, with
-	// fish and sea-creatures left out (filters.js 217)
-	gs.getHuntableSupplies = () =>
-		(gs.updatingGlobalCollection as (key?: string, filter?: unknown, collection?: unknown) => unknown)(
-			"resource-hunt", apiFilters.isHuntable(), (gs.getEntities as () => unknown)());
-	// as GameState.prototype.getFishableSupplies (gamestate.js 730): the world's
-	// cached "resource-fish" collection — the still sea-creatures (filters.js 226)
-	gs.getFishableSupplies = () =>
-		(gs.updatingGlobalCollection as (key?: string, filter?: unknown, collection?: unknown) => unknown)(
-			"resource-fish", apiFilters.isFishable(), (gs.getEntities as () => unknown)());
-	// the cap our houses give; a town's matching ceiling (populationMax) is a
-	// different figure, which the census compares it against
-	gs.getPopulationLimit = () => options.populationLimit ?? options.populationMax ?? 400;
-	gs.getEntityLimits = () => options.entityLimits ?? {};
-	gs.getEntityCounts = () => options.entityCounts ?? {};
-	gs.getEntityMatchCounts = () => options.matchCounts ?? {};
-	// as GameState.getOwnEntities and getOwnEntitiesByClass (gamestate.js 488, 583):
-	// every entity of ours, units and structures, foundations included
-	const ownEntities = () => [...world.ents.values()].filter((e) => e.owner() === PLAYER);
-	gs.getOwnEntities = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript, mapOf(ownEntities()));
-	gs.getOwnEntitiesByClass = (cls: string) => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript, mapOf(ownEntities().filter((e) => e.hasClass(cls))));
-	gs.getOwnFoundations = () => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript,
-		mapOf([...world.ents.values()].filter((e) =>
-			e.owner() === PLAYER && e.foundationProgress() !== undefined)));
-	gs.getOwnFoundationsByClass = (cls: string) => new (EntityCollection as new (ai: unknown, ents?: Map<number, FakeEnt>) => unknown)(
-		world.gameState.sharedScript,
-		mapOf([...world.ents.values()].filter((e) =>
-			e.owner() === PLAYER && e.foundationProgress() !== undefined && e.hasClass(cls))));
-	gs.isTemplateAvailable = (name: string) => !disabled.has(name) && world.templates[name] !== undefined;
 	// as GameState.prototype.isTemplateDisabled (gamestate.js 943) reads
 	// playerData.disabledTemplates: the per-civ disabled-template list the game
 	// ships, so a template name mapped to a truthy value is disabled
-	(world.gameState.playerData as Record<string, unknown>).disabledTemplates =
-		Object.fromEntries([...disabled].map((name: string) => [name, true]));
-	gs.isTemplateDisabled = (name: string) =>
-		!!((world.gameState.playerData as { disabledTemplates: Record<string, unknown> })
-			.disabledTemplates[name]);
-	gs.isCeasefireActive = () => options.ceasefire !== undefined && options.ceasefire !== false;
-	gs.ceasefireTimeRemaining = options.ceasefire === true ? 600 : (options.ceasefire ?? 0);
-	gs.resetOnDiplomacyChanged = () => diplomacyResets.push(world.ai.playedTurn);
-	gs.getNumberOfPhases = () => options.numPhases ?? 3;
-	gs.getPhaseEntityRequirements = (phase: number) => options.phaseRequirements?.[phase] ?? [];
-	// the count of structures our town holds of one type — as the game counts
-	// them (by template; foundations carry their final template's name)
-	gs.countEntitiesByType = (type: string) =>
-		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.templateName() === type).length;
-	// the built form of a foundation: the template its name points at, as the
-	// game's foundation names carry the "foundation|" prefix
-	gs.getBuiltTemplate = (foundationName: string) =>
-		foundationName.startsWith("foundation|") ? world.templates[foundationName.slice("foundation|".length)] ?? null : null;
-	// the own entities carrying a metadata value, as the game gathers them for a
-	// task keyed by an entity id (a foundation's builders, a repair crew)
-	gs.getOwnEntitiesByMetadata = (key: string, value: unknown) =>
-		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.getMetadata(PLAYER, key) === value);
-	gs.countEntitiesAndQueuedByType = (type: string) => (gs.countEntitiesByType as (t: string) => number)(type) +
-		(hqKnobs.queuedTypes[type] ?? 0);
-	gs.hqKnobs = hqKnobs;
-	// as GameState.prototype.findTrainableUnits: every template our own
-	// facilities train, filtered by the class rules of the game
-	gs.findTrainableUnits = (classes: Array<string | string[]>, anticlasses: string[]) =>
-	{
-		const allTrainable: string[] = [];
-		// as GameState.prototype.findTrainableUnits: the training facilities
-		// (an own entity whose trainingQueue is truthy), each list of cards
-		for (const ent of world.structures.filter((s) =>
-			((s as unknown as Record<string, (player: number) => unknown>).trainingQueue)(PLAYER)))
-			for (const trainable of (ent.trainableEntities as (civ: string) => string[] | undefined)("athen") ?? [])
-				if (!allTrainable.includes(trainable))
-					allTrainable.push(trainable);
-		const found: Array<[string, FakeTemplateLike]> = [];
-		const limits = (gs.getEntityLimits as unknown as () =>
-			Record<string, number>)();
-		const current = (gs.getEntityCounts as unknown as () =>
-			Record<string, number>)();
-		const matchCounts = (gs.getEntityMatchCounts as unknown as () =>
-			Record<string, number> | undefined)();
-		for (const trainable of allTrainable)
+	const playerData = Object.assign(fake<Record<string, unknown>>(world.gameState.playerData), {
+		"disabledTemplates": Object.fromEntries([...disabled].map((name) => [name, true])),
+		"isNeutral": [false, false, false, false]
+	});
+	const diplomacy = fake<{ isEnemy: boolean[]; isNeutral: boolean[]; isMutualAlly: boolean[] }>(playerData);
+
+	const gs = world.gameState;
+	const all = () => [...world.ents.values()];
+	// as GameState.getOwnEntities and getOwnEntitiesByClass (gamestate.js 488, 583):
+	// every entity of ours, units and structures, foundations included
+	const ownEntities = () => all().filter((e) => e.owner() === PLAYER);
+	const ownFoundations = () => ownEntities().filter((e) => e.foundationProgress() !== undefined);
+	const countEntitiesByType = (type: string) => ownEntities().filter((e) => e.templateName() === type).length;
+	Object.assign(gs, {
+		hqKnobs,
+		getPassabilityMap: () => map.passability,
+		getPassabilityClassMask: (name: string) =>
 		{
-			if (world.gameState.isTemplateDisabled(trainable as TemplateName))
-				continue;
-			const template = world.templates[trainable];
-			if (!template || !template.available(world.gameState))
-				continue;
-			const limit = template.matchLimit();
-			if (matchCounts && limit && matchCounts[trainable] >= limit)
-				continue;
-			// the class list may nest (a common-api class list carries
-			// AND-groups as sub-arrays); MatchesClassList reads both
-			if (!template.hasClasses(classes as string[]) || template.hasClasses(anticlasses))
-				continue;
-			// the TrainingRestrictions category, counted like the game counts it
-			const category = template.trainingCategory();
-			if (category && limits[category] && current[category] >= limits[category])
-				continue;
-			found.push([trainable, template]);
+			const mask = fake<Record<string, number>>(passMask)[name];
+			if (mask === undefined)
+				throw new Error(`passability class "${name}" is not defined in tests/harness/hqWorld.ts`);
+			return mask;
+		},
+		circularMap: options.circularMap ?? false,
+		// as GameState.prototype.getEnemyStructures (gamestate.js 538): with no
+		// owner, the structures of everyone this player's diplomacy calls an
+		// enemy; with one, that player's structures
+		getEnemyStructures: (owner?: number) => collectionOf(world, world.structures.filter((s) =>
+			owner === undefined ? diplomacy.isEnemy[s.owner()] : s.owner() === owner)),
+		getNeutralStructures: () => collectionOf(world, world.structures.filter((s) => diplomacy.isNeutral[s.owner()])),
+		// as GameState.prototype.getOwnDropsites (gamestate.js 702): the own
+		// entities that accept the resource, or any resource when none is named
+		getOwnDropsites: (resource?: string) =>
+			collectionOf(world, ownEntities().filter((e) => e.isResourceDropsite(resource ?? ""))),
+		getExclusiveAllyEntities: () => collectionOf(world, all().filter((e) =>
+			diplomacy.isMutualAlly[e.owner()] && e.owner() !== PLAYER)),
+		getAlliedVictory: () => options.alliedVictory ?? false,
+		getResources: () => new ResourcesManager({ "food": 0, "wood": 0, "stone": 0, "metal": 0, ...options.stock }),
+		// as GameState.prototype.getResourceSupplies: the supplies of one resource
+		// type, found over the whole world
+		getResourceSupplies: (resource: string) =>
+			gs.updatingGlobalCollection(`resource-${resource}`, apiFilters.byResource(resource), gs.getEntities()),
+		// as GameState.prototype.getHuntableSupplies (gamestate.js 725): the world's
+		// cached "resource-hunt" collection — the huntable animals' supplies, with
+		// fish and sea-creatures left out (filters.js 217)
+		getHuntableSupplies: () => gs.updatingGlobalCollection("resource-hunt", apiFilters.isHuntable(), gs.getEntities()),
+		// as GameState.prototype.getFishableSupplies (gamestate.js 730): the world's
+		// cached "resource-fish" collection — the still sea-creatures (filters.js 226)
+		getFishableSupplies: () => gs.updatingGlobalCollection("resource-fish", apiFilters.isFishable(), gs.getEntities()),
+		// the cap our houses give; a town's matching ceiling (populationMax) is a
+		// different figure, which the census compares it against
+		getPopulationLimit: () => options.populationLimit ?? options.populationMax ?? 400,
+		getEntityLimits: () => options.entityLimits ?? {},
+		getEntityCounts: () => options.entityCounts ?? {},
+		getEntityMatchCounts: () => options.matchCounts ?? {},
+		getOwnEntities: () => collectionOf(world, ownEntities()),
+		getOwnEntitiesByClass: (cls: string) => collectionOf(world, ownEntities().filter((e) => e.hasClass(cls))),
+		getOwnFoundations: () => collectionOf(world, ownFoundations()),
+		getOwnFoundationsByClass: (cls: string) => collectionOf(world, ownFoundations().filter((e) => e.hasClass(cls))),
+		isTemplateAvailable: (name: string) => !disabled.has(name) && world.templates[name] !== undefined,
+		isTemplateDisabled: (name: string) => !!fake<Record<string, unknown>>(playerData["disabledTemplates"])[name],
+		isCeasefireActive: () => options.ceasefire !== undefined && options.ceasefire !== false,
+		ceasefireTimeRemaining: options.ceasefire === true ? 600 : (options.ceasefire || 0),
+		resetOnDiplomacyChanged: () => diplomacyResets.push(world.ai.playedTurn),
+		getNumberOfPhases: () => options.numPhases ?? 3,
+		getPhaseEntityRequirements: (phase: number) => options.phaseRequirements?.[phase] ?? [],
+		// the count of structures our town holds of one type — as the game counts
+		// them (by template; foundations carry their final template's name)
+		countEntitiesByType,
+		// the built form of a foundation: the template its name points at, as the
+		// game's foundation names carry the "foundation|" prefix
+		getBuiltTemplate: (foundationName: string) =>
+			foundationName.startsWith("foundation|") ? world.templates[foundationName.slice("foundation|".length)] ?? null : null,
+		// the own entities carrying a metadata value, as the game gathers them for a
+		// task keyed by an entity id (a foundation's builders, a repair crew)
+		getOwnEntitiesByMetadata: (key: string, value: unknown) =>
+			ownEntities().filter((e) => e.getMetadata(PLAYER, key) === value),
+		countEntitiesAndQueuedByType: (type: string) => countEntitiesByType(type) + (hqKnobs.queuedTypes[type] ?? 0),
+		// as GameState.prototype.findTrainableUnits: every template our own
+		// facilities train, filtered by the class rules of the game
+		findTrainableUnits: (classes: string[], anticlasses: string[]) =>
+		{
+			// the training facilities (an own entity whose trainingQueue is
+			// truthy), each list of cards
+			const allTrainable = new Set(world.structures.filter((s) => s.trainingQueue())
+				.flatMap((ent) => ent.trainableEntities("athen") ?? []));
+			const limits = gs.getEntityLimits();
+			const current = gs.getEntityCounts();
+			const matchCounts = gs.getEntityMatchCounts();
+			const found: Array<[string, CommonTemplate]> = [];
+			for (const trainable of allTrainable)
+			{
+				if (gs.isTemplateDisabled(templateName(trainable)))
+					continue;
+				const template = world.templates[trainable];
+				if (!template || !template.available(gs))
+					continue;
+				const limit = template.matchLimit();
+				if (limit && matchCounts[trainable] >= limit)
+					continue;
+				// the class list may nest (a common-api class list carries
+				// AND-groups as sub-arrays); MatchesClassList reads both
+				if (!template.hasClasses(classes) || template.hasClasses(anticlasses))
+					continue;
+				// the TrainingRestrictions category, counted like the game counts it
+				const category = template.trainingCategory();
+				if (category && limits[category] && current[category] >= limits[category])
+					continue;
+				found.push([trainable, template]);
+			}
+			return found;
+		},
+		getTraderTemplatesGains: () =>
+		{
+			const gains: Record<string, number> = {};
+			if (!disabled.has("units/{civ}/support_trader") && world.templates["units/{civ}/support_trader"])
+				gains.landGainMultiplier = options.traderGains?.landGainMultiplier ?? 0.7;
+			if (!disabled.has("units/{civ}/ship_merchant") && world.templates["units/{civ}/ship_merchant"])
+				gains.navalGainMultiplier = options.traderGains?.navalGainMultiplier ?? 0.35;
+			return gains;
 		}
-		return found;
-	};
-	gs.getTraderTemplatesGains = () =>
-	{
-		const shipMerchant = disabled.has("units/{civ}/ship_merchant") ? undefined :
-			world.templates["units/{civ}/ship_merchant"];
-		const supportTrader = disabled.has("units/{civ}/support_trader") ? undefined :
-			world.templates["units/{civ}/support_trader"];
-		const ret: Record<string, number> = {};
-		if (supportTrader)
-			ret.landGainMultiplier = (options.traderGains?.landGainMultiplier ?? 0.7);
-		if (shipMerchant)
-			ret.navalGainMultiplier = (options.traderGains?.navalGainMultiplier ?? 0.35);
-		return ret;
-	};
-	(world.gameState.playerData as Record<string, unknown>).isNeutral = [false, false, false, false];
+	});
 
-	const hqWorld = world as unknown as HqWorld;
-	hqWorld.map = map;
-	hqWorld.trajectories = trajectories;
-	hqWorld.diplomacyResets = diplomacyResets;
-	return hqWorld;
+	return Object.assign(world, { map, trajectories, diplomacyResets, hqKnobs });
 }
-
-type UnknownWorld = World & {
-	ai: World["ai"] & {
-		accessibility: World["ai"]["accessibility"] & {
-			landPassMap: Uint8Array; navalPassMap: Uint8Array;
-			regionLinks: Record<number, number[]>; regionType: Record<number, string>;
-			getTrajectToIndex(from: number, to: number): number[] | null;
-		};
-	};
-	gameState: CommonGameState & {
-		sharedScript: Record<string, unknown>;
-		playerData: Record<string, unknown>;
-		hqKnobs: Record<string, unknown>;
-	};
-};
 
 /**
  * A recorded door: a co-manager out of the suite's walls, whose every call is
- * written to `<name>Calls` and whose every field rests at a neutral answer.
+ * recorded (`doorCalls`) and whose every field rests at a neutral answer.
  * `extra` carries the fields the code reads without calling.
  */
-export function doorStub(name: string, extra: Record<string, unknown> = {}): never
+export function doorStub<T = never>(extra: Record<string, unknown> = {}): T
 {
 	const calls: Array<[string, unknown[]]> = [];
-	const target = { calls, ...extra } as Record<string, unknown>;
-	return new Proxy(target, {
+	const target: Record<string, unknown> = { calls, ...extra };
+	return fake<T>(new Proxy(target, {
 		get(t, property)
 		{
 			if (typeof property === "symbol")
 				return undefined;
 			if (property in t)
-				return t[String(property)];
-			return (...args: unknown[]) => calls.push([`${String(property)}`, args]);
+				return t[property];
+			return (...args: unknown[]) => calls.push([property, args]);
 		},
 		set(t, property, value)
 		{
 			t[String(property)] = value;
 			return true;
 		}
-	}) as never;
+	}));
 }
 
 /** The calls recorded on a door stub, oldest first. */
-export function doorCalls(stub: never): Array<[string, unknown[]]>
+export function doorCalls(stub: object): Array<[string, unknown[]]>
 {
-	return (stub as unknown as { calls: Array<[string, unknown[]]> }).calls;
+	return fake<{ calls: Array<[string, unknown[]]> }>(stub).calls;
 }
 
-/** What a Headquarters instance looks like to its suites. */
-export interface HqInstance extends Record<string, any>
-{
-	Config: HqConfig;
-	landRegions: Record<number, boolean>;
-	navalMap: boolean;
-	navalRegions: Record<number, boolean>;
-	currentPhase: number;
-	maxFields: boolean | number;
-	basesManager: Record<string, any>;
-	attackManager: Record<string, any>;
-	buildManager: Record<string, any>;
-	defenseManager: Record<string, any>;
-	tradeManager: Record<string, any>;
-	navalManager: Record<string, any>;
-	researchManager: Record<string, any>;
-	diplomacyManager: Record<string, any>;
-	garrisonManager: Record<string, any>;
-	victoryManager: Record<string, any>;
-	emergencyManager: Record<string, any>;
-	capturableTargets: Map<number, Record<string, unknown>>;
-	decayingStructures: Set<number>;
-	treasures: unknown;
-	territoryMap: Record<string, any>;
-	borderMap: Record<string, any>;
-	[key: string]: any;
-}
+/**
+ * The co-managers a suite usually keeps outside its walls, as recorded doors:
+ * naval, trade, research, diplomacy, victory and defense each run their own
+ * campaign.
+ */
+export const doorManagers: readonly string[] = [
+	"navalManager", "tradeManager", "researchManager", "diplomacyManager", "victoryManager", "defenseManager"
+];
 
 export interface HqSeatOptions
 {
 	/** the config the HQ is built with; default makeHQConfig() */
-	config?: HqConfig;
+	config?: Config;
 	/** build it as a deserialized HQ (the constructor takes the flag for its managers) */
 	deserialized?: boolean;
 	/** the sub-managers to swap for recorded doors */
-	stubs?: string[];
+	stubs?: readonly string[];
 	/** seat the real BasesManager on the world's CC; default true (gameAnalysis does) */
 	seatBases?: boolean;
 	/** land/naval regions, as regionAnalysis would fill; defaults land region 2, no navy */
@@ -740,24 +687,22 @@ const doorFields: Record<string, Record<string, unknown>> = {
  * regionAnalysis/gameAnalysis do, then fill what they would fill (the land
  * and naval regions) with test-shaped answers.
  */
-export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): HqInstance
+export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarters
 {
 	const config = options.config ?? makeHQConfig();
 	// the town's queues, as queueManager builds them from the real priorities
-	const queues: Record<string, unknown> = {};
-	const queueManager = new QueueManager(config, queues) as unknown as {
-		addQueue(name: string, priority: number): void;
-	};
-	for (const [name, priority] of Object.entries((config as Record<string, Record<string, number>>).priorities))
+	const queues: Record<string, Queue> = {};
+	const queueManager = new QueueManager(config, queues);
+	for (const [name, priority] of Object.entries(config.priorities))
 		queueManager.addQueue(name, priority);
-	world.ai.queues = queues as World["ai"]["queues"];
-	world.ai.queueManager = queueManager as unknown as World["ai"]["queueManager"];
-	world.ai.Config = config as World["ai"]["Config"];
+	world.ai.queues = queues;
+	world.ai.queueManager = queueManager;
+	world.ai.Config = config;
 
-	const hq = new Headquarters(config, options.deserialized ?? false) as HqInstance;
-	world.ai.HQ = hq as unknown as World["ai"]["HQ"];
+	const hq = new Headquarters(config, options.deserialized ?? false);
+	world.ai.HQ = hq;
 
-	hq.init(world.gameState, world.ai.queues as never);
+	hq.init(world.gameState, queues);
 	if (options.seatBases ?? true)
 		hq.basesManager.init(world.gameState);
 
@@ -770,17 +715,15 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): HqInstance
 	hq.canBuildUnits = true;
 	hq.canExpand = true;
 
+	const managers = fake<Record<string, unknown>>(hq);
 	for (const name of options.stubs ?? [])
 	{
 		// copy the fresh-manager fields per seat: a test that pokes one door
 		// (an army raised, a transport fleet) must not leak over the shared
 		// record into another seat's fresh manager
 		const fields = doorFields[name] ?? {};
-		const extra = Object.fromEntries(Object.entries(fields).map(([field, value]) =>
-			[field, Array.isArray(value) ? [...(value as unknown[])] : value]));
-		const stub = doorStub(name, extra);
-		hq[name] = stub;
-		hq[name + "Calls"] = doorCalls(stub as never);
+		managers[name] = doorStub(Object.fromEntries(Object.entries(fields).map(([field, value]) =>
+			[field, Array.isArray(value) ? [...value] : value])));
 	}
 	return hq;
 }

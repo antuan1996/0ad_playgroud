@@ -1,53 +1,46 @@
 /**
- * Lets Node resolve the engine's VFS-style import specifiers.
+ * Lets Node load the port the way the engine does.
  *
- * The AI scripts import each other the way the game's module loader addresses
- * files in the VFS, e.g. `simulation/ai/common-api/utils.js`, and the reference
- * bot (petra_out) names its own modules that way
- * (`simulation/ai/petra_out/execution/queue.js`). Node has no idea what those
- * mean, so they are mapped to real paths:
- *
- *   simulation/ai/petra_ts/<x>   -> the target under test
- *   simulation/<x>               -> binaries/data/mods/public/simulation/<x>
- *
- * Registered from setup.ts, which tests are run through, so it is installed
- * before any module under test is imported.
+ * - The AI scripts import each other by VFS path, e.g.
+ *   `simulation/ai/common-api/utils.js`, and the built bot names its own
+ *   modules that way (`simulation/ai/petra_out/execution/queue.js`). Those map
+ *   to the public mod's files.
+ * - The tests import the port's sources (`../execution/queue.ts`). With
+ *   PETRA_TARGET=out each such import loads the built module instead
+ *   (`petra_out/execution/queue.js`), so the same tests check the build the
+ *   game loads, and the built modules, importing each other by VFS path, are
+ *   the same instances the tests hold.
  */
-import { registerHooks } from "node:module";
 import { existsSync } from "node:fs";
+import { registerHooks } from "node:module";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { commonApiRoot, petraModuleDir, vfsToDisk } from "./paths.ts";
+import { modsPublic, outRoot, petraTarget, portRoot } from "./paths.ts";
+
+const testsRoot = path.join(portRoot, "tests");
+const toBuild = petraTarget() === "out";
 
 registerHooks({
 	resolve(specifier, context, nextResolve)
 	{
-		if (!specifier.startsWith("simulation/"))
-			return nextResolve(specifier, context);
+		if (specifier.startsWith("simulation/"))
+			return { "url": pathToFileURL(existing(path.join(modsPublic, specifier), specifier)).href, "shortCircuit": true };
 
-		const file = resolveVfs(specifier);
-		if (!existsSync(file))
-			throw new Error(`cannot resolve engine specifier "${specifier}" (looked for ${file})`);
-
-		return { url: pathToFileURL(file).href, shortCircuit: true };
+		const resolved = nextResolve(specifier, context);
+		if (!toBuild || !resolved.url.startsWith("file:"))
+			return resolved;
+		const file = fileURLToPath(resolved.url);
+		if (!file.startsWith(portRoot + path.sep) || file.startsWith(testsRoot + path.sep))
+			return resolved;
+		const built = path.join(outRoot, path.relative(portRoot, file)).replace(/\.ts$/, ".js");
+		return { "url": pathToFileURL(existing(built, specifier)).href, "shortCircuit": true };
 	}
 });
 
-function resolveVfs(specifier: string): string
+function existing(file: string, specifier: string): string
 {
-	const petraPrefixed = /^simulation\/ai\/petra_ts\/(.+)$/;
-	const match = petraPrefixed.exec(specifier);
-	if (match)
-	{
-		const { dir, ext } = petraModuleDir();
-		// The bot spells its modules ".js"; the sources spell them ".ts".
-		const name = match[1].replace(/\.js$/, ext);
-		return path.join(dir, name);
-	}
-
-	if (specifier.startsWith("simulation/ai/common-api/"))
-		return path.join(commonApiRoot, specifier.slice("simulation/ai/common-api/".length));
-
-	return vfsToDisk(specifier);
+	if (!existsSync(file))
+		throw new Error(`cannot resolve "${specifier}" (looked for ${file})`);
+	return file;
 }

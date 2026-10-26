@@ -115,7 +115,7 @@ function snapshot(value: unknown): unknown
 		if (proto !== Object.prototype && proto !== null)
 			return value;
 		const copy: Record<string, unknown> = {};
-		for (const [key, item] of Object.entries(value as Record<string, unknown>))
+		for (const [key, item] of Object.entries(value))
 			copy[key] = snapshot(item);
 		return copy;
 	}
@@ -169,7 +169,7 @@ function allKeys(value: unknown, into = new Set<string>()): Set<string>
 	}
 	else if (value && typeof value === "object")
 	{
-		for (const [key, item] of Object.entries(value as Record<string, unknown>))
+		for (const [key, item] of Object.entries(value))
 		{
 			into.add(key);
 			allKeys(item, into);
@@ -185,8 +185,8 @@ function keyDiff(before: unknown, after: unknown): string
 		return "";
 
 	const out: string[] = [];
-	const dropped = Object.keys(before).filter(key => !(key in (after as object)));
-	const appeared = Object.keys(after).filter(key => !(key in (before as object)));
+	const dropped = Object.keys(before).filter(key => !(key in after));
+	const appeared = Object.keys(after).filter(key => !(key in before));
 	if (dropped.length)
 		out.push(`lost on reload: ${dropped.join(", ")}`);
 	if (appeared.length)

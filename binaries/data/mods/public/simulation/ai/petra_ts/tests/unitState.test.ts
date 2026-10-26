@@ -7,27 +7,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import vm from "node:vm";
+
 import { logs } from "./harness/engine.ts";
+import { fake } from "./harness/fakes.ts";
 import { modsPublic } from "./harness/paths.ts";
-import { loadPetraModule } from "./harness/target.ts";
 
-type UnitState =
-	| { kind: "none" }
-	| { kind: "known"; name: string; role: string; activity: string | undefined }
-	| { kind: "other"; raw: string };
-type Unit = { unitAIState(): string | undefined };
+import * as states from "../adapter/unitState.ts";
 
-const states = await loadPetraModule<{
-	UNIT_AI_STATES: readonly string[];
-	parseUnitState(raw: string | undefined): UnitState;
-	activityOf(state: UnitState): string | undefined;
-	hasActivity(ent: Unit, activity: string): boolean;
-	isInState(ent: Unit, name: string): boolean;
-	requiredActivityIs(ent: Unit, activity: string): boolean;
-	requiredStateWithin(ent: Unit, name: string): boolean;
-}>("unitState");
-
-const unit = (state: string | undefined): Unit => ({ "unitAIState": () => state });
+const unit = (state: string | undefined): CommonEntity => fake<CommonEntity>({ "unitAIState": () => state });
 
 /** Every state of UnitAI's state machine, read from the game's own UnitAI.js and FSM.js. */
 function gameUnitAIStates(): string[]
@@ -45,7 +32,7 @@ function gameUnitAIStates(): string[]
 	vm.runInContext(readFileSync(path.join(modsPublic, "globalscripts/FSM.js"), "utf8"), context);
 	vm.runInContext("function UnitAI() {}\n" +
 		readFileSync(path.join(modsPublic, "simulation/components/UnitAI.js"), "utf8").replace(/^function UnitAI\(\) \{\}$/m, ""), context);
-	const FSM = vm.runInContext("FSM", context) as new (spec: unknown) => { states: Record<string, unknown> };
+	const FSM = vm.runInContext("FSM", context);
 	return Object.keys(new FSM(vm.runInContext("UnitAI.prototype.UnitFsmSpec", context)).states).filter(Boolean).sort();
 }
 

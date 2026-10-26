@@ -9,99 +9,37 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
+import { emptyEvents, entityMetadata, eventsWith } from "./harness/fakes.ts";
 import {
-	makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, seatHQ, structureTemplate, PLAYER, ENEMY,
-	type HqInstance, type HqSeatOptions, type HqWorldOptions
+	bookCentreSupplies, doorManagers, ENEMY, type HqSeatOptions, type HqWorld, type HqWorldOptions,
+	makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate,
+	territoryCellAt
 } from "./harness/hqWorld.ts";
-import { emptyEvents } from "./harness/attackWorld.ts";
-import type { HqWorld } from "./harness/hqWorld.ts";
 
-const { BaseManager } = await loadPetraModule<{
-	BaseManager: {
-		STATE_WITH_ANCHOR: string;
-		STATE_UNCONSTRUCTED: string;
-		STATE_CAPTURED: string;
-		STATE_ANCHORLESS: string;
-	};
-}>("baseManager");
-const { BasesManager } = await loadPetraModule<{
-	BasesManager: new (config: unknown) => Bm;
-}>("basesManager");
-const { Worker } = await loadPetraModule<{
-	Worker: {
-		ROLE_WORKER: string;
-		SUBROLE_GATHERER: string;
-		SUBROLE_BUILDER: string;
-		SUBROLE_IDLE: string;
-		SUBROLE_HUNTER: string;
-		SUBROLE_FISHER: string;
-	};
-}>("worker");
+import { entityId } from "../adapter/brands.ts";
+import { BaseManager } from "../decision/baseManager.ts";
+import { BasesManager } from "../decision/basesManager.ts";
+import type { Headquarters } from "../decision/headquarters.ts";
+import { Worker } from "../execution/worker.ts";
 
 // the player id the common-api reads metadata under
-const PlayerID = 1;
-
-// the co-managers the suites keep outside the walls, as the other campaigns do
-const doorManagers = [
-	"navalManager", "tradeManager", "researchManager", "diplomacyManager",
-	"victoryManager", "defenseManager"
-];
-
-/** the basesManager members the suites read and drive, as the office holds them */
-interface Bm
-{
-	baseManagers: Base[];
-	noBase: Base;
-	checkEvents(gs: unknown, events: EngineAIEvents): void;
-	createBase(gs: unknown, ent: unknown, state: string, deserialize?: boolean): Base;
-	bulkPickWorkers(gs: unknown, baseRef: Base, n: number): { toIdArray(): number[]; length: number } | false;
-	assignGatherers(): void;
-	GetTCGatherer(id: number): number;
-	AddTCGatherer(id: number): void;
-	RemoveTCGatherer(id: number): void;
-	assignEntity(gs: unknown, ent: unknown, territoryIndex: number): void;
-	getBaseByID(id: number): Base | undefined;
-	init(gs: unknown, deserialize: boolean): void;
-	postinit(gs: unknown): void;
-}
-
-/** the base-manager members the suites read and drive, as a town holds them */
-interface Base
-{
-	ID: number;
-	anchor: { id(): number } | undefined;
-	anchorId: number | undefined;
-	constructing: boolean;
-	neededDefenders: number;
-	accessIndex: number | undefined;
-	dropsites: Record<number, boolean | undefined>;
-	territoryIndices: number[];
-	workers: { length: number };
-	reset(gs: unknown, state: string): void;
-	assignEntity(gs: unknown, ent: unknown): void;
-	assignResourceToDropsite(gs: unknown, ent: unknown, deserialized: boolean): void;
-	removeDropsite(gs: unknown, id: number): void;
-	assignRolelessUnits(gs: unknown, ents?: unknown[]): void;
-	reassignIdleWorkers(gs: unknown, ents?: unknown[]): void;
-}
-
+const PlayerID = PLAYER;
 /** a seat of the office on the standard board, with its towns' manager */
 function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<HqSeatOptions> = {})
 {
-	const world = makeHqWorld(worldOptions as HqWorldOptions);
+	const world = makeHqWorld(worldOptions);
 	const hq = seatHQ(world, { stubs: doorManagers, ...seatOptions });
 	// the game books the towns' ground before any plan is made (gameAnalysis)
 	hq.updateTerritories(world.gameState);
 	return {
 		world, hq,
-		bs: hq.basesManager as unknown as Bm,
-		base: hq.baseManagers()[0] as unknown as Base
+		bs: hq.basesManager,
+		base: hq.baseManagers()[0]
 	};
 }
 
 /** a worker of ours, on a base's payroll with the given metadata */
-function hand(world: HqWorld, host: Base, id: number, metadata: Record<string, unknown>,
+function hand(world: HqWorld, host: BaseManager, id: number, metadata: Record<string, unknown>,
 	methods: Record<string, unknown> = {}, position: [number, number] = [60, 60])
 {
 	const ent = world.addEntity(makeHqEntity({ id, "owner": PLAYER, position,
@@ -121,13 +59,13 @@ function hand(world: HqWorld, host: Base, id: number, metadata: Record<string, u
 }
 
 /** a second town of ours on the board, as a colony or a captured centre raises */
-function secondTown(world: HqWorld, hq: HqInstance, id: number, position: [number, number]): Base
+function secondTown(world: HqWorld, hq: Headquarters, id: number, position: [number, number]): BaseManager
 {
 	const cc = world.addEntity(makeHqEntity({
 		"id": id, "owner": PLAYER, "position": position,
 		"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 	}));
-	const town = hq.basesManager.createBase(world.gameState, cc, BaseManager.STATE_WITH_ANCHOR) as unknown as Base;
+	const town = hq.basesManager.createBase(world.gameState, cc, BaseManager.STATE_WITH_ANCHOR);
 	// the office rescans the ground every turn (headquarters.checkEvents)
 	hq.updateTerritories(world.gameState);
 	return town;
@@ -146,7 +84,7 @@ function storehouse(world: HqWorld, id: number, position: [number, number], type
 }
 
 /** a foundation the town carries at the given place, with plan-style metadata */
-function foundation(world: HqWorld, base: Base | undefined, id: number, position: [number, number],
+function foundation(world: HqWorld, base: BaseManager | undefined, id: number, position: [number, number],
 	classes: string[], metadata: Record<string, unknown> = {})
 {
 	const ent = world.addEntity(makeHqEntity({
@@ -173,35 +111,12 @@ function rawSupply(world: HqWorld, id: number, position: [number, number],
 	}));
 }
 
-/** the town's centre as the universal dropsite every civil centre template is,
- * with the map's supplies around it booked into the town's books */
-function bookCentreSupplies(world: HqWorld, base: Base): void
-{
-	const cc = world.ents.get(1000) as unknown as {
-		resourceDropsiteTypes: () => void;
-		isResourceDropsite: (resource?: string) => void;
-	};
-	cc.resourceDropsiteTypes = () => ["food", "wood", "stone", "metal"];
-	cc.isResourceDropsite = (resource?: string) =>
-		!resource || ["food", "wood", "stone", "metal"].includes(resource);
-	base.assignResourceToDropsite(world.gameState, base.anchor as never, false);
-}
-
-/** the turn's events with these entries raised */
-function eventsWith(extra: Record<string, unknown[]>): EngineAIEvents
-{
-	const events = emptyEvents() as unknown as Record<string, unknown[]>;
-	for (const [name, list] of Object.entries(extra))
-		events[name] = list;
-	return events as unknown as EngineAIEvents;
-}
-
 /** swaps the office's answer to a new ground for a recorder; the real one is
  * verified in the headquarters' own campaign */
-function watchHandleNewBase(hq: HqInstance): number[]
+function watchHandleNewBase(hq: Headquarters): number[]
 {
 	const calls: number[] = [];
-	(hq as unknown as { handleNewBase: (gs: unknown) => void }).handleNewBase = () =>
+	hq.handleNewBase = () =>
 	{
 		calls.push(1);
 	};
@@ -246,11 +161,11 @@ describe("a city's grounds: what the board starts with and how grounds are reuse
 			{ "classes": ["Structure", "Dock"], "dropsiteTypes": ["food"] });
 		const island = hq.basesManager.createBase(world.gameState,
 			foundation(world, undefined, 4011, [200, 100], ["Dock"], { "resourceDropsiteTypes": () => ["food"] }),
-			BaseManager.STATE_ANCHORLESS) as unknown as Base;
+			BaseManager.STATE_ANCHORLESS);
 		const count = hq.baseManagers().length;
 
 		const second = foundation(world, undefined, 4012, [220, 110], ["Dock"]);
-		const reused = hq.basesManager.createBase(world.gameState, second, BaseManager.STATE_ANCHORLESS) as unknown as Base;
+		const reused = hq.basesManager.createBase(world.gameState, second, BaseManager.STATE_ANCHORLESS);
 
 		assert.equal(reused, island, "the island's ground is reused for the second dock");
 		assert.equal(hq.baseManagers().length, count, "no founding run for the second dock");
@@ -273,7 +188,7 @@ describe("a building lost: the turn of the destruction events", () =>
 		base.assignResourceToDropsite(world.gameState, store, false);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"Destroy": [{ "entity": 4201, "metadata": { [PlayerID]: { "base": base.ID } } }]
+			"Destroy": [{ "entity": entityId(4201), "metadata": { [PlayerID]: entityMetadata({ "base": base.ID }) } }]
 		}));
 
 		assert.equal(base.dropsites[4201], undefined, "the storehouse is off the town's list");
@@ -286,8 +201,8 @@ describe("a building lost: the turn of the destruction events", () =>
 
 		bs.checkEvents(world.gameState, eventsWith({
 			"Destroy": [{
-				"entity": 1000,
-				"metadata": { [PlayerID]: { "base": base.ID, "baseAnchor": true } }
+				"entity": entityId(1000),
+				"metadata": { [PlayerID]: entityMetadata({ "base": base.ID, "baseAnchor": true }) }
 			}]
 		}));
 
@@ -302,7 +217,7 @@ describe("a building lost: the turn of the destruction events", () =>
 	{
 		const { world, hq, base, bs } = seat({}, { "config": makeHQConfig({ "difficulty": 5 }) });
 		bs.checkEvents(world.gameState, eventsWith({
-			"Destroy": [{ "entity": 1000, "metadata": { [PlayerID]: { "base": base.ID, "baseAnchor": true } } }]
+			"Destroy": [{ "entity": entityId(1000), "metadata": { [PlayerID]: entityMetadata({ "base": base.ID, "baseAnchor": true }) } }]
 		}));
 		const captured = world.addEntity(makeHqEntity({
 			"id": 4300, "owner": PLAYER, "position": [70, 70],
@@ -315,7 +230,7 @@ describe("a building lost: the turn of the destruction events", () =>
 		assert.equal(reused.constructing, false);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"Destroy": [{ "entity": 4300, "metadata": { [PlayerID]: { "base": base.ID, "baseAnchor": true } } }]
+			"Destroy": [{ "entity": entityId(4300), "metadata": { [PlayerID]: entityMetadata({ "base": base.ID, "baseAnchor": true }) } }]
 		}));
 		const rebuilt = foundation(world, undefined, 4301, [70, 70], ["CivCentre"]);
 		assert.equal(bs.createBase(world.gameState, rebuilt, BaseManager.STATE_UNCONSTRUCTED), base);
@@ -327,15 +242,15 @@ describe("a building lost: the turn of the destruction events", () =>
 	it("a foundation raised and felled in the same turn costs the towns nothing", () =>
 	{
 		const { world, bs } = seat();
-		const count = (bs.baseManagers as unknown as Base[]).length;
+		const count = bs.baseManagers.length;
 
 		bs.checkEvents(world.gameState, eventsWith({
 			"Destroy": [{
-				"entity": 4002, "metadata": { [PlayerID]: { "base": -1 } }, "SuccessfulFoundation": false
+				"entity": entityId(4002), "metadata": { [PlayerID]: entityMetadata({ "base": -1 }) }, "SuccessfulFoundation": false
 			}]
 		}));
 
-		assert.equal((bs.baseManagers as unknown as Base[]).length, count, "no ground is affected");
+		assert.equal(bs.baseManagers.length, count, "no ground is affected");
 	});
 });
 
@@ -362,7 +277,7 @@ describe("a unit promoted, a centre renamed: the turn of the renames", () =>
 		void veteran;
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"EntityRenamed": [{ "entity": 4301, "newentity": 4302 }]
+			"EntityRenamed": [{ "entity": entityId(4301), "newentity": entityId(4302) }]
 		}));
 
 		assert.equal(promoted.getMetadata(PLAYER, "subrole"), Worker.SUBROLE_IDLE, "the veteran re-enters as idle");
@@ -379,7 +294,7 @@ describe("a unit promoted, a centre renamed: the turn of the renames", () =>
 		const before = base.anchorId;
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"EntityRenamed": [{ "entity": 1000, "newentity": 4311 }]
+			"EntityRenamed": [{ "entity": entityId(1000), "newentity": entityId(4311) }]
 		}));
 
 		assert.equal(base.anchorId, 4311, "the ground follows the renamed centre, not " + before);
@@ -400,24 +315,24 @@ describe("a foundation raised: the turn of the Create events", () =>
 		const rising = foundation(world, undefined, 4403, [250, 250], ["CivCentre"], { "base": -1 });
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"Create": [{ "entity": 4403 }]
+			"Create": [{ "entity": entityId(4403) }]
 		}));
 
 		// a colony under construction: its rising centre is already its anchor
-		const newBase = (bs.baseManagers as Base[]).filter((b) => b.constructing)[0];
+		const newBase = bs.baseManagers.filter((b) => b.constructing)[0];
 		assert.ok(newBase, "the colony's ground is born");
-		assert.equal((bs.baseManagers as Base[]).length, 3, "the two standing towns keep theirs");
+		assert.equal(bs.baseManagers.length, 3, "the two standing towns keep theirs");
 		assert.equal(rising.getMetadata(PLAYER, "base"), newBase.ID,
 			"the foundation is keyed to the founding ground");
 		let moved = 0;
 		for (let i = 0; i < 13; ++i)
 		{
-			const w = world.ents.get(4410 + i) as unknown as { getMetadata(p: number, k: string): unknown };
+			const w = world.ents.get(4410 + i)!;
 			if (w.getMetadata(PLAYER, "base") === newBase.ID && w.getMetadata(PLAYER, "target-foundation") === 4403)
 				++moved;
 		}
 		assert.equal(moved, 10, "ten hands are sent to raise the new centre");
-		const present = world.ents.get(4410) as unknown as { getMetadata(p: number, k: string): unknown };
+		const present = world.ents.get(4410)!;
 		assert.equal(present.getMetadata(PLAYER, "subrole"), Worker.SUBROLE_BUILDER);
 		void base;
 	});
@@ -435,16 +350,16 @@ describe("a foundation raised: the turn of the Create events", () =>
 		const rising = foundation(world, undefined, 4429, [200, 100], ["Dock"], { "base": -2 });
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"Create": [{ "entity": 4429 }]
+			"Create": [{ "entity": entityId(4429) }]
 		}));
 
-		const islandBase = hq.baseManagers()[1] as unknown as Base;
+		const islandBase = hq.baseManagers()[1];
 		assert.equal(rising.getMetadata(PLAYER, "base"), islandBase.ID,
 			"the dock is keyed to the island's founding ground");
 		let moved = 0;
 		for (let i = 0; i < 8; ++i)
 		{
-			const w = world.ents.get(4420 + i) as unknown as { getMetadata(p: number, k: string): unknown };
+			const w = world.ents.get(4420 + i)!;
 			if (w.getMetadata(PLAYER, "target-foundation") === 4429)
 				++moved;
 		}
@@ -469,7 +384,7 @@ describe("a foundation standing finished: the turn of the ConstructionFinished e
 		}, {}, { "base": newBase.ID, "baseAnchor": true }));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": 4501, "newentity": 4502 }]
+			"ConstructionFinished": [{ "entity": entityId(4501), "newentity": entityId(4502) }]
 		}));
 
 		assert.equal(newBase.constructing, false, "the ground is founding no more");
@@ -486,7 +401,7 @@ describe("a foundation standing finished: the turn of the ConstructionFinished e
 		raised.setMetadata(PLAYER, "base", base.ID);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": 4511, "newentity": 4512 }]
+			"ConstructionFinished": [{ "entity": entityId(4511), "newentity": entityId(4512) }]
 		}));
 
 		assert.equal(base.dropsites[4512], true, "the new storehouse is on the town's list");
@@ -498,15 +413,15 @@ describe("a foundation standing finished: the turn of the ConstructionFinished e
 	{
 		const { world, base, bs } = seat();
 		storehouse(world, 4521, [40, 40]);
-		base.assignEntity(world.gameState, world.ents.get(4521) as never);
+		base.assignEntity(world.gameState, world.ents.get(4521)!);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": 4521, "newentity": 4521 }]
+			"ConstructionFinished": [{ "entity": entityId(4521), "newentity": entityId(4521) }]
 		}));
 
 		assert.equal(base.dropsites[4521] === undefined, false, "the storehouse keeps its place");
 		const count = Object.keys(base.dropsites).length;
-		assert.equal(Object.keys(base.dropsites).filter((id) => bs.baseManagers.some((b) => (b as Base).dropsites[id as unknown as number] !== undefined)).length, 1, "no doubled booking: one storehouse, one place");
+		assert.equal(Object.keys(base.dropsites).filter((id) => bs.baseManagers.some((b) => b.dropsites[id as unknown as number] !== undefined)).length, 1, "no doubled booking: one storehouse, one place");
 	});
 });
 
@@ -520,7 +435,7 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		base.assignResourceToDropsite(world.gameState, store, false);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "from": PlayerID, "to": ENEMY, "entity": 4601 }]
+			"OwnershipChanged": [{ "from": PlayerID, "to": ENEMY, "entity": entityId(4601) }]
 		}));
 
 		assert.equal(base.dropsites[4601], undefined, "the taken storehouse is off the town's list");
@@ -532,7 +447,7 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		const { world, base, bs, hq } = seat();
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "from": PlayerID, "to": ENEMY, "entity": 1000 }]
+			"OwnershipChanged": [{ "from": PlayerID, "to": ENEMY, "entity": entityId(1000) }]
 		}));
 
 		assert.equal(base.anchor, undefined);
@@ -549,10 +464,10 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		}));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": 4611 }]
+			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": entityId(4611) }]
 		}));
 
-		const ground = (bs.baseManagers as Base[]).find((b) => b.constructing === false && b.ID !== (bs.baseManagers[0] as Base).ID);
+		const ground = bs.baseManagers.find((b) => b.constructing === false && b.ID !== bs.baseManagers[0].ID);
 		assert.ok(ground, "the captured centre makes a town");
 		assert.equal(ground?.anchor?.id(), 4611);
 		assert.equal(captured.getMetadata(PLAYER, "base"), ground?.ID);
@@ -567,10 +482,10 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		won.setMetadata(PLAYER, "base", base.ID);
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": 4621 }]
+			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": entityId(4621) }]
 		}));
 
-		const mine = (bs.baseManagers as Base[]).find((b) => b.dropsites[4621] !== undefined);
+		const mine = bs.baseManagers.find((b) => b.dropsites[4621] !== undefined);
 		assert.ok(mine, "the won-back storehouse is booked on a ground of ours");
 		assert.equal(won.getMetadata(PLAYER, "base"), base.ID, "the storehouse answers to its old town again");
 	});
@@ -584,7 +499,7 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		}));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": 4631 }]
+			"OwnershipChanged": [{ "from": ENEMY, "to": PlayerID, "entity": entityId(4631) }]
 		}));
 
 		assert.equal(joined.getMetadata(PLAYER, "base"), base.ID, "the won worker answers to the town");
@@ -615,10 +530,10 @@ describe("a body fresh off the training yard: the turn of the TrainingFinished e
 		}, { "role": Worker.ROLE_WORKER }));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"TrainingFinished": [{ "entities": [4701] }]
+			"TrainingFinished": [{ "entities": [entityId(4701)], "owner": PLAYER }]
 		}));
 
-		const fresh = world.ents.get(4701) as unknown as { getMetadata(p: number, k: string): unknown };
+		const fresh = world.ents.get(4701)!;
 		assert.equal(fresh.getMetadata(PLAYER, "base"), base.ID, "the recruit joins the nearest town");
 		assert.equal(fresh.getMetadata(PLAYER, "subrole"), Worker.SUBROLE_GATHERER, "the recruit is put to the fields");
 		assert.ok(["food", "wood", "stone", "metal"].includes(fresh.getMetadata(PLAYER, "gather-type") as string));
@@ -645,10 +560,10 @@ describe("a body fresh off the training yard: the turn of the TrainingFinished e
 		}, { "role": Worker.ROLE_WORKER, "base": base.ID }));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"TrainingFinished": [{ "entities": [4711] }]
+			"TrainingFinished": [{ "entities": [entityId(4711)], "owner": PLAYER }]
 		}));
 
-		const fresh = world.ents.get(4711) as unknown as { getMetadata(p: number, k: string): unknown };
+		const fresh = world.ents.get(4711)!;
 		assert.equal(fresh.getMetadata(PLAYER, "base"), base.ID, "the recruit stays with its town");
 		assert.equal(fresh.getMetadata(PLAYER, "subrole"), Worker.SUBROLE_GATHERER);
 		assert.equal(fresh.getMetadata(PLAYER, "supply"), bush.id(), "and is sent to the town's nearest supply");
@@ -667,10 +582,10 @@ describe("a body fresh off the training yard: the turn of the TrainingFinished e
 		}, {}, { "role": Worker.ROLE_WORKER, "base": -1 }));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"TrainingFinished": [{ "entities": [4721] }]
+			"TrainingFinished": [{ "entities": [entityId(4721)], "owner": PLAYER }]
 		}));
 
-		const fresh = world.ents.get(4721) as unknown as { getMetadata(p: number, k: string): unknown };
+		const fresh = world.ents.get(4721)!;
 		assert.equal(fresh.getMetadata(PLAYER, "base"), -1, "no bogus ground is found for a -1 plan");
 	});
 
@@ -694,7 +609,7 @@ describe("a body fresh off the training yard: the turn of the TrainingFinished e
 		}));
 
 		bs.checkEvents(world.gameState, eventsWith({
-			"TrainingFinished": [{ "entities": [4732] }]
+			"TrainingFinished": [{ "entities": [entityId(4732)], "owner": PLAYER }]
 		}));
 
 		assert.deepEqual(arrived, [40], "the herd walks to the storehouse");
@@ -704,7 +619,7 @@ describe("a body fresh off the training yard: the turn of the TrainingFinished e
 describe("hands called across the city: bulkPickWorkers", () =>
 {
 	/** a colony ground awaiting builders, as the office founds one */
-	function colonyGround(world: HqWorld, hq: HqInstance, id: number): Base
+	function colonyGround(world: HqWorld, hq: Headquarters, id: number): BaseManager
 	{
 		return hq.basesManager.createBase(world.gameState,
 			foundation(world, undefined, id, [250, 250], ["CivCentre"], { "base": -1 }),
@@ -756,8 +671,8 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 
 		bs.assignGatherers();
 
-		assert.equal(bs.GetTCGatherer(5001), 1, "the pack-man is on the tally for the supply he carries");
-		assert.equal(bs.GetTCGatherer(4000), 0, "the crops' former bush is not counted");
+		assert.equal(bs.GetTCGatherer(entityId(5001)), 1, "the pack-man is on the tally for the supply he carries");
+		assert.equal(bs.GetTCGatherer(entityId(4000)), 0, "the crops' former bush is not counted");
 	});
 
 	it("a gatherer whose order no longer names its supply is not counted", () =>
@@ -772,7 +687,7 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 
 		bs.assignGatherers();
 
-		assert.equal(bs.GetTCGatherer(5011), 0);
+		assert.equal(bs.GetTCGatherer(entityId(5011)), 0);
 	});
 
 	it("a gatherer leaving a supply counted on an earlier turn seeds the tally without dipping past zero", () =>
@@ -789,8 +704,8 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 		const tally = (hq.basesManager as unknown as { turnCache: { resourceGatherer: Record<number, number> } })
 			.turnCache.resourceGatherer;
 		assert.equal(tally[5021], -1, "the leave is seeded, not doubled");
-		hq.basesManager.AddTCGatherer(5021);
-		assert.equal(hq.basesManager.GetTCGatherer(5021), 0, "a hand taking and leaving the same supply nets zero");
+		hq.basesManager.AddTCGatherer(entityId(5021));
+		assert.equal(hq.basesManager.GetTCGatherer(entityId(5021)), 0, "a hand taking and leaving the same supply nets zero");
 	});
 });
 
@@ -816,7 +731,7 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 			"garrisoned": () => [4952]
 		}));
 
-		bs.assignEntity(world.gameState, dock, territoryIndexAt(world, [302, 40]));
+		bs.assignEntity(world.gameState, dock, territoryCellAt([302, 40]));
 
 		assert.equal(dock.getMetadata(PLAYER, "base"), base.ID, "the dock answers to the town");
 		assert.equal(garrisonedUnit.getMetadata(PLAYER, "base"), base.ID, "so does the crew inside it");
@@ -839,10 +754,10 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 		}));
 		hq.updateTerritories(world.gameState);
 
-		bs.assignEntity(world.gameState, port, territoryIndexAt(world, [240, 240]));
+		bs.assignEntity(world.gameState, port, territoryCellAt([240, 240]));
 
 		assert.equal(hq.baseManagers().length, before + 1, "the island port gets its own ground");
-		assert.equal(port.getMetadata(PLAYER, "base"), (hq.baseManagers()[before] as unknown as Base).ID);
+		assert.equal(port.getMetadata(PLAYER, "base"), hq.baseManagers()[before].ID);
 	});
 
 	it("a worker placed in our own ground is put to work at once", () =>
@@ -861,9 +776,9 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 				({ "food.fruit": 1, "food.meat": 1, "wood.tree": 1, "stone.rock": 1, "metal.ore": 1 })
 		}));
 
-		bs.assignEntity(world.gameState, world.ents.get(4971) as never, territoryIndexAt(world, [30, 30]));
+		bs.assignEntity(world.gameState, world.ents.get(4971)!, territoryCellAt([30, 30]));
 
-		const placed = world.ents.get(4971) as unknown as { getMetadata(p: number, k: string): unknown };
+		const placed = world.ents.get(4971)!;
 		assert.equal(placed.getMetadata(PLAYER, "base"), base.ID);
 		assert.equal(placed.getMetadata(PLAYER, "role"), Worker.ROLE_WORKER, "the opening plan's hands know their trade");
 		assert.equal(placed.getMetadata(PLAYER, "supply"), bush.id(), "and walk to their first crop at once");
@@ -880,19 +795,11 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 			"classes": ["Unit", "Cavalry", "Scout"]
 		}));
 
-		bs.assignEntity(world.gameState, world.ents.get(4981) as never, territoryIndexAt(world, [240, 240]));
+		bs.assignEntity(world.gameState, world.ents.get(4981)!, territoryCellAt([240, 240]));
 
-		const stranded = world.ents.get(4981) as unknown as { getMetadata(p: number, k: string): unknown };
+		const stranded = world.ents.get(4981)!;
 		// a unit, unlike a building, may answer a town across the water
 		assert.equal(stranded.getMetadata(PLAYER, "base"), base.ID, "the scout answers the nearest town");
 	});
 });
 
-/** the map's territory-cell index of a position, as the office computes it */
-function territoryIndexAt(world: HqWorld, position: [number, number]): number
-{
-	const width = (world.gameState as unknown as {
-		ai: { HQ: { territoryMap: { width: number } } }
-	}).ai.HQ.territoryMap.width;
-	return Math.floor(position[0] / 8) + width * Math.floor(position[1] / 8);
-}

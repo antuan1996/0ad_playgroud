@@ -16,57 +16,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { loadPetraModule } from "./harness/target.ts";
-import {
-	emptyEvents, ENEMY, GAIA, makeEntity, makeWorld, PLAYER
-} from "./harness/attackWorld.ts";
-import type { FakeEnt, Methods, World } from "./harness/attackWorld.ts";
+import { emptyEvents, eventsWith, makeEntity, type Methods } from "./harness/fakes.ts";
+import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-const { DefenseManager } = await loadPetraModule<{
-	DefenseManager: new (Config: unknown) => DefenseManagerLike;
-}>("defenseManager");
-const { Worker } = await loadPetraModule<{
-	Worker: {
-		SUBROLE_DEFENDER: string;
-		SUBROLE_ATTACKING: string;
-		SUBROLE_COMPLETING: string;
-		SUBROLE_WALKING: string;
-		SUBROLE_GARRISONING: string;
-	};
-}>("worker");
-const { GarrisonManager } = await loadPetraModule<{
-	GarrisonManager: { TYPE_PROTECTION: string; TYPE_DECAY: string; TYPE_EMERGENCY: string };
-}>("garrisonManager");
-const { AttackPlan } = await loadPetraModule<{
-	AttackPlan: { STATE_UNEXECUTED: string };
-}>("attackPlan");
-
-type DefenseManagerLike = Record<string, any> & {
-	armies: any[];
-	targetList: number[];
-	armyMergeSize: number;
-	attackedAllies: Record<number, number>;
-	attackingUnits: Record<number, Record<number, number>>;
-	attackingArmies: Record<number, Record<number, number>>;
-
-	makeIntoArmy(gameState: CommonGameState, entityID: number, type?: string): void;
-	getArmy(partOfArmy: number): any | undefined;
-	abortArmy(gameState: CommonGameState, army: any): void;
-	isDangerous(gameState: CommonGameState, entity: FakeEnt): boolean;
-	checkEnemyUnits(gameState: CommonGameState): void;
-	checkEnemyArmies(gameState: CommonGameState): void;
-	assignDefenders(gameState: CommonGameState): void;
-	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void;
-	garrisonUnitsInside(gameState: CommonGameState, target: FakeEnt,
-		data: { attacker?: FakeEnt; min?: number; type?: string }): boolean;
-	garrisonSiegeUnit(gameState: CommonGameState, unit: FakeEnt): boolean;
-	garrisonAttackedUnit(gameState: CommonGameState, unit: FakeEnt, emergency?: boolean): boolean;
-	GetCooperationLevel(ally: number): number;
-	switchToAttack(gameState: CommonGameState, army: any): void;
-	update(gameState: CommonGameState, events: EngineAIEvents): void;
-	Serialize(): { properties: Record<string, unknown>; armies: Record<string, unknown>[] };
-	Deserialize(gameState: CommonGameState, data: { properties: Record<string, unknown>; armies: Record<string, unknown>[] }): void;
-};
+import { entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { DefenseManager } from "../decision/defenseManager.ts";
+import { GarrisonManager } from "../decision/garrisonManager.ts";
 
 /** damage-weighted attack strength: config weighs "Hack" at 0.075,
  * spread across the four damage types the config knows */
@@ -75,17 +30,16 @@ const hackOf = (strength: number) => 0.075 * strength / 4;
 /** reads the diplomacy row the engine keeps, to name an ally per test */
 function allyRow(world: World): { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[] }
 {
-	return world.gameState.playerData as unknown as
-		{ isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[] };
+	return world.gameState.playerData;
 }
 
 /** a raider: any attacking soldier the defense manager would spot */
-function makeSoldier(id: number, position: [number, number], spec: {
+function makeSoldier(id: number, position: [number, number] | undefined, spec: {
 	owner?: number;
 	strength?: number;
 	classes?: string[];
 	methods?: Methods;
-} = {}): FakeEnt
+} = {}): CommonEntity
 {
 	return makeEntity({
 		id, owner: spec.owner ?? ENEMY, position,
@@ -99,14 +53,14 @@ function makeSoldier(id: number, position: [number, number], spec: {
 
 /** a structure, owned by whoever the scenario needs */
 function makeStructure(id: number, position: [number, number], owner = GAIA,
-	classes: string[] = ["Structure"], methods: Methods = {}): FakeEnt
+	classes: string[] = ["Structure"], methods: Methods = {}): CommonEntity
 {
 	return makeEntity({ id, owner, position, classes }, methods);
 }
 
 /** the defender Petra calls up: a citizen soldier at home */
 function makeDefender(id: number, position: [number, number] | undefined,
-	methods: Methods = {}, metadata: Record<string, unknown> = {}): FakeEnt
+	methods: Methods = {}, metadata: Record<string, unknown> = {}): CommonEntity
 {
 	return makeEntity({
 		id, owner: PLAYER, position, classes: ["Unit", "Infantry", "CitizenSoldier"]
@@ -119,14 +73,14 @@ function makeDefender(id: number, position: [number, number] | undefined,
 }
 
 /** A manager wired to one world as headquarters owns it. */
-function makeDefenseManager(world: World): DefenseManagerLike
+function makeDefenseManager(world: World): DefenseManager
 {
 	return new DefenseManager(world.ai.Config);
 }
 
 /** A manager that has run one quiet startup tick on an empty world, so it
  * holds the territory map, exactly as headquarters hands it over in game. */
-function assembledWorld(): { world: World; manager: DefenseManagerLike }
+function assembledWorld(): { world: World; manager: DefenseManager }
 {
 	const world = makeWorld();
 	const manager = makeDefenseManager(world);
@@ -134,17 +88,8 @@ function assembledWorld(): { world: World; manager: DefenseManagerLike }
 	return { world, manager };
 }
 
-/** the turn's events as the engine raises them, with extras added */
-function eventsWith(extra: Record<string, unknown[]>): EngineAIEvents
-{
-	const events = emptyEvents() as unknown as Record<string, unknown[]>;
-	for (const key in extra)
-		events[key] = extra[key];
-	return events as unknown as EngineAIEvents;
-}
-
 /** a tracked enemy base for the target-list tests */
-function makeWatchedBase(id = 4000): FakeEnt
+function makeWatchedBase(id = 4000): CommonEntity
 {
 	return makeStructure(id, [50, 50], ENEMY);
 }
@@ -171,7 +116,7 @@ describe("watching the field", () =>
 
 		assert.equal(manager.isDangerous(world.gameState, raider), false,
 			"nothing of ours lies within the raider's seventy-tile watch radius");
-		assert.deepEqual(manager.attackingUnits[ENEMY][PLAYER], 1,
+		assert.deepEqual(manager.attackingUnits[ENEMY]?.[PLAYER], 1,
 			"but the scout counts him among the enemies standing in our territory");
 	});
 
@@ -200,7 +145,7 @@ describe("watching the field", () =>
 	it("re-flags the builder whose base headquarters already tracks", () =>
 	{
 		const { world, manager } = assembledWorld();
-		manager.targetList.push(4000);
+		manager.targetList.push(entityId(4000));
 		const builder = makeSoldier(2000, [60, 60], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
@@ -240,7 +185,7 @@ describe("watching the field", () =>
 	{
 		const { world, manager } = assembledWorld();
 		world.addEntity(makeWatchedBase());
-		manager.targetList.push(4000);
+		manager.targetList.push(entityId(4000));
 		// 85 map units from the base: past the 6000 (about 77²) a swordsman is
 		// watched at, inside the (60 + 30)² of an archer shooting 60 far
 		const archer = userAddSoldier(world, 2000, [135, 50], { classes: ["Ranged"], methods: {
@@ -310,7 +255,7 @@ describe("watching the field", () =>
 	it("an enemy riding inside a ram or a ship is not seen", () =>
 	{
 		const { world, manager } = assembledWorld();
-		const passenger = makeSoldier(2000, undefined as unknown as [number, number]);
+		const passenger = makeSoldier(2000, undefined);
 		world.addEntity(passenger);
 		assert.equal(manager.isDangerous(world.gameState, passenger), false);
 	});
@@ -321,7 +266,7 @@ describe("watching the field", () =>
 		// one destroyed, one we captured, one still the enemy's
 		world.addEntity(makeStructure(4001, [60, 60], PLAYER, ["Structure", "CivCentre"]));
 		world.addEntity(makeStructure(4002, [260, 260], ENEMY, ["Structure", "CivCentre"]));
-		manager.targetList.push(4000, 4001, 4002);
+		manager.targetList.push(entityId(4000), entityId(4001), entityId(4002));
 		world.ai.playedTurn = 1;
 		manager.update(world.gameState, emptyEvents());
 		assert.deepEqual(manager.targetList, [4002]);
@@ -339,7 +284,7 @@ describe("watching the field", () =>
 		allyRow(world).isEnemy[3] = false;
 		allyRow(world).isEnemy[4] = true;
 		world.ai.Config.personality.cooperative = 0.6;
-		world.addEntity(makeStructure(4000, [300, 300], 3, ["Structure", "House"]));
+		world.addEntity(makeStructure(4000, [300, 300], playerId(3), ["Structure", "House"]));
 		const inAllyLand = (id: number, owner: number, pos: [number, number]) =>
 		{
 			world.addEntity(makeSoldier(id, pos, { owner }));
@@ -369,7 +314,7 @@ describe("watching the field", () =>
 			manager.update(world.gameState, emptyEvents());
 		}
 		assert.equal(manager.attackedAllies[3], 2);
-		assert.equal(Math.round(manager.GetCooperationLevel(3) * 10) / 10, 0.8);
+		assert.equal(Math.round(manager.GetCooperationLevel(playerId(3)) * 10) / 10, 0.8);
 		assert.equal(manager.armies.length, 1);
 		assert.deepEqual(manager.armies[0].foeEntities, [4108]);
 	});
@@ -403,7 +348,7 @@ describe("watching the field", () =>
 	{
 		const { world, manager } = assembledWorld();
 		world.addEntity(makeWatchedBase());
-		manager.targetList.push(4000);
+		manager.targetList.push(entityId(4000));
 		const raider = makeSoldier(2000, [52, 52]);
 		world.addEntity(raider);
 
@@ -457,7 +402,7 @@ describe("watching the field", () =>
 		world.addEntity(raider);
 		world.territory.set("70,70", 3);
 
-		assert.equal(manager.GetCooperationLevel(3) > 0.7, true,
+		assert.equal(manager.GetCooperationLevel(playerId(3)) > 0.7, true,
 			"three raids lift cooperation from 0.5 to 0.9");
 		assert.equal(manager.isDangerous(world.gameState, raider), true,
 			"a besieged ally's barracks are defended like our own");
@@ -761,7 +706,7 @@ describe("the turn rota", () =>
 
 /** adds a soldier of the given player, as the field tests need */
 function userAddSoldier(world: World, id: number, position: [number, number],
-	spec: { classes?: string[]; methods?: Methods } = {}, owner = ENEMY): FakeEnt
+	spec: { classes?: string[]; methods?: Methods } = {}, owner = ENEMY): CommonEntity
 {
 	const ent = makeSoldier(id, position, { classes: spec.classes, methods: spec.methods, owner });
 	world.addEntity(ent);
@@ -769,7 +714,7 @@ function userAddSoldier(world: World, id: number, position: [number, number],
 }
 
 /** the registered entity, plainly */
-function userEnt(world: World, id: number): FakeEnt
+function userEnt(world: World, id: number): CommonEntity
 {
 	const ent = world.ents.get(id);
 	assert.ok(ent, `entity ${id} must exist`);
@@ -777,7 +722,7 @@ function userEnt(world: World, id: number): FakeEnt
 }
 
 /** the army under its roster id, plainly */
-function userArmy(manager: DefenseManagerLike, id: number): any
+function userArmy(manager: DefenseManager, id: number): any
 {
 	const army = manager.getArmy(id);
 	assert.ok(army, `army ${id} must exist`);
@@ -787,7 +732,7 @@ function userArmy(manager: DefenseManagerLike, id: number): any
 /** a manager holding one army around a lone raider, raised the way the
  * rota raises it: an enemy's turn with the raider inside our land */
 function raidedWorld(foePos: [number, number] = [40, 40]): {
-	world: World; manager: DefenseManagerLike; army: any; raider: FakeEnt;
+	world: World; manager: DefenseManager; army: any; raider: CommonEntity;
 }
 {
 	const world = makeWorld();
@@ -851,7 +796,7 @@ describe("keeping the roster", () =>
 			// our dock is by the raid, or on the far coast
 			world.addEntity(makeStructure(4000, withDock ? [305, 5] : [305, 300], PLAYER, ["Structure", "Dock"]));
 			const manager = makeDefenseManager(world);
-			manager.makeIntoArmy(world.gameState, 2000);
+			manager.makeIntoArmy(world.gameState, entityId(2000));
 			world.territory.set("300,5", 0);
 			world.ai.playedTurn = 5;
 			manager.update(world.gameState, emptyEvents());
@@ -868,7 +813,7 @@ describe("keeping the roster", () =>
 		world.addEntity(makeStructure(4000, [300, 300], ENEMY, ["Structure", "CivCentre"]));
 		world.addEntity(makeSoldier(2000, [320, 300]));
 		const manager = makeDefenseManager(world);
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		world.territory.set("320,300", 0);
 		world.ai.playedTurn = 5;
 		manager.update(world.gameState, emptyEvents());
@@ -884,10 +829,10 @@ describe("keeping the roster", () =>
 			allyRow(world).isMutualAlly[3] = true;
 			allyRow(world).isEnemy[3] = false;
 			world.ai.Config.personality.cooperative = cooperative;
-			world.addEntity(makeStructure(4000, [300, 300], 3, ["Structure", "CivCentre"]));
+			world.addEntity(makeStructure(4000, [300, 300], playerId(3), ["Structure", "CivCentre"]));
 			world.addEntity(makeSoldier(2000, [320, 300]));
 			const manager = makeDefenseManager(world);
-			manager.makeIntoArmy(world.gameState, 2000);
+			manager.makeIntoArmy(world.gameState, entityId(2000));
 			world.territory.set("320,300", 0);
 			world.ai.playedTurn = 5;
 			manager.update(world.gameState, emptyEvents());
@@ -904,13 +849,13 @@ describe("keeping the roster", () =>
 		world.addEntity(raiderB);
 		const manager = makeDefenseManager(world);
 		// two camps far apart, so the rota kept two armies
-		manager.makeIntoArmy(world.gameState, 2000);
-		manager.makeIntoArmy(world.gameState, 2001);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
+		manager.makeIntoArmy(world.gameState, entityId(2001));
 
 		// both camps drift toward our town
-		raiderA.position = () => [195, 198];
-		raiderB.position = () => [198, 200];
-		world.ai.elapsedTime = 110;	// the cadence lets armies re-aim
+		raiderA.position = () => worldPos(195, 198);
+		raiderB.position = () => worldPos(198, 200);
+		world.ai.elapsedTime = seconds(110);	// the cadence lets armies re-aim
 		world.ai.playedTurn = 5;	// the sweep that re-aims and merges
 		manager.update(world.gameState, emptyEvents());
 
@@ -926,8 +871,8 @@ describe("keeping the roster", () =>
 		}));
 		world.addEntity(makeSoldier(2000, [61, 60]));
 		const manager = makeDefenseManager(world);
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		world.ai.playedTurn = 2;
 		manager.update(world.gameState, emptyEvents());
 
@@ -949,8 +894,8 @@ describe("keeping the roster", () =>
 
 		// the wanderer took his own road mid-raid
 		const wanderer = userEnt(world, 2001);
-		wanderer.position = () => [160, 40];
-		world.ai.elapsedTime = 115;	// past the five-second cadence
+		wanderer.position = () => worldPos(160, 40);
+		world.ai.elapsedTime = seconds(115);	// past the five-second cadence
 		world.ai.playedTurn = 7;
 		manager.update(world.gameState, emptyEvents());
 
@@ -976,8 +921,8 @@ describe("keeping the roster", () =>
 		const manager = makeDefenseManager(world);
 		// one enemy camp and one gaia beast horde inside the ally's land,
 		// as when a raid splits up and beasts follow the war trail
-		manager.makeIntoArmy(world.gameState, 2000);
-		manager.makeIntoArmy(world.gameState, 2001);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
+		manager.makeIntoArmy(world.gameState, entityId(2001));
 		world.territory.set("50,50", 3);
 		world.territory.set("160,160", 3);
 		world.ai.playedTurn = 5;
@@ -992,7 +937,7 @@ describe("keeping the roster", () =>
 		manager.update(world.gameState, emptyEvents());
 		assert.equal(manager.attackedAllies[3], 2,
 			"two enemies raiding one ally went into the memory");
-		assert.equal(manager.GetCooperationLevel(3), 0.5 + 0.2,
+		assert.equal(manager.GetCooperationLevel(playerId(3)), 0.5 + 0.2,
 			"and lifted cooperation for him");
 	});
 });
@@ -1002,7 +947,7 @@ describe("calling the defenders", () =>
 	function attackRecorder(): {
 		calls: number[];
 		make: (id: number, pos: [number, number] | undefined, methods?: Methods,
-			metadata?: Record<string, unknown>) => FakeEnt;
+			metadata?: Record<string, unknown>) => CommonEntity;
 	}
 	{
 		const calls: number[] = [];
@@ -1053,7 +998,7 @@ describe("calling the defenders", () =>
 		world.addEntity(makeSoldier(2000, [200, 200]));
 		const manager = makeDefenseManager(world);
 		// the raid was enlisted the way an attack on the ally enlists it
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		const { calls, make } = attackRecorder();
 		for (let i = 0; i < 13; ++i)
 			world.addEntity(make(3000 + i, [20, 20]));
@@ -1082,7 +1027,7 @@ describe("calling the defenders", () =>
 		world.addEntity(makeSoldier(2000, [150, 150]));
 		const manager = makeDefenseManager(world);
 		// enlisted the way an attack event in an ally's land enlists it
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		// the raid stands on another island; our warband on its own isle too
 		world.accessAt.set("150,150", 3);
 		world.accessAt.set("20,20", 5);
@@ -1120,7 +1065,7 @@ describe("calling the defenders", () =>
 		world.addEntity(make(3004, [20, 20], {}, { "plan": 1, "subrole": "attacking" }));
 		world.addEntity(make(3005, [20, 20], {}, { "plan": -1 }));
 		world.addEntity(make(3006, [20, 20]));
-		world.ai.HQ.victoryManager.criticalEnts.set(3006, true);
+		world.ai.HQ.victoryManager.criticalEnts.set(entityId(3006), { "guardsAssigned": new Set(), "guards": new Map() });
 		world.addEntity(makeEntity({
 			id: 3007, owner: PLAYER, position: [20, 20], classes: ["Unit", "StoneThrower"]
 		}, { attackTypes: () => ["Melee"] }));
@@ -1155,7 +1100,6 @@ describe("calling the defenders", () =>
 	});
 });
 
-
 describe("when our own are hit", () =>
 {
 	it("takes our own archers into the tower that opens fire", () =>
@@ -1181,7 +1125,7 @@ describe("when our own are hit", () =>
 		}
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 2000, "attacker": 5000 }]
+			"Attacked": [{ "target": entityId(2000), "attacker": entityId(5000) }]
 		}));
 
 		assert.equal(world.garrisonCalls.length, 2, "both idle archers garrisoned");
@@ -1205,7 +1149,7 @@ describe("when our own are hit", () =>
 		world.ai.HQ.attackManager.getPlan = (plan: number) =>
 			plan == 5 ? { "state": "started", "removeUnit": () => undefined } as never : undefined;
 
-		const events = eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] });
+		const events = eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] });
 		// an extra enlistment check: the raider stays unlisted while the plan owns the fight on our side
 		manager.checkEvents(world.gameState, events);
 
@@ -1223,7 +1167,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [21, 21]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(calls, [2000], "the swordsman struck back at once");
@@ -1240,8 +1184,8 @@ describe("when our own are hit", () =>
 		}));
 		world.addEntity(makeSoldier(2000, [21, 21]));
 
-		const events = eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] });
-		const raider = userEnt(world, 2000) as FakeEnt;
+		const events = eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] });
+		const raider = userEnt(world, 2000);
 		// the raider at the same spot: retaliation would reorder the whole fight
 		manager.checkEvents(world.gameState, events);
 		assert.equal(calls.length, 0, "the ongoing duel was left alone");
@@ -1264,7 +1208,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [35, 30]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.equal(calls.length, 0, "the repair kept him from the duel");
@@ -1275,7 +1219,7 @@ describe("when our own are hit", () =>
 		const { world, manager } = assembledWorld();
 		const citadel = makeStructure(5000, [60, 60], PLAYER, ["Structure"]);
 		world.addEntity(citadel);
-		world.ai.HQ.capturableTargets.set(5000, { "ents": new Set([3000, 3001]) });
+		world.ai.HQ.capturableTargets.set(entityId(5000), { "strength": 0, "ents": new Set([entityId(3000), entityId(3001)]) });
 		const mateCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [70, 60], {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
@@ -1289,10 +1233,10 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [72, 60]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
-		const targets = world.ai.HQ.capturableTargets.get(5000) as unknown as { ents: Set<number> };
+		const targets = world.ai.HQ.capturableTargets.get(entityId(5000)) as unknown as { ents: Set<number> };
 		assert.equal(targets.ents.has(3000), false,
 			"the struck dueller left the capture crew");
 		assert.equal(targets.ents.has(3001), false,
@@ -1306,7 +1250,7 @@ describe("when our own are hit", () =>
 		const { world, manager } = assembledWorld();
 		const citadel = makeStructure(5000, [60, 60], PLAYER, ["Structure"]);
 		world.addEntity(citadel);
-		world.ai.HQ.capturableTargets.set(5000, { "ents": new Set([3000, 3001, 3002]) });
+		world.ai.HQ.capturableTargets.set(entityId(5000), { "strength": 0, "ents": new Set([entityId(3000), entityId(3001), entityId(3002)]) });
 		const calls: Array<[number, number]> = [];
 		world.addEntity(makeDefender(3000, [70, 60], {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
@@ -1326,7 +1270,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [72, 60]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(calls, [[3002, 2000]], "the fighting mate was sent, the stateless one passed over");
@@ -1347,7 +1291,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [31, 30]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 5000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(destroyCalls, [5000],
@@ -1372,7 +1316,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [31, 30]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 5000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(destroyCalls, [], "a defendable tower stands");
@@ -1387,7 +1331,7 @@ describe("when our own are hit", () =>
 		world.addEntity(centre);
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": 5000, "from": 3, "to": 2 }]
+			"OwnershipChanged": [{ "entity": entityId(5000), "from": playerId(3), "to": playerId(2) }]
 		}));
 
 		assert.equal(world.switchCalls.length, 1, "one order went to the attack office");
@@ -1406,8 +1350,8 @@ describe("when our own are hit", () =>
 
 		const events = eventsWith({
 			"Attacked": [
-				{ "target": 3000, "attacker": 2000 },
-				{ "target": 3000, "attacker": 2001 }
+				{ "target": entityId(3000), "attacker": entityId(2000) },
+				{ "target": entityId(3000), "attacker": entityId(2001) }
 			]
 		});
 		manager.checkEvents(world.gameState, events);
@@ -1437,7 +1381,7 @@ describe("when our own are hit", () =>
 		world.addEntity(raider);
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(fleeWalks, [[51, 50]], "the boat was ordered to the safe rim");
@@ -1450,7 +1394,7 @@ describe("when our own are hit", () =>
 			capturePoints: () => [5, 20, 5, 0]
 		});
 		world.addEntity(fort);
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 		const capturingID = fort.getMetadata(PLAYER, "PartOfArmy") as number;
 		world.addEntity(makeSoldier(2000, [61, 60]));
 		const soldier = makeDefender(3001, [59, 60]);
@@ -1460,7 +1404,7 @@ describe("when our own are hit", () =>
 		const capturing = userArmy(manager, capturingID);
 		capturing.ownEntities.push(3001);
 
-		const events = eventsWith({ "Attacked": [{ "target": 3001, "attacker": 2000 }] });
+		const events = eventsWith({ "Attacked": [{ "target": entityId(3001), "attacker": entityId(2000) }] });
 		manager.checkEvents(world.gameState, events);
 
 		assert.equal(manager.armies.length, 1,
@@ -1477,9 +1421,9 @@ describe("when our own are hit", () =>
 		});
 		fort.setMetadata(PLAYER, "base", 1);
 		world.addEntity(fort);
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 
-		const events = eventsWith({ "Attacked": [{ "target": 5000, "attacker": 2000 }] });
+		const events = eventsWith({ "Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }] });
 		world.addEntity(makeSoldier(2000, [61, 60]));
 		manager.checkEvents(world.gameState, events);
 
@@ -1499,9 +1443,9 @@ describe("when our own are hit", () =>
 		});
 		fort.setMetadata(PLAYER, "base", 1);
 		world.addEntity(fort);
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 
-		const events = eventsWith({ "Attacked": [{ "target": 5000, "attacker": 2000 }] });
+		const events = eventsWith({ "Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }] });
 		world.addEntity(makeSoldier(2000, [61, 60]));
 		manager.checkEvents(world.gameState, events);
 
@@ -1534,7 +1478,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [41, 40]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]),
@@ -1559,7 +1503,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [41, 40]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]),
@@ -1584,7 +1528,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 5000, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }]
 		}));
 
 		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]),
@@ -1595,7 +1539,7 @@ describe("when our own are hit", () =>
 
 describe("garrisoning by hand", () =>
 {
-	function towerWorld(overrides: Methods = {}): { world: World; manager: DefenseManagerLike; tower: FakeEnt }
+	function towerWorld(overrides: Methods = {}): { world: World; manager: DefenseManager; tower: CommonEntity }
 	{
 		const { world, manager } = assembledWorld();
 		const tower = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Tower"], {
@@ -1611,7 +1555,7 @@ describe("garrisoning by hand", () =>
 		return { world, manager, tower };
 	}
 
-	function archer(id: number, attackTypes: string[], metadata: Record<string, unknown> = {}): FakeEnt
+	function archer(id: number, attackTypes: string[], metadata: Record<string, unknown> = {}): CommonEntity
 	{
 		return makeEntity({ id, owner: PLAYER, position: [20, 20], classes: ["Unit", "Infantry"] },
 			{ attackTypes: () => attackTypes }, metadata);
@@ -1684,7 +1628,7 @@ describe("garrisoning by hand", () =>
 			"a plan hand with a fighting job is not pulled out");
 
 		const removed: number[] = [];
-		const planStub = { "state": "started", "removeUnit": (ent: FakeEnt) => { removed.push(ent.id()); } };
+		const planStub = { "state": "started", "removeUnit": (ent: CommonEntity) => { removed.push(ent.id()); } };
 		world.ai.HQ.attackManager.getPlan = (plan: number) => plan == 1 ? planStub as never : undefined;
 		// the tower is a captured decay-prone one: it takes even plan hands
 		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
@@ -1799,7 +1743,7 @@ describe("garrisoning by hand", () =>
 			isGarrisonHolder: () => true,
 			garrisonableClasses: () => ["Support"],
 			garrisonMax: () => 1,
-			unload: (ent: unknown) => { unloadCalls.push(ent as number); },
+			unload: (ent: number) => { unloadCalls.push(ent); },
 			// like the engine: the holder reports its residents, here id 3000
 			garrisoned: () => [3000]
 		});
@@ -1853,15 +1797,15 @@ describe("the office itself", () =>
 			capturePoints: () => [0, 15, 10, 0]
 		});
 		world.addEntity(fort);
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		assert.equal(manager.armies.length, 1, "one standing army");
 		const next = makeSoldier(2001, [41, 40]);
 		world.addEntity(next);
-		manager.makeIntoArmy(world.gameState, 2001);
+		manager.makeIntoArmy(world.gameState, entityId(2001));
 		assert.equal(manager.armies.length, 1, "the second raider joined the first army");
 		assert.deepEqual(manager.armies[0].foeEntities.sort(), [2000, 2001]);
 
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 		assert.equal(manager.armies.length, 2,
 			"a capture army never folds into a punitive one");
 		const captureID = fort.getMetadata(PLAYER, "PartOfArmy") as number;
@@ -1875,7 +1819,7 @@ describe("the office itself", () =>
 			capturePoints: () => [5, 20, 5, 0]
 		});
 		world.addEntity(fort);
-		manager.makeIntoArmy(world.gameState, 5000, "capturing");
+		manager.makeIntoArmy(world.gameState, entityId(5000), "capturing");
 		const army = manager.armies[0];
 
 		manager.abortArmy(world.gameState, army);
@@ -1887,13 +1831,13 @@ describe("the office itself", () =>
 	it("lifts cooperation with each extra enemy raiding the same ally", () =>
 	{
 		const { world, manager } = assembledWorld();
-		assert.equal(manager.GetCooperationLevel(3), 0.5,
+		assert.equal(manager.GetCooperationLevel(playerId(3)), 0.5,
 			"friendly cooperation stands at the personality's value");
 		manager.attackedAllies[3] = 2;
-		assert.equal(manager.GetCooperationLevel(3), 0.5 + 0.2,
+		assert.equal(manager.GetCooperationLevel(playerId(3)), 0.5 + 0.2,
 			"two raiders lift it by a fifth");
 		manager.attackedAllies[3] = 3;
-		assert.equal(manager.GetCooperationLevel(3), 0.5 + 0.4,
+		assert.equal(manager.GetCooperationLevel(playerId(3)), 0.5 + 0.4,
 			"and again by a fifth per further enemy");
 	});
 
@@ -1904,7 +1848,7 @@ describe("the office itself", () =>
 		world.addEntity(raider);
 		world.addEntity(makeStructure(4000, [50, 50], ENEMY));
 		const manager = makeDefenseManager(world);
-		manager.targetList.push(4000);
+		manager.targetList.push(entityId(4000));
 		world.ai.playedTurn = 2;
 		world.addEntity(makeDefender(3000, [55, 50]));
 		world.addEntity(makeDefender(3001, [56, 50]));
@@ -1919,7 +1863,7 @@ describe("the office itself", () =>
 
 		assert.equal(manager.armies.length, 0, "the army dissolved after the roll-out");
 		assert.equal(world.switchCalls.length, 1, "and the freed men were rolled out");
-		const roll = world.switchCalls[0] as [FakeEnt, Record<string, unknown>];
+		const roll = world.switchCalls[0] as [CommonEntity, Record<string, unknown>];
 		assert.equal(roll[0].id(), 4000, "against the tracked base");
 		assert.deepEqual(roll[1], { "armyID": armyID, "uniqueTarget": true });
 	});
@@ -1931,7 +1875,7 @@ describe("the office itself", () =>
 		world.addEntity(raider);
 		world.addEntity(makeStructure(4000, [50, 50], ENEMY));
 		const manager = makeDefenseManager(world);
-		manager.targetList.push(4000);
+		manager.targetList.push(entityId(4000));
 		world.ai.playedTurn = 2;
 		world.addEntity(makeDefender(3000, [220, 220]));
 		world.addEntity(makeDefender(3001, [221, 220]));
@@ -1953,7 +1897,7 @@ describe("the office itself", () =>
 		const { world, manager } = assembledWorld();
 		const raider = makeSoldier(2000, [40, 40]);
 		world.addEntity(raider);
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		manager.attackedAllies[3] = 2;
 
 		const data = manager.Serialize();
@@ -1961,7 +1905,7 @@ describe("the office itself", () =>
 		fresh.Deserialize(world.gameState, data);
 
 		assert.equal(fresh.armies.length, 1, "one army restored");
-		assert.deepEqual(fresh.getArmy(manager.armies[0].ID).foeEntities, [2000],
+		assert.deepEqual(fresh.getArmy(manager.armies[0].ID)?.foeEntities, [2000],
 			"the restored army hunts the same raider");
 		assert.deepEqual(fresh.attackedAllies, { "3": 2 },
 			"the cooperation memory returned");
@@ -1972,7 +1916,7 @@ describe("the office itself", () =>
 describe("rarer turns of the defence", () =>
 {
 	/** one of ours in combat with the enemy house 4000 we are capturing */
-	function capturerOf(world: World, id: number, position: [number, number], methods: Methods = {}): FakeEnt
+	function capturerOf(world: World, id: number, position: [number, number], methods: Methods = {}): CommonEntity
 	{
 		return world.addEntity(makeDefender(id, position, {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
@@ -1999,10 +1943,10 @@ describe("rarer turns of the defence", () =>
 		capturerOf(world, 3004, [73, 72], { unitAIOrderData: () => [{ "target": 2000 }], ...fighter(3004) });
 		capturerOf(world, 3005, [75, 75], fighter(3005));
 		capturerOf(world, 3006, [90, 90], fighter(3006));
-		world.ai.HQ.capturableTargets.set(4000, { "strength": 10, "ents": new Set([3000, 3001, 3002, 3003, 3004, 3005, 3006]) });
+		world.ai.HQ.capturableTargets.set(entityId(4000), { "strength": 10, "ents": new Set([entityId(3000), entityId(3001), entityId(3002), entityId(3003), entityId(3004), entityId(3005), entityId(3006)]) });
 
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }, { "target": 3001, "attacker": 2000 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }, { "target": entityId(3001), "attacker": entityId(2000) }]
 		}));
 
 		// each hit capturer answers and pulls the nearest capturer free to help:
@@ -2011,7 +1955,7 @@ describe("rarer turns of the defence", () =>
 		assert.ok(attacks.some(([id]) => id === 3000));
 		assert.ok(attacks.some(([id]) => id === 3001));
 		// the ones that left the building are struck off its capture book
-		const book = world.ai.HQ.capturableTargets.get(4000) as { ents: Set<number> };
+		const book = world.ai.HQ.capturableTargets.get(entityId(4000)) as { ents: Set<number> };
 		assert.deepEqual([...book.ents].sort(), [3002, 3003, 3004]);
 		void hit;
 	});
@@ -2025,7 +1969,7 @@ describe("rarer turns of the defence", () =>
 		world.addEntity(makeDefender(3000, [20, 20], { attack: () => assert.fail("no fight with an ally") }));
 		world.addEntity(makeSoldier(2000, [22, 20], { owner: 3 }));
 
-		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] }));
 		assert.equal(manager.armies.length, 0);
 	});
 
@@ -2034,7 +1978,7 @@ describe("rarer turns of the defence", () =>
 		const { world, manager } = assembledWorld();
 		world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Ship", "Warship"] }));
 		world.addEntity(makeSoldier(2000, [22, 20]));
-		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] }));
 		assert.equal(manager.armies.length, 0);
 	});
 
@@ -2048,7 +1992,7 @@ describe("rarer turns of the defence", () =>
 		world.addEntity(field);
 		world.blinking.set("30,30", true);
 		world.addEntity(makeSoldier(2000, [32, 30]));
-		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 5000, "attacker": 2000 }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": entityId(5000), "attacker": entityId(2000) }] }));
 		assert.equal(manager.armies.length, 0);
 	});
 
@@ -2058,7 +2002,7 @@ describe("rarer turns of the defence", () =>
 		world.addEntity(makeSoldier(2000, [22, 20]));
 		world.addEntity(makeDefender(3001, [20, 20], { attack: () => assert.fail("no one to answer") }));
 		manager.checkEvents(world.gameState, eventsWith({
-			"Attacked": [{ "target": 3000, "attacker": 2000 }, { "target": 3001, "attacker": 2999 }]
+			"Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }, { "target": entityId(3001), "attacker": entityId(2999) }]
 		}));
 		assert.equal(manager.armies.length, 0);
 	});
@@ -2069,7 +2013,7 @@ describe("rarer turns of the defence", () =>
 		world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Worker"] },
 			{ healthLevel: () => 0.9, attackTypes: () => ["Melee"] }));
 		world.addEntity(makeSoldier(2000, [22, 20]));
-		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": 3000, "attacker": 2000 }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": entityId(3000), "attacker": entityId(2000) }] }));
 		assert.equal(world.garrisonCalls.length, 0);
 		assert.equal(manager.armies.length, 1);
 	});
@@ -2094,16 +2038,16 @@ describe("rarer turns of the defence", () =>
 		infantry(3007, [37, 30]);
 		// a defender of the army hunting a raider
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		const army = manager.armies[0];
-		army.addOwn(world.gameState, 3005);
+		army.addOwn(world.gameState, entityId(3005));
 
 		const ret = manager.garrisonUnitsInside(world.gameState, fort, { "min": 2, "type": GarrisonManager.TYPE_DECAY });
 
 		assert.equal(ret, true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, , type]) => [unit.id(), type]),
 			[[3005, GarrisonManager.TYPE_DECAY], [3006, GarrisonManager.TYPE_DECAY]]);
-		assert.equal(army.ownEntities.includes(3005), false);
+		assert.equal(army.ownEntities.includes(entityId(3005)), false);
 	});
 
 	it("a stone thrower under fire goes to the nearest fortress that can take it", () =>
@@ -2154,12 +2098,12 @@ describe("rarer turns of the defence", () =>
 		const { world, manager } = assembledWorld();
 		world.addEntity(makeStructure(4000, [50, 50], ENEMY, ["Structure", "CivCentre"]));
 		world.accessAt.set("50,50", 4);
-		manager.targetList.push(3999, 4000);		// one already destroyed
+		manager.targetList.push(entityId(3999), entityId(4000));		// one already destroyed
 		const raider = makeSoldier(2000, [40, 40]);
 		world.addEntity(raider);
-		manager.makeIntoArmy(world.gameState, 2000);
+		manager.makeIntoArmy(world.gameState, entityId(2000));
 		world.addEntity(makeDefender(3000, [45, 45]));
-		manager.armies[0].addOwn(world.gameState, 3000);
+		manager.armies[0].addOwn(world.gameState, entityId(3000));
 
 		manager.switchToAttack(world.gameState, manager.armies[0]);
 		assert.equal(world.switchCalls.length, 0);

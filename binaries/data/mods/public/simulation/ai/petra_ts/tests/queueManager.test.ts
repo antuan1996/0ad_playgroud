@@ -12,136 +12,34 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { makeFakeGameState } from "./harness/bareState.ts";
 import { logs } from "./harness/engine.ts";
-import { loadCommonModule, loadPetraModule } from "./harness/target.ts";
-import { makeFakeGameState } from "./harness/world.ts";
+import { fake, override } from "./harness/fakes.ts";
 
-interface Amounts
-{
-	amounts: Record<string, number>;
-	population: number;
-}
+import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
-interface ResourcesLike
-{
-	reset(): void;
-	canAfford(other: unknown): boolean;
-	Serialize(): Amounts;
-}
+import { seconds } from "../adapter/brands.ts";
+import { Config } from "../decision/config.ts";
+import type { Headquarters } from "../decision/headquarters.ts";
+import { Queue } from "../execution/queue.ts";
+import { QueueManager } from "../execution/queueManager.ts";
 
-type ResourcesManagerCtor = new (amounts?: Record<string, number>, population?: number) => ResourcesLike;
-
-/** The part of a plan a QueueManager actually touches: its cost and readiness. */
-interface FakePlan
-{
-	category: string;
-	type: string;
-	number: number;
-	isInvalid(): boolean;
-	isGo(): boolean;
-	canStart(): boolean;
-	getCost(): ResourcesLike;
-	start(): void;
-}
-
-/** The part of a Queue a QueueManager reads. The queue objects themselves are real. */
-interface QueueLike
-{
-	plans: FakePlan[];
-	paused: boolean;
-	switched: number;
-	addPlan(plan: FakePlan): void;
-	length(): number;
-	hasQueuedUnits(): boolean;
-	getNext(): FakePlan | null;
-	startNext(gameState: CommonGameState): boolean;
-	maxAccountWanted(gameState: CommonGameState, fraction: number): ResourcesLike;
-	check(gameState: CommonGameState): void;
-	Serialize(): { plans: Record<string, unknown>[]; paused: boolean; switched: number };
-	Deserialize(gameState: CommonGameState, data: { plans: Record<string, unknown>[]; paused: boolean; switched: number }): void;
-}
-
-/** The parts of Petra's Config a QueueManager reads. */
-interface ConfigLike
-{
-	debug: number;
-	priorities: Record<string, number>;
-	popScaling: number;
-	Economy: { popPhase2: number };
-	queues: {
-		firstTurn: Record<string, number>;
-		short: Record<string, number>;
-		medium: Record<string, number>;
-		long: Record<string, number>;
-	};
-}
-
-export interface SavedQueueManager
-{
-	priorities: Record<string, number>;
-	queues: Record<string, { plans: Record<string, unknown>[]; paused: boolean; switched: number }>;
-	accounts: Record<string, Amounts>;
-}
-
-interface QueueManagerLike
-{
-	Config: ConfigLike;
-	accounts: Record<string, ResourcesLike>;
-	finishingTime: number | undefined;
-	priorities: Record<string, number>;
-	queueArrays: Array<[string, QueueLike]>;
-	queues: Record<string, QueueLike>;
-	getAvailableResources(gameState: CommonGameState): ResourcesLike;
-	getTotalAccountedResources(): ResourcesLike;
-	currentNeeds(gameState: CommonGameState): ResourcesLike;
-	wantedGatherRates(gameState: CommonGameState): Record<string, number>;
-	printQueues(gameState: CommonGameState): void;
-	clear(): void;
-	setAccounts(gameState: CommonGameState, cost: ResourcesLike | Record<string, number>, queue: string): void;
-	transferAccounts(cost: ResourcesLike | Record<string, number>, from: string, into: string): void;
-	distributeResources(gameState: CommonGameState): void;
-	switchResource(gameState: CommonGameState, res: string): void;
-	startNextItems(gameState: CommonGameState): void;
-	update(gameState: CommonGameState): void;
-	checkPausedQueues(gameState: CommonGameState): void;
-	canAfford(queue: string, cost: ResourcesLike | Record<string, number>): boolean;
-	pauseQueue(queue: string, scrapAccounts: boolean): void;
-	unpauseQueue(queue: string): void;
-	pauseAll(scrapAccounts: boolean, but: string | undefined): void;
-	unpauseAll(but: string | undefined): void;
-	addQueue(queueName: string, priority: number): void;
-	removeQueue(queueName: string): void;
-	getPriority(queueName: string): number;
-	changePriority(queueName: string, newPriority: number): void;
-	Serialize(): SavedQueueManager;
-	Deserialize(gameState: CommonGameState, data: SavedQueueManager): void;
-}
-
-const { Queue } = await loadPetraModule<{ Queue: new () => QueueLike }>("queue");
-const { QueueManager } = await loadPetraModule<{
-	QueueManager: new (Config: ConfigLike, queues: Record<string, QueueLike>) => QueueManagerLike;
-}>("queueManager");
-const { ResourcesManager } = await loadCommonModule<{ ResourcesManager: ResourcesManagerCtor }>("resources");
-
-function food(amount: number): ResourcesLike
+function food(amount: number): ResourcesManager
 {
 	return new ResourcesManager({ food: amount }, 0);
 }
 
-function costOf(amount: number): () => ResourcesLike
+function costOf(amount: number): () => ResourcesManager
 {
 	// A fresh object each call: maxAccountWanted multiplies what it is given.
 	return () => food(amount);
 }
 
-/** Petra's tuning, pruned to no more than QueueManager reads. */
-function makeConfig(overrides: Partial<ConfigLike> = {}): ConfigLike
+/** Petra's tuning, with the queue rates these tests reckon with. */
+function makeConfig(overrides: Partial<Config> = {}): Config
 {
-	return {
-		debug: 0,
+	return Object.assign(new Config(), {
 		priorities: {},
-		popScaling: 1,
-		Economy: { popPhase2: 150 },
 		queues: {
 			firstTurn: { "food": 10, "default": 0 },
 			short: { "default": 100 },
@@ -149,12 +47,13 @@ function makeConfig(overrides: Partial<ConfigLike> = {}): ConfigLike
 			long: { "default": 0 }
 		},
 		...overrides
-	};
+	});
 }
 
-function makePlan(overrides: Partial<FakePlan> = {}): FakePlan
+/** A plan as a QueueManager sees it: its cost and readiness. */
+function makePlan(overrides: Record<string, unknown> = {}): PetraRuntime.ConcretePlan
 {
-	return {
+	return fake<PetraRuntime.ConcretePlan>({
 		category: "unit",
 		type: "test_unit",
 		number: 1,
@@ -164,7 +63,7 @@ function makePlan(overrides: Partial<FakePlan> = {}): FakePlan
 		getCost: () => food(0),
 		start: () => undefined,
 		...overrides
-	};
+	});
 }
 
 /**
@@ -174,21 +73,20 @@ function makePlan(overrides: Partial<FakePlan> = {}): FakePlan
 function worldWithResources(amounts: Record<string, number> = {}): CommonGameState
 {
 	const { gameState } = makeFakeGameState();
-	const state = gameState as unknown as Record<string, unknown>;
-	state["getResources"] = () => new ResourcesManager({ ...amounts });
+	override(gameState, { "getResources": () => new ResourcesManager({ ...amounts }) });
 	return gameState;
 }
 
 /** The manager's account for a queue, as the plain numbers its methods swap. */
-function account(manager: QueueManagerLike, queue: string): Record<string, number>
+function account(manager: QueueManager, queue: string): Record<string, number>
 {
-	return manager.accounts[queue] as unknown as Record<string, number>;
+	return manager.accounts[queue];
 }
 
 /** A manager owning the given queues, each pre-loaded with its plans. */
-function makeManager(config: ConfigLike, plans: Record<string, FakePlan[]> = {}): QueueManagerLike
+function makeManager(config: Config, plans: Record<string, PetraRuntime.ConcretePlan[]> = {}): QueueManager
 {
-	const queues: Record<string, QueueLike> = {};
+	const queues: Record<string, Queue> = {};
 	for (const name in plans)
 	{
 		queues[name] = new Queue();
@@ -276,8 +174,7 @@ describe("QueueManager", () =>
 	it("wants the first-turn rates before it has planned anything", () =>
 	{
 		const gameState = worldWithResources();
-		const ai = gameState.ai as unknown as { playedTurn: number };
-		ai.playedTurn = 0;
+		gameState.ai.playedTurn = 0;
 		const manager = makeManager(makeConfig());
 
 		const rates = manager.wantedGatherRates(gameState);
@@ -288,8 +185,7 @@ describe("QueueManager", () =>
 	it("wants rates that cover what its short and medium plans still lack", () =>
 	{
 		const gameState = worldWithResources({ food: 500 });
-		const ai = gameState.ai as unknown as { playedTurn: number };
-		ai.playedTurn = 2;   // any turn past the first
+		gameState.ai.playedTurn = 2;   // any turn past the first
 		const manager = makeManager(makeConfig(), {
 			a: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(50) })]
 		});
@@ -344,7 +240,7 @@ describe("QueueManager", () =>
 	it("takes no share for a paused queue", () =>
 	{
 		const gameState = worldWithResources({ food: 200 });
-		const queues: Record<string, QueueLike> = {
+		const queues: Record<string, Queue> = {
 			active: Object.assign(new Queue(), {}),
 			paused: new Queue()
 		};
@@ -377,7 +273,7 @@ describe("QueueManager", () =>
 	it("compacts accounts so a higher priority queue can afford its item", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const queues: Record<string, QueueLike> = {
+		const queues: Record<string, Queue> = {
 			hungry: new Queue(),
 			donor: new Queue(),
 			// A queue the compaction never goes through: paused, or with plans.
@@ -442,8 +338,7 @@ describe("QueueManager", () =>
 	it("starts the next item when the account can afford it", () =>
 	{
 		const gameState = worldWithResources();
-		const ai = gameState.ai as unknown as { elapsedTime: number };
-		ai.elapsedTime = 20;
+		gameState.ai.elapsedTime = seconds(20);
 		let started = 0;
 		const manager = makeManager(makeConfig({ priorities: { a: 1 } }), {
 			a: [makePlan({ getCost: costOf(100), start: () => { ++started; } })]
@@ -512,7 +407,7 @@ describe("QueueManager", () =>
 		let fields = 0;
 		// A house plan raised its queue for a pop-cap emergency; starting it
 		// puts the queue back to its normal priority (a plan's queueToReset).
-		const house = (): FakePlan => makePlan({
+		const house = (): PetraRuntime.ConcretePlan => makePlan({
 			getCost: costOf(50),
 			start: () =>
 			{
@@ -540,7 +435,7 @@ describe("QueueManager", () =>
 	{
 		const gameState = worldWithResources();
 		let started = 0;
-		const queues: Record<string, QueueLike> = { a: new Queue() };
+		const queues: Record<string, Queue> = { a: new Queue() };
 		queues.a.addPlan(makePlan({ getCost: costOf(100), start: () => { ++started; } }));
 		queues.a.paused = true;
 		const manager = new QueueManager(makeConfig({ priorities: { a: 1 } }), queues);
@@ -708,9 +603,8 @@ describe("QueueManager", () =>
 	it("runs one full turn: fund, then start what the money bought", () =>
 	{
 		const gameState = worldWithResources({ food: 300 });
-		const ai = gameState.ai as unknown as Record<string, unknown>;
-		ai.HQ = { hasPotentialBase: () => true };
-		ai.elapsedTime = 20;
+		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.ai.elapsedTime = seconds(20);
 		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
 
 		let started = 0;
@@ -728,8 +622,7 @@ describe("QueueManager", () =>
 	it("repairs a zero priority and asks for a report", () =>
 	{
 		const gameState = worldWithResources();
-		const ai = gameState.ai as unknown as Record<string, unknown>;
-		ai.HQ = { hasPotentialBase: () => true };
+		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
 		const logged = logs.length;
 		const manager = makeManager(makeConfig({ priorities: { military: 0 } }), { military: [] });
@@ -746,18 +639,16 @@ describe("QueueManager", () =>
 	it("prints its queue overview every 50 turns at verbose log levels", () =>
 	{
 		const gameState = worldWithResources({ food: 300 });
-		const state = gameState as unknown as Record<string, unknown>;
-		state["getPopulation"] = () => 42;
-		state["getOwnUnits"] = () => [];
-		const ai = gameState.ai as unknown as Record<string, unknown>;
-		ai.HQ = {
+		override(gameState, { "getPopulation": () => 42 });
+		override(gameState, { "getOwnUnits": () => [] });
+		gameState.ai.HQ = fake<Headquarters>({
 			"hasPotentialBase": () => true,
 			"GetWantedGatherRates": () => ({}),
 			"GetCurrentGatherRates": () => ({}),
 			"pickMostNeededResources": () => []
-		};
-		ai.elapsedTime = 20;
-		ai.playedTurn = 50;
+		});
+		gameState.ai.elapsedTime = seconds(20);
+		gameState.ai.playedTurn = 50;
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
 		const logged = logs.length;
 		const manager = makeManager(makeConfig({ debug: 2, priorities: { a: 1 } }), { a: [] });
@@ -807,8 +698,7 @@ describe("QueueManager", () =>
 	it("wants long-horizon rates for what it is not ready to start", () =>
 	{
 		const gameState = worldWithResources({ food: 200 });
-		const ai = gameState.ai as unknown as { playedTurn: number };
-		ai.playedTurn = 2;
+		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
 			a: [
 				makePlan({ getCost: costOf(100) }),
@@ -830,8 +720,7 @@ describe("QueueManager", () =>
 	it("ignores a paused queue when sizing the gather rates", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const ai = gameState.ai as unknown as { playedTurn: number };
-		ai.playedTurn = 2;
+		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
 			a: [makePlan({ getCost: costOf(500) })]
 		});
@@ -847,8 +736,7 @@ describe("QueueManager", () =>
 	it("stops counting plans after the first two when sizing the gather rates", () =>
 	{
 		const gameState = worldWithResources({ food: 0 });
-		const ai = gameState.ai as unknown as { playedTurn: number };
-		ai.playedTurn = 2;
+		gameState.ai.playedTurn = 2;
 		const manager = makeManager(makeConfig(), {
 			a: [
 				makePlan({ type: "first", getCost: costOf(100) }),
@@ -867,17 +755,15 @@ describe("QueueManager", () =>
 	it("writes an overview of itself, its queues and its plans for the log", () =>
 	{
 		const gameState = worldWithResources({ food: 111 });
-		const state = gameState as unknown as Record<string, unknown>;
-		state["getPopulation"] = () => 42;
+		override(gameState, { "getPopulation": () => 42 });
 		// One unassigned worker: enough to be counted into the header.
-		state["getOwnUnits"] = () =>
-			[{ "getMetadata": (_player: number, key: string) => key === "role" ? "worker" : undefined }];
-		const ai = gameState.ai as unknown as Record<string, unknown>;
-		ai.HQ = {
+		override(gameState, { "getOwnUnits": () =>
+			[{ "getMetadata": (_player: number, key: string) => key === "role" ? "worker" : undefined }] });
+		gameState.ai.HQ = fake<Headquarters>({
 			"GetWantedGatherRates": () => ({ food: 1 }),
 			"GetCurrentGatherRates": () => ({ food: 0.5 }),
 			"pickMostNeededResources": () => ["food"]
-		};
+		});
 		const manager = makeManager(makeConfig({ priorities: { military: 500, reserve: 1 } }),
 		{
 			military: [makePlan({ number: 3 })],
@@ -992,10 +878,8 @@ describe("QueueManager", () =>
 		): CommonGameState
 		{
 			const { gameState } = makeFakeGameState(stateOptions);
-			const state = gameState as unknown as Record<string, unknown>;
-			state["getResources"] = () => new ResourcesManager({});
-			const ai = gameState.ai as unknown as Record<string, unknown>;
-			ai.HQ = { "hasPotentialBase": () => true, ...hq };
+			override(gameState, { "getResources": () => new ResourcesManager({}) });
+			gameState.ai.HQ = fake<Headquarters>({ "hasPotentialBase": () => true, ...hq });
 			gameState.countOwnEntitiesAndQueuedWithRole = () => numWorkers;
 			return gameState;
 		}

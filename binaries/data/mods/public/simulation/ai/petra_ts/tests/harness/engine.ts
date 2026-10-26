@@ -22,7 +22,13 @@ import { afterEach, beforeEach } from "node:test";
 import { modsBase, modsPublic } from "./paths.ts";
 
 /** Commands handed to Engine.PostCommand, oldest first. */
-export const commands: unknown[] = [];
+export const commands: EngineCommand[] = [];
+
+/** The recorded commands of one type, oldest first. */
+export function sent<T extends EngineCommand["type"]>(type: T): Array<Extract<EngineCommand, { type: T }>>
+{
+	return commands.filter((command): command is Extract<EngineCommand, { type: T }> => command.type === type);
+}
 
 /** Everything passed to warn()/error(), oldest first. */
 export const logs: string[] = [];
@@ -78,12 +84,10 @@ export class EngineExit extends Error
 	}
 }
 
-type EngineStub = Record<string, (...args: never[]) => unknown>;
-
 function makeEngine(): object
 {
 	const real: Record<string, unknown> = {
-		PostCommand: (player: number, command: unknown) => {
+		PostCommand: (player: number, command: EngineCommand) => {
 			void player;
 			commands.push(command);
 		},
@@ -128,7 +132,7 @@ function makeEngine(): object
 				return target[property];
 			throw new Error(`Engine.${property} is not stubbed — add it to tests/harness/engine.ts`);
 		}
-	}) as EngineStub;
+	});
 }
 
 /**
@@ -145,7 +149,7 @@ function uneval(value: unknown, depth = 0): string
 	if (typeof value === "string")
 		return JSON.stringify(value);
 	if (typeof value === "function")
-		return `[function ${(value as { name?: string }).name ?? "anonymous"}]`;
+		return `[function ${value.name ?? "anonymous"}]`;
 	if (value instanceof Set)
 		return `new Set([${[...value].map(item => uneval(item, depth + 1)).join(", ")}])`;
 	if (value instanceof Map)
@@ -154,7 +158,7 @@ function uneval(value: unknown, depth = 0): string
 		return `[${value.map(item => uneval(item, depth + 1)).join(", ")}]`;
 	if (typeof value === "object")
 	{
-		const entries = Object.entries(value as Record<string, unknown>)
+		const entries = Object.entries(value)
 			.map(([key, item]) => `${key}: ${uneval(item, depth + 1)}`);
 		return `{ ${entries.join(", ")} }`;
 	}
@@ -182,15 +186,9 @@ function globalScriptFiles(): { dir: string; file: string }[]
 	return out;
 }
 
-let installed = false;
-
-/** Put the AI's global scope in place. Safe to call more than once. */
+/** Put the AI's global scope in place; setup.ts does, once per test process. */
 export function installEngineGlobals(): void
 {
-	if (installed)
-		return;
-	installed = true;
-
 	const g = globalThis as Record<string, unknown>;
 
 	g["Engine"] = makeEngine();
@@ -214,7 +212,7 @@ export function installEngineGlobals(): void
 		if (value && typeof value === "object")
 		{
 			Object.freeze(value);
-			for (const child of Object.values(value as Record<string, unknown>))
+			for (const child of Object.values(value))
 				deepfreeze(child);
 		}
 		return value;
