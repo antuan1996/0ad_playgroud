@@ -498,3 +498,62 @@ attacks up (`PLAN.md` §6).
   than the control's (72.8k gathered against 69.5k, +5%, against +12%);
   one batch does not tell that from noise. They are kept as bug fixes, not
   as strength.
+
+## 17. Type review (2026-10-26)
+
+A scan of the port's syntax trees and, for inferred types, its type checker
+(`as`, `!`, `any`, private common-api fields, untyped saves), during stage
+4. Every change below kept the integration match's fingerprint
+(`f11c19c0cbb8ab10`) and both test targets green.
+
+- **Done.**
+  - **Casts and `!`.** The three `!` became `requireValue`. The diplomacy
+    events were cast to local copies of their types: the engine's events
+    are typed now (`TributeExchanged` from `Player.js`; `TributeRequest`
+    and `DiplomacyRequest` are the other AI's command). A diplomacy request
+    for a stance other than ally or neutral is ignored (the one behaviour
+    change, with a test).
+  - **Saves.** Six managers and `DefenseArmy` loaded saves with
+    `this[key as keyof this] = ...`: each has a `Serialized*` type
+    (`Pick` of its fields) and assigns field by field; `Config` saves as
+    `SerializedConfig`.
+  - **`requireValue`** throws on `null` as well as `undefined`; seven
+    lookups that cannot miss use it or `requireTemplate` (a foundation's
+    built template, a batch in training, `findBestTrainableUnit`'s pick).
+    The lists of what a building trains are not among them: the AI splits
+    the raw template string with its own civ, so a captured building lists
+    units its civ lacks (the engine's own list, `Trainer.js`, filters them).
+  - **`TerritoryMap`** is a subclass of `InfoMap`, no longer a cast object
+    with functions attached; the grid's data is typed per kind (territory
+    `Uint8Array`, passability `Uint16Array`, as `CCmpAIManager` has them).
+  - **Private fields.** `researchManager` read `_template` because
+    `findAvailableTech` was declared to return entity templates; it returns
+    technologies, whose accessors it uses now. The HQ's `_entity.trainingQueue`
+    is `trainingQueue()`.
+  - **`TechName`.** `getTemplate` has an overload per name brand;
+    `QueuePlan<T>` holds a `CommonTemplate` (training, building) or a
+    `CommonTechnology` (research), each subclass looking its template up.
+    `ResearchPlan`'s `researchTime === undefined` guard could never fire (both
+    wrappers have the method; its test passed on a fake without it) and is
+    gone. The queue's class counts skip technology plans, which have no
+    `hasClass`.
+  - **Implicit `any`.** `buildManager.builders`/`unbuildables` and
+    `attackManager.bombingAttacks` were `new Map()` without type arguments,
+    hence `Map<any, any>`, invisible to a search for `any`. Typing them
+    found a test that keyed `bombingAttacks` by a string.
+- **Left** (`PLAN.md` 3.5): `Template.get()` returning `any` (55 uses),
+  three more `any` declarations, the `plan` metadata's magic numbers (31
+  uses), queue names as `string`, 19 functions over 150 lines, 571 `==`, 84
+  inline `import()` types, 99 `for...in`, and the `declare` fields. The 117
+  other `any` hits are evolving declarations (`let x;`, `const a = []`) that
+  the compiler types from their assignments: not holes.
+- **The `declare` fields (202)** fall in three groups. 133 are assigned in
+  their own class's constructor: removing `declare` makes the compiler check
+  that, and with the ES2022 target defines each field before the
+  constructor body (own-property order can change, which matters where a
+  class iterates its own fields, as `Config.Serialize` does): planned for
+  stage 4. 12 are in subclasses, where a plain field would overwrite the
+  value `super()` set (`ResearchPlan`'s `category`, ...). 57 are set only in
+  `init()`, `Deserialize` or later: the managers' and plans' two-step
+  set-up, so no small change removes them. Both groups go with stage 5, as
+  each class is rewritten.

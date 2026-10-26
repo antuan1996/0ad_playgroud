@@ -10,6 +10,7 @@ import { describe, it } from "node:test";
 
 import { makeFakeGameState } from "./harness/bareState.ts";
 import { assertRoundTrip } from "./harness/persistence.ts";
+import { techName } from "../adapter/brands.ts";
 
 import { AttackManager } from "../decision/attackManager.ts";
 import { BaseManager } from "../decision/baseManager.ts";
@@ -378,8 +379,8 @@ describe("save and reload", () =>
 			assertRoundTrip(
 				{
 					label: "ResearchPlan",
-					original: () => new ResearchPlan(world, "research/athenians_myrnidian_founding"),
-					restored: () => new ResearchPlan(world, "research/athenians_myrnidian_founding"),
+					original: () => new ResearchPlan(world, techName("research/athenians_myrnidian_founding")),
+					restored: () => new ResearchPlan(world, techName("research/athenians_myrnidian_founding")),
 					keep: ["ID"]
 				},
 				world

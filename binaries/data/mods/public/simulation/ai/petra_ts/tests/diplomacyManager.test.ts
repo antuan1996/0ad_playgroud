@@ -283,16 +283,16 @@ describe("the turn's diplomatic events: checkEvents", () =>
 			"type": "wood", "warnTime": seconds(10), "sentWarning": true });
 		world.ai.elapsedTime = seconds(200);
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": 2, "amounts": { "wood": 400 } }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 400 } }] }));
 		const request = manager.receivedDiplomacyRequests.get(playerId(2));
 		assert.equal(request?.wanted, 600);
 		assert.equal(request?.warnTime, 260);
 		assert.equal(request?.sentWarning, false);
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": 2, "amounts": { "food": 900 } }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 900 } }] }));
 		assert.equal(request?.wanted, 600, "food is not what was asked");
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": 2, "amounts": { "wood": 600 } }] }));
+		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 600 } }] }));
 		assert.equal(request?.status, "accepted");
 		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 2, "to": "ally" }]);
 	});
@@ -302,8 +302,8 @@ describe("the turn's diplomatic events: checkEvents", () =>
 		const { world, hq, manager } = seat([GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" } }, {}]);
 		const before = hq.Config.personality.cooperative;
 		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [
-			{ "to": PLAYER, "from": 2, "amounts": { "food": 100, "wood": 100 } },
-			{ "to": 3, "from": 2, "amounts": { "food": 5000 } }
+			{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 100, "wood": 100 } },
+			{ "to": playerId(3), "from": playerId(2), "amounts": { "food": 5000 } }
 		] }));
 		assert.ok(Math.abs(hq.Config.personality.cooperative - (before + 0.0001 * 300)) < 1e-9, "food counts once, the rest twice");
 
@@ -390,7 +390,8 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	{
 		const { world, manager } = seat(table());
 		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyRequest": [
-			{ "player": PLAYER, "source": 2, "to": "ally" }, { "player": 3, "source": 4, "to": "ally" }
+			{ "type": "diplomacy-request", "player": PLAYER, "source": playerId(2), "to": "ally" },
+			{ "type": "diplomacy-request", "player": playerId(3), "source": playerId(4), "to": "ally" }
 		] }));
 
 		assert.deepEqual(sent("tribute-request"), [
@@ -398,14 +399,25 @@ describe("the turn's diplomatic events: checkEvents", () =>
 		]);
 	});
 
+	it("an AI's request for a stance we do not know is ignored", () =>
+	{
+		const { world, manager } = seat(table());
+		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyRequest": [
+			{ "type": "diplomacy-request", "player": PLAYER, "source": playerId(2), "to": "enemy" }
+		] }));
+
+		assert.equal(manager.receivedDiplomacyRequests.size, 0);
+		assert.deepEqual(commands, []);
+	});
+
 	it("an AI asking us a tribute for our request gets it when we can afford it", () =>
 	{
 		const { world, manager } = seat(table(), { "stock": { "food": 500 } });
 		world.ai.elapsedTime = seconds(100);
 		manager.checkEvents(world.gameState, eventsWith({ "TributeRequest": [
-			{ "player": PLAYER, "source": 2, "resourceWanted": 300, "resourceType": "food" },
-			{ "player": PLAYER, "source": 3, "resourceWanted": 800, "resourceType": "food" },
-			{ "player": 4, "source": 2, "resourceWanted": 1, "resourceType": "food" }
+			{ "type": "tribute-request", "player": PLAYER, "source": playerId(2), "resourceWanted": 300, "resourceType": "food" },
+			{ "type": "tribute-request", "player": PLAYER, "source": playerId(3), "resourceWanted": 800, "resourceType": "food" },
+			{ "type": "tribute-request", "player": playerId(4), "source": playerId(2), "resourceWanted": 1, "resourceType": "food" }
 		] }));
 
 		assert.deepEqual(sent("tribute"), [{ "type": "tribute", "player": 2, "amounts": { "food": 300 } }]);

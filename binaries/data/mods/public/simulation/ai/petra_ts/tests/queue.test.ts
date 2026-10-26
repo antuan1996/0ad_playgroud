@@ -16,7 +16,7 @@ import { fake } from "./harness/fakes.ts";
 
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
-import { templateName } from "../adapter/brands.ts";
+import { techName, templateName } from "../adapter/brands.ts";
 import { type PlanSerialize, Queue } from "../execution/queue.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
@@ -61,7 +61,7 @@ describe("Queue", () =>
 		const queue = new Queue();
 		assert.equal(queue.length(), 0);
 		assert.equal(queue.hasQueuedUnits(), false);
-		assert.equal(queue.getNext(), null);
+		assert.equal(queue.getNext(), undefined);
 	});
 
 	it("drops an absent plan", () =>
@@ -180,7 +180,8 @@ describe("Queue", () =>
 		const queue = new Queue();
 		queue.addPlan(makePlan({ number: 2, template: { hasClass: (name: string) => name === "Worker" } }));
 		queue.addPlan(makePlan({ type: "other", number: 5, template: { hasClass: (name: string) => name === "Soldier" } }));
-		queue.addPlan(makePlan({ type: "bare", number: 1 }));
+		// a technology has no classes: it is not counted, whatever is asked
+		queue.addPlan(makePlan({ category: "technology", type: "gather_wicker_baskets", number: 1, template: {} }));
 
 		assert.equal(queue.hasQueuedUnitsWithClass("Worker"), true);
 		assert.equal(queue.hasQueuedUnitsWithClass("Siege"), false);
@@ -296,7 +297,7 @@ describe("restoring a saved queue", () =>
 	{
 		const plan = category === "unit" ? new TrainingPlan(gameState, type)
 			: category === "building" ? new ConstructionPlan(gameState, type)
-			: new ResearchPlan(gameState, type);
+			: new ResearchPlan(gameState, techName(type));
 		return plan.Serialize();
 	}
 

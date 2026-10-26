@@ -245,12 +245,12 @@ untested branches.
   where the context guarantees a value, and remove guards that cannot fire.
 - Ids, positions, regions, times, template names and grid cells are branded
   (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`, `SeaIndex`,
-  `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName`, `CellIndex<Grid>`
-  in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
+  `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName` (entity templates),
+  `TechName` (technologies), `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
   grid): what the engine hands over carries the brand. `petra_ts/brands.ts`
   is the only place that gives it to a plain value (`entityId`, `playerId`,
   `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
-  `templateName`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
+  `templateName`, `techName`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
   `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`): its identity
   functions hold the port's only sanctioned casts. A loop over a map's cells
   brands its index once (`const j = cellIndex(map, jIndex)`). A loop over player indices brands its index once

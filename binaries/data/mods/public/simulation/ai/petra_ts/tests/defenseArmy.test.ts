@@ -1239,9 +1239,9 @@ describe("saved and restored", () =>
 	{
 		const world = makeWorld();
 		const shell = new DefenseArmy(world.gameState, []);
-		const data = { "ID": 77, "type": "default", "foePosition": [5, 5], "positionLastUpdate": 3,
-			"assignedAgainst": { "99": [7] }, "assignedTo": { "7": 99 }, "foeEntities": [99],
-			"foeStrength": 12, "ownEntities": [55], "ownStrength": 3 };
+		const data = { "ID": 77, "type": "default", "foePosition": worldPos(5, 5), "positionLastUpdate": 3,
+			"assignedAgainst": { "99": [entityId(7)] }, "assignedTo": { "7": entityId(99) }, "foeEntities": [entityId(99)],
+			"foeStrength": 12, "ownEntities": [entityId(55)], "ownStrength": 3 };
 		shell.Deserialize(data);
 		assert.deepEqual(
 			[shell.ID, shell.type, shell.foeEntities, shell.ownEntities, shell.assignedAgainst["99"]],

@@ -306,24 +306,24 @@ describe("attack manager", () =>
 		it("renames a bombing aim whose target was rebuilt", () =>
 		{
 			const manager = new AttackManager(configFor(0.5));
-			manager.bombingAttacks.set(5001, new Set([1100]));
+			manager.bombingAttacks.set(entityId(5001), new Set([entityId(1100)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ "entity": entityId(5001), "newentity": entityId(7001) });
 
 			manager.checkEvents(fake<CommonGameState>({}), events);
 			assert.deepEqual([...manager.bombingAttacks.keys()], [7001], "the aim followed the rebuild");
-			assert.deepEqual([...manager.bombingAttacks.get(7001)!], [1100], "with its force intact");
+			assert.deepEqual([...manager.bombingAttacks.get(entityId(7001))!], [1100], "with its force intact");
 		});
 
 		it("renames each bomber inside a group whose unit was rebuilt", () =>
 		{
 			const manager = new AttackManager(configFor(0.5));
-			manager.bombingAttacks.set(5000, new Set([6001, 6002]));
+			manager.bombingAttacks.set(entityId(5000), new Set([entityId(6001), entityId(6002)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ "entity": entityId(6001), "newentity": entityId(7001) });
 
 			manager.checkEvents(fake<CommonGameState>({}), events);
-			assert.deepEqual([...manager.bombingAttacks.get(5000)!], [6002, 7001], "the rebuilt bomber was re-listed");
+			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [6002, 7001], "the rebuilt bomber was re-listed");
 		});
 	});
 
@@ -344,9 +344,9 @@ describe("attack manager", () =>
 			world.addEntity(makeEntity({ id: 5002, owner: PLAYER, position: [32, 30], classes: ["Structure"] }));
 			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
 				{ "isIdle": () => false, "unitAIOrderData": () => [{ "target": 5000 }] }));
-			manager.bombingAttacks.set(5002, new Set([1100]));
-			manager.bombingAttacks.set(5003, new Set([1100]));
-			manager.bombingAttacks.set(5000, new Set([1100]));
+			manager.bombingAttacks.set(entityId(5002), new Set([entityId(1100)]));
+			manager.bombingAttacks.set(entityId(5003), new Set([entityId(1100)]));
+			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100)]));
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual([...manager.bombingAttacks.keys()], [5000], "only the enemy aim survived");
@@ -361,10 +361,10 @@ describe("attack manager", () =>
 				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => [{ "target": 5000 }] }));
 			world.addEntity(makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
 				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => [{ "target": 6000 }] }));
-			manager.bombingAttacks.set(5000, new Set([1100, 1101]));
+			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100), entityId(1101)]));
 
 			manager.assignBombers(world.gameState);
-			assert.deepEqual([...manager.bombingAttacks.get(5000)!], [1100], "the moved-on bomber was dropped");
+			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [1100], "the moved-on bomber was dropped");
 		});
 
 		it("skips blind, busy or reserved bombers", () =>
@@ -402,7 +402,7 @@ describe("attack manager", () =>
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [[5000, false, false]], "the wall took the shot without marching");
-			assert.deepEqual([...manager.bombingAttacks.get(5000)!], [1100], "the bomber was enrolled");
+			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [1100], "the bomber was enrolled");
 		});
 
 		it("marches out of reach and opens fire from the border", () =>
@@ -486,14 +486,14 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
-			const crowd = new Set<number>();
+			const crowd = new Set<EntityId>();
 			for (let i = 0; i < 5; ++i)
 			{
 				world.addEntity(makeEntity({ id: 7001 + i, owner: PLAYER },
 					{ "unitAIOrderData": () => [{ "target": 5000 }] }));
-				crowd.add(7001 + i);
+				crowd.add(entityId(7001 + i));
 			}
-			manager.bombingAttacks.set(5000, crowd);
+			manager.bombingAttacks.set(entityId(5000), crowd);
 			const strikes: unknown[] = [];
 			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
 				"isIdle": () => true,
@@ -505,7 +505,7 @@ describe("attack manager", () =>
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [], "the crowded wall was left alone");
-			assert.equal(manager.bombingAttacks.get(5000)!.size, 5, "the crowd stood unchanged");
+			assert.equal(manager.bombingAttacks.get(entityId(5000))!.size, 5, "the crowd stood unchanged");
 		});
 
 		it("lets a second bomber pile onto the same storm", () =>
@@ -532,7 +532,7 @@ describe("attack manager", () =>
 
 			manager.assignBombers(world.gameState);
 			assert.equal(strikes.length, 2, "both bombers opened fire");
-			assert.deepEqual([...manager.bombingAttacks.get(5000)!], [1100, 1101], "both were enrolled");
+			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [1100, 1101], "both were enrolled");
 		});
 	});
 	describe("keeping the exiles apart", () =>
@@ -912,7 +912,7 @@ describe("attack manager", () =>
 			}));
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.equal(manager.bombingAttacks.get(5000)?.has(1100), true, "the idle bomber was enrolled");
+			assert.equal(manager.bombingAttacks.get(entityId(5000))?.has(entityId(1100)), true, "the idle bomber was enrolled");
 		});
 
 		it("leaves the bombers alone on other turns and on easy difficulties", () =>

@@ -19,7 +19,7 @@ import { describe, it } from "node:test";
 import { eventsWith, makeEntity, makeTemplate, type Methods } from "./harness/fakes.ts";
 import { ENEMY, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-import { entityId, seconds } from "../adapter/brands.ts";
+import { entityId, seconds, templateName } from "../adapter/brands.ts";
 import { BuildManager } from "../decision/buildManager.ts";
 
 /** a support unit whose Builder/Entities/_string names the structures it can
@@ -72,7 +72,7 @@ describe("the builder book: who can raise what", () =>
 		assert.deepEqual(
 			[...mgr.builders.keys()], ["structures/athen/house"],
 			"the {civ} stand-in came out as the player's civ");
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3001]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
 	});
 
 	it("a unit with no Builder tag raises nothing, and a structure raises nothing", () =>
@@ -98,8 +98,8 @@ describe("the builder book: who can raise what", () =>
 
 		mgr.init(world.gameState);
 
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3001, 3002]);
-		assert.deepEqual(mgr.builders.get("structures/athen/storehouse"), [3001]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001, 3002]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3001]);
 	});
 });
 
@@ -114,7 +114,7 @@ describe("the book over one turn's events", () =>
 
 		mgr.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(3001) }] }));
 
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3001]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
 		assert.equal(mgr.elapsedTime, 100, "the office named the turn's own time");
 	});
 
@@ -143,12 +143,12 @@ describe("the book over one turn's events", () =>
 
 		mgr.checkEvents(world.gameState, eventsWith({ "Destroy": [{ "entity": entityId(3001) }] }));
 
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3002]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3002]);
 		// the storehouse entry had only this builder: the removal splices his
 		// id out and the now-empty list stays as the template's book page
 		assert.deepEqual(
 			[...mgr.builders.keys()], ["structures/athen/house", "structures/athen/storehouse"]);
-		assert.deepEqual(mgr.builders.get("structures/athen/storehouse"), []);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), []);
 	});
 
 	it("a captured builder takes his skills over", () =>
@@ -164,7 +164,7 @@ describe("the book over one turn's events", () =>
 			"OwnershipChanged": [{ "entity": entityId(3001), "from": ENEMY, "to": PLAYER }]
 		}));
 
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3001]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
 	});
 
 	it("a builder captured away leaves the book, whoever raises stones", () =>
@@ -185,8 +185,8 @@ describe("the book over one turn's events", () =>
 		// template's book page
 		assert.deepEqual([...mgr.builders.keys()],
 			["structures/athen/storehouse", "structures/athen/house"]);
-		assert.deepEqual(mgr.builders.get("structures/athen/storehouse"), [3002]);
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), []);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3002]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), []);
 	});
 
 	it("an overhaul of the Builder component dumps and rebuilds the whole book", () =>
@@ -209,8 +209,8 @@ describe("the book over one turn's events", () =>
 
 		assert.deepEqual(
 			[...mgr.builders.keys()], ["structures/athen/storehouse", "structures/athen/house"]);
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3002]);
-		assert.deepEqual(mgr.builders.get("structures/athen/storehouse"), [3002]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3002]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3002]);
 	});
 
 	it("an overhaul of some other component leaves the book alone", () =>
@@ -229,7 +229,7 @@ describe("the book over one turn's events", () =>
 			]
 		}));
 
-		assert.deepEqual(mgr.builders.get("structures/athen/house"), [3001]);
+		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
 	});
 });
 
@@ -296,14 +296,14 @@ describe("what a project needs in the book", () =>
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 		mgr.init(world.gameState);
 
-		assert.equal(mgr.hasBuilder("structures/athen/house"), true,
+		assert.equal(mgr.hasBuilder(templateName("structures/athen/house")), true,
 			"the id list counts somebody — the office answers just true, not the list");
-		assert.equal(mgr.hasBuilder("structures/athen/fortress"), undefined,
+		assert.equal(mgr.hasBuilder(templateName("structures/athen/fortress")), undefined,
 			"a template nobody raised in the book answers `undefined`");
 		// the empty page a removal stranded: the `numBuilders && length > 0`
 		// read answers false
-		mgr.builders.set("structures/athen/fortress", []);
-		assert.equal(mgr.hasBuilder("structures/athen/fortress"), false);
+		mgr.builders.set(templateName("structures/athen/fortress"), []);
+		assert.equal(mgr.hasBuilder(templateName("structures/athen/fortress")), false);
 	});
 });
 
@@ -399,8 +399,8 @@ describe("the parking lot: unbuildables and their waits", () =>
 
 		assert.deepEqual(restored.Serialize(), saved);
 		// and the loaded book keeps its meaning as well
-		assert.equal(restored.hasBuilder("structures/athen/house"), true);
-		const bookedIds = saved.builders.get("structures/athen/house");
+		assert.equal(restored.hasBuilder(templateName("structures/athen/house")), true);
+		const bookedIds = saved.builders.get(templateName("structures/athen/house"));
 		assert.deepEqual(bookedIds, [3001]);
 		assert.deepEqual(restored.unbuildables.get("structures/athen/fortress"),
 			{ "reason": "limit", "time": 190 });

@@ -16,22 +16,28 @@ import {
 	doorManagers, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, PLAYER, seatHQ
 } from "./harness/hqWorld.ts";
 import { modsPublic } from "./harness/paths.ts";
+import { techName } from "../adapter/brands.ts";
 
 import { ResearchManager } from "../decision/researchManager.ts";
 import type { Queue } from "../execution/queue.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 
-/** a game tech, read from its file as the engine's TechnologyTemplates does */
-function tech(world: HqWorld, name: string): [string, CommonTemplate]
+/**
+ * a game tech, read from its file as the engine's TechnologyTemplates does,
+ * answering as common-api's Technology (a missing field reads undefined)
+ */
+function tech(world: HqWorld, name: string, edit: (json: Record<string, unknown>) => void = () => {}): [TechName, CommonTechnology]
 {
 	const json = JSON.parse(readFileSync(path.join(modsPublic, "simulation/data/technologies", name + ".json"), "utf8"));
-	const template = fake<CommonTemplate>({
-		"_template": json,
-		"researchTime": json.researchTime ?? 40,
-		"cost": () => ({ ...(json.cost ?? {}) })
+	edit(json);
+	const technology = fake<CommonTechnology>({
+		"researchTime": () => json.researchTime ?? 0,
+		"cost": () => json.cost ? { ...json.cost } : undefined,
+		"modifications": () => json.modifications || undefined,
+		"affects": () => json.affects || undefined
 	});
-	world.templates[name] = template;
-	return [name, template];
+	world.templates[name] = fake<CommonTemplate>(technology);
+	return [techName(name), technology];
 }
 
 /** a town on the plain; `techs` are what its buildings could research now */
@@ -196,10 +202,9 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 
 	it("a gathering tech with no cost at all counts as cheap, as in the original", () =>
 	{
-		const s = seat({ "phase": 2 }, ["gather_lumbering_ironaxes"]);
-		const techs = s.world.gameState.findAvailableTech();
-		// the same tech, as a civ bonus that costs nothing would be written
-		delete techs[0][1]._template.cost;
+		const s = seat({ "phase": 2 });
+		// the tech, as a civ bonus that costs nothing would be written
+		const techs = [tech(s.world, "gather_lumbering_ironaxes", (json) => { delete json.cost; })];
 		assert.deepEqual(s.manager.researchWantedTechs(s.world.gameState, techs),
 			{ "name": "gather_lumbering_ironaxes", "increasePriority": true });
 	});

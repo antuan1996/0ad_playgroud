@@ -751,7 +751,8 @@ describe("training units", () =>
 		assert.equal(queued.metadata?.base, 0, "at no base in particular");
 
 		// a second run, on the full queue path: the queue holds the wanted units
-		assert.ok(plan.queue.plans[0].template.available(world.gameState), "the template is available");
+		const first = plan.queue.plans[0];
+		assert.ok(first.category === "unit" && first.template.available(world.gameState), "the template is available");
 	});
 
 	it("trains a mercenary for the attack as an attacker, not as a worker", () =>
@@ -1145,14 +1146,16 @@ describe("updatePreparation: the completing step", () =>
 		}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
 		const target = makeTarget(world, {}, 2003);
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
-		const bombing = new Map([["bomber", new Set([bomber.id(), 9999])]]);
+		// the bomber and one more unit sent against an enemy tower
+		const tower = entityId(2050);
+		const bombing = new Map([[tower, new Set([bomber.id(), entityId(9999)])]]);
 		world.ai.HQ.attackManager.bombingAttacks = bombing;
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
 			assert.equal(plan.updatePreparation(world.gameState), 1, "the plan started");
 		});
-		assert.deepEqual([...bombing.get("bomber") as Set<number>], [9999], "the bomber was taken out of the list");
+		assert.deepEqual([...bombing.get(tower) ?? []], [9999], "the bomber was taken out of the list");
 		assert.ok(marches.length > 0, "the free unit marched on");
 	});
 });

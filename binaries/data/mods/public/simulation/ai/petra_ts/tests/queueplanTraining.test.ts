@@ -16,6 +16,7 @@ import {
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { techName } from "../adapter/brands.ts";
 
 const SPEARMAN = "units/athen/infantry_spearman_b";
 const FEMALE = "units/athen/support_female_citizen";
@@ -170,7 +171,7 @@ describe("a batch of units: TrainingPlan", () =>
 
 describe("a technology: ResearchPlan", () =>
 {
-	const TECH = "gather_lumbering_ironaxes";
+	const TECH = techName("gather_lumbering_ironaxes");
 
 	/** a town whose buildings may research the given tech */
 	function lab(options: Partial<HqWorldOptions> = {}, researchers: Array<ReturnType<typeof trainer>> = [])
@@ -184,12 +185,6 @@ describe("a technology: ResearchPlan", () =>
 		gs.isResearched = () => false;
 		return { ...s, researchers };
 	}
-
-	it("a template that is no technology cannot be researched", () =>
-	{
-		const { world } = seat();
-		assert.throws(() => new ResearchPlan(world.gameState, SPEARMAN));
-	});
 
 	it("can start only with a building to research it", () =>
 	{
@@ -230,7 +225,7 @@ describe("a technology: ResearchPlan", () =>
 		const queueManager = s.world.ai.queueManager;
 		const usual = queueManager.priorities.majorTech;
 		queueManager.changePriority("majorTech", 1);
-		const plan = new ResearchPlan(s.world.gameState, "phase_town_generic", true);
+		const plan = new ResearchPlan(s.world.gameState, techName("phase_town_generic"), true);
 		plan.queueToReset = "majorTech";
 		plan.canStart(s.world.gameState);
 
