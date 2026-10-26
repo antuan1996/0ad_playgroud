@@ -691,23 +691,12 @@ export class AttackPlan
 			{
 				this.emptyQueues();
 			}
-			else	// Abort the plan so that its units will be reassigned to other plans.
-			{
-				if (this.Config.debug > 1)
-				{
-					const am = hqOf(gameState).attackManager;
-					aiWarn(" attacks upcoming: raid " +
-							am.upcomingAttacks[AttackPlan.TYPE_RAID].length +
-						  " rush " + am.upcomingAttacks[AttackPlan.TYPE_RUSH].length +
-						  " attack " + am.upcomingAttacks[AttackPlan.TYPE_DEFAULT].length +
-						  " huge " + am.upcomingAttacks[AttackPlan.TYPE_HUGE_ATTACK].length);
-					aiWarn(" attacks started: raid " + am.startedAttacks[AttackPlan.TYPE_RAID].length +
-						  " rush " + am.startedAttacks[AttackPlan.TYPE_RUSH].length +
-						  " attack " + am.startedAttacks[AttackPlan.TYPE_DEFAULT].length +
-						  " huge " + am.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length);
-				}
-				return AttackPlan.PREPARATION_FAILED;
-			}
+			// Short of men at the cap: wait, gathering the reserve as below it. The
+			// original aborted the plan so that its units would serve other plans,
+			// but the next plan the attack manager made took them back at once
+			// (FINDINGS §16: 120 plans in 200 games, 80 in one).
+			else
+				return AttackPlan.PREPARATION_KEEP_GOING;
 		}
 		else if (this.mustStart())
 		{
