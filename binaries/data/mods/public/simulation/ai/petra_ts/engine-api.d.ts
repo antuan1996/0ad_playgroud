@@ -83,12 +83,18 @@ type GameMs = number & { readonly __brand: "GameMs" };
  */
 type GameSeconds = number & { readonly __brand: "GameSeconds" };
 /**
- * The name of an entity or technology template as the game knows it, with
- * the civilisation filled in ("structures/athen/house", not
+ * The name of an entity template as the game knows it, with the
+ * civilisation filled in ("structures/athen/house", not
  * "structures/{civ}/house"): what entities report and `applyCiv` returns,
  * and what a template lookup takes.
  */
 type TemplateName = string & { readonly __brand: "TemplateName" };
+/**
+ * The name of a technology template ("phase_town_athen", "gather_wicker_baskets"):
+ * what researchers list and the phase chain names. A template lookup by
+ * this name returns a Technology, not a Template.
+ */
+type TechName = string & { readonly __brand: "TechName" };
 /**
  * The two grids the AI's maps come in: the territory grid (terrain tiles,
  * also the resource and influence maps) and the passability grid (navcells,
@@ -544,12 +550,13 @@ interface EngineAIEvents
 	UnGarrison: Array<{ entity: EntityId; holder: EntityId }>;
 	TerritoriesChanged: EngineAIEvent[];
 	TerritoryDecayChanged: EngineAITerritoryDecayChangedEvent[];
-	/** Initiated by Player.Transfer: `{ to, from, amounts }` (Player.js). */
-	TributeExchanged: EngineAIEvent[];
+	/** Initiated by Player.Transfer (Player.js). */
+	TributeExchanged: Array<{ to: PlayerId; from: PlayerId; amounts: Record<string, number> }>;
 	AttackRequest: EngineAIAttackRequestEvent[];
 	CeasefireEnded: EngineAIEvent[];
-	TributeRequest: EngineAIEvent[];
-	DiplomacyRequest: EngineAIEvent[];
+	/** The other AI's command itself, pushed as an event (Commands.js). */
+	TributeRequest: EngineCommandTributeRequest[];
+	DiplomacyRequest: EngineCommandDiplomacyRequest[];
 }
 
 /**

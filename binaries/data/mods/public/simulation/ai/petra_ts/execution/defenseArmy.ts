@@ -7,6 +7,9 @@ import type { Config } from "../decision/config.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 
+/** The fields a save keeps. */
+export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePosition" | "positionLastUpdate" | "assignedAgainst" | "assignedTo" | "foeEntities" | "foeStrength" | "ownEntities" | "ownStrength">;
+
 /**
  * Armies used by the defense manager.
  * An army is a collection of own entities and enemy entities.
@@ -644,7 +647,7 @@ export class DefenseArmy
 		return breakaways;
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedDefenseArmy
 	{
 		return {
 			"ID": this.ID,
@@ -660,9 +663,17 @@ export class DefenseArmy
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedDefenseArmy): void
 	{
-		for (const key in data)
-			this[key as keyof this] = data[key] as this[keyof this];
+		this.ID = data.ID;
+		this.type = data.type;
+		this.foePosition = data.foePosition;
+		this.positionLastUpdate = data.positionLastUpdate;
+		this.assignedAgainst = data.assignedAgainst;
+		this.assignedTo = data.assignedTo;
+		this.foeEntities = data.foeEntities;
+		this.foeStrength = data.foeStrength;
+		this.ownEntities = data.ownEntities;
+		this.ownStrength = data.ownStrength;
 	}
 }

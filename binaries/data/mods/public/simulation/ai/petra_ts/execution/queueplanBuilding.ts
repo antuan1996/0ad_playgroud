@@ -24,7 +24,7 @@ export type BuildingPosition = {
  * We'll try to fing a good position if non has been provided
  */
 
-export class ConstructionPlan extends QueuePlan
+export class ConstructionPlan extends QueuePlan<CommonTemplate>
 {
 	declare category: "building";
 	declare goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
@@ -34,7 +34,8 @@ export class ConstructionPlan extends QueuePlan
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		position?: CommonPosition | 0)
 	{
-		super(gameState, type, metadata);
+		const name = gameState.applyCiv(type);
+		super(gameState, name, gameState.getTemplate(name), metadata);
 
 		this.position = position ? position : 0;
 
@@ -947,11 +948,7 @@ export class ConstructionPlan extends QueuePlan
 				return false;
 			let freeSlots = gameState.getPopulationLimit() - gameState.getPopulation();
 			for (const ent of gameState.getOwnFoundations().values())
-			{
-				const template = gameState.getBuiltTemplate(ent.templateName());
-				if (template)
-					freeSlots += template.getPopulationBonus();
-			}
+				freeSlots += requireValue(gameState.getBuiltTemplate(ent.templateName())).getPopulationBonus();
 
 			if (hqOf(gameState).saveResources)
 				return freeSlots <= 10;

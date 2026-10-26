@@ -3,7 +3,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "../decision/config.ts";
 import * as difficulty from "../decision/difficultyLevel.ts";
-import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireValue } from
+import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
@@ -862,9 +862,10 @@ export class AttackPlan
 					const max = firstOrder[3].batchSize;
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
 					const data: Record<string, unknown> = { "plan": this.name, "special": specialData, "base": 0 };
-					const templateObj = gameState.getTemplate(template);
+					// findBestTrainableUnit names only templates that exist
+					const templateObj = requireTemplate(gameState, template);
 					// a mercenary is a citizen soldier that cannot gather: an attacker only
-					data.role = templateObj && templateObj.hasClass("CitizenSoldier") &&
+					data.role = templateObj.hasClass("CitizenSoldier") &&
 						templateObj.resourceGatherRates() !== undefined ? Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
 					const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 					if (trainingPlan.template)

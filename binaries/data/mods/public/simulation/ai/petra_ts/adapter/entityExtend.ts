@@ -207,17 +207,17 @@ export function requireMetadata<K extends keyof PetraEntityMetadata>(ent: Common
 }
 
 /**
- * Asserts that a possibly-undefined value is present, for call sites where the
- * calling context guarantees it, so that the common-api declarations can keep
- * stating their true (possibly-undefined) return types.
+ * Asserts that a possibly-missing value (undefined or null) is present, for
+ * call sites where the calling context guarantees it, so that the common-api
+ * declarations can keep stating their true return types.
  * Throws (after a warning) if the value is unexpectedly missing, so that such
  * an unexpected case is noticed instead of silently skipping a decision.
  */
-export function requireValue<T>(value: T | undefined): T
+export function requireValue<T>(value: T | null | undefined): T
 {
-	if (value === undefined)
+	if (value === undefined || value === null)
 	{
-		const message = "Petra error: required value was unexpectedly undefined.";
+		const message = "Petra error: required value was unexpectedly " + value + ".";
 		aiWarn(message);
 		throw new Error(message);
 	}
@@ -413,12 +413,9 @@ export function getHolder(gameState: CommonGameState, ent: CommonEntity): Common
 /** Returns the template of the structure a foundation builds when `ent` is a foundation, otherwise `ent` itself; callers only use template-level queries. */
 export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): CommonTemplate
 {
+	// a foundation's template is "foundation|" + the template it builds
 	if (ent.foundationProgress() !== undefined)
-	{
-		const built = gameState.getBuiltTemplate(ent.templateName());
-		if (built)
-			return built;
-	}
+		return requireValue(gameState.getBuiltTemplate(ent.templateName()));
 
 	return ent;
 }

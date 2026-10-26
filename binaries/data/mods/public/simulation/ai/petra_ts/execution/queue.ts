@@ -63,11 +63,9 @@ export class Queue
 	}
 
 	/** The plan at the head of the queue, or null when empty. */
-	getNext(): PetraRuntime.PlanLike | null
+	getNext(): PetraRuntime.PlanLike | undefined
 	{
-		if (this.plans.length > 0)
-			return this.plans[0];
-		return null;
+		return this.plans.length > 0 ? this.plans[0] : undefined;
 	}
 
 	/** Starts (shifts) the head plan; false when the queue is empty. */
@@ -130,14 +128,14 @@ export class Queue
 
 	hasQueuedUnitsWithClass(classe: string): boolean
 	{
-		return this.plans.some((plan: PetraRuntime.PlanLike): boolean | undefined => plan.template && plan.template.hasClass(classe));
+		return this.plans.some(plan => plan.category !== "technology" && plan.template.hasClass(classe));
 	}
 
 	countQueuedUnitsWithClass(classe: string): number
 	{
 		let count = 0;
 		for (const plan of this.plans)
-			if (plan.template && plan.template.hasClass(classe))
+			if (plan.category !== "technology" && plan.template.hasClass(classe))
 				count += plan.number;
 		return count;
 	}

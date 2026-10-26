@@ -1,6 +1,9 @@
 import { emergency as chatEmergency } from "../adapter/chatHelper.ts";
 import type { Config } from "./config.ts";
 
+/** The fields a save keeps. */
+export type SerializedEmergencyManager = Pick<EmergencyManager, "referencePopulation" | "referenceStructureCount" | "numRoots" | "hasEmergency">;
+
 /**
  * Checks for emergencies and acts accordingly
  */
@@ -87,7 +90,7 @@ export class EmergencyManager
 		chatEmergency(gameState, enable);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedEmergencyManager
 	{
 		return {
 			"referencePopulation": this.referencePopulation,
@@ -97,9 +100,11 @@ export class EmergencyManager
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedEmergencyManager): void
 	{
-		for (const key in data)
-			this[key as keyof this] = data[key] as this[keyof this];
+		this.referencePopulation = data.referencePopulation;
+		this.referenceStructureCount = data.referenceStructureCount;
+		this.numRoots = data.numRoots;
+		this.hasEmergency = data.hasEmergency;
 	}
 }

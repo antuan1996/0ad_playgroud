@@ -1,7 +1,7 @@
 import { BaseAI } from "simulation/ai/common-api/baseAI.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Entity } from "simulation/ai/common-api/entity.js";
-import { Config } from "./decision/config.ts";
+import { Config, type SerializedConfig } from "./decision/config.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { Queue } from "./execution/queue.ts";
@@ -42,7 +42,7 @@ type PetraBotSavedData = {
 	playedTurn: number;
 	elapsedTime: GameSeconds;
 	savedEvents: HeadquartersEvents;
-	config: Record<string, unknown>;
+	config: SerializedConfig;
 	queueManager: Parameters<QueueManager["Deserialize"]>[1];
 	HQ: HeadquartersSerializedData;
 };

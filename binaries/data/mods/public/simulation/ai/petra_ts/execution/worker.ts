@@ -652,8 +652,7 @@ export class Worker
 		{
 			if (!foundation || getLandAccess(gameState, foundation) != this.entAccess)
 				return false;
-			const structure = gameState.getBuiltTemplate(foundation.templateName());
-			const dropsiteTypes = structure && structure.resourceDropsiteTypes();
+			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
 			if (dropsiteTypes && dropsiteTypes.indexOf(resource) != -1)
 			{
 				if (foundation.getMetadata(PlayerID, "base") != this.baseID)
@@ -721,8 +720,7 @@ export class Worker
 		{
 			if (!foundation || getLandAccess(gameState, foundation) == this.entAccess)
 				return false;
-			const structure = gameState.getBuiltTemplate(foundation.templateName());
-			const dropsiteTypes = structure && structure.resourceDropsiteTypes();
+			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
 			if (dropsiteTypes && dropsiteTypes.indexOf(resource) != -1)
 			{
 				const foundationAccess = requireValue(getLandAccess(gameState, foundation));
@@ -1061,8 +1059,8 @@ export class Worker
 			if (found.getMetadata(PlayerID, "base") != baseID || !found.hasClass("Field"))
 				continue;
 			const current = found.getBuildersNb();
-			const template = gameState.getBuiltTemplate(found.templateName());
-			if (current === undefined || !template || current >= template.maxGatherers())
+			const template = requireValue(gameState.getBuiltTemplate(found.templateName()));
+			if (current === undefined || current >= template.maxGatherers())
 				continue;
 			const dist = SquareVectorDistance(found.position(), pos);
 			if (dist > bestFarmDist)

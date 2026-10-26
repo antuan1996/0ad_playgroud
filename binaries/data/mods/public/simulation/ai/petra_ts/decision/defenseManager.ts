@@ -1,12 +1,13 @@
+/** The fields a save keeps, and the armies. */
 export type SerializedDefenseManager = {
-	properties: Record<string, unknown>;
-	armies: Array<Record<string, unknown>>;
+	properties: Pick<DefenseManager, "targetList" | "armyMergeSize" | "attackingUnits" | "attackingArmies" | "attackedAllies">;
+	armies: SerializedDefenseArmy[];
 };
 
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "../execution/attackPlan.ts";
-import { DefenseArmy } from "../execution/defenseArmy.ts";
+import { DefenseArmy, type SerializedDefenseArmy } from "../execution/defenseArmy.ts";
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from
 	"../adapter/entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
@@ -815,8 +816,7 @@ export class DefenseManager
 				return false;
 			const dist = SquareVectorDistance(data.attacker.position(), target.position());
 			// attackRange("Ranged") is defined whenever Ranged is in attackTypes
-			// (checked just above).
-			const range = target.attackRange("Ranged")!.max;
+			const range = requireValue(target.attackRange("Ranged")).max;
 			if (dist >= range*range)
 				return false;
 		}
@@ -1016,17 +1016,17 @@ export class DefenseManager
 			"attackedAllies": this.attackedAllies
 		};
 
-		const armies = [];
-		for (const army of this.armies)
-			armies.push(army.Serialize());
-
-		return { "properties": properties, "armies": armies };
+		return { "properties": properties, "armies": this.armies.map(army => army.Serialize()) };
 	}
 
 	Deserialize(gameState: CommonGameState, data: SerializedDefenseManager): void
 	{
-		for (const key in data.properties)
-			this[key as keyof this] = data.properties[key] as this[keyof this];
+		const properties = data.properties;
+		this.targetList = properties.targetList;
+		this.armyMergeSize = properties.armyMergeSize;
+		this.attackingUnits = properties.attackingUnits;
+		this.attackingArmies = properties.attackingArmies;
+		this.attackedAllies = properties.attackedAllies;
 
 		this.armies = [];
 		for (const dataArmy of data.armies)

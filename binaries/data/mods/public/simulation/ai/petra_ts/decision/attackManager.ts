@@ -45,7 +45,7 @@ export class AttackManager
 		[AttackPlan.TYPE_DEFAULT]: [],
 		[AttackPlan.TYPE_HUGE_ATTACK]: []
 	};
-	bombingAttacks = new Map();// Temporary attacks for siege units while waiting their current attack to start
+	bombingAttacks = new Map<EntityId, Set<EntityId>>();// Temporary attacks for siege units while waiting their current attack to start
 	debugTime = 0;
 	maxRushes = 0;
 	rushSize: number[] = [];
@@ -267,7 +267,7 @@ export class AttackManager
 					continue;	// already enough units against that target
 				if (!attackingUnits)
 				{
-					attackingUnits = new Set();
+					attackingUnits = new Set<EntityId>();
 					this.bombingAttacks.set(struct.id(), attackingUnits);
 				}
 				attackingUnits.add(ent.id());
@@ -806,7 +806,7 @@ export class AttackManager
 					continue;
 			}
 			// If range is not given, the entry check ensured armyID is set.
-			else if (army.ID != data.armyID!)
+			else if (army.ID != data.armyID)
 				continue;
 
 			while (army.foeEntities.length > 0)
@@ -858,23 +858,15 @@ export class AttackManager
 			"defeated": this.defeated
 		};
 
-		const upcomingAttacks: Record<string, any[]> = {};
+		const upcomingAttacks: SerializedAttackManager["upcomingAttacks"] = {};
 		for (const key in this.upcomingAttacks)
-		{
-			upcomingAttacks[key] = [];
-			for (const attack of this.upcomingAttacks[key])
-				upcomingAttacks[key].push(attack.Serialize());
-		}
+			upcomingAttacks[key] = this.upcomingAttacks[key].map(attack => attack.Serialize());
 
-		const startedAttacks: Record<string, any[]> = {};
+		const startedAttacks: SerializedAttackManager["startedAttacks"] = {};
 		for (const key in this.startedAttacks)
-		{
-			startedAttacks[key] = [];
-			for (const attack of this.startedAttacks[key])
-				startedAttacks[key].push(attack.Serialize());
-		}
+			startedAttacks[key] = this.startedAttacks[key].map(attack => attack.Serialize());
 
-		return { "properties": properties, "upcomingAttacks": upcomingAttacks as SerializedAttackManager["upcomingAttacks"], "startedAttacks": startedAttacks as SerializedAttackManager["startedAttacks"] };
+		return { "properties": properties, "upcomingAttacks": upcomingAttacks, "startedAttacks": startedAttacks };
 	}
 
 	Deserialize(gameState: CommonGameState, data: SerializedAttackManager): void

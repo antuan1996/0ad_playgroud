@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 
-function addBuilder(builders: Map<string, EntityId[]>, civ: string, entity: CommonEntity): void
+function addBuilder(builders: Map<TemplateName, EntityId[]>, civ: string, entity: CommonEntity): void
 {
 	for (const buildable of entity.buildableEntities(civ))
 	{
@@ -13,7 +13,7 @@ function addBuilder(builders: Map<string, EntityId[]>, civ: string, entity: Comm
 	}
 }
 
-function removeBuilder(builders: Map<string, EntityId[]>, entityId: EntityId): void
+function removeBuilder(builders: Map<TemplateName, EntityId[]>, entityId: EntityId): void
 {
 	for (const entities of builders.values())
 	{
@@ -29,9 +29,12 @@ function removeBuilder(builders: Map<string, EntityId[]>, entityId: EntityId): v
  * It also takes care of the structures we can't currently build and should not try to build endlessly.
  */
 
+/** a structure not to try again before `time`, and why */
+type Unbuildable = { reason: string; time: number };
+
 export type SerializedBuildManager = {
-	builders: Map<string, EntityId[]>;
-	unbuildables: Map<string, { reason: string; time: number }>;
+	builders: Map<TemplateName, EntityId[]>;
+	unbuildables: Map<string, Unbuildable>;
 };
 
 export class BuildManager
@@ -39,10 +42,10 @@ export class BuildManager
 	declare elapsedTime: GameSeconds;
 
 	// List of buildings we have builders for, with number of possible builders.
-	builders = new Map();
+	builders = new Map<TemplateName, EntityId[]>();
 	// List of buildings we can't currently build (because no room, no builder or whatever),
 	// with time we should wait before trying again to build it.
-	unbuildables = new Map();
+	unbuildables = new Map<string, Unbuildable>();
 
 	/** Initialization at start of game */
 	init(gameState: CommonGameState): void
@@ -129,7 +132,7 @@ export class BuildManager
 		return this.findStructuresByFilter(gameState, filters.byClasses(classes))[0];
 	}
 
-	hasBuilder(template: string): boolean | undefined
+	hasBuilder(template: TemplateName): boolean | undefined
 	{
 		const numBuilders = this.builders.get(template);
 		return numBuilders && numBuilders.length > 0;
@@ -137,8 +140,8 @@ export class BuildManager
 
 	isUnbuildable(gameState: CommonGameState, template: string): boolean
 	{
-		return this.unbuildables.has(template) &&
-			this.unbuildables.get(template).time > gameState.ai.elapsedTime;
+		const unbuildable = this.unbuildables.get(template);
+		return unbuildable !== undefined && unbuildable.time > gameState.ai.elapsedTime;
 	}
 
 	setBuildable(template: string): void
@@ -150,14 +153,14 @@ export class BuildManager
 	/** Time is the duration in second that we will wait before checking again if it is buildable */
 	setUnbuildable(gameState: CommonGameState, template: string, time: number = 90, reason: string = "room"): void
 	{
-		if (!this.unbuildables.has(template))
+		const unbuildable = this.unbuildables.get(template);
+		if (unbuildable === undefined)
 		{
 			this.unbuildables.set(template,
 				{ "reason": reason, "time": gameState.ai.elapsedTime + time });
 		}
 		else
 		{
-			const unbuildable = this.unbuildables.get(template);
 			if (unbuildable.time < gameState.ai.elapsedTime + time)
 			{
 				unbuildable.reason = reason;

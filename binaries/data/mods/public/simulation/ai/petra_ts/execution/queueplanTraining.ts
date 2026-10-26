@@ -5,7 +5,7 @@ import { QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 import { hqOf } from "./hq.ts";
 
-export class TrainingPlan extends QueuePlan
+export class TrainingPlan extends QueuePlan<CommonTemplate>
 {
 	declare category: "unit";
 	declare maxMerge: number;
@@ -14,7 +14,8 @@ export class TrainingPlan extends QueuePlan
 	constructor(gameState: CommonGameState, type: string, metadata?: Record<string, unknown>,
 		number: number = 1, maxMerge: number = 5)
 	{
-		super(gameState, type, metadata);
+		const name = gameState.applyCiv(type);
+		super(gameState, name, gameState.getTemplate(name), metadata);
 
 		// Refine the estimated cost and add pop cost
 		const template = this.template;

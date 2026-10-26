@@ -127,36 +127,37 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 
 
 /** The territory grid with its owner and blinking bits read out. */
-export type TerritoryMap = InfoMap<"territory"> & {
-	getOwner: (position: CommonPosition) => PlayerId;
-	getOwnerIndex: (index: CellIndex<"territory">) => PlayerId;
-	isBlinking: (position: CommonPosition) => boolean;
-};
+/** Who owns each territory cell, read from the engine's territory grid. */
+export class TerritoryMap extends InfoMap<"territory">
+{
+	constructor(gameState: CommonGameState)
+	{
+		// BUG: this read `.map` for a while. `gameState.ai.territoryMap` is the
+		// engine's grid, whose array is `data` (CCmpAIManager reads the same name
+		// back), so `.map` was undefined and InfoMap fell back to an all-zero map:
+		// every territory came out unowned, with nothing thrown to say so.
+		super(gameState.sharedScript, "territory", gameState.ai.territoryMap.data);
+	}
+
+	getOwner(p: CommonPosition): PlayerId
+	{
+		return playerId(this.point(p) & TERRITORY_PLAYER_MASK);
+	}
+
+	getOwnerIndex(p: CellIndex<"territory">): PlayerId
+	{
+		return playerId(this.map[p] & TERRITORY_PLAYER_MASK);
+	}
+
+	isBlinking(p: CommonPosition): boolean
+	{
+		return (this.point(p) & TERRITORY_BLINKING_MASK) != 0;
+	}
+}
 
 export function createTerritoryMap(gameState: CommonGameState): TerritoryMap
 {
-	const map = gameState.ai.territoryMap;
-
-	// BUG: this read `.map` for a while. `gameState.ai.territoryMap` is the
-	// engine's grid, whose array is `data` (CCmpAIManager reads the same name
-	// back), so `.map` was undefined and InfoMap fell back to an all-zero map:
-	// every territory came out unowned, with nothing thrown to say so.
-	// (The territory grid is a Grid<uint8_t>, so the data array is a
-	// Uint8Array; the narrowing below documents that.)
-	const ret = new InfoMap(gameState.sharedScript, "territory", map.data as Uint8Array) as TerritoryMap;
-	ret.getOwner = function(this: InfoMap, p: CommonPosition): PlayerId
-	{
-		return playerId(this.point(p) & TERRITORY_PLAYER_MASK);
-	};
-	ret.getOwnerIndex = function(this: InfoMap<"territory">, p: CellIndex<"territory">): PlayerId
-	{
-		return playerId(this.map[p] & TERRITORY_PLAYER_MASK);
-	};
-	ret.isBlinking = function(this: InfoMap, p: CommonPosition): boolean
-	{
-		return (this.point(p) & TERRITORY_BLINKING_MASK) != 0;
-	};
-	return ret;
+	return new TerritoryMap(gameState);
 }
 
 /**

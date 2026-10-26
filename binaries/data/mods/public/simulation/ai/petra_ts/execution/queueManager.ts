@@ -5,6 +5,7 @@ import { Queue } from "./queue.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
 import { hqOf } from "./hq.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 
 /**
  * This takes the input queues and picks which items to fund with resources until no more resources are left to distribute.
@@ -402,9 +403,8 @@ export class QueueManager
 			const queue = q[1];
 			if (queue.hasQueuedUnits() && !queue.paused)
 			{
-				// The queue just said it has plans and getNext() classes the
-				// empty queue itself, so the item cannot be null here.
-				const item = queue.getNext()!;
+				// the queue just said it has plans
+				const item = requireValue(queue.getNext());
 				if (this.accounts[name].canAfford(item.getCost()) && item.canStart(gameState))
 				{
 					// canStart may update the cost because of the costMultiplier so we must check it again

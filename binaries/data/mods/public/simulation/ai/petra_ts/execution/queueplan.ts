@@ -26,28 +26,33 @@ export interface PlanMetadata {
 	[key: string]: unknown;
 }
 
+/** What a plan makes: a unit or a structure (an entity template), or a technology. */
+export type PlanTemplate = CommonTemplate | CommonTechnology;
+/** The name a plan's template goes by: a technology's, or an entity template's. */
+export type PlanName<T extends PlanTemplate> = T extends CommonTechnology ? TechName : TemplateName;
+
 /**
  * Common functions and variables to all queue plans.
  */
 
-export abstract class QueuePlan
+export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate>
 {
 	declare ID: number;
 	declare category: string;
 	declare cost: ResourcesManager;
 	declare metadata: PlanMetadata | undefined;
 	declare number: number;
-	declare template: CommonTemplate;
-	declare type: TemplateName;
+	declare template: T;
+	declare type: PlanName<T>;
 	declare queueToReset?: string;
 	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 
-	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata)
+	/** `template` is what the game's lookup of `type` returned */
+	constructor(gameState: CommonGameState, type: PlanName<T>, template: T | null, metadata?: PlanMetadata)
 	{
-		this.type = gameState.applyCiv(type);
+		this.type = type;
 		this.metadata = metadata;
 
-		const template = gameState.getTemplate(this.type);
 		if (!template)
 			throw new Error("Tried to add the inexisting template " + this.type + " to Petra.");
 		this.template = template;

@@ -1,6 +1,9 @@
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import * as difficultyLevel from "./difficultyLevel.ts";
 
+/** The settings a save keeps: the data fields, without the debug level. */
+export type SerializedConfig = Omit<{ [K in keyof Config as Config[K] extends Function ? never : K]: Config[K] }, "debug">;
+
 export class Config
 {
 	behavior: string;
@@ -365,16 +368,14 @@ export class Config
 		}, gameState.playerData.entity);
 	}
 
-	Serialize(): Record<string, unknown>
+	/** every setting but the debug level, which stays the running game's */
+	Serialize(): SerializedConfig
 	{
-		const data: Record<string, unknown> = {};
-		for (const key in this)
-			if (Object.hasOwn(this, key) && key != "debug")
-				data[key] = this[key];
+		const { debug, ...data } = this;
 		return data;
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedConfig): void
 	{
 		Object.assign(this, data);
 	}

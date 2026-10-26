@@ -2,19 +2,16 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { QueuePlan } from "./queueplan.ts";
 import { hqOf } from "./hq.ts";
 
-export class ResearchPlan extends QueuePlan
+export class ResearchPlan extends QueuePlan<CommonTechnology>
 {
 	declare category: "technology";
 	declare queueToReset: string | undefined;
 	declare researchers: CommonEntity[] | undefined;
 	declare rush: boolean;
 
-	constructor(gameState: CommonGameState, type: string, rush: boolean = false)
+	constructor(gameState: CommonGameState, type: TechName, rush: boolean = false)
 	{
-		super(gameState, type, {});
-
-		if (this.template.researchTime === undefined)
-			throw new Error();
+		super(gameState, type, gameState.getTemplate(type), {});
 
 		// Refine the estimated cost
 		const researchers = this.getBestResearchers(gameState, true);
@@ -93,7 +90,7 @@ export class ResearchPlan extends QueuePlan
 
 	Serialize(): {
 		category: "technology";
-		type: TemplateName;
+		type: TechName;
 		ID: number;
 		metadata: Record<string, unknown> | undefined;
 		cost: { amounts: Record<string, number>; population: number };

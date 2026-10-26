@@ -43,7 +43,8 @@ type HeadquartersQueues = PetraRuntime.QueueCollection;
 type HeadquartersTrainableRequirement = [string, number, ...string[]];
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {
-	properties: Record<string, unknown>;
+	/** the fields a save keeps (the regions and naval flag through the geography's accessors) */
+	properties: Pick<Headquarters, "phasing" | "lastFailedGather" | "firstBaseConfig" | "supportRatio" | "targetNumWorkers" | "fortStartTime" | "towerStartTime" | "fortressStartTime" | "bAdvanced" | "saveResources" | "saveSpace" | "needCorral" | "needFarm" | "needFish" | "maxFields" | "canExpand" | "canBuildUnits" | "navalMap" | "landRegions" | "navalRegions" | "decayingStructures" | "capturableTargets" | "capturableTargetsTime">;
 	basesManager: ReturnType<BasesManager["Serialize"]>;
 	attackManager: ReturnType<AttackManager["Serialize"]>;
 	buildManager: ReturnType<BuildManager["Serialize"]>;
@@ -2041,9 +2042,10 @@ export class Headquarters
 		// We will choose randomly ranged and melee units, except when garrisonHolder is full
 		// in which case we prefer melee units
 		let numGarrisoned = this.garrisonManager.numberOfGarrisonedSlots(nearestAnchor);
-		if (nearestAnchor._entity.trainingQueue)
+		const anchorQueue = nearestAnchor.trainingQueue();
+		if (anchorQueue)
 		{
-			for (const item of nearestAnchor._entity.trainingQueue)
+			for (const item of anchorQueue)
 			{
 				// only unit batches are trained with a garrisonType metadata (Petra never
 				// attaches it to research), so the unit-only `count` field is present.
@@ -2387,9 +2389,8 @@ export class Headquarters
 				{
 					if (!item.unitTemplate)
 						continue;
-					const unitTemplate = gameState.getTemplate(item.unitTemplate);
-					if (!unitTemplate)
-						continue;
+					// a batch in training: its template exists
+					const unitTemplate = requireTemplate(gameState, item.unitTemplate);
 					// template leaves are strings (parsed XML)
 					const unitPop = Number(unitTemplate.get("Cost/Population"));
 					if (unitPop)
@@ -2615,9 +2616,30 @@ export class Headquarters
 
 	Deserialize(gameState: CommonGameState, data: HeadquartersSerializedData): void
 	{
-		for (const key in data.properties)
-			this[key as keyof this] = data.properties[key] as this[keyof this];
-
+		const properties = data.properties;
+		this.phasing = properties.phasing;
+		this.lastFailedGather = properties.lastFailedGather;
+		this.firstBaseConfig = properties.firstBaseConfig;
+		this.supportRatio = properties.supportRatio;
+		this.targetNumWorkers = properties.targetNumWorkers;
+		this.fortStartTime = properties.fortStartTime;
+		this.towerStartTime = properties.towerStartTime;
+		this.fortressStartTime = properties.fortressStartTime;
+		this.bAdvanced = properties.bAdvanced;
+		this.saveResources = properties.saveResources;
+		this.saveSpace = properties.saveSpace;
+		this.needCorral = properties.needCorral;
+		this.needFarm = properties.needFarm;
+		this.needFish = properties.needFish;
+		this.maxFields = properties.maxFields;
+		this.canExpand = properties.canExpand;
+		this.canBuildUnits = properties.canBuildUnits;
+		this.navalMap = properties.navalMap;
+		this.landRegions = properties.landRegions;
+		this.navalRegions = properties.navalRegions;
+		this.decayingStructures = properties.decayingStructures;
+		this.capturableTargets = properties.capturableTargets;
+		this.capturableTargetsTime = properties.capturableTargetsTime;
 
 		this.basesManager = new BasesManager(this.Config);
 		this.basesManager.init(gameState, true);

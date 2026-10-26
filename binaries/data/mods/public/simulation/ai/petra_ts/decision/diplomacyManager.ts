@@ -19,35 +19,6 @@ type SentDiplomacyRequest = {
 	requestType: DiplomacyRequestType;
 	timeSent: GameSeconds;
 };
-type TributeExchangedEvent = {
-	to: PlayerId;
-	from: PlayerId;
-	amounts: Record<string, number>;
-};
-
-type AttackedEvent = {
-	target: EntityId;
-	attacker: EntityId;
-};
-
-type DiplomacyChangedEvent = {
-	player: PlayerId;
-	otherPlayer: PlayerId;
-};
-
-type DiplomacyRequestEvent = {
-	player: PlayerId;
-	source: PlayerId;
-	to: DiplomacyRequestType;
-};
-
-type TributeRequestEvent = {
-	player: PlayerId;
-	source: PlayerId;
-	resourceWanted: number;
-	resourceType: string;
-};
-
 /**
  * Manage the diplomacy:
  *     update our cooperative trait
@@ -56,6 +27,9 @@ type TributeRequestEvent = {
  *     respond to diplomacy requests
  *     send diplomacy requests to other players (rarely)
  */
+
+/** The fields a save keeps. */
+export type SerializedDiplomacyManager = Pick<DiplomacyManager, "nextTributeUpdate" | "nextTributeRequest" | "betrayLapseTime" | "waitingToBetray" | "betrayWeighting" | "receivedDiplomacyRequests" | "sentDiplomacyRequests" | "sentDiplomacyRequestLapseTime">;
 
 /**
  * If a player sends us an ally or neutral request, an Object in this.receivedDiplomacyRequests will be created
@@ -193,7 +167,7 @@ export class DiplomacyManager
 	{
 		// Increase slowly the cooperative personality trait either when we receive tribute from our allies
 		// or if our allies attack enemies inside our territory
-		for (const evt of events.TributeExchanged as TributeExchangedEvent[])
+		for (const evt of events.TributeExchanged)
 		{
 			if (evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from))
 			{
@@ -237,7 +211,7 @@ export class DiplomacyManager
 			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.0001 * tributes);
 		}
 
-		for (const evt of events.Attacked as AttackedEvent[])
+		for (const evt of events.Attacked)
 		{
 			const target = gameState.getEntityById(evt.target);
 			if (!target || !target.position() ||
@@ -259,7 +233,7 @@ export class DiplomacyManager
 			this.sentDiplomacyRequests.delete(evt.playerId);
 		}
 
-		for (const evt of events.DiplomacyChanged as DiplomacyChangedEvent[])
+		for (const evt of events.DiplomacyChanged)
 		{
 			if (evt.otherPlayer !== PlayerID)
 				continue;
@@ -303,9 +277,10 @@ export class DiplomacyManager
 		}
 
 		// These events will only be sent by other AI players
-		for (const evt of events.DiplomacyRequest as DiplomacyRequestEvent[])
+		for (const evt of events.DiplomacyRequest)
 		{
-			if (evt.player !== PlayerID)
+			// another AI may send any stance; we answer only these two
+			if (evt.player !== PlayerID || evt.to !== "ally" && evt.to !== "neutral")
 				continue;
 
 			this.handleDiplomacyRequest(gameState, evt.source, evt.to);
@@ -332,7 +307,7 @@ export class DiplomacyManager
 		}
 
 		// An AI player we sent a diplomacy request to demanded we send them a tribute
-		for (const evt of events.TributeRequest as TributeRequestEvent[])
+		for (const evt of events.TributeRequest)
 		{
 			if (evt.player !== PlayerID)
 				continue;
@@ -638,7 +613,7 @@ export class DiplomacyManager
 		this.checkSentDiplomacyRequests(gameState);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedDiplomacyManager
 	{
 		return {
 			"nextTributeUpdate": this.nextTributeUpdate,
@@ -652,9 +627,15 @@ export class DiplomacyManager
 		};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedDiplomacyManager): void
 	{
-		for (const key in data)
-			this[key as keyof this] = data[key] as this[keyof this];
+		this.nextTributeUpdate = data.nextTributeUpdate;
+		this.nextTributeRequest = data.nextTributeRequest;
+		this.betrayLapseTime = data.betrayLapseTime;
+		this.waitingToBetray = data.waitingToBetray;
+		this.betrayWeighting = data.betrayWeighting;
+		this.receivedDiplomacyRequests = data.receivedDiplomacyRequests;
+		this.sentDiplomacyRequests = data.sentDiplomacyRequests;
+		this.sentDiplomacyRequestLapseTime = data.sentDiplomacyRequestLapseTime;
 	}
 }

@@ -25,9 +25,12 @@ type CommonPassabilityMap = CommonGrid<"passability">;
 /**
  * An engine grid of kind G with its cell size filled in. `__grid` exists only
  * for the compiler: grids of different kinds do not pass for each other.
+ * The territory grid is a Grid<u8>, the passability one a Grid<NavcellData>
+ * (u16; CCmpAIManager).
  */
 type CommonGrid<G extends GridKind> = EngineGridMap & {
 	cellSize: number;
+	data: G extends "territory" ? Uint8Array : Uint16Array;
 	readonly __grid?: G;
 };
 /**
@@ -301,8 +304,8 @@ declare module "simulation/ai/common-api/technology.js"
  */
 	export class Technology
 	{
-		constructor(templateName: string);
-		_templateName: string;
+		constructor(templateName: TechName);
+		_templateName: TechName;
 		_template: CommonTechnologyTemplate;
 /** Generic display name, or the civ-specific one when `civ` is given (undefined when no such name exists). */
 		name(civ?: string): string | undefined;
@@ -585,15 +588,11 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Whether a ceasefire is running in the current game. */
 		isCeasefireActive(): boolean;
 /**
- * Template wrapper for one template name. Returns a Template for entity and
- * technology template names alike: gamestate.getTemplate returns a
- * Technology object for technology template names (see its implementation)
- * — but Petra only ever calls the methods that the two wrapper classes
- * duck-type in common (cost, costSum, researchTime, ...). Callers whose
- * template names come from trainable/buildable lists always get a Template;
- * ResearchPlan is the only path that looks up a technology and calls only
- * the duck-typed methods. Returns null for templates that failed lookup.
+ * The wrapper for one template name: a Technology for a technology name (the
+ * implementation asks TechnologyTemplates first), a Template for an entity
+ * template name; null for a name that names neither.
  */
+		getTemplate(type: TechName): CommonTechnology | null;
 		getTemplate(type: TemplateName): CommonTemplate | null;
 /** Template of the structure a foundation builds (strips the "foundation|" filter prefix); null for a bogus name or unknown template. */
 		getBuiltTemplate(foundationName: TemplateName): CommonTemplate | null;
@@ -606,20 +605,20 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Count of this civ's phases. */
 		getNumberOfPhases(): number;
 /** Name of phase `i` (1-based); undefined when out of range. */
-		getPhaseName(index: number): TemplateName | undefined;
+		getPhaseName(index: number): TechName | undefined;
 /** Entity-class requirements ("check: count" entries only) of phase `i`, flattened to {class, count} pairs. */
 		getPhaseEntityRequirements(index: number): Array<{ class: string; count: number }>;
 /** Whether `template` is already researched by this player. */
-		isResearched(template: string): boolean;
+		isResearched(template: TechName): boolean;
 /** Whether `template` is currently being researched (by anyone in this player's queues). */
-		isResearching(template: string): boolean;
+		isResearching(template: TechName): boolean;
 /**
  * Whether this player may research `techTemplateName`: requirement checks
  * against the phase chain, completeness of researcher production, and
  * template availability; `noRequirementCheck` skips only the requirement
  * subtree.
  */
-		canResearch(templateName: TemplateName, noRequirementCheck?: boolean): boolean;
+		canResearch(templateName: TechName, noRequirementCheck?: boolean): boolean;
 /** Whether a requirement list (as produced by DeriveTechnologyRequirements) is satisfiable; false values give false. */
 		checkTechRequirements(requirements: CommonRequirement[] | false): boolean;
 /** Terrain passability grid of the map (engine Grid, cellSize added by shared.js). */
@@ -735,7 +734,7 @@ declare module "simulation/ai/common-api/gamestate.js"
  */
 		findTrainableUnits(classes: Array<string | string[]>, anticlasses?: string[]): Array<[TemplateName, CommonTemplate]>;
 /** Available technologies across all own researchable structures, deduplicated and not disabled; [name, Technology] pairs (the wrapper for tech names is a Technology). */
-		findAvailableTech(): Array<[TemplateName, CommonTemplate]>;
+		findAvailableTech(): Array<[TechName, CommonTechnology]>;
 /** Whether one of the AI's structures can train `template`. */
 		hasTrainer(template: string): boolean;
 /** Own structures able to train `template`, as collection. */
@@ -743,9 +742,9 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** One builder able to construct `template`, preferring the nearest idle one. */
 		findBuilder(template: string): CommonEntity | undefined;
 /** Whether one of the AI's structures can research `templateName`. */
-		hasResearchers(templateName: TemplateName, noRequirementCheck?: boolean): boolean;
+		hasResearchers(templateName: TechName, noRequirementCheck?: boolean): boolean;
 /** Own structures able to research `templateName` (undefined when the tech is not available). */
-		findResearchers(templateName: TemplateName, noRequirementCheck?: boolean): CommonEntityCollection | undefined;
+		findResearchers(templateName: TechName, noRequirementCheck?: boolean): CommonEntityCollection | undefined;
 /** Per-template entity limit categories, straight from this player's engine player state. */
 		getEntityLimits(): Record<string, number>;
 /** Per-template counts of existing entities with active match markers (playerData.matchEntityCounts). */
@@ -1011,7 +1010,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** All units trainable by the template for a civ (undefined when it trains none). */
 		trainableEntities(civ: string): TemplateName[] | undefined;
 /** Techs researchable by the template for `gameState` and civ (undefined when it researches none). */
-		researchableTechs(gameState: CommonGameState, civ: string): TemplateName[] | undefined;
+		researchableTechs(gameState: CommonGameState, civ: string): TechName[] | undefined;
 /** {generic, specific} resource names the template supplies (undefined when it supplies nothing). */
 		resourceSupplyType(): CommonResourceSupplyType | undefined;
 /** Generic part of ResourceSupply/Type (everything before the first dot); undefined when the template supplies nothing. */
@@ -1257,7 +1256,7 @@ declare module "simulation/ai/common-api/entity.js"
 /** Places a building foundation of `template` at (x, z), rotated by `angle`, with this entity as builder. */
 		construct(template: string, x: number, z: number, angle: number, metadata?: Record<string, unknown>): this;
 /** Starts researching `template` in this structure. */
-		research(template: string, pushFront?: boolean): this;
+		research(template: TechName, pushFront?: boolean): this;
 /** Cancels the training/research production with queue id `id`. */
 		stopProduction(id: number): this;
 /** Cancels productions of this structure under `percentToStopAt` completion (returning true when there was no queue). */

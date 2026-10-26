@@ -15,6 +15,9 @@ type GarrisonThreats = {
 	unit: boolean;
 };
 
+/** The fields a save keeps. */
+export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decayingStructures">;
+
 /**
  * Manage the garrisonHolders
  * When a unit is ordered to garrison, it must be done through this.garrison() function so that
@@ -408,14 +411,14 @@ export class GarrisonManager
 		this.decayingStructures.delete(entId);
 	}
 
-	Serialize(): Record<string, unknown>
+	Serialize(): SerializedGarrisonManager
 	{
 		return { "holders": this.holders, "decayingStructures": this.decayingStructures };
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: SerializedGarrisonManager): void
 	{
-		for (const key in data)
-			this[key as keyof this] = data[key] as this[keyof this];
+		this.holders = data.holders;
+		this.decayingStructures = data.decayingStructures;
 	}
 }

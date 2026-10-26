@@ -73,6 +73,12 @@ export function templateName(value: string): TemplateName
 	return value as TemplateName;
 }
 
+/** A string known to be a technology template name. */
+export function techName(value: string): TechName
+{
+	return value as TechName;
+}
+
 /** No template: the empty name a search starts from before it finds one. */
 export const NO_TEMPLATE: TemplateName = templateName("");
 
