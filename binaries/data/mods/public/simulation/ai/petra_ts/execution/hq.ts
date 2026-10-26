@@ -17,7 +17,7 @@ export type ExecutionHQ = {
 	/** the maps and the regions (world/geography.ts), read-only */
 	readonly geography: Readonly<Geography>;
 	// bases are read through their view (world/bases.ts)
-	getBaseByID(baseID: number): BaseView | undefined;
+	getBaseByID(baseID: BaseId): BaseView | undefined;
 	baseManagers(): ReadonlyArray<BaseView & SupplyUpkeep>;
 } & Readonly<Pick<Headquarters,
 	// the managers they ask

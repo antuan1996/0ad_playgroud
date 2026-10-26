@@ -58,7 +58,6 @@ export class EmergencyManager
 		const pop = gameState.getPopulation();
 		const nStructures = gameState.getOwnStructures().length;
 		const nRoots = this.rootCount(gameState);
-		const factors = this.Config.emergencyValues;
 
 		if ((pop > this.referencePopulation * 1.2 &&
 			nStructures > this.referenceStructureCount * 1.2) ||
@@ -74,7 +73,7 @@ export class EmergencyManager
 	rootCount(gameState: CommonGameState): number
 	{
 		let roots = 0;
-		gameState.getOwnStructures().toEntityArray().forEach((ent: CommonEntity): void =>
+		gameState.getOwnStructures().toEntityArray().forEach((ent) =>
 		{
 			const influence = ent?.get("TerritoryInfluence");
 			if (typeof influence === "object" && influence !== null &&

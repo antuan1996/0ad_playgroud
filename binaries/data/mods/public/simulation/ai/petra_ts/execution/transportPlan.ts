@@ -2,10 +2,11 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
-import { worldPos } from "../adapter/brands.ts";
+import { transportPlanId, worldPos } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 /**
  * Describes a transport plan
@@ -30,7 +31,7 @@ import { hqOf } from "./hq.ts";
  */
 
 export interface SerializedTransportPlan {
-	ID: number;
+	ID: TransportPlanId;
 	flotilla: boolean;
 	endPos: CommonPosition;
 	endIndex: AccessIndex;
@@ -47,7 +48,7 @@ export interface SerializedTransportPlan {
 
 export class TransportPlan
 {
-	ID: number;
+	ID: TransportPlanId;
 	declare boardingPos: Record<string, CommonPosition | undefined>;
 	declare boardingRange: number;
 	declare canceled: boolean | undefined;
@@ -70,7 +71,7 @@ export class TransportPlan
 
 	constructor(gameState: CommonGameState, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex, endPos: CommonPosition, ship?: CommonEntity)
 	{
-		this.ID = gameState.ai.uniqueIDs.transports++;
+		this.ID = transportPlanId(gameState.ai.uniqueIDs.transports++);
 		this.debug = gameState.ai.Config.debug;
 		this.flotilla = false;   // when false, only one ship per transport ... not yet tested when true
 		this.needSplit = [];
@@ -101,11 +102,8 @@ export class TransportPlan
 			if (!sea)
 			{
 				this.failed = true;
-				if (this.debug > 1)
-				{
-					aiWarn("transport plan with bad path: startIndex " + startIndex + " endIndex " +
-						endIndex);
-				}
+				debugWarn(this, 1, () => "transport plan with bad path: startIndex " + startIndex + " endIndex " +
+					endIndex);
 				return;
 			}
 			this.sea = sea;
@@ -117,11 +115,8 @@ export class TransportPlan
 			ent.setMetadata(PlayerID, "endPos", endPos);
 		}
 
-		if (this.debug > 1)
-		{
-			aiWarn("Starting a new transport plan with ID " + this.ID + " to index " + endIndex +
-				" with units length " + units.length);
-		}
+		debugWarn(this, 1, () => "Starting a new transport plan with ID " + this.ID + " to index " + endIndex +
+			" with units length " + units.length);
 
 		this.state = TransportPlan.BOARDING;
 		this.boardingPos = {};
@@ -216,7 +211,7 @@ export class TransportPlan
 		// and choose the nearest available ship from this unit
 		let distmin = Math.min();
 		let nearest: CommonEntity | undefined;
-		requireValue(hqOf(gameState).navalManager.seaTransportShips[this.sea]).forEach((ship: CommonEntity): void =>
+		requireValue(hqOf(gameState).navalManager.seaTransportShips[this.sea]).forEach((ship) =>
 		{
 			if (ship.getMetadata(PlayerID, "transporter"))
 				return;
@@ -332,7 +327,7 @@ export class TransportPlan
 			if (!base || !base.anchor || !base.anchor.position())
 				return false;
 			const baseForUnits = base;
-			this.units.forEach((unit: CommonEntity): void => { unit.setMetadata(PlayerID, "base", baseForUnits.ID); });
+			this.units.forEach((unit) => { unit.setMetadata(PlayerID, "base", baseForUnits.ID); });
 		}
 		this.endIndex = this.startIndex;
 		if (base && base.anchor)
@@ -436,8 +431,7 @@ export class TransportPlan
 						if (this.nTry[shipId] > 1)	// we must have been blocked by something ... try with another boarding point
 						{
 							this.nTry[shipId] = 0;
-							if (this.debug > 1)
-								aiWarn("ship " + shipId + " new attempt for a landing point ");
+							debugWarn(this, 1, () => "ship " + shipId + " new attempt for a landing point ");
 							this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, undefined, false);
 						}
 						// a new search falls back to the previous boarding position
@@ -461,11 +455,8 @@ export class TransportPlan
 								++this.nTry[ent.id()];
 							if (this.nTry[ent.id()] > 5)
 							{
-								if (this.debug > 1)
-								{
-									aiWarn("unit blocked, but no ways out of the trap ... " +
-										"destroy it");
-								}
+								debugWarn(this, 1, () => "unit blocked, but no ways out of the trap ... " +
+									"destroy it");
 								this.resetUnit(gameState, ent);
 								ent.destroy();
 								continue;
@@ -608,22 +599,19 @@ export class TransportPlan
 					ship.moveApart(recov.entPos, 15);
 				continue;
 			}
-			if (this.debug > 1)
-				aiWarn(">>> transport " + this.ID + " reloading failed ... <<<");
+			debugWarn(this, 1, () => ">>> transport " + this.ID + " reloading failed ... <<<");
 			// destroy the unit if inaccessible otherwise leave it there
 			const index = requireValue(getLandAccess(gameState, ent));
 			if (hqOf(gameState).geography.landRegions[index])
 			{
-				if (this.debug > 1)
-					aiWarn(" recovered entity kept " + ent.id());
+				debugWarn(this, 1, () => " recovered entity kept " + ent.id());
 				this.resetUnit(gameState, ent);
 				// Cancel its garrison order, so it is not reloaded on the next turn without a plan
 				ent.stopMoving();
 			}
 			else
 			{
-				if (this.debug > 1)
-					aiWarn("recovered entity destroyed " + ent.id());
+				debugWarn(this, 1, () => "recovered entity destroyed " + ent.id());
 				this.resetUnit(gameState, ent);
 				ent.destroy();
 			}
@@ -661,8 +649,7 @@ export class TransportPlan
 			else if (getLandAccess(gameState, ent) !== this.endIndex)
 			{
 				// unit unloaded on a wrong region - try to regarrison it and move a bit the ship
-				if (this.debug > 1)
-					aiWarn(">>> unit unloaded on a wrong region ! try to garrison it again <<<");
+				debugWarn(this, 1, () => ">>> unit unloaded on a wrong region ! try to garrison it again <<<");
 				const ship = this.shipOf(gameState, ent);
 				if (ship && !this.canceled)
 				{
@@ -673,8 +660,7 @@ export class TransportPlan
 				}
 				else
 				{
-					if (this.debug > 1)
-						aiWarn("no way ... we destroy it");
+					debugWarn(this, 1, () => "no way ... we destroy it");
 					this.resetUnit(gameState, ent);
 					ent.destroy();
 				}
@@ -757,8 +743,7 @@ export class TransportPlan
 				if (this.nTry[shipId] > 2)	// we must have been blocked by something ... try with another boarding point
 				{
 					this.nTry[shipId] = 0;
-					if (this.debug > 1)
-						aiWarn(shipId + " new attempt for a landing point ");
+					debugWarn(this, 1, () => shipId + " new attempt for a landing point ");
 					this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, undefined, true);
 				}
 				// a new search falls back to the previous boarding position

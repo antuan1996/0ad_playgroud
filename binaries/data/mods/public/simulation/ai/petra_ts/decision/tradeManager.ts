@@ -3,7 +3,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { newTradeRoute as chatNewTradeRoute } from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate, requireValue } from
+import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -11,6 +11,8 @@ import { Worker } from "../execution/worker.ts";
 import { INVALID_ENTITY, landRegion } from "../adapter/brands.ts";
 import { requiredStateWithin } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
+import { type PlanMetadata } from "../execution/queueplan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 export type TradeRoute = {
 	source: EntityId;
@@ -103,7 +105,7 @@ export class TradeManager
 			return;
 
 		let template;
-		const metadata: Record<string, unknown> = { "role": Worker.ROLE_TRADER };
+		const metadata: PlanMetadata = { "role": Worker.ROLE_TRADER };
 		if (route.sea)
 		{
 			// if we have some merchand ships assigned to transport, try first to reassign them
@@ -151,11 +153,8 @@ export class TradeManager
 
 		if (!gameState.getTemplate(template))
 		{
-			if (this.Config.debug > 0)
-			{
-				aiWarn("Petra error: trying to train " + template + " for civ " +
-					gameState.getPlayerCiv() + " but no template found.");
-			}
+			debugWarn(this.Config, 0, () => "Petra error: trying to train " + template + " for civ " +
+				gameState.getPlayerCiv() + " but no template found.");
 			return;
 		}
 		queues.trader.addPlan(new TrainingPlan(gameState, template, metadata, 1, 1));
@@ -188,8 +187,7 @@ export class TradeManager
 		if (!route)
 		{
 			// TODO try to garrison land trader inside merchant ship when only sea routes available
-			if (this.Config.debug > 0)
-				aiWarn(" no available route for " + ent.genericName() + " " + ent.id());
+			debugWarn(this.Config, 0, () => " no available route for " + ent.genericName() + " " + ent.id());
 			Engine.ProfileStop();
 			return;
 		}
@@ -274,8 +272,7 @@ export class TradeManager
 		else
 			tradingGoods[mostNeeded[0].type] += nextNeed;
 		postCommand({ "type": "set-trading-goods", "tradingGoods": tradingGoods });
-		if (this.Config.debug > 2)
-			aiWarn(" trading goods set to " + uneval(tradingGoods));
+		debugWarn(this.Config, 2, () => " trading goods set to " + uneval(tradingGoods));
 	}
 
 	/**
@@ -311,7 +308,7 @@ export class TradeManager
 				continue;
 
 			// Pick the best resource to barter.
-			let bestToSell;
+			let bestToSell: string | undefined;
 			let bestRate = 0;
 			for (const sell of resBarterCodes)
 			{
@@ -354,14 +351,11 @@ export class TradeManager
 			{
 				const amount = available[bestToSell] > 5000 ? 500 : 100;
 				barterers[0].barter(buy, bestToSell, amount);
-				if (this.Config.debug > 2)
-				{
-					aiWarn("Necessity bartering: sold " + bestToSell +" for " + buy +
-						" >> need sell " + needs[bestToSell] + " need buy " + needs[buy] +
-						" rate buy " + rates[buy] + " available sell " + available[bestToSell] +
-						" available buy " + available[buy] + " barterRate " + bestRate +
-						" amount " + amount);
-				}
+				debugWarn(this.Config, 2, () => "Necessity bartering: sold " + bestToSell +" for " + buy +
+					" >> need sell " + needs[bestToSell] + " need buy " + needs[buy] +
+					" rate buy " + rates[buy] + " available sell " + available[bestToSell] +
+					" available buy " + available[buy] + " barterRate " + bestRate +
+					" amount " + amount);
 				return true;
 			}
 		}
@@ -369,7 +363,7 @@ export class TradeManager
 		// now do contingency bartering, selling food to buy finite resources (and annoy our ennemies by increasing prices)
 		if (available.food < 1000 || needs.food > 0 || resBarterCodes.indexOf("food") === -1)
 			return false;
-		let bestToBuy;
+		let bestToBuy: string | undefined;
 		let bestChoice = 0;
 		for (const buy of resBarterCodes)
 		{
@@ -392,12 +386,9 @@ export class TradeManager
 		{
 			const amount = available.food > 5000 ? 500 : 100;
 			barterers[0].barter(bestToBuy, "food", amount);
-			if (this.Config.debug > 2)
-			{
-				aiWarn("Contingency bartering: sold food for " + bestToBuy + " available sell " +
-					available.food + " available buy " + available[bestToBuy] + " barterRate " +
-					getBarterRate(barterPrices, bestToBuy, "food") + " amount " + amount);
-			}
+			debugWarn(this.Config, 2, () => "Contingency bartering: sold food for " + bestToBuy + " available sell " +
+				available.food + " available buy " + available[bestToBuy] + " barterRate " +
+				getBarterRate(barterPrices, bestToBuy, "food") + " amount " + amount);
 			return true;
 		}
 
@@ -589,8 +580,7 @@ export class TradeManager
 
 		if (candidate.gain < 1)
 		{
-			if (this.Config.debug > 2)
-				aiWarn("no better trade route possible");
+			debugWarn(this.Config, 2, () => "no better trade route possible");
 			this.tradeRoute = undefined;
 			return false;
 		}
@@ -603,8 +593,7 @@ export class TradeManager
 					this.tradeRoute.gain);
 			}
 		}
-		else if (this.Config.debug > 1)
-			aiWarn("one trade route set with gain " + candidate.gain);
+		else debugWarn(this.Config, 1, () => "one trade route set with gain " + candidate.gain);
 		this.tradeRoute = candidate;
 
 		if (this.Config.chat)
@@ -751,13 +740,13 @@ export class TradeManager
 
 		if (this.checkEvents(gameState, events))  // true if one market was built or destroyed
 		{
-			this.traders.forEach((ent: CommonEntity): void => { this.checkTrader(gameState, ent); });
+			this.traders.forEach((ent) => { this.checkTrader(gameState, ent); });
 			this.checkRoutes(gameState);
 		}
 
 		if (this.tradeRoute)
 		{
-			this.traders.forEach((ent: CommonEntity): void => { this.updateTrader(gameState, ent); });
+			this.traders.forEach((ent) => { this.updateTrader(gameState, ent); });
 			if (gameState.ai.playedTurn % 5 === 0)
 				this.trainMoreTraders(gameState, queues);
 			if (gameState.ai.playedTurn % 20 === 0 && this.traders.length >= 2)

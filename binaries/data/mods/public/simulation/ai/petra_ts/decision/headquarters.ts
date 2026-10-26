@@ -26,11 +26,13 @@ import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "../execution/worker.ts";
-import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
+import { type PlanMetadata } from "../execution/queueplan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -186,7 +188,7 @@ export class Headquarters
 		this.geography.navalMap = false;
 		this.geography.navalRegions = {};
 
-		this.treasures = gameState.getEntities().filter((ent: CommonEntity): boolean => ent.isTreasure());
+		this.treasures = gameState.getEntities().filter((ent) => ent.isTreasure());
 		this.treasures.registerUpdates();
 		this.currentPhase = gameState.currentPhase();
 		this.decayingStructures = new Set();
@@ -479,12 +481,12 @@ export class Headquarters
 					return;
 				if (queue === "wonder")
 				{
-					gameState.ai.queueManager.changePriority("majorTech", 400, { "phaseUp": true });
+					gameState.ai.queueManager.changePriority("majorTech", 400);
 					plan.queueToReset = "majorTech";
 				}
 				else
 				{
-					gameState.ai.queueManager.changePriority(queue, 1000, { "phaseUp": true });
+					gameState.ai.queueManager.changePriority(queue, 1000);
 					plan.queueToReset = queue;
 				}
 				queues[queue].addPlan(plan);
@@ -538,7 +540,7 @@ export class Headquarters
 		// counting the workers that aren't part of a plan
 		let numberOfWorkers = 0;   // all workers
 		let numberOfSupports = 0;  // only support workers (i.e. non fighting)
-		gameState.getOwnUnits().forEach((ent: CommonEntity): void =>
+		gameState.getOwnUnits().forEach((ent) =>
 		{
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER && ent.getMetadata(PlayerID, "plan") === undefined)
 			{
@@ -641,9 +643,9 @@ export class Headquarters
 		// If the template variable is empty, the default unit (Support unit) will be used
 		// base "0" means automatic choice of base
 		if (!template && templateDef)
-			queues.villager.addPlan(new TrainingPlan(gameState, templateDef, { "role": Worker.ROLE_WORKER, "base": 0, "support": true }, size, size));
+			queues.villager.addPlan(new TrainingPlan(gameState, templateDef, { "role": Worker.ROLE_WORKER, "base": NO_BASE, "support": true }, size, size));
 		else if (template)
-			queues.citizenSoldier.addPlan(new TrainingPlan(gameState, template, { "role": Worker.ROLE_WORKER, "base": 0 }, size, size));
+			queues.citizenSoldier.addPlan(new TrainingPlan(gameState, template, { "role": Worker.ROLE_WORKER, "base": NO_BASE }, size, size));
 	}
 
 	/** picks the best template based on parameters and classes */
@@ -992,8 +994,7 @@ export class Headquarters
 
 		Engine.ProfileStop();
 
-		if (this.Config.debug > 1)
-			aiWarn("we have found a base for " + resource + " with best (cut=" + cut + ") = " + bestVal);
+		debugWarn(this.Config, 1, () => "we have found a base for " + resource + " with best (cut=" + cut + ") = " + bestVal);
 		// not good enough.
 		if (bestVal < cut)
 			return false;
@@ -1133,8 +1134,7 @@ export class Headquarters
 			bestIdx = i;
 		}
 
-		if (this.Config.debug > 1)
-			aiWarn("We've found a strategic base with bestVal = " + bestVal);
+		debugWarn(this.Config, 1, () => "We've found a strategic base with bestVal = " + bestVal);
 
 		Engine.ProfileStop();
 
@@ -1169,7 +1169,8 @@ export class Headquarters
 	 * To do so, we suppose that the gain/distance is an increasing function of distance and look for the max distance
 	 * for performance reasons.
 	 */
-	findMarketLocation(gameState: CommonGameState, template: CommonTemplate): false | [number, number, number, number]
+	/** [x, z, base, expected gain]; base -1 (and x, z -1) when the market goes where the standard placement puts it */
+	findMarketLocation(gameState: CommonGameState, template: CommonTemplate): false | [number, number, BaseId | -1, number]
 	{
 		let markets = gameState.updatingCollection("diplo-ExclusiveAllyMarkets", filters.byClass("Trade"),
 			gameState.getExclusiveAllyEntities()).toEntityArray();
@@ -1207,7 +1208,7 @@ export class Headquarters
 			// do not try on the narrow border of our territory
 			if (this.geography.borderMap.map[j] & mapMask.narrowFrontier)
 				continue;
-			if (this.baseAtIndex(j) === 0)   // only in our territory
+			if (this.baseAtIndex(j) === NO_BASE)   // only in our territory
 				continue;
 			// with enough room around to build the market
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -1258,16 +1259,14 @@ export class Headquarters
 			bestJdx = j;
 		}
 
-		if (this.Config.debug > 1)
-			aiWarn("We found a market position with bestVal = " + bestVal);
+		debugWarn(this.Config, 1, () => "We found a market position with bestVal = " + bestVal);
 
 		if (bestVal === -Infinity)  // no constraints. For the time being, place it arbitrarily by the ConstructionPlan
 			return [-1, -1, -1, 0];
 		const expectedGain = Math.round(bestGainMult * TradeGain(bestDistSq, gameState.sharedScript.mapSize));
-		if (this.Config.debug > 1)
-			aiWarn("this would give a trading gain of " + expectedGain);
+		debugWarn(this.Config, 1, () => "this would give a trading gain of " + expectedGain);
 		// Do not keep it if gain is too small, except if this is our first Market.
-		let idx;
+		let idx: BaseId | -1;
 		if (expectedGain < this.tradeManager.minimalGain)
 		{
 			if (template.hasClass("Market") &&
@@ -1289,7 +1288,7 @@ export class Headquarters
 	 * Whose primary function is to defend our borders
 	 */
 	findDefensiveLocation(gameState: CommonGameState, template: CommonTemplate):
-		[number, number, number] | undefined
+		[number, number, BaseId] | undefined
 	{
 		// We take the point in our territory which is the nearest to any enemy cc
 		// but requiring a minimal distance with our other defensive structures
@@ -1358,7 +1357,7 @@ export class Headquarters
 				if (this.geography.borderMap.map[j] & mapMask.largeFrontier && isTower)
 					continue;
 			}
-			if (this.baseAtIndex(j) === 0)   // inaccessible cell
+			if (this.baseAtIndex(j) === NO_BASE)   // inaccessible cell
 				continue;
 			// with enough room around to build the cc
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -1625,8 +1624,7 @@ export class Headquarters
 					.length;
 				if (count < entityReq.count && this.buildManager.isUnbuildable(gameState, houseTemplateName))
 				{
-					if (this.Config.debug > 1)
-						aiWarn("no room to place a house ... try to be less restrictive");
+					debugWarn(this.Config, 1, () => "no room to place a house ... try to be less restrictive");
 					this.buildManager.setBuildable(houseTemplateName);
 					this.requireHouses = true;
 				}
@@ -1670,8 +1668,7 @@ export class Headquarters
 		{
 			if (this.buildManager.isUnbuildable(gameState, house))
 			{
-				if (this.Config.debug > 1)
-					aiWarn("no room to place a house ... try to improve with technology");
+				debugWarn(this.Config, 1, () => "no room to place a house ... try to improve with technology");
 				this.researchManager.researchPopulationBonus(gameState, queues);
 			}
 			else
@@ -1698,8 +1695,7 @@ export class Headquarters
 		// Then expand if we have not enough room available for buildings
 		if (this.buildManager.numberMissingRoom(gameState) > 1)
 		{
-			if (this.Config.debug > 2)
-				aiWarn("try to build a new base because not enough room to build ");
+			debugWarn(this.Config, 2, () => "try to build a new base because not enough room to build ");
 			this.buildNewBase(gameState, queues);
 			return;
 		}
@@ -1712,11 +1708,8 @@ export class Headquarters
 		const numvar = 10 * (1 - this.Config.personality.aggressive);
 		if (numUnits > activeBases * (65 + numvar + (10 + numvar)*(activeBases-1)) || this.saveResources && numUnits > 50)
 		{
-			if (this.Config.debug > 2)
-			{
-				aiWarn("try to build a new base because of population " + numUnits + " for " +
-					activeBases + " CCs");
-			}
+			debugWarn(this.Config, 2, () => "try to build a new base because of population " + numUnits + " for " +
+				activeBases + " CCs");
 			this.buildNewBase(gameState, queues);
 		}
 	}
@@ -1749,9 +1742,8 @@ export class Headquarters
 			return false;
 
 		// base "-1" means new base.
-		if (this.Config.debug > 1)
-			aiWarn("new base " + gameState.applyCiv(template) + " planned with resource " + resource);
-		queues.civilCentre.addPlan(new ConstructionPlan(gameState, template, { "base": -1, "resource": resource }));
+		debugWarn(this.Config, 1, () => "new base " + gameState.applyCiv(template) + " planned with resource " + resource);
+		queues.civilCentre.addPlan(new ConstructionPlan(gameState, template, { "base": NEW_BASE, "resource": resource }));
 		return true;
 	}
 
@@ -2084,7 +2076,7 @@ export class Headquarters
 					break;
 			}
 		}
-		const metadata: Record<string, unknown> = {
+		const metadata: PlanMetadata = {
 			"role": Worker.ROLE_WORKER,
 			"base": nearestAnchor.getMetadata(PlayerID, "base"),
 			"plan": PLAN_RESERVE,
@@ -2226,7 +2218,7 @@ export class Headquarters
 	/**
 	 * returns the base corresponding to baseID
 	 */
-	getBaseByID(baseID: number): BaseManager | undefined
+	getBaseByID(baseID: BaseId): BaseManager | undefined
 	{
 		return this.basesManager.getBaseByID(baseID);
 	}
@@ -2419,7 +2411,7 @@ export class Headquarters
 	 * @param {number} territoryIndex - The index to get the map for.
 	 * @return {number} - The ID of the base at the given territory index.
 	 */
-	baseAtIndex(territoryIndex: CellIndex<"territory">): number
+	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId
 	{
 		return this.basesManager.baseAtIndex(territoryIndex);
 	}
@@ -2439,10 +2431,9 @@ export class Headquarters
 		// TODO find a better way to update
 		if (this.currentPhase !== gameState.currentPhase())
 		{
-			if (this.Config.debug > 0)
-				aiWarn(" civ " + gameState.getPlayerCiv() + " has phasedUp from " + this.currentPhase +
-					" to " + gameState.currentPhase() + " at time " + gameState.ai.elapsedTime +
-					" phasing " + this.phasing);
+			debugWarn(this.Config, 0, () => " civ " + gameState.getPlayerCiv() + " has phasedUp from " + this.currentPhase +
+				" to " + gameState.currentPhase() + " at time " + gameState.ai.elapsedTime +
+				" phasing " + this.phasing);
 			this.currentPhase = gameState.currentPhase();
 
 			// In principle, this.phasing should be already reset to 0 when starting the research

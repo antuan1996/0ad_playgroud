@@ -9,12 +9,14 @@ import { obstructionShape } from "../adapter/templateData.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
 import { Worker } from "./worker.ts";
 import type { Queue } from "./queue.ts";
-import { INVALID_PLAYER, NO_LAND, NO_REGION, attackPlanId, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { INVALID_PLAYER, NO_BASE, NO_LAND, NO_REGION, attackPlanId, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
 import { debugShade, postCommand } from "../adapter/commands.ts";
 import { basesOf } from "../world/bases.ts";
 import { hqOf } from "./hq.ts";
 import { PLAN_RESERVE } from "./unitPlan.ts";
+import { type PlanMetadata } from "./queueplan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 export type AttackUnitStat = {
 	priority: number;
@@ -94,6 +96,13 @@ function isAttackPlanState(value: unknown): value is AttackPlanState
 /** The four kinds of attack plan, in the order the attack manager keeps them. */
 export type AttackType = "Rush" | "Raid" | "Attack" | "HugeAttack";
 export const ATTACK_TYPES: readonly AttackType[] = ["Rush", "Raid", "Attack", "HugeAttack"];
+
+/** Every plan of the records, type by type in ATTACK_TYPES' order; lazy, as the nested loops it replaces were. */
+export function* plansIn(records: Record<AttackType, AttackPlan[]>): Generator<AttackPlan>
+{
+	for (const type of ATTACK_TYPES)
+		yield* records[type];
+}
 
 /** A record over the four attack types, in ATTACK_TYPES' order, of what `make` gives for each. */
 export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackType, T>
@@ -863,18 +872,16 @@ export class AttackPlan
 				// effectively removing the unit from the plan.
 				if (template === undefined)
 				{
-					if (this.Config.debug > 1)
-						aiWarn("attack no template found " + firstOrder[1]);
+					debugWarn(this.Config, 1, () => "attack no template found " + firstOrder[1]);
 					delete this.unitStat[firstOrder[4]];	// deleting the associated unitstat.
 					this.buildOrders.splice(0, 1);
 				}
 				else
 				{
-					if (this.Config.debug > 2)
-						aiWarn("attack template " + template + " added for plan " + this.name);
+					debugWarn(this.Config, 2, () => "attack template " + template + " added for plan " + this.name);
 					const max = firstOrder[3].batchSize;
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
-					const data: Record<string, unknown> = { "plan": this.name, "special": specialData, "base": 0 };
+					const data: PlanMetadata = { "plan": this.name, "special": specialData, "base": NO_BASE };
 					// findBestTrainableUnit names only templates that exist
 					const templateObj = requireTemplate(gameState, template);
 					// a mercenary is a citizen soldier that cannot gather: an attacker only
@@ -883,12 +890,9 @@ export class AttackPlan
 					const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 					if (trainingPlan.template)
 						queue.addPlan(trainingPlan);
-					else if (this.Config.debug > 1)
-					{
-						aiWarn("training plan canceled because no template for " + template +
-							"   build1 " + uneval(firstOrder[1]) +
-							" build3 " + uneval(firstOrder[3].interests));
-					}
+					else debugWarn(this.Config, 1, () => "training plan canceled because no template for " + template +
+						"   build1 " + uneval(firstOrder[1]) +
+						" build3 " + uneval(firstOrder[3].interests));
 				}
 			}
 		}
@@ -1211,7 +1215,7 @@ export class AttackPlan
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
 		{
 			for (const ent of gameState.updatingGlobalCollection("allRelics",
-				filters.byClass("Relic")).filter((relic: CommonEntity): boolean => relic.owner() === playerEnemy).values())
+				filters.byClass("Relic")).filter((relic) => relic.owner() === playerEnemy).values())
 			{
 				targets.addEnt(ent);
 			}
@@ -1490,8 +1494,7 @@ export class AttackPlan
 	 */
 	StartAttack(gameState: CommonGameState): boolean
 	{
-		if (this.Config.debug > 1)
-			aiWarn("start attack " + this.name + " with type " + this.type);
+		debugWarn(this.Config, 1, () => "start attack " + this.name + " with type " + this.type);
 
 		// if our target was destroyed during preparation, choose a new one
 		if ((this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
@@ -1597,7 +1600,7 @@ export class AttackPlan
 			// let's proceed on with whatever happens now.
 			this.changeState(AttackPlan.STATE_ARRIVED, AttackPlan.STATE_ATTACKING);
 			this.startingAttack = true;
-			this.unitCollection.forEach((ent: CommonEntity): void =>
+			this.unitCollection.forEach((ent) =>
 			{
 				ent.stopMoving();
 				ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_ATTACKING);
@@ -1884,7 +1887,7 @@ export class AttackPlan
 				// Checking for gates if we're a siege unit.
 				if (siegeUnit)
 				{
-					const mStruct = enemyStructures.filter((enemy: CommonEntity): boolean =>
+					const mStruct = enemyStructures.filter((enemy) =>
 					{
 						const enemyPos = enemy.position();
 						if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
@@ -1939,7 +1942,7 @@ export class AttackPlan
 				else
 				{
 					const nearby = !ent.hasClasses(["FastMoving", "Ranged"]);
-					const mUnit = enemyUnits.filter((enemy: CommonEntity): boolean =>
+					const mUnit = enemyUnits.filter((enemy) =>
 					{
 						const enemyPos = enemy.position();
 						if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
@@ -2008,7 +2011,7 @@ export class AttackPlan
 					}
 					else
 					{
-						const mStruct = enemyStructures.filter((enemy: CommonEntity): boolean =>
+						const mStruct = enemyStructures.filter((enemy) =>
 						{
 							if (this.isBlocked && enemy.id() !== target.id())
 								return false;
@@ -2049,7 +2052,7 @@ export class AttackPlan
 						{
 							let distmin = Math.min();
 							let attacker;
-							this.unitCollection.forEach((unit: CommonEntity): void =>
+							this.unitCollection.forEach((unit) =>
 							{
 								const unitPos = unit.position();
 								if (!unitPos)
@@ -2209,20 +2212,14 @@ export class AttackPlan
 				// there are walls, so check if we can attack
 				if (this.unitCollection.filter(filters.byCanAttackClass(enemyClass)).hasEntities())
 				{
-					if (this.Config.debug > 1)
-					{
-						aiWarn("Attack Plan " + this.type + " " + this.name +
-							" has met walls and is not happy.");
-					}
+					debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
+						" has met walls and is not happy.");
 					this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 					return true;
 				}
 				// abort plan
-				if (this.Config.debug > 1)
-				{
-					aiWarn("Attack Plan " + this.type + " " + this.name +
-						" has met walls and gives up.");
-				}
+				debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
+					" has met walls and gives up.");
 				return false;
 			}
 
@@ -2233,8 +2230,7 @@ export class AttackPlan
 		// check if our units are close enough from the next waypoint.
 		if (targetPos && SquareVectorDistance(pos, targetPos) < 10000)
 		{
-			if (this.Config.debug > 1)
-				aiWarn("Attack Plan " + this.type + " " + this.name + " has arrived to destination.");
+			debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name + " has arrived to destination.");
 			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 			return true;
 		}
@@ -2245,11 +2241,8 @@ export class AttackPlan
 				this.unitCollection.moveToRange(this.path[0][0], this.path[0][1], 0, 15);
 			else
 			{
-				if (this.Config.debug > 1)
-				{
-					aiWarn("Attack Plan " + this.type + " " + this.name +
-						" has arrived to destination.");
-				}
+				debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
+					" has arrived to destination.");
 				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 				return true;
 			}
@@ -2294,11 +2287,8 @@ export class AttackPlan
 
 		if (!this.target || !gameState.getEntityById(this.target.id()))
 		{
-			if (this.Config.debug > 1)
-			{
-				aiWarn("Seems like our target for plan " + this.name +
-					" has been destroyed or captured. Switching.");
-			}
+			debugWarn(this.Config, 1, () => "Seems like our target for plan " + this.name +
+				" has been destroyed or captured. Switching.");
 			const accessIndex = this.getAttackAccess(gameState);
 			this.target = this.getNearestTarget(gameState, pos, accessIndex);
 			if (!this.target)
@@ -2308,26 +2298,23 @@ export class AttackPlan
 
 				// Check if we could help any current attack
 				const attackManager = hqOf(gameState).attackManager;
-				for (const attackType of ATTACK_TYPES)
+				for (const attack of plansIn(attackManager.startedAttacks))
 				{
-					for (const attack of attackManager.startedAttacks[attackType])
-					{
-						if (attack.name === this.name)
-							continue;
-						if (!attack.target || !gameState.getEntityById(attack.target.id()) ||
-						    !gameState.isPlayerEnemy(attack.target.owner()))
-							continue;
-						if (accessIndex !== getLandAccess(gameState, attack.target))
-							continue;
-						if (attack.target.owner() === 0 && attack.targetPlayer !== 0)	// looks like it has resigned
-							continue;
-						if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
-							continue;
-						this.target = attack.target;
-						this.targetPlayer = attack.targetPlayer;
-						this.targetPos = this.target.position();
-						return true;
-					}
+					if (attack.name === this.name)
+						continue;
+					if (!attack.target || !gameState.getEntityById(attack.target.id()) ||
+					    !gameState.isPlayerEnemy(attack.target.owner()))
+						continue;
+					if (accessIndex !== getLandAccess(gameState, attack.target))
+						continue;
+					if (attack.target.owner() === 0 && attack.targetPlayer !== 0)	// looks like it has resigned
+						continue;
+					if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
+						continue;
+					this.target = attack.target;
+					this.targetPlayer = attack.targetPlayer;
+					this.targetPos = this.target.position();
+					return true;
 				}
 
 				// If not, let's look for another enemy
@@ -2338,16 +2325,12 @@ export class AttackPlan
 						this.target = this.getNearestTarget(gameState, pos, accessIndex);
 					if (!this.target)
 					{
-						if (this.Config.debug > 1)
-						{
-							aiWarn("No new target found. Remaining units " +
-								this.unitCollection.length);
-						}
+						debugWarn(this.Config, 1, () => "No new target found. Remaining units " +
+							this.unitCollection.length);
 						return false;
 					}
 				}
-				if (this.Config.debug > 1)
-					aiWarn("We will help one of our other attacks");
+				debugWarn(this.Config, 1, () => "We will help one of our other attacks");
 			}
 			this.targetPos = this.target.position();
 		}

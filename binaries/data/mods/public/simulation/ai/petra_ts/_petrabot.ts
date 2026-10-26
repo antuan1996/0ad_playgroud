@@ -1,6 +1,5 @@
 import { BaseAI } from "simulation/ai/common-api/baseAI.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
-import { Entity } from "simulation/ai/common-api/entity.js";
 import { Config, type SerializedConfig } from "./decision/config.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";

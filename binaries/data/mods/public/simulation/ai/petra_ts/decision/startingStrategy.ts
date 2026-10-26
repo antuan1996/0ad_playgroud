@@ -1,13 +1,13 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
-import { cellIndex, landRegion, seaRegion } from "../adapter/brands.ts";
+import { NEW_BASE, cellIndex, landRegion, seaRegion } from "../adapter/brands.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -47,8 +47,7 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 		const templateObj = gameState.getTemplate(template);
 		if (!gameState.isTemplateAvailable(template) || !templateObj || !templateObj.available(gameState))
 		{
-			if (HQ.Config.debug > 1)
-				aiWarn(" this AI is unable to produce any units");
+			debugWarn(HQ.Config, 1, () => " this AI is unable to produce any units");
 			HQ.canBuildUnits = false;
 			dispatchUnits(HQ, gameState);
 		}
@@ -334,7 +333,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 	{
 		gameState.ai.queues.civilCentre.addPlan(new ConstructionPlan(gameState,
 			"structures/{civ}/civil_centre",
-			{ "base": -1, "resource": "wood", "proximity": startingPoint[imax].pos }));
+			{ "base": NEW_BASE, "resource": "wood", "proximity": startingPoint[imax].pos }));
 	}
 }
 
@@ -349,18 +348,15 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 		.toEntityArray();
 	if (allycc.length)
 	{
-		if (HQ.Config.debug > 1)
-		{
-			aiWarn(" We have allied cc " + allycc.length + " and " + gameState.getOwnUnits().length +
-				" units ");
-		}
+		debugWarn(HQ.Config, 1, () => " We have allied cc " + allycc.length + " and " + gameState.getOwnUnits().length +
+			" units ");
 		const units = gameState.getOwnUnits();
 		let num = Math.max(Math.min(Math.round(0.08 * (1 + HQ.Config.personality.cooperative) *
 			units.length), 20), 5);
 		let num1 = Math.floor(num / 2);
 		let num2 = num1;
 		// first pass to affect ranged infantry
-		units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent: CommonEntity): void =>
+		units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent) =>
 		{
 			if (!num || !num1)
 				return;
@@ -381,7 +377,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			}
 		});
 		// second pass to affect melee infantry
-		units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent: CommonEntity): void =>
+		units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent) =>
 		{
 			if (!num || !num2)
 				return;
@@ -402,7 +398,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			}
 		});
 		// and now complete the affectation, including all support units
-		units.forEach((ent: CommonEntity): void =>
+		units.forEach((ent) =>
 		{
 			if (!num && !ent.hasClass("Support"))
 				return;
@@ -452,8 +448,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	}
 	const cell = gameState.getPassabilityMap().cellSize;
 	startingSize = startingSize * cell * cell;
-	if (HQ.Config.debug > 1)
-		aiWarn("starting size " + startingSize + "(cut at 24000 for fish pushing)");
+	debugWarn(HQ.Config, 1, () => "starting size " + startingSize + "(cut at 24000 for fish pushing)");
 	if (startingSize < 25000)
 	{
 		HQ.saveSpace = true;
@@ -491,11 +486,8 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	let startingWood = gameState.getResources().wood;
 	startingWood += HQ.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood;
 
-	if (HQ.Config.debug > 1)
-	{
-		aiWarn("startingWood: " + startingWood +
-			" (cut at 8500 for no rush and 6000 for saveResources)");
-	}
+	debugWarn(HQ.Config, 1, () => "startingWood: " + startingWood +
+		" (cut at 8500 for no rush and 6000 for saveResources)");
 	if (startingWood < 6000)
 	{
 		HQ.saveResources = true;

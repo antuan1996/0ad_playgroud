@@ -1,15 +1,15 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, requireValue, setSeaAccess } from
 	"../adapter/entityExtend.ts";
-import type { Queue } from "../execution/queue.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
-import { cellIndex, seaRegion } from "../adapter/brands.ts";
+import { NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 /**
  * Naval Manager
@@ -266,7 +266,7 @@ export class NavalManager
 	{
 		// a land region links only to seas
 		const seas = gameState.ai.accessibility.regionLinks[region].map(seaRegion);
-		this.docks.forEach((dock: CommonEntity): void =>
+		this.docks.forEach((dock) =>
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) !== region)
 				return;
@@ -311,15 +311,12 @@ export class NavalManager
 				continue;
 
 			const shipId = evt.entity;
-			if (this.Config.debug > 1)
-			{
-				aiWarn("one ship " + shipId + " from plan " + plan.ID + " destroyed during " +
-					plan.state);
-			}
+			debugWarn(this.Config, 1, () => "one ship " + shipId + " from plan " + plan.ID + " destroyed during " +
+				plan.state);
 			if (plan.state === TransportPlan.BOARDING)
 			{
 				// just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
-				plan.units.forEach((ent: CommonEntity): void =>
+				plan.units.forEach((ent) =>
 				{
 					if (ent.getMetadata(PlayerID, "onBoard") === "onBoard" && ent.position() ||
 					    ent.getMetadata(PlayerID, "onBoard") === shipId)
@@ -360,7 +357,7 @@ export class NavalManager
 	}
 
 
-	getPlan(ID: number | undefined): TransportPlan | undefined
+	getPlan(ID: TransportPlanId | undefined): TransportPlan | undefined
 	{
 		for (const plan of this.transportPlans)
 			if (plan.ID === ID)
@@ -387,11 +384,8 @@ export class NavalManager
 
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			if (this.Config.debug > 0)
-			{
-				aiWarn("Petra naval manager error: unit " + ent.id() +
-					" has already required a transport");
-			}
+			debugWarn(this.Config, 0, () => "Petra naval manager error: unit " + ent.id() +
+				" has already required a transport");
 			return false;
 		}
 
@@ -404,7 +398,7 @@ export class NavalManager
 				continue;
 			}
 			// Limit the number of siege units per transport to avoid problems when ungarrisoning
-			if (isSiegeUnit(ent) && plan.units.filter((unit: CommonEntity): boolean => isSiegeUnit(unit)).length > 3)
+			if (isSiegeUnit(ent) && plan.units.filter((unit) => isSiegeUnit(unit)).length > 3)
 				continue;
 			plans.push(plan);
 		}
@@ -420,8 +414,7 @@ export class NavalManager
 		const plan = new TransportPlan(gameState, [ent], startIndex, endIndex, endPos);
 		if (plan.failed)
 		{
-			if (this.Config.debug > 1)
-				aiWarn(">>>> transport plan aborted <<<<");
+			debugWarn(this.Config, 1, () => ">>>> transport plan aborted <<<<");
 			return false;
 		}
 		plan.init(gameState);
@@ -432,13 +425,11 @@ export class NavalManager
 	/** split a transport plan in two, moving all entities not yet affected to a ship in the new plan */
 	splitTransport(gameState: CommonGameState, plan: TransportPlan): boolean
 	{
-		if (this.Config.debug > 1)
-			aiWarn(">>>> split of transport plan started <<<<");
+		debugWarn(this.Config, 1, () => ">>>> split of transport plan started <<<<");
 		const newplan = new TransportPlan(gameState, [], plan.startIndex, plan.endIndex, plan.endPos);
 		if (newplan.failed)
 		{
-			if (this.Config.debug > 1)
-				aiWarn(">>>> split of transport plan aborted <<<<");
+			debugWarn(this.Config, 1, () => ">>>> split of transport plan aborted <<<<");
 			return false;
 		}
 		newplan.init(gameState);
@@ -559,7 +550,7 @@ export class NavalManager
 				if (template)
 				{
 					queues.ships.addPlan(new TrainingPlan(gameState, template,
-						{ "base": 0, "role": Worker.ROLE_WORKER, "sea": sea }, 1, 1));
+						{ "base": NO_BASE, "role": Worker.ROLE_WORKER, "sea": sea }, 1, 1));
 					continue;
 				}
 			}
@@ -892,8 +883,7 @@ export class NavalManager
 			const remaining = this.transportPlans[i].update(gameState);
 			if (remaining)
 				continue;
-			if (this.Config.debug > 1)
-				aiWarn("no more units on transport plan " + this.transportPlans[i].ID);
+			debugWarn(this.Config, 1, () => "no more units on transport plan " + this.transportPlans[i].ID);
 			this.transportPlans[i].releaseAll();
 			this.transportPlans.splice(i--, 1);
 		}

@@ -1,5 +1,4 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import { aiWarn } from "simulation/ai/common-api/utils.js";
 
 function addBuilder(builders: Map<TemplateName, EntityId[]>, civ: string, entity: CommonEntity): void
 {

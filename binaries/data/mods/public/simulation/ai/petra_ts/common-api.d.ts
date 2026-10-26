@@ -81,6 +81,12 @@ type CommonGameState = import("simulation/ai/common-api/gamestate.js").GameState
 type CommonSharedScript = import("simulation/ai/common-api/shared.js").SharedScript;
 type CommonTechnology = import("simulation/ai/common-api/technology.js").Technology;
 
+/** A unit's `role` (Worker.ROLE_*). */
+type WorkerRole = "attack" | "trader" | "switchToTrader" | "worker" | "criticalEntGuard" | "criticalEntHealer";
+/** A unit's `subrole` (Worker.SUBROLE_*). */
+type WorkerSubrole = "defender" | "idle" | "builder" | "completing" | "walking" | "attacking" | "gatherer" |
+	"hunter" | "fisher" | "garrisoning";
+
 /**
  * Petra's own metadata namespace: every key Petra ever stores through
  * setMetadata / sharedScript.setMetadata. All declared fields are optional at
@@ -92,13 +98,13 @@ interface PetraEntityMetadata
 {
 	[key: string]: unknown;
 	plan: UnitPlan;
-	base: number;
-	transport: number;
+	base: BaseId;
+	transport: TransportPlanId;
 	/** on a ship: the id of the transport plan it serves (a plan, not an entity) */
-	transporter: number;
+	transporter: TransportPlanId;
 	sea: SeaIndex;
 	access: AccessIndex;
-	PartOfArmy: number;
+	PartOfArmy: ArmyId;
 	"target-foundation": EntityId;
 	supply: EntityId;
 	treasure: EntityId;
@@ -113,8 +119,8 @@ interface PetraEntityMetadata
 	turnPreviousPosition: number;
 	nextMoveToGatherer: GameSeconds;
 	lastHuntSearch: GameSeconds;
-	role: string;
-	subrole: string;
+	role: WorkerRole;
+	subrole: WorkerSubrole;
 	"gather-type": string;
 	garrisonType: string;
 	onBoard: EntityId | "onBoard";
@@ -135,7 +141,7 @@ interface PetraEntityMetadata
 	lastGathered: GameSeconds;
 	carriedBefore: number;
 /** The subrole of the entity before it was turned into a defender. */
-	formerSubrole?: string;
+	formerSubrole?: WorkerSubrole;
 }
 
 /**
@@ -699,7 +705,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Auto-updating collections of Petra's own entities whose metadata key matches `value`. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
 /** By `role` metadata (helper over getOwnEntitiesByMetadata). */
-		getOwnEntitiesByRole(role: string | undefined, maintain?: boolean): CommonEntityCollection;
+		getOwnEntitiesByRole(role: WorkerRole | undefined, maintain?: boolean): CommonEntityCollection;
 /** By template name, included in the collection when `maintain` is set. */
 		getOwnEntitiesByType(type: string, maintain?: boolean): CommonEntityCollection;
 /** By Identity class single (Collection filtered by class). */
@@ -717,9 +723,9 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Count of foundations of one template. */
 		countFoundationsByType(type: string, maintain?: boolean): number;
 /** Own entities with the given role metadata. */
-		countOwnEntitiesByRole(role: string): number;
+		countOwnEntitiesByRole(role: WorkerRole): number;
 /** countOwnEntitiesByRole plus queued role units. */
-		countOwnEntitiesAndQueuedWithRole(role: string): number;
+		countOwnEntitiesAndQueuedWithRole(role: WorkerRole): number;
 /** countOwnEntitiesAndQueuedWithRole parameterized on arbitrary metadata. */
 		countOwnQueuedEntitiesWithMetadata(data: string, value: unknown): number;
 /** Own foundations. */
@@ -1255,9 +1261,9 @@ declare module "simulation/ai/common-api/entity.js"
 /** Clears the rally point. */
 		unsetRallyPoint(): this;
 /** Trains `count` units of `type`, attaching `metadata` to their training batches. */
-		train(civ: string, type: string, count: number, metadata?: Record<string, unknown>, pushFront?: boolean): this;
+		train(civ: string, type: string, count: number, metadata?: Partial<PetraEntityMetadata>, pushFront?: boolean): this;
 /** Places a building foundation of `template` at (x, z), rotated by `angle`, with this entity as builder. */
-		construct(template: string, x: number, z: number, angle: number, metadata?: Record<string, unknown>): this;
+		construct(template: string, x: number, z: number, angle: number, metadata?: Partial<PetraEntityMetadata>): this;
 /** Starts researching `template` in this structure. */
 		research(template: TechName, pushFront?: boolean): this;
 /** Cancels the training/research production with queue id `id`. */

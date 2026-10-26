@@ -1,16 +1,17 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { aiWarn } from "simulation/ai/common-api/utils.js";
 
 /** Land access index -> whether a dock may be built on that landmass. */
 export interface PlanLandSet {
 	[landAccess: number]: boolean;
 }
 
-export interface PlanMetadata {
-	base?: number;
-	access?: AccessIndex;
+/**
+ * A plan's metadata: what it hands on to the entities it trains or builds
+ * (typed as theirs), and what only the plan reads.
+ */
+export interface PlanMetadata extends Partial<PetraEntityMetadata> {
 	expectedGain?: number;
-	favoredBase?: number;
+	favoredBase?: BaseId;
 	index?: number;
 	land?: PlanLandSet;
 	militaryBase?: boolean;
@@ -18,8 +19,6 @@ export interface PlanMetadata {
 	phaseUp?: boolean;
 	proximity?: CommonPosition;
 	resource?: string;
-	role?: string;
-	sea?: SeaIndex;
 	support?: boolean;
 	trainer?: EntityId;
 	type?: string;
@@ -36,7 +35,7 @@ export type SerializedQueuePlan<T extends PlanTemplate> = {
 	category: string;
 	type: PlanName<T>;
 	ID: number;
-	metadata: Record<string, unknown> | undefined;
+	metadata: PlanMetadata | undefined;
 	cost: { amounts: Record<string, number>; population: number };
 	number: number;
 };

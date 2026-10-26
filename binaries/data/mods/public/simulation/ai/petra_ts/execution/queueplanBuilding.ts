@@ -6,7 +6,7 @@ import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate, requireVa
 import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
-import { NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
+import { NEW_ANCHORLESS_BASE, NO_BASE, NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { hqOf } from "./hq.ts";
 
@@ -14,7 +14,7 @@ export type BuildingPosition = {
 	x: number;
 	z: number;
 	angle: number;
-	base: number;
+	base: BaseId;
 	access?: AccessIndex;
 	xx?: number;
 	zz?: number;
@@ -166,7 +166,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate>
 					pos = HQ.findStrategicCCLocation(gameState, template);
 
 				if (pos)
-					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": 0 };
+					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": NO_BASE };
 				// No possible location, try to build instead a dock in a not-enemy island
 				const templateName = gameState.applyCiv("structures/{civ}/dock");
 				if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
@@ -193,12 +193,14 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate>
 			else if (template.hasClass("Market")) // Docks are done before.
 			{
 				const pos = HQ.findMarketLocation(gameState, template);
-				if (pos && pos[2] > 0)
+				const base = pos ? pos[2] : -1;
+				// a base of its own (not -1, nor a cell no base claims): there
+				if (pos && base !== -1 && base !== NO_BASE)
 				{
 					if (!this.metadata)
 						this.metadata = {};
 					this.metadata.expectedGain = pos[3];
-					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": pos[2] };
+					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": base };
 				}
 				else if (!pos)
 					return false;
@@ -564,7 +566,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate>
 		// Assign this dock to a base
 		let baseIndex = hqOf(gameState).baseAtIndex(bestJdx);
 		if (!baseIndex)
-			baseIndex = -2;	// We'll do an anchorless base around it
+			baseIndex = NEW_ANCHORLESS_BASE;	// We'll do an anchorless base around it
 
 		return { "x": x, "z": z, "angle": bestAngle, "base": baseIndex, "access": bestLand };
 	}

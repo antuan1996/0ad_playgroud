@@ -6,7 +6,7 @@ import { getAttackBonus, getBestBase, getLandAccess, returnResources, requireVal
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
-import { seconds } from "../adapter/brands.ts";
+import { NO_BASE, seconds } from "../adapter/brands.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 
 /**
@@ -29,7 +29,7 @@ export type SerializedVictoryManager = {
 	healersPerCriticalEnt: number;
 	tryCaptureGaiaRelic: boolean;
 	tryCaptureGaiaRelicLapseTime: GameSeconds;
-	targetedGaiaRelics: Map<EntityId, number[]>;
+	targetedGaiaRelics: Map<EntityId, AttackPlanId[]>;
 };
 
 export class VictoryManager
@@ -39,7 +39,7 @@ export class VictoryManager
 	guardEnts: Map<EntityId, boolean>;
 	healersPerCriticalEnt: number;
 	/** Gaia relics we are after, each with the attack plans raiding it; changed only here. */
-	private targetedGaiaRelics: Map<EntityId, number[]>;
+	private targetedGaiaRelics: Map<EntityId, AttackPlanId[]>;
 	tryCaptureGaiaRelic: boolean;
 	tryCaptureGaiaRelicLapseTime: GameSeconds;
 
@@ -396,7 +396,7 @@ export class VictoryManager
 
 			const template = gameState.applyCiv("units/{civ}/support_healer_b");
 			queues.healer.addPlan(new TrainingPlan(gameState, template,
-				{ "role": Worker.ROLE_CRITICAL_ENT_HEALER, "base": 0 }, 1, 1));
+				{ "role": Worker.ROLE_CRITICAL_ENT_HEALER, "base": NO_BASE }, 1, 1));
 			return;
 		}
 	}
@@ -705,7 +705,7 @@ export class VictoryManager
 			// And look for some new gaia relics visible by any of our units
 			// or that may be on our territory
 			const allGaiaRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"))
-				.filter((relic: CommonEntity): boolean => relic.owner() === 0);
+				.filter((relic) => relic.owner() === 0);
 			for (const relic of allGaiaRelics.values())
 			{
 				const relicPosition = relic.position();
@@ -762,7 +762,7 @@ export class VictoryManager
 			return;
 		const relicPosition = relic.position();
 		const access = getLandAccess(gameState, relic);
-		const units = gameState.getOwnUnits().filter((ent: CommonEntity): boolean =>
+		const units = gameState.getOwnUnits().filter((ent) =>
 		{
 			if (!ent.position() || !ent.canCapture(relic))
 				return false;
@@ -829,7 +829,7 @@ export class VictoryManager
 	}
 
 	/** An attack plan that chose a gaia relic as its target raids it, alone. */
-	planRelicRaid(relicId: EntityId, plan: number): void
+	planRelicRaid(relicId: EntityId, plan: AttackPlanId): void
 	{
 		this.targetedGaiaRelics.set(relicId, [plan]);
 	}

@@ -226,11 +226,11 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 }
 
 /** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
+export function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 {
 	const width = map.width;
 	const cell = map.cellSize;
-	gameState.getEntities().forEach((ent: CommonEntity): void =>
+	gameState.getEntities().forEach((ent) =>
 	{
 		const pos = ent.position();
 		if (!pos)

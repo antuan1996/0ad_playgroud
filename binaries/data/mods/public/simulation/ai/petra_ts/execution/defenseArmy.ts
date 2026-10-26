@@ -4,7 +4,7 @@ import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue,
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
-import { playerId, worldPos } from "../adapter/brands.ts";
+import { armyId, playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 import { lentPlan, releasedPlan } from "./unitPlan.ts";
 
@@ -23,7 +23,7 @@ export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePositi
 export class DefenseArmy
 {
 	Config: Config;
-	ID: number;
+	ID: ArmyId;
 	assignedAgainst: Record<number, EntityId[]>;
 	assignedTo: Record<number, EntityId | 0>;
 	breakawaySize: number;
@@ -38,7 +38,7 @@ export class DefenseArmy
 
 	constructor(gameState: CommonGameState, foeEntities: EntityId[], type?: string)
 	{
-		this.ID = gameState.ai.uniqueIDs.armies++;
+		this.ID = armyId(gameState.ai.uniqueIDs.armies++);
 		this.type = type || "default";
 
 		this.Config = gameState.ai.Config;

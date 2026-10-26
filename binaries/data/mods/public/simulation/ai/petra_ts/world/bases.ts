@@ -16,7 +16,7 @@ export type SupplyBands = Readonly<Record<string, Readonly<Record<string, Readon
 /** What a base is, for reading. */
 export interface BaseView
 {
-	readonly ID: number;
+	readonly ID: BaseId;
 	/** The land the base stands on; undefined for the baseless pool. */
 	readonly accessIndex: AccessIndex | undefined;
 	readonly anchor: CommonEntity | undefined;
@@ -24,7 +24,7 @@ export interface BaseView
 	readonly resources: { readonly dropsiteSupplies: SupplyBands };
 	/** How many of our gatherers this turn are booked on `supply` beyond what the engine counts. */
 	GetTCGatherer(supply: EntityId): number;
-	workersBySubrole(gameState: CommonGameState, subrole: string): CommonEntityCollection;
+	workersBySubrole(gameState: CommonGameState, subrole: WorkerSubrole): CommonEntityCollection;
 	/** The base's workers (a live collection the base keeps up to date). */
 	readonly workers: CommonEntityCollection;
 	/** Where a dropsite for `resource` of this template would serve the base best (a search; it changes nothing). */

@@ -4,9 +4,9 @@ import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
 import { BaseManager, type SerializedBaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
-import { getBestBase, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
+import { getBestBase, getLandAccess } from "../adapter/entityExtend.ts";
 import { Worker } from "../execution/worker.ts";
-import { NO_LAND, worldPos } from "../adapter/brands.ts";
+import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
 import { requireStateName } from "../adapter/unitState.ts";
 
 export interface SerializedBasesManager {
@@ -76,18 +76,6 @@ export class BasesManager
 		for (const base of this.baseManagers)
 			for (const j of base.territoryIndices)
 				this.basesMap.map[j] = base.ID;
-
-		for (const ent of gameState.getOwnEntities().values())
-		{
-			if (!ent.resourceDropsiteTypes() || !ent.hasClass("Structure"))
-				continue;
-			// Entities which have been built or have changed ownership after the last AI turn have no base.
-			// they will be dealt with in the next checkEvents
-			const baseID = ent.getMetadata(PlayerID, "base");
-			if (baseID === undefined)
-				continue;
-			const base = this.getBaseByID(baseID);
-		}
 	}
 
 	/**
@@ -214,7 +202,7 @@ export class BasesManager
 			if (!ent || ent.owner() !== PlayerID || ent.foundationProgress() === undefined)
 				continue;
 
-			if (ent.getMetadata(PlayerID, "base") === -1)	// Standard base around a cc
+			if (ent.getMetadata(PlayerID, "base") === NEW_BASE)	// Standard base around a cc
 			{
 				// Okay so let's try to create a new base around this.
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
@@ -222,7 +210,7 @@ export class BasesManager
 				const builders = this.bulkPickWorkers(gameState, newbase, 10);
 				if (builders !== false)
 				{
-					builders.forEach((worker: CommonEntity): void =>
+					builders.forEach((worker) =>
 					{
 						worker.setMetadata(PlayerID, "base", newbase.ID);
 						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -230,14 +218,14 @@ export class BasesManager
 					});
 				}
 			}
-			else if (ent.getMetadata(PlayerID, "base") === -2)	// anchorless base around a dock
+			else if (ent.getMetadata(PlayerID, "base") === NEW_ANCHORLESS_BASE)	// anchorless base around a dock
 			{
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 				// Let's get a few units from other bases there to build this.
 				const builders = this.bulkPickWorkers(gameState, newbase, 4);
 				if (builders !== false)
 				{
-					builders.forEach((worker: CommonEntity): void =>
+					builders.forEach((worker) =>
 					{
 						worker.setMetadata(PlayerID, "base", newbase.ID);
 						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -574,7 +562,7 @@ export class BasesManager
 	 * @param {number} baseID
 	 * @return {Object} - The base corresponding to baseID.
 	 */
-	getBaseByID(baseID: number): BaseManager | undefined
+	getBaseByID(baseID: BaseId): BaseManager | undefined
 	{
 		if (this.noBase.ID === baseID)
 			return this.noBase;
@@ -671,9 +659,10 @@ export class BasesManager
 	 * @param {number} territoryIndex
 	 * @return {number} - The ID of the base at the given territory index.
 	 */
-	baseAtIndex(territoryIndex: CellIndex<"territory">): number
+	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId
 	{
-		return this.basesMap.map[territoryIndex];
+		// the map holds base ids, NO_BASE where no base claims the cell
+		return baseId(this.basesMap.map[territoryIndex]);
 	}
 
 	/**
@@ -681,8 +670,8 @@ export class BasesManager
 	 */
 	removeBaseFromTerritoryIndex(territoryIndex: CellIndex<"territory">): void
 	{
-		const baseID = this.basesMap.map[territoryIndex];
-		if (baseID === 0)
+		const baseID = this.baseAtIndex(territoryIndex);
+		if (baseID === NO_BASE)
 			return;
 		const base = this.getBaseByID(baseID);
 		if (base)

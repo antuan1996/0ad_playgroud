@@ -1,7 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { aiWarn } from "simulation/ai/common-api/utils.js";
-import { QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 import { hqOf } from "./hq.ts";
 
@@ -11,7 +10,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 	declare maxMerge: number;
 	declare trainers: CommonEntity[] | undefined;
 
-	constructor(gameState: CommonGameState, type: string, metadata?: Record<string, unknown>,
+	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		number: number = 1, maxMerge: number = 5)
 	{
 		const name = gameState.applyCiv(type);
@@ -80,10 +79,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 
 		if (this.metadata && this.metadata.trainer)
 		{
-			const metadata: Record<string, unknown> = {};
-			for (const key in this.metadata)
-				if (key !== "trainer")
-					metadata[key] = this.metadata[key];
+			const { trainer, ...metadata } = this.metadata;
 			this.metadata = metadata;
 		}
 
@@ -170,7 +166,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 		category: "unit";
 		type: TemplateName;
 		ID: number;
-		metadata: Record<string, unknown> | undefined;
+		metadata: PlanMetadata | undefined;
 		cost: { amounts: Record<string, number>; population: number };
 		number: number;
 		maxMerge: number;

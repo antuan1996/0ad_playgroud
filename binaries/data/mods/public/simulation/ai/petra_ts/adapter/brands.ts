@@ -79,6 +79,31 @@ export function techName(value: string): TechName
 	return value as TechName;
 }
 
+/** A number known to be a base manager's id. */
+export function baseId(value: number): BaseId
+{
+	return value as BaseId;
+}
+
+/** No base: 0, as a unit's or a plan's `base` before it has one ("the trainer's base" in a training plan). */
+export const NO_BASE: BaseId = baseId(0);
+/** A civic centre's foundation that founds a new base once built (basesManager). */
+export const NEW_BASE: BaseId = baseId(-1);
+/** A dock's foundation that founds a new base without an anchor once built. */
+export const NEW_ANCHORLESS_BASE: BaseId = baseId(-2);
+
+/** A number known to be a defense army's id. */
+export function armyId(value: number): ArmyId
+{
+	return value as ArmyId;
+}
+
+/** A number known to be a transport plan's id. */
+export function transportPlanId(value: number): TransportPlanId
+{
+	return value as TransportPlanId;
+}
+
 /** A number known to be an attack plan's name. */
 export function attackPlanId(value: number): AttackPlanId
 {

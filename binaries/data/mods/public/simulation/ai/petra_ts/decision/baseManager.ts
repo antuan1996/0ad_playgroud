@@ -9,7 +9,7 @@ import { BaseResources } from "../world/baseResources.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { Worker } from "../execution/worker.ts";
-import { NO_TEMPLATE, seconds, worldPos } from "../adapter/brands.ts";
+import { NO_TEMPLATE, baseId, seconds, worldPos } from "../adapter/brands.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
@@ -35,7 +35,7 @@ export type ResourceSupply = {
 };
 
 export type SerializedBaseManager = {
-	ID: number;
+	ID: BaseId;
 	anchorId: EntityId | undefined;
 	accessIndex: AccessIndex | undefined;
 	maxDistResourceSquare: number;
@@ -50,7 +50,7 @@ export type SerializedBaseManager = {
 export class BaseManager
 {
 	Config: Config;
-	ID: number;
+	ID: BaseId;
 	accessIndex: AccessIndex | undefined;
 	anchor: CommonEntity | undefined;
 	anchorId: EntityId | undefined;
@@ -76,7 +76,7 @@ export class BaseManager
 	constructor(gameState: CommonGameState, basesManager: BasesManager)
 	{
 		this.Config = basesManager.Config;
-		this.ID = gameState.ai.uniqueIDs.bases++;
+		this.ID = baseId(gameState.ai.uniqueIDs.bases++);
 		this.basesManager = basesManager;
 		// init() makes it afresh; here so that a base read back from a save has one before init
 		this.resources = new BaseResources();
@@ -503,7 +503,7 @@ export class BaseManager
 			// I use some logarithms.
 			// TODO: this should take into account for unit speed and/or distance to target
 
-			this.gatherersByType(gameState, res).forEach((ent: CommonEntity): void =>
+			this.gatherersByType(gameState, res).forEach((ent) =>
 			{
 				if (ent.isIdle() || !ent.position())
 					return;
@@ -513,7 +513,7 @@ export class BaseManager
 			});
 			if (res === "food")
 			{
-				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent: CommonEntity): void =>
+				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent) =>
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
@@ -521,7 +521,7 @@ export class BaseManager
 					if (gRate)
 						currentRates[res] += Math.log(1+gRate)/1.1;
 				});
-				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent: CommonEntity): void =>
+				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent) =>
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
@@ -695,7 +695,7 @@ export class BaseManager
 		}
 	}
 
-	workersBySubrole(gameState: CommonGameState, subrole: string): CommonEntityCollection
+	workersBySubrole(gameState: CommonGameState, subrole: WorkerSubrole): CommonEntityCollection
 	{
 		return gameState.updatingCollection("subrole-" + subrole +"-base-" + this.ID,
 			filters.byMetadata(PlayerID, "subrole", subrole), this.workers);
@@ -714,7 +714,7 @@ export class BaseManager
 	 */
 	pickBuilders(gameState: CommonGameState, workers: CommonEntityCollection, number: number): void
 	{
-		const availableWorkers = this.workers.filter((ent: CommonEntity): boolean =>
+		const availableWorkers = this.workers.filter((ent) =>
 		{
 			if (!ent.position() || !ent.isBuilder())
 				return false;
@@ -756,13 +756,13 @@ export class BaseManager
 		let foundations = this.buildings.filter(filters.and(filters.isFoundation(),
 			filters.not(filters.byClass("Field"))));
 
-		const damagedBuildings = this.buildings.filter((ent: CommonEntity): boolean => ent.foundationProgress() === undefined && ent.needsRepair());
+		const damagedBuildings = this.buildings.filter((ent) => ent.foundationProgress() === undefined && ent.needsRepair());
 
 		// Check if nothing to build
 		if (!foundations.length && !damagedBuildings.length)
 			return;
 
-		const workers = this.workers.filter((ent: CommonEntity): boolean => ent.isBuilder());
+		const workers = this.workers.filter((ent) => ent.isBuilder());
 		const builderWorkers = this.workersBySubrole(gameState, Worker.SUBROLE_BUILDER);
 		const idleBuilderWorkers = builderWorkers.filter(filters.isIdle());
 
@@ -772,7 +772,7 @@ export class BaseManager
 		{
 			foundations = foundations.filter(filters.byMetadata(PlayerID, "baseAnchor", true));
 			const tID = foundations.toEntityArray()[0].id();
-			workers.forEach((ent: CommonEntity): void =>
+			workers.forEach((ent) =>
 			{
 				const target = ent.getMetadata(PlayerID, "target-foundation");
 				if (target && target !== tID)
@@ -789,7 +789,7 @@ export class BaseManager
 			if (fromOtherBase)
 			{
 				const baseID = this.ID;
-				fromOtherBase.forEach((worker: CommonEntity): void =>
+				fromOtherBase.forEach((worker) =>
 				{
 					worker.setMetadata(PlayerID, "base", baseID);
 					worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);

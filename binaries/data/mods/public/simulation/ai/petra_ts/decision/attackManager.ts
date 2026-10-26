@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { ATTACK_TYPES, AttackPlan, type AttackType, type SerializedAttackPlan, byAttackType } from "../execution/attackPlan.ts";
+import { ATTACK_TYPES, AttackPlan, type AttackType, type SerializedAttackPlan, byAttackType, plansIn } from "../execution/attackPlan.ts";
 import * as chat from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
@@ -8,6 +8,7 @@ import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExte
 import { Worker } from "../execution/worker.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 export type SerializedAttackManager = {
     properties: {
@@ -88,41 +89,35 @@ export class AttackManager
 				continue;
 			targetPlayer = evt.player;
 			let available = 0;
-			for (const attackType of ATTACK_TYPES)
+			for (const attack of plansIn(this.upcomingAttacks))
 			{
-				for (const attack of this.upcomingAttacks[attackType])
+				if (attack.state === AttackPlan.STATE_COMPLETING)
 				{
-					if (attack.state === AttackPlan.STATE_COMPLETING)
-					{
-						if (attack.targetPlayer === targetPlayer)
-							available += attack.unitCollection.length;
-						else if (attack.targetPlayer !== undefined && attack.targetPlayer !== targetPlayer)
-							other = attack.targetPlayer;
-						continue;
-					}
-
-					attack.targetPlayer = targetPlayer;
-
-					if (attack.unitCollection.length > 2)
+					if (attack.targetPlayer === targetPlayer)
 						available += attack.unitCollection.length;
+					else if (attack.targetPlayer !== undefined && attack.targetPlayer !== targetPlayer)
+						other = attack.targetPlayer;
+					continue;
 				}
+
+				attack.targetPlayer = targetPlayer;
+
+				if (attack.unitCollection.length > 2)
+					available += attack.unitCollection.length;
 			}
 
 			if (available > 12)	// launch the attack immediately
 			{
-				for (const attackType of ATTACK_TYPES)
+				for (const attack of plansIn(this.upcomingAttacks))
 				{
-					for (const attack of this.upcomingAttacks[attackType])
-					{
-						// every non-completing attack was re-aimed at targetPlayer by the
-						// loop above, so the original targetPlayer re-check here could
-						// never fire and was dropped
-						if (attack.state === AttackPlan.STATE_COMPLETING ||
-							attack.unitCollection.length < 3)
-							continue;
-						attack.forceStart();
-						attack.requested = true;
-					}
+					// every non-completing attack was re-aimed at targetPlayer by the
+					// loop above, so the original targetPlayer re-check here could
+					// never fire and was dropped
+					if (attack.state === AttackPlan.STATE_COMPLETING ||
+						attack.unitCollection.length < 3)
+						continue;
+					attack.forceStart();
+					attack.requested = true;
 				}
 				answer = "join";
 			}
@@ -330,11 +325,8 @@ export class AttackManager
 				}
 				else if (updateStep === AttackPlan.PREPARATION_FAILED)
 				{
-					if (this.Config.debug > 1)
-					{
-						aiWarn("Attack Manager: " + attack.getType() + " plan " + attack.getName() +
-							" aborted.");
-					}
+					debugWarn(this.Config, 1, () => "Attack Manager: " + attack.getType() + " plan " + attack.getName() +
+						" aborted.");
 					attack.Abort(gameState);
 					this.upcomingAttacks[attackType].splice(i--, 1);
 				}
@@ -342,11 +334,8 @@ export class AttackManager
 				{
 					if (attack.StartAttack(gameState))
 					{
-						if (this.Config.debug > 1)
-						{
-							aiWarn("Attack Manager: Starting " + attack.getType() + " plan " +
-								attack.getName());
-						}
+						debugWarn(this.Config, 1, () => "Attack Manager: Starting " + attack.getType() + " plan " +
+							attack.getName());
 						if (this.Config.chat)
 							chat.launchAttack(gameState, requireValue(attack.targetPlayer), attack.getType());
 						this.startedAttacks[attackType].push(attack);
@@ -370,11 +359,8 @@ export class AttackManager
 				const remaining = attack.update(gameState, events);
 				if (!remaining)
 				{
-					if (this.Config.debug > 1)
-					{
-						aiWarn("Military Manager: " + attack.getType() + " plan " +
-							attack.getName() + " is finished with remaining " + remaining);
-					}
+					debugWarn(this.Config, 1, () => "Military Manager: " + attack.getType() + " plan " +
+						attack.getName() + " is finished with remaining " + remaining);
 					attack.Abort(gameState);
 					this.startedAttacks[attackType].splice(i--, 1);
 				}
@@ -394,11 +380,8 @@ export class AttackManager
 					AttackPlan.TYPE_RUSH, data, false);
 				if (!attackPlan.failed)
 				{
-					if (this.Config.debug > 1)
-					{
-						aiWarn("Military Manager: Rushing plan " + this.totalNumber +
-							" with maxRushes " + this.maxRushes);
-					}
+					debugWarn(this.Config, 1, () => "Military Manager: Rushing plan " + this.totalNumber +
+						" with maxRushes " + this.maxRushes);
 					this.totalNumber++;
 					attackPlan.init(gameState);
 					this.upcomingAttacks[AttackPlan.TYPE_RUSH].push(attackPlan);
@@ -428,11 +411,8 @@ export class AttackManager
 				// on failure; nothing ever read it, so the port drops the dead write
 				if (!attackPlan.failed)
 				{
-					if (this.Config.debug > 1)
-					{
-						aiWarn("Military Manager: Creating the plan " + type + "  " +
-							this.totalNumber);
-					}
+					debugWarn(this.Config, 1, () => "Military Manager: Creating the plan " + type + "  " +
+						this.totalNumber);
 					this.totalNumber++;
 					attackPlan.init(gameState);
 					this.upcomingAttacks[type].push(attackPlan);
@@ -463,25 +443,19 @@ export class AttackManager
 			this.assignBombers(gameState);
 	}
 
-	getPlan(planName: number): AttackPlan | undefined
+	getPlan(planName: UnitPlan | undefined): AttackPlan | undefined
 	{
-		for (const attackType of ATTACK_TYPES)
-		{
-			for (const attack of this.upcomingAttacks[attackType])
-				if (attack.getName() === planName)
-					return attack;
-		}
-		for (const attackType of ATTACK_TYPES)
-		{
-			for (const attack of this.startedAttacks[attackType])
-				if (attack.getName() === planName)
-					return attack;
-		}
+		for (const attack of plansIn(this.upcomingAttacks))
+			if (attack.getName() === planName)
+				return attack;
+		for (const attack of plansIn(this.startedAttacks))
+			if (attack.getName() === planName)
+				return attack;
 		return undefined;
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	pausePlan(planName: number): void
+	pausePlan(planName: AttackPlanId): void
 	{
 		const attack = this.getPlan(planName);
 		if (attack)
@@ -489,7 +463,7 @@ export class AttackManager
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	unpausePlan(planName: number): void
+	unpausePlan(planName: AttackPlanId): void
 	{
 		const attack = this.getPlan(planName);
 		if (attack)
@@ -499,25 +473,21 @@ export class AttackManager
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pauseAllPlans(): void
 	{
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.upcomingAttacks[attackType])
-				attack.setPaused(true);
+		for (const attack of plansIn(this.upcomingAttacks))
+			attack.setPaused(true);
 
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.startedAttacks[attackType])
-				attack.setPaused(true);
+		for (const attack of plansIn(this.startedAttacks))
+			attack.setPaused(true);
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpauseAllPlans(): void
 	{
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.upcomingAttacks[attackType])
-				attack.setPaused(false);
+		for (const attack of plansIn(this.upcomingAttacks))
+			attack.setPaused(false);
 
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.startedAttacks[attackType])
-				attack.setPaused(false);
+		for (const attack of plansIn(this.startedAttacks))
+			attack.setPaused(false);
 	}
 
 	getAttackInPreparation(type: AttackType): AttackPlan | undefined
@@ -692,7 +662,7 @@ export class AttackManager
 			    i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
 				continue;
 
-			const relicsCount = allRelics.filter((relic: CommonEntity): boolean => relic.owner() === i).length;
+			const relicsCount = allRelics.filter((relic) => relic.owner() === i).length;
 			if (relicsCount <= maxRelicsOwned)
 				continue;
 			maxRelicsOwned = relicsCount;
@@ -711,10 +681,9 @@ export class AttackManager
 	/** f.e. if we have changed diplomacy with another player. */
 	cancelAttacksAgainstPlayer(gameState: CommonGameState, player: PlayerId): void
 	{
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.upcomingAttacks[attackType])
-				if (attack.targetPlayer === player)
-					attack.targetPlayer = undefined;
+		for (const attack of plansIn(this.upcomingAttacks))
+			if (attack.targetPlayer === player)
+				attack.targetPlayer = undefined;
 
 		for (const attackType of ATTACK_TYPES)
 			for (let i = 0; i < this.startedAttacks[attackType].length; ++i)
@@ -735,8 +704,7 @@ export class AttackManager
 			AttackPlan.TYPE_RAID, data, false);
 		if (attackPlan.failed)
 			return undefined;
-		if (this.Config.debug > 1)
-			aiWarn("Military Manager: Raiding plan " + this.totalNumber);
+		debugWarn(this.Config, 1, () => "Military Manager: Raiding plan " + this.totalNumber);
 		this.raidNumber++;
 		this.totalNumber++;
 		attackPlan.init(gameState);
@@ -750,14 +718,13 @@ export class AttackManager
 	numAttackingUnitsAround(pos: CommonPosition, dist: number): number
 	{
 		let num = 0;
-		for (const attackType of ATTACK_TYPES)
-			for (const attack of this.startedAttacks[attackType])
-			{
-				if (!attack.position)	// this attack may be inside a transport
-					continue;
-				if (SquareVectorDistance(pos, attack.position) < dist*dist)
-					num += attack.unitCollection.length;
-			}
+		for (const attack of plansIn(this.startedAttacks))
+		{
+			if (!attack.position)	// this attack may be inside a transport
+				continue;
+			if (SquareVectorDistance(pos, attack.position) < dist*dist)
+				num += attack.unitCollection.length;
+		}
 		return num;
 	}
 
@@ -767,7 +734,7 @@ export class AttackManager
 	 * data.armyID: transform only the defense army ID into a new attack
 	 * data.uniqueTarget: the attack will stop when the target is destroyed or captured
 	 */
-	switchDefenseToAttack(gameState: CommonGameState, target: CommonEntity, data: { range?: number; armyID?: number; uniqueTarget?: boolean }): boolean
+	switchDefenseToAttack(gameState: CommonGameState, target: CommonEntity, data: { range?: number; armyID?: ArmyId; uniqueTarget?: boolean }): boolean
 	{
 		if (!target || !target.position())
 			return false;

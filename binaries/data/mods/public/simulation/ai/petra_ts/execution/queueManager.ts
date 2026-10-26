@@ -6,6 +6,7 @@ import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
 import { hqOf } from "./hq.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 /**
  * This takes the input queues and picks which items to fund with resources until no more resources are left to distribute.
@@ -234,7 +235,7 @@ export class QueueManager
 	printQueues(gameState: CommonGameState): void
 	{
 		let numWorkers = 0;
-		gameState.getOwnUnits().forEach((ent: CommonEntity): void =>
+		gameState.getOwnUnits().forEach((ent) =>
 		{
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER &&
 				ent.getMetadata(PlayerID, "plan") === undefined)
@@ -426,11 +427,8 @@ export class QueueManager
 				this.accounts[j][res] += diff;
 				this.accounts[i][res] -= diff;
 				++otherQueue.switched;
-				if (this.Config.debug > 2)
-				{
-					aiWarn("switching queue " + res + " from " + i + " to " + j + " in amount " +
-						diff);
-				}
+				debugWarn(this.Config, 2, () => "switching queue " + res + " from " + i + " to " + j + " in amount " +
+					diff);
 				break;
 			}
 		}
@@ -636,13 +634,10 @@ export class QueueManager
 		return this.priorities[queueName];
 	}
 
-	changePriority(queueName: PetraRuntime.QueueName, newPriority: number, metadata?: Record<string, unknown>): void
+	changePriority(queueName: PetraRuntime.QueueName, newPriority: number): void
 	{
-		if (this.Config.debug > 1)
-		{
-			aiWarn(">>> Priority of queue " + queueName + " changed from " + this.priorities[queueName] +
-				" to " + newPriority);
-		}
+		debugWarn(this.Config, 1, () => ">>> Priority of queue " + queueName + " changed from " + this.priorities[queueName] +
+			" to " + newPriority);
 		if (this.queues[queueName] !== undefined)
 			this.priorities[queueName] = newPriority;
 		this.queueArrays = sortedQueues(this.queues, this.priorities);

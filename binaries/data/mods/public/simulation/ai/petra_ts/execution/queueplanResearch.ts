@@ -1,5 +1,5 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { hqOf } from "./hq.ts";
 
 export class ResearchPlan extends QueuePlan<CommonTechnology>
@@ -92,7 +92,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology>
 		category: "technology";
 		type: TechName;
 		ID: number;
-		metadata: Record<string, unknown> | undefined;
+		metadata: PlanMetadata | undefined;
 		cost: { amounts: Record<string, number>; population: number };
 		number: number;
 		rush: boolean;

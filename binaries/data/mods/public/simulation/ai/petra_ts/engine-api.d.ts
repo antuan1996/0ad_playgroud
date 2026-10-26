@@ -95,6 +95,12 @@ type TemplateName = string & { readonly __brand: "TemplateName" };
  * this name returns a Technology, not a Template.
  */
 type TechName = string & { readonly __brand: "TechName" };
+/** A base manager's id, numbered from 1; 0 (NO_BASE) is "no base" (adapter/brands.ts). */
+type BaseId = number & { readonly __brand: "BaseId" };
+/** A defense army's id, numbered from 1. */
+type ArmyId = number & { readonly __brand: "ArmyId" };
+/** A transport plan's id, numbered from 1 (a plan, not the ship). */
+type TransportPlanId = number & { readonly __brand: "TransportPlanId" };
 /** An attack plan's name, numbered from 0 by the attack manager (not an entity id). */
 type AttackPlanId = number & { readonly __brand: "AttackPlanId" };
 /**

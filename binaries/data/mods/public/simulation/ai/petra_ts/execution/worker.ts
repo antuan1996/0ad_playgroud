@@ -1,5 +1,5 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAccess, isFastMoving,
 	isSupplyFull, requireValue, returnResources } from "../adapter/entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
@@ -9,6 +9,7 @@ import { GAIA, INVALID_ENTITY, NO_REGION, seconds } from "../adapter/brands.ts";
 import { requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
 import { hqOf } from "./hq.ts";
 import { isLent } from "./unitPlan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
@@ -17,7 +18,7 @@ export class Worker
 {
 	base: WorkerBase;
 	declare baseAccess: AccessIndex;
-	baseID: number;
+	baseID: BaseId;
 	declare ent: CommonEntity;
 	declare entAccess: AccessIndex;
 
@@ -27,23 +28,23 @@ export class Worker
 		this.baseID = base.ID;
 	}
 
-	static ROLE_ATTACK = "attack";
-	static ROLE_TRADER = "trader";
-	static ROLE_SWITCH_TO_TRADER = "switchToTrader";
-	static ROLE_WORKER = "worker";
-	static ROLE_CRITICAL_ENT_GUARD = "criticalEntGuard";
-	static ROLE_CRITICAL_ENT_HEALER = "criticalEntHealer";
+	static readonly ROLE_ATTACK = "attack";
+	static readonly ROLE_TRADER = "trader";
+	static readonly ROLE_SWITCH_TO_TRADER = "switchToTrader";
+	static readonly ROLE_WORKER = "worker";
+	static readonly ROLE_CRITICAL_ENT_GUARD = "criticalEntGuard";
+	static readonly ROLE_CRITICAL_ENT_HEALER = "criticalEntHealer";
 
-	static SUBROLE_DEFENDER = "defender";
-	static SUBROLE_IDLE = "idle";
-	static SUBROLE_BUILDER = "builder";
-	static SUBROLE_COMPLETING = "completing";
-	static SUBROLE_WALKING = "walking";
-	static SUBROLE_ATTACKING = "attacking";
-	static SUBROLE_GATHERER = "gatherer";
-	static SUBROLE_HUNTER = "hunter";
-	static SUBROLE_FISHER = "fisher";
-	static SUBROLE_GARRISONING = "garrisoning";
+	static readonly SUBROLE_DEFENDER = "defender";
+	static readonly SUBROLE_IDLE = "idle";
+	static readonly SUBROLE_BUILDER = "builder";
+	static readonly SUBROLE_COMPLETING = "completing";
+	static readonly SUBROLE_WALKING = "walking";
+	static readonly SUBROLE_ATTACKING = "attacking";
+	static readonly SUBROLE_GATHERER = "gatherer";
+	static readonly SUBROLE_HUNTER = "hunter";
+	static readonly SUBROLE_FISHER = "fisher";
+	static readonly SUBROLE_GARRISONING = "garrisoning";
 
 	update(gameState: CommonGameState, ent: CommonEntity): void
 	{
@@ -469,7 +470,7 @@ export class Worker
 		}
 	}
 
-	retryWorking(gameState: CommonGameState, subrole: string): boolean
+	retryWorking(gameState: CommonGameState, subrole: WorkerSubrole | undefined): boolean
 	{
 		switch (subrole)
 		{
@@ -646,7 +647,7 @@ export class Worker
 		// Okay may-be we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any accessible foundation available
 		const foundations = gameState.getOwnFoundations().toEntityArray();
-		let shouldBuild = this.ent.isBuilder() && foundations.some((foundation: CommonEntity): boolean =>
+		let shouldBuild = this.ent.isBuilder() && foundations.some((foundation) =>
 		{
 			if (!foundation || getLandAccess(gameState, foundation) !== this.entAccess)
 				return false;
@@ -714,7 +715,7 @@ export class Worker
 		}
 		// Okay so we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any non-accessible foundation available
-		shouldBuild = this.ent.isBuilder() && foundations.some((foundation: CommonEntity): boolean =>
+		shouldBuild = this.ent.isBuilder() && foundations.some((foundation) =>
 		{
 			if (!foundation || getLandAccess(gameState, foundation) === this.entAccess)
 				return false;
@@ -784,8 +785,7 @@ export class Worker
 
 		// If we are here, we have nothing left to gather ... certainly no more resources of this type
 		hqOf(gameState).noteNothingToGather(resource, gameState.ai.elapsedTime);
-		if (gameState.ai.Config.debug > 2)
-			aiWarn(" >>>>> worker with gather-type " + resource + " with nothing to gather ");
+		debugWarn(gameState.ai.Config, 2, () => " >>>>> worker with gather-type " + resource + " with nothing to gather ");
 		this.ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
 		return false;
 	}
@@ -946,7 +946,7 @@ export class Worker
 
 		let exhausted = true;
 		const gatherRates = requireValue(this.ent.resourceGatherRates());
-		resources.forEach((supply: CommonEntity): void =>
+		resources.forEach((supply) =>
 		{
 			if (!supply.position())
 				return;
@@ -1001,7 +1001,7 @@ export class Worker
 		return false;
 	}
 
-	gatherNearestField(gameState: CommonGameState, baseID: number): CommonEntity | false
+	gatherNearestField(gameState: CommonGameState, baseID: BaseId): CommonEntity | false
 	{
 		const ownFields = gameState.getOwnEntitiesByClass("Field", true).filter(filters.isBuilt())
 			.filter(filters.byMetadata(PlayerID, "base", baseID));
@@ -1045,7 +1045,7 @@ export class Worker
 	 * WARNING with the present options of AI orders, the unit will not gather after building the farm.
 	 * This is done by calling the gatherNearestField function when construction is completed.
 	 */
-	buildAnyField(gameState: CommonGameState, baseID: number): CommonEntity | false
+	buildAnyField(gameState: CommonGameState, baseID: BaseId): CommonEntity | false
 	{
 		if (!this.ent.isBuilder())
 			return false;

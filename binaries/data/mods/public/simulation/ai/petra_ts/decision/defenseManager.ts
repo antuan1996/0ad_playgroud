@@ -18,6 +18,7 @@ import type { Config } from "./config.ts";
 import { playerId } from "../adapter/brands.ts";
 import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import { debugWarn } from "../adapter/debug.ts";
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
 	Attacked: Array<{ target: EntityId; attacker: EntityId }>;
@@ -113,7 +114,7 @@ export class DefenseManager
 		this.armies.push(new DefenseArmy(gameState, [entityID], type));
 	}
 
-	getArmy(partOfArmy: number): DefenseArmy | undefined
+	getArmy(partOfArmy: ArmyId): DefenseArmy | undefined
 	{
 		return this.armies.find((army: DefenseArmy): boolean => army.ID === partOfArmy);
 	}
@@ -403,8 +404,7 @@ export class DefenseManager
 					continue;
 				if (SquareVectorDistance(base.position(), army.foePosition) > 40000)
 					continue;
-				if (this.Config.debug > 1)
-					aiWarn("army in neutral territory, but still near one of our CC");
+				debugWarn(this.Config, 1, () => "army in neutral territory, but still near one of our CC");
 				stillDangerous = true;
 				break;
 			}
@@ -837,7 +837,7 @@ export class DefenseManager
 			else
 				allowMelee = true;
 		}
-		const units = gameState.getOwnUnits().filter((ent: CommonEntity): boolean =>
+		const units = gameState.getOwnUnits().filter((ent) =>
 			{
 			const entAttackTypes = ent.attackTypes();
 			if (!ent.position())

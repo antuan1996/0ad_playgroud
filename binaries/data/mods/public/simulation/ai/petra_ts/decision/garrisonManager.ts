@@ -1,5 +1,5 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { dumpEntity, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
+import { dumpEntity, isSiegeUnit } from "../adapter/entityExtend.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { hasActivity } from "../adapter/unitState.ts";
