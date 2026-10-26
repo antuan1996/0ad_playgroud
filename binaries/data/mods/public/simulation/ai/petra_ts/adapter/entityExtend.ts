@@ -1,6 +1,7 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import type { BaseManager } from "../decision/baseManager.ts";
 import { worldPos } from "./brands.ts";
+import { attackBonuses, footprintHalves } from "./templateData.ts";
 
 /** returns true if this unit should be considered as a siege unit */
 export function isSiegeUnit(ent: CommonEntity): boolean
@@ -27,7 +28,7 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 
 	for (const type of attackTypes)
 	{
-		if (type == "Slaughter")
+		if (type === "Slaughter")
 			continue;
 
 		const attackStrength = ent.attackStrengths(type);
@@ -109,13 +110,9 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 	{
 		access = gameState.ai.accessibility.getAccessValue(ent.position());
 		// Docks are sometimes not as expected
-		if (access < 2 && ent.buildPlacementType() == "shore")
+		if (access < 2 && ent.buildPlacementType() === "shore")
 		{
-			let halfDepth = 0;
-			if (ent.get("Footprint/Square"))
-				halfDepth = +ent.get("Footprint/Square/@depth") / 2;
-			else if (ent.get("Footprint/Circle"))
-				halfDepth = +ent.get("Footprint/Circle/@radius");
+			const halfDepth = footprintHalves(ent).halfDepth;
 			const entPos = ent.position();
 			const entAngle = ent.angle();
 			const cosa = Math.cos(entAngle ?? NaN);
@@ -142,7 +139,7 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): Sea
 	{
 		sea = gameState.ai.accessibility.getAccessValue(ent.position(), true);
 		// Docks are sometimes not as expected
-		if (sea < 2 && ent.buildPlacementType() == "shore")
+		if (sea < 2 && ent.buildPlacementType() === "shore")
 		{
 			const entPos = ent.position();
 			const entAngle = ent.angle();
@@ -274,12 +271,8 @@ export function allowCapture(gameState: CommonGameState, ent: CommonEntity, targ
 export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: string): number
 {
 	let attackBonus = 1;
-	if (!ent.get("Attack/" + type) || !ent.get("Attack/" + type + "/Bonuses"))
-		return attackBonus;
-	const bonuses = ent.get("Attack/" + type + "/Bonuses");
-	for (const key in bonuses)
+	for (const bonus of attackBonuses(ent, type))
 	{
-		const bonus = bonuses[key];
 		if (bonus.Civ && bonus.Civ !== target.civ())
 			continue;
 		if (!bonus.Classes || target.hasClasses(bonus.Classes))
@@ -310,7 +303,7 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 		// owner !== PlayerID can only happen when hasSharedDropsites === true, so no need to test it again
 		if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 			continue;
-		if (getLandAccess(gameState, dropsite) != access)
+		if (getLandAccess(gameState, dropsite) !== access)
 			continue;
 		const dist = SquareVectorDistance(ent.position(), dropsite.position());
 		if (dist > distmin)
@@ -364,11 +357,11 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 	for (const base of gameState.ai.HQ.baseManagers())
 	{
 		const baseless = gameState.ai.HQ.basesManager.baselessBase();
-		if (base.ID == baseless.ID || exclude && base.ID == exclude)
+		if (base.ID === baseless.ID || exclude && base.ID === exclude)
 			continue;
 		if (onlyConstructedBase && (!base.anchor || base.anchor.foundationProgress() !== undefined))
 			continue;
-		if (ent.hasClass("Structure") && base.accessIndex != accessIndex)
+		if (ent.hasClass("Structure") && base.accessIndex !== accessIndex)
 			continue;
 		if (base.anchor && base.anchor.position())
 			dist = SquareVectorDistance(base.anchor.position(), pos);
@@ -386,7 +379,7 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 			if (!found)
 				continue;
 		}
-		if (base.accessIndex != accessIndex)
+		if (base.accessIndex !== accessIndex)
 			dist += 50000000;
 		if (!base.anchor)
 			dist += 50000000;
@@ -471,15 +464,15 @@ export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | u
 		const lastGathered = treasure.getMetadata(PlayerID, "lastGathered");
 		if (lastGathered && gameState.ai.elapsedTime - lastGathered < 20)
 			continue;
-		if (!water && access != getLandAccess(gameState, treasure))
+		if (!water && access !== getLandAccess(gameState, treasure))
 			continue;
-		if (water && access != getSeaAccess(gameState, treasure))
+		if (water && access !== getSeaAccess(gameState, treasure))
 			continue;
 		const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(treasure.position());
-		if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))
+		if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			continue;
 		const dist = SquareVectorDistance(ent.position(), treasure.position());
-		if (dist > 120000 || territoryOwner != PlayerID && dist > 14000) // AI has no LOS, so restrict it a bit
+		if (dist > 120000 || territoryOwner !== PlayerID && dist > 14000) // AI has no LOS, so restrict it a bit
 			continue;
 		if (dist > distmin)
 			continue;

@@ -6,6 +6,7 @@ import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
+import { lentPlan, releasedPlan } from "./unitPlan.ts";
 
 /** The fields a save keeps. */
 export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePosition" | "positionLastUpdate" | "assignedAgainst" | "assignedTo" | "foeEntities" | "foeStrength" | "ownEntities" | "ownStrength">;
@@ -21,19 +22,19 @@ export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePositi
  */
 export class DefenseArmy
 {
-	declare Config: Config;
-	declare ID: number;
-	declare assignedAgainst: Record<number, EntityId[]>;
-	declare assignedTo: Record<number, EntityId | 0>;
-	declare breakawaySize: number;
-	declare compactSize: number;
-	declare foeEntities: EntityId[];
-	declare foePosition: CommonPosition;
-	declare foeStrength: number;
-	declare ownEntities: EntityId[];
-	declare ownStrength: number;
-	declare positionLastUpdate: number;
-	declare type: string;
+	Config: Config;
+	ID: number;
+	assignedAgainst: Record<number, EntityId[]>;
+	assignedTo: Record<number, EntityId | 0>;
+	breakawaySize: number;
+	compactSize: number;
+	foeEntities: EntityId[];
+	foePosition: CommonPosition;
+	foeStrength: number;
+	ownEntities: EntityId[];
+	ownStrength: number;
+	positionLastUpdate: number;
+	type: string;
 
 	constructor(gameState: CommonGameState, foeEntities: EntityId[], type?: string)
 	{
@@ -111,7 +112,7 @@ export class DefenseArmy
 		delete this.assignedAgainst[enemyId];
 		// entities assigned against this foe become unassigned
 		for (const to in this.assignedTo)
-			if (this.assignedTo[to] == enemyId)
+			if (this.assignedTo[to] === enemyId)
 				this.assignedTo[to] = 0;
 
 		const ent = enemyEntity ? enemyEntity : gameState.getEntityById(enemyId);
@@ -141,11 +142,7 @@ export class DefenseArmy
 		ent.setMetadata(PlayerID, "PartOfArmy", this.ID);
 		this.assignedTo[id] = 0;
 
-		const plan = ent.getMetadata(PlayerID, "plan");
-		if (plan !== undefined)
-			ent.setMetadata(PlayerID, "plan", -2);
-		else
-			ent.setMetadata(PlayerID, "plan", -3);
+		ent.setMetadata(PlayerID, "plan", lentPlan(ent.getMetadata(PlayerID, "plan")));
 		const subrole = ent.getMetadata(PlayerID, "subrole");
 		if (subrole === undefined || subrole !== Worker.SUBROLE_DEFENDER)
 			ent.setMetadata(PlayerID, "formerSubrole", subrole);
@@ -176,10 +173,7 @@ export class DefenseArmy
 
 		this.evaluateStrength(ent, true, true);
 		ent.setMetadata(PlayerID, "PartOfArmy", undefined);
-		if (ent.getMetadata(PlayerID, "plan") === -2)
-			ent.setMetadata(PlayerID, "plan", -1);
-		else
-			ent.setMetadata(PlayerID, "plan", undefined);
+		ent.setMetadata(PlayerID, "plan", releasedPlan(ent.getMetadata(PlayerID, "plan")));
 
 		const formerSubrole = ent.getMetadata(PlayerID, "formerSubrole");
 		if (formerSubrole !== undefined)
@@ -330,7 +324,7 @@ export class DefenseArmy
 				continue;
 
 			if (eEnt.hasClass("Unit") && eEnt.unitAIOrderData() && eEnt.unitAIOrderData().length &&
-				eEnt.unitAIOrderData()[0].target && eEnt.unitAIOrderData()[0].target == entID)
+				eEnt.unitAIOrderData()[0].target && eEnt.unitAIOrderData()[0].target === entID)
 			{   // being attacked  >>> target the unit
 				idMin = id;
 				break;
@@ -370,7 +364,7 @@ export class DefenseArmy
 		const foeEnt = requireValue(gameState.getEntityById(idFoe));
 		const foePosition = foeEnt.position();
 		const foeIndex = gameState.ai.accessibility.getAccessValue(foePosition);
-		if (ownIndex == foeIndex || ent.hasClass("Ship"))
+		if (ownIndex === foeIndex || ent.hasClass("Ship"))
 		{
 			this.assignedTo[entID] = idFoe;
 			this.assignedAgainst[idFoe].push(entID);
@@ -430,14 +424,14 @@ export class DefenseArmy
 	{
 		let defenseRatio;
 		const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(this.foePosition);
-		if (territoryOwner == PlayerID)
+		if (territoryOwner === PlayerID)
 			defenseRatio = this.Config.Defense.defenseRatio.own;
 		else if (gameState.isPlayerAlly(territoryOwner))
 		{
 			defenseRatio = this.Config.Defense.defenseRatio.ally;
 			let numExclusiveAllies = 0;
 			for (let p = 1; p < gameState.sharedScript.playersData.length; ++p)
-				if (p != territoryOwner && gameState.sharedScript.playersData[p].isAlly[territoryOwner])
+				if (p !== territoryOwner && gameState.sharedScript.playersData[p].isAlly[territoryOwner])
 					++numExclusiveAllies;
 			defenseRatio /= 1 + 0.5*Math.max(0, numExclusiveAllies-1);
 		}
@@ -600,7 +594,7 @@ export class DefenseArmy
 			}
 		}
 
-		if (this.type == "capturing")
+		if (this.type === "capturing")
 		{
 			const firstFoe = gameState.getEntityById(this.foeEntities[0]);
 			if (this.foeEntities.length && firstFoe)

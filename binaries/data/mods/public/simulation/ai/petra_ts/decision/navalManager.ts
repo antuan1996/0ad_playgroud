@@ -22,7 +22,7 @@ import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
  */
 export class NavalManager
 {
-	declare Config: Config;
+	Config: Config;
 	declare docks: CommonEntityCollection;
 	declare fishShips: CommonEntityCollection;
 	declare ships: CommonEntityCollection;
@@ -221,9 +221,9 @@ export class NavalManager
 				if (gameState.ai.accessibility.landPassMap[i + j*width] === 1)
 				{
 					const navalPass = gameState.ai.accessibility.navalPassMap[i + j*width];
-					if (navalPass == sea)
+					if (navalPass === sea)
 						return true;
-					else if (navalPass == 1)  // we could be outside the map
+					else if (navalPass === 1)  // we could be outside the map
 						continue;
 				}
 				return false;
@@ -254,7 +254,7 @@ export class NavalManager
 				if (i < 0 || i >= width || j < 0 || j >= width)
 					continue;
 				const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, i + j*width));
-				if (owner != 0 && gameState.isPlayerEnemy(owner))
+				if (owner !== 0 && gameState.isPlayerEnemy(owner))
 					return false;
 			}
 			return true;
@@ -266,18 +266,18 @@ export class NavalManager
 	{
 		// a land region links only to seas
 		const seas = gameState.ai.accessibility.regionLinks[region].map(seaRegion);
-		this.docks.forEach((dock: import("simulation/ai/common-api/entity.js").Entity): void =>
+		this.docks.forEach((dock: CommonEntity): void =>
 		{
-			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) != region)
+			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) !== region)
 				return;
 			const i = seas.indexOf(requireValue(getSeaAccess(gameState, dock)));
-			if (i != -1)
+			if (i !== -1)
 				seas.splice(i, 1);
 		});
 		return seas;
 	}
 
-	checkEvents(gameState: CommonGameState, queues: Record<string, Queue>, events: EngineAIEvents): void
+	checkEvents(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		for (const evt of events.Create)
 		{
@@ -319,10 +319,10 @@ export class NavalManager
 			if (plan.state === TransportPlan.BOARDING)
 			{
 				// just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
-				plan.units.forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+				plan.units.forEach((ent: CommonEntity): void =>
 				{
-					if (ent.getMetadata(PlayerID, "onBoard") == "onBoard" && ent.position() ||
-					    ent.getMetadata(PlayerID, "onBoard") == shipId)
+					if (ent.getMetadata(PlayerID, "onBoard") === "onBoard" && ent.position() ||
+					    ent.getMetadata(PlayerID, "onBoard") === shipId)
 						ent.setMetadata(PlayerID, "onBoard", undefined);
 				});
 				plan.needTransportShips = !plan.transportShips.hasEntities();
@@ -343,7 +343,7 @@ export class NavalManager
 					// otherwise, we should require another transport
 					// TODO if attacking and no more ships available, remove the units from the attack
 					// to avoid delaying it too much
-					if (access != endIndex)
+					if (access !== endIndex)
 						this.requireTransport(gameState, ent, access, endIndex, endPos);
 				}
 			}
@@ -398,7 +398,7 @@ export class NavalManager
 		const plans: TransportPlan[] = [];
 		for (const plan of this.transportPlans)
 		{
-			if (plan.startIndex != startIndex || plan.endIndex != endIndex ||
+			if (plan.startIndex !== startIndex || plan.endIndex !== endIndex ||
 				plan.state !== TransportPlan.BOARDING)
 			{
 				continue;
@@ -453,7 +453,7 @@ export class NavalManager
 
 		if (newplan.units.length)
 			this.transportPlans.push(newplan);
-		return newplan.units.length != 0;
+		return newplan.units.length !== 0;
 	}
 
 	/**
@@ -495,7 +495,7 @@ export class NavalManager
 	}
 
 	// bumps up the number of ships we want if we need more.
-	checkLevels(gameState: CommonGameState, queues: Record<string, Queue>): void
+	checkLevels(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.ships.hasQueuedUnits())
 			return;
@@ -524,7 +524,7 @@ export class NavalManager
 				++this.wantedTransportShips[sea];
 	}
 
-	maintainFleet(gameState: CommonGameState, queues: Record<string, Queue>): void
+	maintainFleet(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.ships.hasQueuedUnits())
 			return;
@@ -609,8 +609,8 @@ export class NavalManager
 			    stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 			{
 				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-				if (!previousPosition || previousPosition[0] != shipPosition[0] ||
-					                   previousPosition[1] != shipPosition[1])
+				if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
+					                   previousPosition[1] !== shipPosition[1])
 				{
 					ship.setMetadata(PlayerID, "previousPosition", shipPosition);
 					ship.setMetadata(PlayerID, "turnPreviousPosition", gameState.ai.playedTurn);
@@ -627,8 +627,8 @@ export class NavalManager
 			else if (ship.isIdle())
 			{
 				const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-				if (!previousIdlePosition || previousIdlePosition[0] != shipPosition[0] ||
-					                       previousIdlePosition[1] != shipPosition[1])
+				if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
+					                       previousIdlePosition[1] !== shipPosition[1])
 				{
 					ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
 					ship.setMetadata(PlayerID, "stationnary", undefined);
@@ -646,7 +646,7 @@ export class NavalManager
 				for (const dock of
 					gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
 				{
-					if (getSeaAccess(gameState, dock) != sea)
+					if (getSeaAccess(gameState, dock) !== sea)
 						continue;
 					if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
 						continue;
@@ -668,8 +668,8 @@ export class NavalManager
 			if (isInState(ship, "INDIVIDUAL.TRADE.APPROACHINGMARKET"))
 			{
 				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-				if (!previousPosition || previousPosition[0] != shipPosition[0] ||
-					                   previousPosition[1] != shipPosition[1])
+				if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
+					                   previousPosition[1] !== shipPosition[1])
 				{
 					ship.setMetadata(PlayerID, "previousPosition", shipPosition);
 					ship.setMetadata(PlayerID, "turnPreviousPosition", gameState.ai.playedTurn);
@@ -686,8 +686,8 @@ export class NavalManager
 			else if (ship.isIdle())
 			{
 				const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-				if (!previousIdlePosition || previousIdlePosition[0] != shipPosition[0] ||
-					                       previousIdlePosition[1] != shipPosition[1])
+				if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
+					                       previousIdlePosition[1] !== shipPosition[1])
 				{
 					ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
 					ship.setMetadata(PlayerID, "stationnary", undefined);
@@ -704,7 +704,7 @@ export class NavalManager
 				const sea = requireMetadata(ship, "sea");
 				for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
 				{
-					if (getSeaAccess(gameState, dock) != sea)
+					if (getSeaAccess(gameState, dock) !== sea)
 						continue;
 					if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
 						continue;
@@ -720,7 +720,7 @@ export class NavalManager
 			const sea = requireMetadata(ship, "sea");
 			for (const blockingShip of requireValue(this.seaShips[sea]).values())
 			{
-				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
+				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !blockingShip.position())
 					continue;
 				const distSquare = SquareVectorDistance(shipPosition, blockingShip.position());
 				const state = unitState(blockingShip);
@@ -738,9 +738,9 @@ export class NavalManager
 			for (const blockingShip of
 				gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).values())
 			{
-				if (blockingShip.getMetadata(PlayerID, "sea") != sea)
+				if (blockingShip.getMetadata(PlayerID, "sea") !== sea)
 					continue;
-				if (blockedIds.indexOf(blockingShip.id()) != -1 || !blockingShip.position())
+				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !blockingShip.position())
 					continue;
 				const role = blockingShip.getMetadata(PlayerID, "role");
 				if (role === undefined || role !== Worker.ROLE_TRADER)	// already accounted before
@@ -757,7 +757,7 @@ export class NavalManager
 		}
 	}
 
-	buildNavalStructures(gameState: CommonGameState, queues: Record<string, Queue>): void
+	buildNavalStructures(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.hasPotentialBase())
 			return;
@@ -882,7 +882,7 @@ export class NavalManager
 		return bestShip;
 	}
 
-	update(gameState: CommonGameState, queues: Record<string, Queue>, events: EngineAIEvents): void
+	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		Engine.ProfileStart("Naval Manager update");
 
@@ -935,8 +935,8 @@ export class NavalManager
 		};
 
 		const transports: Record<string, ReturnType<TransportPlan["Serialize"]>> = {};
-		for (const plan in this.transportPlans)
-			transports[plan] = this.transportPlans[plan].Serialize();
+		// keyed by the plan's place in the list, as the save always was
+		this.transportPlans.forEach((plan, i) => { transports[i] = plan.Serialize(); });
 
 		return { "properties": properties, "transports": transports };
 	}

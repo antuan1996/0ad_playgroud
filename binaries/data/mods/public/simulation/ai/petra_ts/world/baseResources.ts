@@ -58,7 +58,7 @@ export class BaseResources
 				const medium = this.dropsiteSupplies[type].medium;
 				const faraway = this.dropsiteSupplies[type].faraway;
 
-				resources.forEach(function(supply: import("simulation/ai/common-api/entity.js").Entity): void 
+				resources.forEach(function(supply: CommonEntity): void 
 				{
 					if (!supply.position())
 						return;
@@ -66,7 +66,7 @@ export class BaseResources
 					if (supply.hasClasses(["Animal", "Field"]))
 						return;
 					// quick accessibility check
-					if (getLandAccess(gameState, supply) != accessIndex)
+					if (getLandAccess(gameState, supply) !== accessIndex)
 						return;
 
 					const dist = SquareVectorDistance(supply.position(), dropsitePos);

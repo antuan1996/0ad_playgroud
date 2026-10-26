@@ -63,7 +63,7 @@ export class BuildManager
 
 		for (const evt of events.Create)
 		{
-			if (events.Destroy.some((e: EngineAIDestroyEvent): boolean => e.entity == evt.entity))
+			if (events.Destroy.some((e: EngineAIDestroyEvent): boolean => e.entity === evt.entity))
 				continue;
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent && ent.isOwn(PlayerID) && ent.hasClass("Unit"))
@@ -75,12 +75,12 @@ export class BuildManager
 
 		for (const evt of events.OwnershipChanged)   // capture events
 		{
-			if (evt.from == PlayerID)
+			if (evt.from === PlayerID)
 			{
 				removeBuilder(this.builders, evt.entity);
 				continue;
 			}
-			else if (evt.to != PlayerID)
+			else if (evt.to !== PlayerID)
 				continue;
 
 			const ent = gameState.getEntityById(evt.entity);
@@ -90,7 +90,7 @@ export class BuildManager
 
 		for (const evt of events.ValueModification)
 		{
-			if (evt.component != "Builder" ||
+			if (evt.component !== "Builder" ||
 				  !evt.valueNames.some((val: string): boolean => val.startsWith("Builder/Entities/")))
 				continue;
 
@@ -174,7 +174,7 @@ export class BuildManager
 	{
 		let num = 0;
 		for (const unbuildable of this.unbuildables.values())
-			if (unbuildable.reason == "room" && unbuildable.time > gameState.ai.elapsedTime)
+			if (unbuildable.reason === "room" && unbuildable.time > gameState.ai.elapsedTime)
 				++num;
 		return num;
 	}
@@ -183,7 +183,7 @@ export class BuildManager
 	resetMissingRoom(gameState: CommonGameState): void
 	{
 		for (const [key, unbuildable] of this.unbuildables)
-			if (unbuildable.reason == "room")
+			if (unbuildable.reason === "room")
 				this.unbuildables.delete(key);
 	}
 

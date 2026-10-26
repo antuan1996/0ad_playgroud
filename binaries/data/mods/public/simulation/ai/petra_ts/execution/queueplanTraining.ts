@@ -123,7 +123,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 					else
 					{
 						const aBaseManager = hqOf(gameState).getBaseByID(aBase);
-						if (!aBaseManager || aBaseManager.accessIndex != wantedIndex)
+						if (!aBaseManager || aBaseManager.accessIndex !== wantedIndex)
 							aa += 30;
 					}
 					if (!bBase)
@@ -131,12 +131,12 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 					else
 					{
 						const bBaseManager = hqOf(gameState).getBaseByID(bBase);
-						if (!bBaseManager || bBaseManager.accessIndex != wantedIndex)
+						if (!bBaseManager || bBaseManager.accessIndex !== wantedIndex)
 							bb += 30;
 					}
 				}
 				// Then, if workers, small preference for bases with less workers
-				if (workerUnit && aBase && bBase && aBase != bBase)
+				if (workerUnit && aBase && bBase && aBase !== bBase)
 				{
 					const aBaseManager = hqOf(gameState).getBaseByID(aBase);
 					const bBaseManager = hqOf(gameState).getBaseByID(bBase);

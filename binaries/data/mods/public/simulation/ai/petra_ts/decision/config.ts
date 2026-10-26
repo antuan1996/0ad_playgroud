@@ -136,7 +136,7 @@ export class Config
 			]
 		};
 
-	priorities: Record<string, number> =
+	priorities: Record<PetraRuntime.ConfiguredQueueName, number> =
 		{
 			"villager": 300,      // should be slightly lower than the citizen soldier one to not get all the food
 			"citizenSoldier": 600,
@@ -291,7 +291,7 @@ export class Config
 		}
 		else
 		{
-			if (this.difficulty == difficultyLevel.MEDIUM)
+			if (this.difficulty === difficultyLevel.MEDIUM)
 				this.Military.numSentryTowers = 1;
 			else
 				this.Military.numSentryTowers = 2;

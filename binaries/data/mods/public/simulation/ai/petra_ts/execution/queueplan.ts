@@ -31,20 +31,30 @@ export type PlanTemplate = CommonTemplate | CommonTechnology;
 /** The name a plan's template goes by: a technology's, or an entity template's. */
 export type PlanName<T extends PlanTemplate> = T extends CommonTechnology ? TechName : TemplateName;
 
+/** What every plan's save holds; each kind of plan adds its own fields. */
+export type SerializedQueuePlan<T extends PlanTemplate> = {
+	category: string;
+	type: PlanName<T>;
+	ID: number;
+	metadata: Record<string, unknown> | undefined;
+	cost: { amounts: Record<string, number>; population: number };
+	number: number;
+};
+
 /**
  * Common functions and variables to all queue plans.
  */
 
 export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate>
 {
-	declare ID: number;
-	declare category: string;
-	declare cost: ResourcesManager;
-	declare metadata: PlanMetadata | undefined;
-	declare number: number;
-	declare template: T;
-	declare type: PlanName<T>;
-	declare queueToReset?: string;
+	ID: number;
+	category: string;
+	cost: ResourcesManager;
+	metadata: PlanMetadata | undefined;
+	number: number;
+	template: T;
+	type: PlanName<T>;
+	declare queueToReset?: PetraRuntime.ConfiguredQueueName;
 	declare goRequirement?: TechnologyRequirements | "houseNeeded";
 
 	/** `template` is what the game's lookup of `type` returned */
@@ -62,8 +72,9 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate>
 		this.category = "";
 	}
 
-	abstract Serialize(): Record<string, unknown>;
-	abstract Deserialize(gameState: CommonGameState, data: Record<string, unknown>): void;
+	/** what a save keeps of the plan: these fields, and each kind's own */
+	abstract Serialize(): SerializedQueuePlan<T>;
+	abstract Deserialize(gameState: CommonGameState, data: ReturnType<this["Serialize"]>): void;
 
 	/** Check the content of this queue */
 	isInvalid(gameState: CommonGameState): boolean

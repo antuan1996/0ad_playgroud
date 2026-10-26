@@ -10,8 +10,10 @@ import { createObstructionMap } from "../world/mapModule.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { Worker } from "../execution/worker.ts";
 import { NO_TEMPLATE, seconds, worldPos } from "../adapter/brands.ts";
+import { footprintHalves } from "../adapter/templateData.ts";
 import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
+import { isLent } from "../execution/unitPlan.ts";
 
 /**
  * Base Manager
@@ -47,26 +49,26 @@ export type SerializedBaseManager = {
 
 export class BaseManager
 {
-	declare Config: Config;
-	declare ID: number;
-	declare accessIndex: AccessIndex | undefined;
-	declare anchor: CommonEntity | undefined;
-	declare anchorId: EntityId | undefined;
-	declare basesManager: BasesManager;
+	Config: Config;
+	ID: number;
+	accessIndex: AccessIndex | undefined;
+	anchor: CommonEntity | undefined;
+	anchorId: EntityId | undefined;
+	basesManager: BasesManager;
 	declare buildings: CommonEntityCollection;
-	declare constructing: boolean;
+	constructing: boolean;
 	/** The resources within reach of the base's dropsites; the accessors below keep its fields' old names. */
-	declare resources: BaseResources;
+	resources: BaseResources;
 	get dropsiteSupplies(): Record<string, Record<string, ResourceSupply[]>> { return this.resources.dropsiteSupplies; }
 	set dropsiteSupplies(supplies: Record<string, Record<string, ResourceSupply[]>>) { this.resources.dropsiteSupplies = supplies; }
 	get dropsites(): Record<number, boolean | undefined> { return this.resources.dropsites; }
 	set dropsites(dropsites: Record<number, boolean | undefined>) { this.resources.dropsites = dropsites; }
 	declare gatherers: Record<string, { nextCheck: number; used: number; lost: number }>;
-	declare maxDistResourceSquare: number;
+	maxDistResourceSquare: number;
 	declare mobileDropsites: CommonEntityCollection;
-	declare neededDefenders: number;
-	declare territoryIndices: Array<CellIndex<"territory">>;
-	declare timeNextIdleCheck: GameSeconds;
+	neededDefenders: number;
+	territoryIndices: Array<CellIndex<"territory">>;
+	timeNextIdleCheck: GameSeconds;
 	declare units: CommonEntityCollection;
 	declare workerObject: Worker;
 	declare workers: CommonEntityCollection;
@@ -225,7 +227,7 @@ export class BaseManager
 	 */
 	assignResourceToDropsite(gameState: CommonGameState, dropsite: CommonEntity, deserialized: boolean): void
 	{
-		const baseless = this.ID == this.basesManager.baselessBase().ID;
+		const baseless = this.ID === this.basesManager.baselessBase().ID;
 		if (!this.resources.addDropsite(gameState, dropsite, this.accessIndex, baseless, this.maxDistResourceSquare, this.Config.debug))
 			return;
 		if (deserialized)
@@ -236,7 +238,7 @@ export class BaseManager
 		postCommand({
 			"type": "set-dropsite-sharing",
 			"entities": [dropsite.id()],
-			"shared": dropsite.id() != this.anchorId
+			"shared": dropsite.id() !== this.anchorId
 		});
 	}
 
@@ -284,11 +286,7 @@ export class BaseManager
 		if (template.hasClasses(["CivCentre", "Dock"]))
 			return { "quality": 0, "pos": worldPos(0, 0) };
 
-		let halfSize = 0;
-		if (template.get("Footprint/Square"))
-			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
-		else if (template.get("Footprint/Circle"))
-			halfSize = +template.get("Footprint/Circle/@radius");
+		const halfSize = footprintHalves(template).halfSize;
 
 		// This builds a map. The procedure is fairly simple. It adds the resource maps
 		//	(which are dynamically updated and are made so that they will facilitate DP placement)
@@ -325,7 +323,7 @@ export class BaseManager
 			// We add 3 times the needed resource and once others that can be dropped here.
 			let total = 2 * gameState.sharedScript.resourceMaps[resource].map[j];
 			for (const res in gameState.sharedScript.resourceMaps)
-				if (droppableResources.indexOf(res) != -1)
+				if (droppableResources.indexOf(res) !== -1)
 					total += gameState.sharedScript.resourceMaps[res].map[j];
 
 			total *= 0.7;   // Just a normalisation factor as the locateMap is limited to 255
@@ -379,7 +377,7 @@ export class BaseManager
 	{
 		for (const type of Resources.GetCodes())
 		{
-			if (type == "food")
+			if (type === "food")
 			{
 				const prox = ["nearby"];
 				if (gameState.currentPhase() < 2)
@@ -392,7 +390,7 @@ export class BaseManager
 					const numQueue = queues.field.countQueuedUnits();
 
 					// TODO  if not yet farms, add a check on time used/lost and build farmstead if needed
-					if (numFarms + numQueue == 0)	// starting game, rely on fruits as long as we have enough of them
+					if (numFarms + numQueue === 0)	// starting game, rely on fruits as long as we have enough of them
 					{
 						if (count < 600)
 						{
@@ -457,7 +455,7 @@ export class BaseManager
 			}
 			// TODO  add also a test on remaining resources.
 			const total = this.gatherers[type].used + this.gatherers[type].lost;
-			if (total > 150 || total > 60 && type != "wood")
+			if (total > 150 || total > 60 && type !== "wood")
 			{
 				const ratio = this.gatherers[type].lost / total;
 				if (ratio > 0.15)
@@ -489,7 +487,7 @@ export class BaseManager
 				this.gatherers[type].used = 0;
 				this.gatherers[type].lost = 0;
 			}
-			else if (total == 0)
+			else if (total === 0)
 				this.gatherers[type].nextCheck = gameState.ai.playedTurn + 10;
 		}
 	}
@@ -505,7 +503,7 @@ export class BaseManager
 			// I use some logarithms.
 			// TODO: this should take into account for unit speed and/or distance to target
 
-			this.gatherersByType(gameState, res).forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+			this.gatherersByType(gameState, res).forEach((ent: CommonEntity): void =>
 			{
 				if (ent.isIdle() || !ent.position())
 					return;
@@ -513,9 +511,9 @@ export class BaseManager
 				if (gRate)
 					currentRates[res] += Math.log(1+gRate)/1.1;
 			});
-			if (res == "food")
+			if (res === "food")
 			{
-				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent: CommonEntity): void =>
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
@@ -523,7 +521,7 @@ export class BaseManager
 					if (gRate)
 						currentRates[res] += Math.log(1+gRate)/1.1;
 				});
-				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent: CommonEntity): void =>
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
@@ -583,24 +581,24 @@ export class BaseManager
 				if (lastFailed && gameState.ai.elapsedTime - lastFailed < 20)
 					continue;
 				// Ensure that the most wanted resource is not exhausted
-				if (moreNeed.type != "food" && this.basesManager.isResourceExhausted(moreNeed.type))
+				if (moreNeed.type !== "food" && this.basesManager.isResourceExhausted(moreNeed.type))
 				{
-					if (lessNeed.type != "food" && this.basesManager.isResourceExhausted(lessNeed.type))
+					if (lessNeed.type !== "food" && this.basesManager.isResourceExhausted(lessNeed.type))
 						continue;
 
 					// And if so, move the gatherer to the less wanted one.
 					nb = this.switchGatherer(gameState, moreNeed.type, lessNeed.type, nb);
-					if (nb == 0)
+					if (nb === 0)
 						return;
 				}
 
 				// If we assume a mean rate of 0.5 per gatherer, this diff should be > 1
 				// but we require a bit more to avoid too frequent changes
 				if (scale*moreNeed.wanted - moreNeed.current - scale*lessNeed.wanted + lessNeed.current > 1.5 ||
-				    lessNeed.type != "food" && this.basesManager.isResourceExhausted(lessNeed.type))
+				    lessNeed.type !== "food" && this.basesManager.isResourceExhausted(lessNeed.type))
 				{
 					nb = this.switchGatherer(gameState, lessNeed.type, moreNeed.type, nb);
-					if (nb == 0)
+					if (nb === 0)
 						return;
 				}
 			}
@@ -617,14 +615,14 @@ export class BaseManager
 		let num = number;
 		let only;
 		const gatherers = this.gatherersByType(gameState, from);
-		if (from == "food" && gatherers.filter(filters.byClass("CitizenSoldier")).hasEntities())
+		if (from === "food" && gatherers.filter(filters.byClass("CitizenSoldier")).hasEntities())
 			only = "CitizenSoldier";
-		else if (to == "food" && gatherers.filter(filters.byClass("Civilian")).hasEntities())
+		else if (to === "food" && gatherers.filter(filters.byClass("Civilian")).hasEntities())
 			only = "Civilian";
 
 		for (const ent of gatherers.values())
 		{
-			if (num == 0)
+			if (num === 0)
 				return num;
 			if (!ent.canGather(to))
 				continue;
@@ -681,7 +679,7 @@ export class BaseManager
 						const lastFailed = gameState.ai.HQ.lastFailedGather[needed.type];
 						if (lastFailed && gameState.ai.elapsedTime - lastFailed < 20)
 							continue;
-						if (needed.type != "food" && this.basesManager.isResourceExhausted(needed.type))
+						if (needed.type !== "food" && this.basesManager.isResourceExhausted(needed.type))
 							continue;
 						ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_GATHERER);
 						ent.setMetadata(PlayerID, "gather-type", needed.type);
@@ -716,18 +714,18 @@ export class BaseManager
 	 */
 	pickBuilders(gameState: CommonGameState, workers: CommonEntityCollection, number: number): void
 	{
-		const availableWorkers = this.workers.filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean =>
+		const availableWorkers = this.workers.filter((ent: CommonEntity): boolean =>
 		{
 			if (!ent.position() || !ent.isBuilder())
 				return false;
-			if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
+			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				return false;
 			if (ent.getMetadata(PlayerID, "transport"))
 				return false;
 			return true;
 		}).toEntityArray();
 		// idle hands first, then the town's own, then a plan's; builders last
-		const lendScore = (ent: import("simulation/ai/common-api/entity.js").Entity): number =>
+		const lendScore = (ent: CommonEntity): number =>
 		{
 			const subrole = ent.getMetadata(PlayerID, "subrole");
 			if (subrole === Worker.SUBROLE_BUILDER)
@@ -736,7 +734,7 @@ export class BaseManager
 				return -50;
 			return ent.getMetadata(PlayerID, "plan") === undefined ? -20 : 0;
 		};
-		availableWorkers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number =>
+		availableWorkers.sort((a: CommonEntity, b: CommonEntity): number =>
 			lendScore(a) - lendScore(b));
 		const needed = Math.min(number, availableWorkers.length - 3);
 		for (let i = 0; i < needed; ++i)
@@ -758,13 +756,13 @@ export class BaseManager
 		let foundations = this.buildings.filter(filters.and(filters.isFoundation(),
 			filters.not(filters.byClass("Field"))));
 
-		const damagedBuildings = this.buildings.filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean => ent.foundationProgress() === undefined && ent.needsRepair());
+		const damagedBuildings = this.buildings.filter((ent: CommonEntity): boolean => ent.foundationProgress() === undefined && ent.needsRepair());
 
 		// Check if nothing to build
 		if (!foundations.length && !damagedBuildings.length)
 			return;
 
-		const workers = this.workers.filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean => ent.isBuilder());
+		const workers = this.workers.filter((ent: CommonEntity): boolean => ent.isBuilder());
 		const builderWorkers = this.workersBySubrole(gameState, Worker.SUBROLE_BUILDER);
 		const idleBuilderWorkers = builderWorkers.filter(filters.isIdle());
 
@@ -774,10 +772,10 @@ export class BaseManager
 		{
 			foundations = foundations.filter(filters.byMetadata(PlayerID, "baseAnchor", true));
 			const tID = foundations.toEntityArray()[0].id();
-			workers.forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+			workers.forEach((ent: CommonEntity): void =>
 			{
 				const target = ent.getMetadata(PlayerID, "target-foundation");
-				if (target && target != tID)
+				if (target && target !== tID)
 				{
 					ent.stopMoving();
 					ent.setMetadata(PlayerID, "target-foundation", tID);
@@ -841,14 +839,14 @@ export class BaseManager
 				maxTotalBuilders += 2;
 			let targetNB = 2;
 			if (target.hasClasses(["Fortress", "Wonder"]) ||
-			    target.getMetadata(PlayerID, "phaseUp") == true)
+			    target.getMetadata(PlayerID, "phaseUp") === true)
 				targetNB = 7;
 			else if (target.hasClasses(["Barracks", "Range", "Stable", "Tower", "Market"]))
 				targetNB = 4;
 			else if (target.hasClasses(["House", "DropsiteWood"]))
 				targetNB = 3;
 
-			if (target.getMetadata(PlayerID, "baseAnchor") == true ||
+			if (target.getMetadata(PlayerID, "baseAnchor") === true ||
 			    target.hasClass("Wonder") && gameState.getVictoryConditions().has("wonder"))
 			{
 				targetNB = 15;
@@ -863,7 +861,7 @@ export class BaseManager
 
 			if (assigned >= targetNB)
 				continue;
-			idleBuilderWorkers.forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
+			idleBuilderWorkers.forEach(function(ent: CommonEntity): void 
 			{
 				if (ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 					return;
@@ -878,31 +876,31 @@ export class BaseManager
 			});
 			if (assigned >= targetNB || builderTot >= maxTotalBuilders)
 				continue;
-			const nonBuilderWorkers = workers.filter(function(ent: import("simulation/ai/common-api/entity.js").Entity): boolean 
+			const nonBuilderWorkers = workers.filter(function(ent: CommonEntity): boolean 
 			{
 				if (ent.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
 					return false;
 				if (!ent.position())
 					return false;
-				if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
+				if (isLent(ent.getMetadata(PlayerID, "plan")))
 					return false;
 				if (ent.getMetadata(PlayerID, "transport"))
 					return false;
 				return true;
 			}).toEntityArray();
 			const time = target.buildTime();
-			nonBuilderWorkers.sort((workerA: import("simulation/ai/common-api/entity.js").Entity, workerB: import("simulation/ai/common-api/entity.js").Entity): number =>
+			nonBuilderWorkers.sort((workerA: CommonEntity, workerB: CommonEntity): number =>
 			{
 				let coeffA = SquareVectorDistance(target.position(), workerA.position());
 				// elephant moves slowly, so when far away they are only useful if build time is long
 				if (workerA.hasClass("Elephant"))
 					coeffA *= 0.5 * (1 + Math.sqrt(coeffA)/5/time);
-				else if (workerA.getMetadata(PlayerID, "gather-type") == "food")
+				else if (workerA.getMetadata(PlayerID, "gather-type") === "food")
 					coeffA *= 3;
 				let coeffB = SquareVectorDistance(target.position(), workerB.position());
 				if (workerB.hasClass("Elephant"))
 					coeffB *= 0.5 * (1 + Math.sqrt(coeffB)/5/time);
-				else if (workerB.getMetadata(PlayerID, "gather-type") == "food")
+				else if (workerB.getMetadata(PlayerID, "gather-type") === "food")
 					coeffB *= 3;
 				return coeffA - coeffB;
 			});
@@ -941,7 +939,7 @@ export class BaseManager
 			let targetNB = 1;
 			if (target.hasClasses(["Fortress", "Wonder"]))
 				targetNB = 3;
-			if (target.getMetadata(PlayerID, "baseAnchor") == true ||
+			if (target.getMetadata(PlayerID, "baseAnchor") === true ||
 			    target.hasClass("Wonder") && gameState.getVictoryConditions().has("wonder"))
 			{
 				maxTotalBuilders = Math.ceil(workers.length * Math.max(0.3, builderRatio));
@@ -956,7 +954,7 @@ export class BaseManager
 
 			if (assigned >= targetNB)
 				continue;
-			idleBuilderWorkers.forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
+			idleBuilderWorkers.forEach(function(ent: CommonEntity): void 
 			{
 				if (ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 					return;
@@ -969,13 +967,13 @@ export class BaseManager
 			});
 			if (assigned >= targetNB || builderTot >= maxTotalBuilders)
 				continue;
-			const nonBuilderWorkers = workers.filter(function(ent: import("simulation/ai/common-api/entity.js").Entity): boolean 
+			const nonBuilderWorkers = workers.filter(function(ent: CommonEntity): boolean 
 			{
 				if (ent.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
 					return false;
 				if (!ent.position())
 					return false;
-				if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
+				if (isLent(ent.getMetadata(PlayerID, "plan")))
 					return false;
 				if (ent.getMetadata(PlayerID, "transport"))
 					return false;
@@ -984,7 +982,7 @@ export class BaseManager
 			const num = Math.min(nonBuilderWorkers.length, targetNB-assigned);
 			const nearestNonBuilders = nonBuilderWorkers.filterNearest(target.position(), num);
 
-			nearestNonBuilders.forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
+			nearestNonBuilders.forEach(function(ent: CommonEntity): void 
 			{
 				++assigned;
 				++builderTot;
@@ -999,7 +997,7 @@ export class BaseManager
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): boolean
 	{
 		const baseless = this.basesManager.baselessBase();
-		if (this.ID == baseless.ID)
+		if (this.ID === baseless.ID)
 		{
 			// if some active base, reassigns the workers/buildings
 			// otherwise look for anything useful to do, i.e. treasures to gather
@@ -1009,7 +1007,7 @@ export class BaseManager
 				{
 					// a unit always finds a base while one is active
 					const bestBase = requireValue(getBestBase(gameState, ent));
-					if (bestBase.ID != this.ID)
+					if (bestBase.ID !== this.ID)
 						bestBase.assignEntity(gameState, ent);
 				}
 				for (const ent of this.buildings.values())
@@ -1105,14 +1103,14 @@ export class BaseManager
 		if (this.constructing)
 		{
 			const owner = gameState.ai.HQ.geography.territoryMap.getOwner(this.anchor.position());
-			if (owner != 0 && !gameState.isPlayerAlly(owner))
+			if (owner !== 0 && !gameState.isPlayerAlly(owner))
 			{
 				// we're in enemy territory. If we're too close from the enemy, destroy us.
 				const ccEnts = gameState.updatingGlobalCollection("allCCs",
 					filters.byClass("CivCentre"));
 				for (const cc of ccEnts.values())
 				{
-					if (cc.owner() != owner)
+					if (cc.owner() !== owner)
 						continue;
 					if (SquareVectorDistance(cc.position(), this.anchor.position()) > 8000)
 						continue;
@@ -1126,7 +1124,7 @@ export class BaseManager
 			--this.neededDefenders;
 
 		if (gameState.ai.elapsedTime > this.timeNextIdleCheck &&
-		   (gameState.currentPhase() > 1 || gameState.ai.HQ.phasing == 2))
+		   (gameState.currentPhase() > 1 || gameState.ai.HQ.phasing === 2))
 			this.setWorkersIdleByPriority(gameState);
 
 		this.assignRolelessUnits(gameState);

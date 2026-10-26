@@ -38,7 +38,7 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 
 
 	// Sandbox difficulty should not try to expand
-	HQ.canExpand = HQ.Config.difficulty != difficulty.SANDBOX;
+	HQ.canExpand = HQ.Config.difficulty !== difficulty.SANDBOX;
 	// If no base yet, check if we can construct one. If not, dispatch our units to possible tasks/attacks
 	HQ.canBuildUnits = true;
 	if (!gameState.getOwnStructures().filter(filters.byClass("CivCentre")).hasEntities())
@@ -159,7 +159,7 @@ function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 	const cellArea = passabilityMap.cellSize * passabilityMap.cellSize;
 	for (let i = 0; i < accessibility.regionSize.length; ++i)
 	{
-		if (landIndex && i == landIndex)
+		if (landIndex && i === landIndex)
 			HQ.geography.landRegions[i] = true;
 		else if (accessibility.regionType[i] === "land" && cellArea*accessibility.regionSize[i] > 320)
 		{
@@ -324,7 +324,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		if (startingPoint[i].weight > startingPoint[imax].weight)
 			imax = i;
 
-	if (goal == "dock")
+	if (goal === "dock")
 	{
 		const sea = startingPoint[imax].sea > 1 ? startingPoint[imax].sea : undefined;
 		gameState.ai.queues.dock.addPlan(new ConstructionPlan(gameState, "structures/{civ}/dock",
@@ -360,7 +360,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 		let num1 = Math.floor(num / 2);
 		let num2 = num1;
 		// first pass to affect ranged infantry
-		units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent: CommonEntity): void =>
 		{
 			if (!num || !num1)
 				return;
@@ -370,7 +370,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			for (const cc of allycc)
 			{
 				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) != access)
+				if (!ccPos || getLandAccess(gameState, cc) !== access)
 					continue;
 				--num;
 				--num1;
@@ -381,7 +381,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			}
 		});
 		// second pass to affect melee infantry
-		units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent: CommonEntity): void =>
 		{
 			if (!num || !num2)
 				return;
@@ -391,7 +391,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			for (const cc of allycc)
 			{
 				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) != access)
+				if (!ccPos || getLandAccess(gameState, cc) !== access)
 					continue;
 				--num;
 				--num2;
@@ -402,7 +402,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			}
 		});
 		// and now complete the affectation, including all support units
-		units.forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		units.forEach((ent: CommonEntity): void =>
 		{
 			if (!num && !ent.hasClass("Support"))
 				return;
@@ -412,7 +412,7 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			for (const cc of allycc)
 			{
 				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) != access)
+				if (!ccPos || getLandAccess(gameState, cc) !== access)
 					continue;
 				if (!ent.hasClass("Support"))
 					--num;
@@ -443,7 +443,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	{
 		for (const base of HQ.baseManagers())
 		{
-			if (!base.anchor || base.accessIndex != +region)
+			if (!base.anchor || base.accessIndex !== +region)
 				continue;
 			startingSize += gameState.ai.accessibility.regionSize[region];
 			startingLand.push(base.accessIndex);

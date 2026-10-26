@@ -27,8 +27,10 @@ import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "../execution/worker.ts";
 import { GAIA, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { footprintHalves } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
+import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -74,51 +76,51 @@ export type HeadquartersSerializedData = {
 
 export class Headquarters
 {
-	declare Config: Config;
-	declare attackManager: AttackManager;
+	Config: Config;
+	attackManager: AttackManager;
 	declare bAdvanced: TemplateName[];
-	declare basesManager: BasesManager;
-	declare buildManager: BuildManager;
+	basesManager: BasesManager;
+	buildManager: BuildManager;
 	declare canBarter: boolean;
 	declare canBuildUnits: boolean;
 	declare canExpand: boolean;
-	declare capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId> }>;
-	declare capturableTargetsTime: GameSeconds;
+	capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId> }>;
+	capturableTargetsTime: GameSeconds;
 	declare currentPhase: number;
 	declare decayingStructures: Set<EntityId>;
-	declare defenseManager: DefenseManager;
-	declare diplomacyManager: DiplomacyManager;
-	declare emergencyManager: EmergencyManager;
-	declare extraFortresses: number;
-	declare extraTowers: number;
-	declare firstBaseConfig: boolean;
-	declare fortStartTime: GameSeconds;
-	declare fortressLapseTime: GameSeconds;
-	declare fortressStartTime: GameSeconds;
-	declare garrisonManager: GarrisonManager;
+	defenseManager: DefenseManager;
+	diplomacyManager: DiplomacyManager;
+	emergencyManager: EmergencyManager;
+	extraFortresses: number;
+	extraTowers: number;
+	firstBaseConfig: boolean;
+	fortStartTime: GameSeconds;
+	fortressLapseTime: GameSeconds;
+	fortressStartTime: GameSeconds;
+	garrisonManager: GarrisonManager;
 	/** When a worker last found nothing left to gather, per resource. */
-	declare lastFailedGather: Record<string, GameSeconds>;
+	lastFailedGather: Record<string, GameSeconds>;
 	declare maxFields: number | false;
-	declare navalManager: NavalManager;
+	navalManager: NavalManager;
 	declare needCorral: boolean;
 	declare needFarm: boolean;
 	declare needFish: boolean;
-	declare phasing: number;
+	phasing: number;
 	declare requireHouses: boolean | undefined;
-	declare researchManager: ResearchManager;
+	researchManager: ResearchManager;
 	declare saveResources: boolean | undefined;
 	declare saveSpace: boolean | undefined;
-	declare supportRatio: number;
-	declare targetNumWorkers: number;
-	declare towerLapseTime: GameSeconds;
-	declare towerStartTime: GameSeconds;
-	declare tradeManager: TradeManager;
+	supportRatio: number;
+	targetNumWorkers: number;
+	towerLapseTime: GameSeconds;
+	towerStartTime: GameSeconds;
+	tradeManager: TradeManager;
 	declare treasures: CommonEntityCollection;
-	declare turnCache: HeadquartersTurnCache;
-	declare victoryManager: VictoryManager;
+	turnCache: HeadquartersTurnCache;
+	victoryManager: VictoryManager;
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
-	declare geography: Geography;
+	geography: Geography;
 
 	get territoryMap(): TerritoryMap { return this.geography.territoryMap; }
 	set territoryMap(map: TerritoryMap) { this.geography.territoryMap = map; }
@@ -184,7 +186,7 @@ export class Headquarters
 		this.geography.navalMap = false;
 		this.geography.navalRegions = {};
 
-		this.treasures = gameState.getEntities().filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean => ent.isTreasure());
+		this.treasures = gameState.getEntities().filter((ent: CommonEntity): boolean => ent.isTreasure());
 		this.treasures.registerUpdates();
 		this.currentPhase = gameState.currentPhase();
 		this.decayingStructures = new Set();
@@ -207,7 +209,7 @@ export class Headquarters
 	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined
 	{
 		const path = gameState.ai.accessibility.getTrajectToIndex(index1, index2);
-		if (path && path.length == 3 && gameState.ai.accessibility.regionType[path[1]] == "water")
+		if (path && path.length === 3 && gameState.ai.accessibility.regionType[path[1]] === "water")
 			return seaRegion(path[1]);
 
 		if (this.Config.debug > 1)
@@ -226,7 +228,7 @@ export class Headquarters
 
 		for (const evt of events.DiplomacyChanged)
 		{
-			if (evt.player != PlayerID && evt.otherPlayer != PlayerID)
+			if (evt.player !== PlayerID && evt.otherPlayer !== PlayerID)
 				continue;
 			// Reset the entities collections which depend on diplomacy
 			gameState.resetOnDiplomacyChanged();
@@ -237,10 +239,10 @@ export class Headquarters
 
 		for (const evt of events.ConstructionFinished)
 		{
-			if (evt.newentity == evt.entity)  // repaired building
+			if (evt.newentity === evt.entity)  // repaired building
 				continue;
 			const ent = gameState.getEntityById(evt.newentity);
-			if (!ent || ent.owner() != PlayerID)
+			if (!ent || ent.owner() !== PlayerID)
 				continue;
 			if (ent.hasClass("Market") && this.maxFields)
 				this.maxFields = false;
@@ -248,7 +250,7 @@ export class Headquarters
 
 		for (const evt of events.OwnershipChanged)   // capture events
 		{
-			if (evt.to != PlayerID)
+			if (evt.to !== PlayerID)
 				continue;
 			const ent = gameState.getEntityById(evt.entity);
 			if (!ent)
@@ -282,7 +284,7 @@ export class Headquarters
 			if (ent.hasClass("Ship"))
 				setSeaAccess(gameState, ent);
 			if (!ent.hasClasses(["Support", "Ship"]) && ent.attackTypes() !== undefined)
-				ent.setMetadata(PlayerID, "plan", -1);
+				ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 		}
 
 		// deal with the different rally points of training units: the rally point is set when the training starts
@@ -338,7 +340,7 @@ export class Headquarters
 				{
 					const attack = this.attackManager.getPlan(plan);
 					if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
-						ent.setMetadata(PlayerID, "plan", -1);
+						ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 				}
 			}
 		}
@@ -387,7 +389,7 @@ export class Headquarters
 				let ratioMax = 0.7 + randFloat(0, 0.1);
 				for (const evt of events.Attacked)
 				{
-					if (ent.id() != evt.target)
+					if (ent.id() !== evt.target)
 						continue;
 					ratioMax = 0.85 + randFloat(0, 0.1);
 					break;
@@ -417,16 +419,16 @@ export class Headquarters
 	/** Ensure that all requirements are met when phasing up*/
 	checkPhaseRequirements(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (gameState.getNumberOfPhases() == this.currentPhase)
+		if (gameState.getNumberOfPhases() === this.currentPhase)
 			return;
 
 		const requirements = gameState.getPhaseEntityRequirements(this.currentPhase + 1);
 		let plan;
-		let queue;
+		let queue: PetraRuntime.ConfiguredQueueName | undefined;
 		for (const entityReq of requirements)
 		{
 			// Village requirements are met elsewhere by constructing more houses
-			if (entityReq.class == "Village" || entityReq.class == "NotField")
+			if (entityReq.class === "Village" || entityReq.class === "NotField")
 				continue;
 			if (gameState.getOwnEntitiesByClass(entityReq.class, true).length >= entityReq.count)
 				continue;
@@ -462,7 +464,7 @@ export class Headquarters
 			default:
 				// All classes not dealt with inside vanilla game.
 				// We put them for the time being on the economic queue, except if wonder
-				queue = entityReq.class == "Wonder" ? "wonder" : "economicBuilding";
+				queue = entityReq.class === "Wonder" ? "wonder" : "economicBuilding";
 				if (!queues[queue].hasQueuedUnits())
 				{
 					const structure = this.buildManager.findStructureWithClass(gameState, [entityReq.class]);
@@ -475,7 +477,7 @@ export class Headquarters
 			{
 				if (queue === undefined)
 					return;
-				if (queue == "wonder")
+				if (queue === "wonder")
 				{
 					gameState.ai.queueManager.changePriority("majorTech", 400, { "phaseUp": true });
 					plan.queueToReset = "majorTech";
@@ -536,7 +538,7 @@ export class Headquarters
 		// counting the workers that aren't part of a plan
 		let numberOfWorkers = 0;   // all workers
 		let numberOfSupports = 0;  // only support workers (i.e. non fighting)
-		gameState.getOwnUnits().forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		gameState.getOwnUnits().forEach((ent: CommonEntity): void =>
 		{
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER && ent.getMetadata(PlayerID, "plan") === undefined)
 			{
@@ -546,7 +548,7 @@ export class Headquarters
 			}
 		});
 		let numberInTraining = 0;
-		gameState.getOwnTrainingFacilities().forEach(function(ent: import("simulation/ai/common-api/entity.js").Entity): void 
+		gameState.getOwnTrainingFacilities().forEach(function(ent: CommonEntity): void 
 		{
 			const trainingQueue = ent.trainingQueue();
 			if (!trainingQueue)
@@ -592,7 +594,7 @@ export class Headquarters
 		// getPhaseName(2) is optional: preserve original semantics (isResearching(undefined) === false)
 		const phaseName2 = gameState.getPhaseName(2);
 		if (numberTotal > this.targetNumWorkers || (numberTotal >= this.Config.Economy.popPhase2 &&
-			this.currentPhase == 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2))))
+			this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2))))
 			return;
 		if (numberQueued > 50 || (numberOfQueuedSupports > 20 && numberOfQueuedSoldiers > 20) || numberInTraining > 15)
 			return;
@@ -649,7 +651,7 @@ export class Headquarters
 		requirements: HeadquartersTrainableRequirement[], gatherersOnly = false): TemplateName | undefined
 	{
 		let units;
-		if (classes.indexOf("Hero") != -1)
+		if (classes.indexOf("Hero") !== -1)
 			units = gameState.findTrainableUnits(classes, []);
 		// We do not want siege tower as AI does not know how to use it nor hero when not explicitely specified.
 		else
@@ -673,7 +675,7 @@ export class Headquarters
 			let toAdd = true;
 			for (const param of parameters)
 			{
-				if (param[0] != "costsResource" || param[2] != type)
+				if (param[0] !== "costsResource" || param[2] !== type)
 					continue;
 				param[1] = Math.min(param[1], costsResource);
 				toAdd = false;
@@ -683,7 +685,7 @@ export class Headquarters
 				parameters.push(["costsResource", costsResource, type]);
 		}
 
-		units.sort((a: [string, import("simulation/ai/common-api/entity.js").Template], b: [string, import("simulation/ai/common-api/entity.js").Template]): number =>
+		units.sort((a: [string, CommonTemplate], b: [string, CommonTemplate]): number =>
 		{
 			const aCost = 1 + a[1].costSum();
 			const bCost = 1 + b[1].costSum();
@@ -691,22 +693,22 @@ export class Headquarters
 			let bValue = 0.1;
 			for (const param of parameters)
 			{
-				if (param[0] == "strength")
+				if (param[0] === "strength")
 				{
 					aValue += getMaxStrength(a[1], gameState.ai.Config.debug, gameState.ai.Config.DamageTypeImportance) * param[1];
 					bValue += getMaxStrength(b[1], gameState.ai.Config.debug, gameState.ai.Config.DamageTypeImportance) * param[1];
 				}
-				else if (param[0] == "siegeStrength")
+				else if (param[0] === "siegeStrength")
 				{
 					aValue += getMaxStrength(a[1], gameState.ai.Config.debug, gameState.ai.Config.DamageTypeImportance, "Structure") * param[1];
 					bValue += getMaxStrength(b[1], gameState.ai.Config.debug, gameState.ai.Config.DamageTypeImportance, "Structure") * param[1];
 				}
-				else if (param[0] == "speed")
+				else if (param[0] === "speed")
 				{
 					aValue += a[1].walkSpeed() * param[1];
 					bValue += b[1].walkSpeed() * param[1];
 				}
-				else if (param[0] == "costsResource")
+				else if (param[0] === "costsResource")
 				{
 					// requires a third parameter which is the resource
 					if (a[1].cost()[param[2]])
@@ -714,7 +716,7 @@ export class Headquarters
 					if (b[1].cost()[param[2]])
 						bValue *= param[1];
 				}
-				else if (param[0] == "canGather")
+				else if (param[0] === "canGather")
 				{
 					// checking against wood, could be anything else really.
 					if (a[1].resourceGatherRates()?.["wood.tree"])
@@ -822,11 +824,7 @@ export class Headquarters
 
 		// obstruction map
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		let halfSize = 0;
-		if (template.get("Footprint/Square"))
-			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
-		else if (template.get("Footprint/Circle"))
-			halfSize = +template.get("Footprint/Circle/@radius");
+		const halfSize = footprintHalves(template).halfSize;
 
 		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
 		const dpEnts = gameState.getOwnDropsites().filter(
@@ -884,7 +882,7 @@ export class Headquarters
 		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
 			const j = cellIndex(this.geography.territoryMap, jIndex);
-			if (this.geography.territoryMap.getOwnerIndex(j) != 0)
+			if (this.geography.territoryMap.getOwnerIndex(j) !== 0)
 				continue;
 			// With enough room around to build the cc
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -894,7 +892,7 @@ export class Headquarters
 			const index = gameState.ai.accessibility.landPassMap[i];
 			if (!this.geography.landRegions[index])
 				continue;
-			if (proxyAccess && nbShips == 0 && proxyAccess != index)
+			if (proxyAccess && nbShips === 0 && proxyAccess !== index)
 				continue;
 
 			let norm = 0.5;   // TODO adjust it, knowing that we will sum 5 maps
@@ -930,9 +928,9 @@ export class Headquarters
 
 					if (dist < minDist)
 						minDist = dist;
-					accessible = accessible || index == getLandAccess(gameState, cc.ent);
+					accessible = accessible || index === getLandAccess(gameState, cc.ent);
 				}
-				if (norm == 0)
+				if (norm === 0)
 					continue;
 
 				if (accessible && minDist > maxAccessRejected)
@@ -952,7 +950,7 @@ export class Headquarters
 				}
 
 				// Not near any of our dropsite, except for oversea docks
-				oversea = !accessible && dpList.some((dp: { ent: import("simulation/ai/common-api/entity.js").Entity; pos: CommonPosition | undefined; territory: any; }): boolean => getLandAccess(gameState, dp.ent) == index);
+				oversea = !accessible && dpList.some(dp => getLandAccess(gameState, dp.ent) === index);
 				if (!oversea)
 				{
 					for (const dp of dpList)
@@ -967,7 +965,7 @@ export class Headquarters
 							norm *= 0.5;
 					}
 				}
-				if (norm == 0)
+				if (norm === 0)
 					continue;
 			}
 
@@ -976,7 +974,7 @@ export class Headquarters
 
 			let val = 2 * gameState.sharedScript.ccResourceMaps[resource].map[j];
 			for (const res in gameState.sharedScript.resourceMaps)
-				if (res != "food")
+				if (res !== "food")
 					val += gameState.sharedScript.ccResourceMaps[res].map[j];
 			val *= norm;
 
@@ -1007,7 +1005,7 @@ export class Headquarters
 		const indexIdx = gameState.ai.accessibility.landPassMap[bestIdx];
 		for (const base of this.baseManagers())
 		{
-			if (!base.anchor || base.accessIndex === undefined || base.accessIndex == indexIdx)
+			if (!base.anchor || base.accessIndex === undefined || base.accessIndex === indexIdx)
 				continue;
 			const sea = this.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
 			if (sea !== undefined)
@@ -1047,11 +1045,7 @@ export class Headquarters
 
 		// obstruction map
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		let halfSize = 0;
-		if (template.get("Footprint/Square"))
-			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
-		else if (template.get("Footprint/Circle"))
-			halfSize = +template.get("Footprint/Circle/@radius");
+		const halfSize = footprintHalves(template).halfSize;
 
 		let bestIdx = -1;
 		let bestVal = Infinity;
@@ -1067,7 +1061,7 @@ export class Headquarters
 		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
 			const j = cellIndex(this.geography.territoryMap, jIndex);
-			if (this.geography.territoryMap.getOwnerIndex(j) != 0)
+			if (this.geography.territoryMap.getOwnerIndex(j) !== 0)
 				continue;
 			// with enough room around to build the cc
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -1158,7 +1152,7 @@ export class Headquarters
 		const indexIdx = gameState.ai.accessibility.landPassMap[bestIdx];
 		for (const base of this.baseManagers())
 		{
-			if (!base.anchor || base.accessIndex === undefined || base.accessIndex == indexIdx)
+			if (!base.anchor || base.accessIndex === undefined || base.accessIndex === indexIdx)
 				continue;
 			const sea = this.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
 			if (sea !== undefined)
@@ -1191,11 +1185,7 @@ export class Headquarters
 
 		// obstruction map
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		let halfSize = 0;
-		if (template.get("Footprint/Square"))
-			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
-		else if (template.get("Footprint/Circle"))
-			halfSize = +template.get("Footprint/Circle/@radius");
+		const halfSize = footprintHalves(template).halfSize;
 
 		let bestIdx = -1;
 		let bestJdx = cellIndex(this.geography.territoryMap, -1);
@@ -1217,7 +1207,7 @@ export class Headquarters
 			// do not try on the narrow border of our territory
 			if (this.geography.borderMap.map[j] & mapMask.narrowFrontier)
 				continue;
-			if (this.baseAtIndex(j) == 0)   // only in our territory
+			if (this.baseAtIndex(j) === 0)   // only in our territory
 				continue;
 			// with enough room around to build the market
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -1236,11 +1226,11 @@ export class Headquarters
 			{
 				if (isNavalMarket && template.hasClasses(["Naval+Trade"]))
 				{
-					if (getSeaAccess(gameState, market) != gameState.ai.accessibility.getAccessValue(pos, true))
+					if (getSeaAccess(gameState, market) !== gameState.ai.accessibility.getAccessValue(pos, true))
 						continue;
 					gainMultiplier = traderTemplatesGains.navalGainMultiplier;
 				}
-				else if (getLandAccess(gameState, market) == index &&
+				else if (getLandAccess(gameState, market) === index &&
 					!isLineInsideEnemyTerritory(gameState, market.position(), pos))
 					gainMultiplier = traderTemplatesGains.landGainMultiplier;
 				else
@@ -1255,7 +1245,7 @@ export class Headquarters
 					maxGainMult = gainMultiplier;
 				}
 			}
-			if (maxVal == 0)
+			if (maxVal === 0)
 				continue;
 			if (maxVal < bestVal)
 				continue;
@@ -1329,7 +1319,7 @@ export class Headquarters
 		if (wonderMode)
 		{
 			wonders = gameState.getOwnStructures().filter(filters.byClass("Wonder")).toEntityArray();
-			wonderMode = wonders.length != 0;
+			wonderMode = wonders.length !== 0;
 			if (wonderMode)
 			{
 				// wonders always have a footprint
@@ -1340,11 +1330,7 @@ export class Headquarters
 
 		// obstruction map
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		let halfSize = 0;
-		if (template.get("Footprint/Square"))
-			halfSize = Math.max(+template.get("Footprint/Square/@depth"), +template.get("Footprint/Square/@width")) / 2;
-		else if (template.get("Footprint/Circle"))
-			halfSize = +template.get("Footprint/Circle/@radius");
+		const halfSize = footprintHalves(template).halfSize;
 
 		let bestIdx = -1;
 		let bestJdx = cellIndex(this.geography.territoryMap, -1);
@@ -1372,7 +1358,7 @@ export class Headquarters
 				if (this.geography.borderMap.map[j] & mapMask.largeFrontier && isTower)
 					continue;
 			}
-			if (this.baseAtIndex(j) == 0)   // inaccessible cell
+			if (this.baseAtIndex(j) === 0)   // inaccessible cell
 				continue;
 			// with enough room around to build the cc
 			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
@@ -1425,7 +1411,7 @@ export class Headquarters
 					break;
 				}
 			}
-			if (minDist < 0 || minDist == Math.min())
+			if (minDist < 0 || minDist === Math.min())
 				continue;
 			if (minDist > bestVal)
 				continue;
@@ -1479,9 +1465,9 @@ export class Headquarters
 				queueManager.setAccounts(gameState, cost, "economicBuilding");
 				if (!queueManager.canAfford("economicBuilding", cost))
 				{
-					for (const q in queueManager.queues)
+					for (const [q] of queueManager.entries())
 					{
-						if (q == "economicBuilding")
+						if (q === "economicBuilding")
 							continue;
 						queueManager.transferAccounts(cost, q, "economicBuilding");
 						if (queueManager.canAfford("economicBuilding", cost))
@@ -1544,7 +1530,7 @@ export class Headquarters
 				else if (!resources[res] || resources[res] < 0.3 * cost[res])
 					++lowLevel;
 			}
-			if (highLevel == 0 || lowLevel > 1)
+			if (highLevel === 0 || lowLevel > 1)
 				return;
 		}
 
@@ -1694,7 +1680,7 @@ export class Headquarters
 		else
 			priority = this.Config.priorities.house;
 
-		if (priority && priority != gameState.ai.queueManager.getPriority("house"))
+		if (priority && priority !== gameState.ai.queueManager.getPriority("house"))
 			gameState.ai.queueManager.changePriority("house", priority);
 	}
 
@@ -1738,7 +1724,7 @@ export class Headquarters
 	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string): boolean
 	{
 		const phaseName2 = gameState.getPhaseName(2);
-		if (this.hasPotentialBase() && this.currentPhase == 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)))
+		if (this.hasPotentialBase() && this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)))
 			return false;
 		if (gameState.getOwnFoundations().filter(filters.byClass("CivCentre")).hasEntities() || queues.civilCentre.hasQueuedUnits())
 			return false;
@@ -1748,7 +1734,7 @@ export class Headquarters
 		let hasOwnCC = false;
 		for (const ent of gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")).values())
 		{
-			if (ent.owner() != PlayerID || ent.templateName() != gameState.applyCiv("structures/{civ}/civil_centre"))
+			if (ent.owner() !== PlayerID || ent.templateName() !== gameState.applyCiv("structures/{civ}/civil_centre"))
 				continue;
 			hasOwnCC = true;
 			break;
@@ -1853,7 +1839,7 @@ export class Headquarters
 			return;
 
 		const numBarracks = gameState.getOwnEntitiesByClass("Barracks", true).length;
-		if (this.saveResources && numBarracks != 0)
+		if (this.saveResources && numBarracks !== 0)
 			return;
 
 		const barracksTemplate = this.canBuild(gameState, "structures/{civ}/barracks") ? "structures/{civ}/barracks" : undefined;
@@ -1865,10 +1851,10 @@ export class Headquarters
 		const numStables = gameState.getOwnEntitiesByClass("Stable", true).length;
 
 		if (this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks1 ||
-		    this.phasing == 2 && gameState.getOwnStructures().filter(filters.byClass("Village")).length < 5)
+		    this.phasing === 2 && gameState.getOwnStructures().filter(filters.byClass("Village")).length < 5)
 		{
 			// First barracks/range and stable.
-			if (numBarracks + numRanges == 0)
+			if (numBarracks + numRanges === 0)
 			{
 				const template = barracksTemplate || rangeTemplate;
 				if (template)
@@ -1880,30 +1866,30 @@ export class Headquarters
 					return;
 				}
 			}
-			if (numStables == 0 && stableTemplate)
+			if (numStables === 0 && stableTemplate)
 			{
 				queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, stableTemplate, { "militaryBase": true }));
 				return;
 			}
 
 			// Second barracks/range and stable.
-			if (numBarracks + numRanges == 1 && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2)
+			if (numBarracks + numRanges === 1 && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2)
 			{
-				const template = numBarracks == 0 ? (barracksTemplate || rangeTemplate) : (rangeTemplate || barracksTemplate);
+				const template = numBarracks === 0 ? (barracksTemplate || rangeTemplate) : (rangeTemplate || barracksTemplate);
 				if (template)
 				{
 					queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, template, { "militaryBase": true }));
 					return;
 				}
 			}
-			if (numStables == 1 && stableTemplate && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2)
+			if (numStables === 1 && stableTemplate && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2)
 			{
 				queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, stableTemplate, { "militaryBase": true }));
 				return;
 			}
 
 			// Third barracks/range and stable, if needed.
-			if (numBarracks + numRanges + numStables == 2 && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2 + 30)
+			if (numBarracks + numRanges + numStables === 2 && this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks2 + 30)
 			{
 				const template = barracksTemplate || stableTemplate || rangeTemplate;
 				if (template)
@@ -1977,9 +1963,9 @@ export class Headquarters
 			const isEnemy = gameState.isPlayerEnemy(cce.owner());
 			for (const cc of ccEnts)
 			{
-				if (cc.owner() != PlayerID)
+				if (cc.owner() !== PlayerID)
 					continue;
-				if (getLandAccess(gameState, cc) != access)
+				if (getLandAccess(gameState, cc) !== access)
 					continue;
 				const dist = SquareVectorDistance(cc.position(), cce.position());
 				if (!enemyFound && isEnemy)
@@ -2015,7 +2001,7 @@ export class Headquarters
 			{
 				if (!base.anchor || !base.anchor.position())
 					continue;
-				if (getLandAccess(gameState, base.anchor) != access)
+				if (getLandAccess(gameState, base.anchor) !== access)
 					continue;
 				if (!base.anchor.trainableEntities(civ))	// base still in construction
 					continue;
@@ -2075,7 +2061,7 @@ export class Headquarters
 			if (!total.canAfford(new ResourcesManager(template.cost())))
 				continue;
 			templateFound = [trainable, template];
-			if (template.hasClass("Ranged") == rangedWanted)
+			if (template.hasClass("Ranged") === rangedWanted)
 				break;
 		}
 		if (!templateFound)
@@ -2089,9 +2075,9 @@ export class Headquarters
 		queueManager.setAccounts(gameState, cost, "emergency");
 		if (!queueManager.canAfford("emergency", cost))
 		{
-			for (const q in queueManager.queues)
+			for (const [q] of queueManager.entries())
 			{
-				if (q == "emergency")
+				if (q === "emergency")
 					continue;
 				queueManager.transferAccounts(cost, q, "emergency");
 				if (queueManager.canAfford("emergency", cost))
@@ -2101,7 +2087,7 @@ export class Headquarters
 		const metadata: Record<string, unknown> = {
 			"role": Worker.ROLE_WORKER,
 			"base": nearestAnchor.getMetadata(PlayerID, "base"),
-			"plan": -1,
+			"plan": PLAN_RESERVE,
 			"trainer": nearestAnchor.id()
 		};
 		if (autogarrison)
@@ -2145,7 +2131,7 @@ export class Headquarters
 		{
 			// if no base, check that we can build outside our territory
 			const buildTerritories = template.buildTerritories();
-			if (buildTerritories && (!buildTerritories.length || buildTerritories.length == 1 && buildTerritories[0] == "own"))
+			if (buildTerritories && (!buildTerritories.length || buildTerritories.length === 1 && buildTerritories[0] === "own"))
 			{
 				this.buildManager.setUnbuildable(gameState, type, 180, "room");
 				return false;
@@ -2183,7 +2169,7 @@ export class Headquarters
 			if (this.geography.borderMap.map[j] & mapMask.fullFrontier)
 				this.geography.borderMap.map[j] &= ~mapMask.fullFrontier;	// reset the frontier
 
-			if (this.geography.territoryMap.getOwnerIndex(j) != PlayerID)
+			if (this.geography.territoryMap.getOwnerIndex(j) !== PlayerID)
 				this.basesManager.removeBaseFromTerritoryIndex(j);
 			else
 			{
@@ -2202,7 +2188,7 @@ export class Headquarters
 					if (this.geography.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
 					let territoryOwner = this.geography.territoryMap.getOwnerIndex(cellIndex(this.geography.territoryMap, jx+width*jz));
-					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
+					if (territoryOwner !== PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 					{
 						this.geography.borderMap.map[j] |= mapMask.narrowFrontier;
 						break;
@@ -2216,7 +2202,7 @@ export class Headquarters
 					if (this.geography.borderMap.map[jx+width*jz] & mapMask.outside)
 						continue;
 					territoryOwner = this.geography.territoryMap.getOwnerIndex(cellIndex(this.geography.territoryMap, jx+width*jz));
-					if (territoryOwner != PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
+					if (territoryOwner !== PlayerID && !(alliedVictory && gameState.isPlayerAlly(territoryOwner)))
 						onFrontier = true;
 				}
 				if (onFrontier && !(this.geography.borderMap.map[j] & mapMask.narrowFrontier))
@@ -2355,7 +2341,7 @@ export class Headquarters
 				const orderData = ent.unitAIOrderData();
 				if (!orderData || !orderData.length || !orderData[0].attackType)
 					continue;
-				if ((orderData[0].attackType == "Capture") !== shouldCapture)
+				if ((orderData[0].attackType === "Capture") !== shouldCapture)
 					ent.attack(targetId, shouldCapture);
 			}
 		}
@@ -2380,7 +2366,7 @@ export class Headquarters
 	 */
 	getAccountedPopulation(gameState: CommonGameState): number
 	{
-		if (this.turnCache.accountedPopulation == undefined)
+		if (this.turnCache.accountedPopulation === undefined)
 		{
 			let pop = gameState.getPopulation();
 			for (const ent of gameState.getOwnTrainingFacilities().values())
@@ -2407,7 +2393,7 @@ export class Headquarters
 	 */
 	getAccountedWorkers(gameState: CommonGameState): number
 	{
-		if (this.turnCache.accountedWorkers == undefined)
+		if (this.turnCache.accountedWorkers === undefined)
 		{
 			let workers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).length;
 			for (const ent of gameState.getOwnTrainingFacilities().values())
@@ -2451,7 +2437,7 @@ export class Headquarters
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt())
 			.hasEntities();
 		// TODO find a better way to update
-		if (this.currentPhase != gameState.currentPhase())
+		if (this.currentPhase !== gameState.currentPhase())
 		{
 			if (this.Config.debug > 0)
 				aiWarn(" civ " + gameState.getPlayerCiv() + " has phasedUp from " + this.currentPhase +
@@ -2486,27 +2472,27 @@ export class Headquarters
 
 		if (this.hasActiveBase())
 		{
-			if (gameState.ai.playedTurn % 4 == 0)
+			if (gameState.ai.playedTurn % 4 === 0)
 				this.trainMoreWorkers(gameState, queues);
 
-			if (gameState.ai.playedTurn % 4 == 1)
+			if (gameState.ai.playedTurn % 4 === 1)
 				this.buildMoreHouses(gameState, queues);
 
-			if ((!this.saveResources || this.canBarter) && gameState.ai.playedTurn % 4 == 2)
+			if ((!this.saveResources || this.canBarter) && gameState.ai.playedTurn % 4 === 2)
 				this.buildFarmstead(gameState, queues);
 
-			if (this.needCorral && gameState.ai.playedTurn % 4 == 3)
+			if (this.needCorral && gameState.ai.playedTurn % 4 === 3)
 				this.manageCorral(gameState, queues);
 
-			if (gameState.ai.playedTurn % 5 == 1)
+			if (gameState.ai.playedTurn % 5 === 1)
 				this.researchManager.update(gameState, queues);
 		}
 
 		if (!this.hasPotentialBase() ||
-		    this.canExpand && gameState.ai.playedTurn % 10 == 7 && this.currentPhase > 1)
+		    this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1)
 			this.checkBaseExpansion(gameState, queues);
 
-		if (this.currentPhase > 1 && gameState.ai.playedTurn % 3 == 0)
+		if (this.currentPhase > 1 && gameState.ai.playedTurn % 3 === 0)
 		{
 			if (!this.canBarter)
 				this.buildMarket(gameState, queues);
@@ -2517,7 +2503,7 @@ export class Headquarters
 				this.buildTemple(gameState, queues);
 			}
 
-			if (gameState.ai.playedTurn % 30 == 0 &&
+			if (gameState.ai.playedTurn % 30 === 0 &&
 			    gameState.getPopulation() > 0.9 * gameState.getPopulationMax())
 				this.buildWonder(gameState, queues, false);
 		}
@@ -2527,7 +2513,7 @@ export class Headquarters
 		this.garrisonManager.update(gameState, events);
 		this.defenseManager.update(gameState, events);
 
-		if (gameState.ai.playedTurn % 3 == 0)
+		if (gameState.ai.playedTurn % 3 === 0)
 		{
 			this.constructTrainingBuildings(gameState, queues);
 			if (this.Config.difficulty > difficulty.SANDBOX)
@@ -2580,7 +2566,7 @@ export class Headquarters
 			"capturableTargetsTime": this.capturableTargetsTime
 		};
 
-		if (this.Config.debug == -100)
+		if (this.Config.debug === -100)
 		{
 			aiWarn(" HQ serialization ---------------------");
 			aiWarn(" properties " + uneval(properties));

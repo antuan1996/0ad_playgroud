@@ -9,7 +9,7 @@ export type SerializedEmergencyManager = Pick<EmergencyManager, "referencePopula
  */
 export class EmergencyManager
 {
-	declare Config: Config;
+	Config: Config;
 
 	referencePopulation = 0;
 	referenceStructureCount = 0;
@@ -39,10 +39,10 @@ export class EmergencyManager
 		const nStructures = gameState.getOwnStructures().length;
 		const nRoots = this.rootCount(gameState);
 		const factors = this.Config.emergencyValues;
-		if (((pop / this.referencePopulation) < factors.population || pop == 0) &&
-			((nStructures / this.referenceStructureCount) < factors.structures || nStructures == 0))
+		if (((pop / this.referencePopulation) < factors.population || pop === 0) &&
+			((nStructures / this.referenceStructureCount) < factors.structures || nStructures === 0))
 			this.setEmergency(gameState, true);
-		else if ((nRoots / this.numRoots) <= factors.roots || (nRoots == 0 && this.numRoots != 0))
+		else if ((nRoots / this.numRoots) <= factors.roots || (nRoots === 0 && this.numRoots !== 0))
 			this.setEmergency(gameState, true);
 
 		if (pop > this.referencePopulation || this.hasEmergency)
@@ -74,7 +74,7 @@ export class EmergencyManager
 	rootCount(gameState: CommonGameState): number
 	{
 		let roots = 0;
-		gameState.getOwnStructures().toEntityArray().forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		gameState.getOwnStructures().toEntityArray().forEach((ent: CommonEntity): void =>
 		{
 			const influence = ent?.get("TerritoryInfluence");
 			if (typeof influence === "object" && influence !== null &&

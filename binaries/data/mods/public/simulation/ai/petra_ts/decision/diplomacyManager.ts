@@ -47,15 +47,15 @@ export type SerializedDiplomacyManager = Pick<DiplomacyManager, "nextTributeUpda
  */
 export class DiplomacyManager
 {
-	declare Config: Config;
-	declare betrayLapseTime: GameSeconds;
-	declare betrayWeighting: number;
-	declare nextTributeRequest: Map<string, GameSeconds>;
-	declare nextTributeUpdate: GameSeconds;
-	declare receivedDiplomacyRequests: Map<PlayerId, DiplomacyRequest>;
-	declare sentDiplomacyRequestLapseTime: GameSeconds;
-	declare sentDiplomacyRequests: Map<PlayerId, SentDiplomacyRequest>;
-	declare waitingToBetray: boolean;
+	Config: Config;
+	betrayLapseTime: GameSeconds;
+	betrayWeighting: number;
+	nextTributeRequest: Map<string, GameSeconds>;
+	nextTributeUpdate: GameSeconds;
+	receivedDiplomacyRequests: Map<PlayerId, DiplomacyRequest>;
+	sentDiplomacyRequestLapseTime: GameSeconds;
+	sentDiplomacyRequests: Map<PlayerId, SentDiplomacyRequest>;
+	waitingToBetray: boolean;
 
 	constructor(Config: Config, deserialized: boolean)
 	{
@@ -141,7 +141,7 @@ export class DiplomacyManager
 						mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes);
 					for (let k = 0; k < mostNeeded.length; ++k)
 					{
-						if (mostNeeded[k].type == res && mostNeeded[k].wanted > 0)
+						if (mostNeeded[k].type === res && mostNeeded[k].wanted > 0)
 						{
 							this.nextTributeRequest.set("all", seconds(gameState.ai.elapsedTime + 90));
 							this.nextTributeRequest.set(res, seconds(gameState.ai.elapsedTime + 240));
@@ -396,7 +396,7 @@ export class DiplomacyManager
 			if (gameState.getVictoryConditions().has("capture_the_relic"))
 			{
 				const relicsCount = gameState.updatingGlobalCollection("allRelics",
-					filters.byClass("Relic")).filter((relic: import("simulation/ai/common-api/entity.js").Entity): boolean => relic.owner() === i).length;
+					filters.byClass("Relic")).filter((relic: CommonEntity): boolean => relic.owner() === i).length;
 				turnFactor += relicsCount * this.betrayWeighting;
 			}
 

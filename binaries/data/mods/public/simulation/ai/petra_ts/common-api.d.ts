@@ -91,10 +91,11 @@ type CommonTechnology = import("simulation/ai/common-api/technology.js").Technol
 interface PetraEntityMetadata
 {
 	[key: string]: unknown;
-	plan: number;
+	plan: UnitPlan;
 	base: number;
 	transport: number;
-	transporter: EntityId;
+	/** on a ship: the id of the transport plan it serves (a plan, not an entity) */
+	transporter: number;
 	sea: SeaIndex;
 	access: AccessIndex;
 	PartOfArmy: number;
@@ -152,10 +153,11 @@ interface CommonTemplateData
 	requirements?: CommonRequirement[];
 	BuildDistance?: { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined };
 	UnitAI?: { DefaultStance?: string };
-	Attack?: Record<string, { Bonuses?: Array<{
+	/** per attack type, its bonuses keyed by name; parsed leaves are strings (adapter/templateData.ts reads them) */
+	Attack?: Record<string, { Bonuses?: Record<string, {
 		Civ?: string;
-		Classes?: string[];
-		Multiplier: number;
+		Classes?: string;
+		Multiplier: string;
 	}> }>;
 }
 
@@ -449,10 +451,15 @@ declare module "simulation/ai/common-api/shared.js"
 
 declare module "simulation/ai/common-api/resources.js"
 {
-/** Plain resource amount account (also used for costs and gather-rate quotas). Amounts live on both the named fields and the object itself, so mod-added resource names work through the index signature. */
-	export class ResourcesManager
+/**
+ * Plain resource amount account (also used for costs and gather-rate quotas).
+ * Amounts live on the object itself, keyed by resource code, so mod-added
+ * resources work through the index. A class whose methods share the object
+ * cannot give its string index the type `number`, so the instance type is
+ * the methods intersected with the amounts.
+ */
+	interface ResourcesManagerMethods
 	{
-		constructor(amounts?: CommonResourceAmounts, population?: number);
 		population: number;
 		food: number;
 		wood: number;
@@ -472,8 +479,9 @@ declare module "simulation/ai/common-api/resources.js"
 		Serialize(): { amounts: CommonResourceAmounts; population: number };
 /** Restores the account from Serialize()'s output. */
 		Deserialize(data: { amounts: CommonResourceAmounts; population: number }): void;
-		[key: string]: any;
 	}
+	export type ResourcesManager = ResourcesManagerMethods & { [resource: string]: number };
+	export const ResourcesManager: new (amounts?: CommonResourceAmounts, population?: number) => ResourcesManager;
 }
 
 declare module "simulation/ai/common-api/map-module.js"
@@ -944,13 +952,8 @@ declare module "simulation/ai/common-api/entity.js"
 		get(path: "Cost/Population"): string | undefined;
 		get(path: "UnitAI/DefaultStance"): string | undefined;
 		get(path: "ResourceSupply/Type"): string | undefined;
-/** Bonus modifiers of the attack type's bonus list (Civ/Classes filters with Multiplier). */
-		get(path: "Attack/Melee/Bonuses" | "Attack/Ranged/Bonuses"): Array<{
-			Civ?: string;
-			Classes?: string[];
-			Multiplier: number;
-		}> | undefined;
-		get(path: string): any;
+/** Anything else: whatever the template holds there, read through adapter/templateData.ts. */
+		get(path: string): unknown;
 /** Full template name (civ or wildcard substitution already applied where appropriate). */
 		templateName(): TemplateName;
 /** Display name from the template (undefined if absent). */
@@ -1126,16 +1129,16 @@ declare module "simulation/ai/common-api/entity.js"
 		_entity: EngineAIEntityState;
 		constructor(sharedAI: CommonSharedScript, entity: Record<string, unknown>);
 /** Live component query straight into the running simulation (SimEngine.QueryInterface of the entity id); the returned object is the raw component interface. */
-		queryInterface(iid: string | number): any;
+		queryInterface(iid: string | number): unknown;
 /** Debug helper "\<template> (id)" describing the entity briefly. */
 		toString(): string;
 /** The entity id (INVALID_ENTITY never occurs inside a collection — dead entities are removed). */
 		id(): EntityId;
 /** Metadata for a player+entity pair from the shared script's metadata cache (undefined unless set). */
 		getMetadata<K extends keyof PetraEntityMetadata>(player: PlayerId, key: K): PetraEntityMetadata[K] | undefined;
-		getMetadata(player: PlayerId, key: string): any;
-/** Sets metadata for a player+entity via the shared script. */
-		setMetadata(player: PlayerId, key: string, value: unknown): void;
+		getMetadata(player: PlayerId, key: string): unknown;
+/** Sets metadata for a player+entity via the shared script (undefined clears a key). */
+		setMetadata<K extends keyof PetraEntityMetadata>(player: PlayerId, key: K, value: PetraEntityMetadata[K] | undefined): void;
 /** Deletes all metadata of one player+entity pair. */
 		deleteAllMetadata(player: PlayerId): void;
 /** Deletes one metadata key of a player+entity pair. */

@@ -28,12 +28,10 @@ export class Queue
 	/**
 	 * Appends a plan, or merges it into an identical unit-plan head-group when
 	 * the merged count stays within the plan's `maxMerge`; technology
-	 * duplicates are silently swallowed. A null/undefined plan is ignored.
+	 * duplicates are silently swallowed.
 	 */
-	addPlan(newPlan: PetraRuntime.ConcretePlan | null | undefined): void
+	addPlan(newPlan: PetraRuntime.ConcretePlan): void
 	{
-		if (!newPlan)
-			return;
 		for (const plan of this.plans)
 		{
 			if (newPlan.category === "unit" && samePlanType(plan, newPlan) &&
@@ -146,7 +144,7 @@ export class Queue
 		for (const plan of this.plans)
 		{
 			const metadata = plan.metadata;
-			if (metadata && metadata[data] && metadata[data] == value)
+			if (metadata && metadata[data] && metadata[data] === value)
 				count += plan.number;
 		}
 		return count;
@@ -176,19 +174,19 @@ export class Queue
 		this.plans = [];
 		for (const dataPlan of data.plans)
 		{
-			if (dataPlan.category == "unit")
+			if (dataPlan.category === "unit")
 			{
 				const plan = new TrainingPlan(gameState, dataPlan.type);
 				plan.Deserialize(gameState, dataPlan);
 				this.plans.push(plan);
 			}
-			else if (dataPlan.category == "building")
+			else if (dataPlan.category === "building")
 			{
 				const plan = new ConstructionPlan(gameState, dataPlan.type);
 				plan.Deserialize(gameState, dataPlan);
 				this.plans.push(plan);
 			}
-			else if (dataPlan.category == "technology")
+			else if (dataPlan.category === "technology")
 			{
 				const plan = new ResearchPlan(gameState, dataPlan.type);
 				plan.Deserialize(gameState, dataPlan);

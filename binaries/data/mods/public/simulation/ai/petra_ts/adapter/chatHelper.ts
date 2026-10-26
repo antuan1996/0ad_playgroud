@@ -166,9 +166,9 @@ export function answerRequestAttack(gameState: CommonGameState, player: PlayerId
 	answer: "join" | "decline" | "other", other?: PlayerId): void
 {
 	// The "other" response also names a second player (_player_2) when one is supplied.
-	const translateParameters = answer != "other" ? ["_player_"] : ["_player_", "_player_2"];
+	const translateParameters = answer !== "other" ? ["_player_"] : ["_player_", "_player_2"];
 	const parameters: Record<string, string | number> = { "_player_": player };
-	if (answer == "other" && other !== undefined)
+	if (answer === "other" && other !== undefined)
 		parameters["_player_2"] = other;
 
 	postCommand({

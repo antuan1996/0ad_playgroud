@@ -8,7 +8,7 @@ import { techName } from "../adapter/brands.ts";
  */
 export class ResearchManager
 {
-	declare Config: Config;
+	Config: Config;
 
 	constructor(Config: Config)
 	{
@@ -32,8 +32,8 @@ export class ResearchManager
 			return;
 
 		const petraRequirements =
-			currentPhaseIndex == 1 && gameState.ai.HQ.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
-			currentPhaseIndex == 2 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase3 ||
+			currentPhaseIndex === 1 && gameState.ai.HQ.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
+			currentPhaseIndex === 2 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase3 ||
 			currentPhaseIndex >= 3 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase4;
 		if (petraRequirements && gameState.hasResearchers(nextPhaseName, true))
 		{
@@ -87,16 +87,16 @@ export class ResearchManager
 	}
 
 	/** Techs to be searched for as soon as they are available */
-	researchWantedTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): { name: TechName; increasePriority: boolean } | null
+	researchWantedTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): { name: TechName; increasePriority: boolean } | undefined
 	{
 		const phase1 = gameState.currentPhase() === 1;
 		const available = phase1 ? gameState.ai.queueManager.getAvailableResources(gameState) : null;
 		const numWorkers = phase1 ? gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).length : 0;
 		for (const tech of techs)
 		{
-			if (tech[0].indexOf("unlock_champion") == 0)
+			if (tech[0].indexOf("unlock_champion") === 0)
 				return { "name": tech[0], "increasePriority": true };
-			if (tech[0] == "traditional_army_sele" || tech[0] == "reformed_army_sele")
+			if (tech[0] === "traditional_army_sele" || tech[0] === "reformed_army_sele")
 			{
 				const selected = pickRandom([techName("traditional_army_sele"), techName("reformed_army_sele")]);
 				if (selected !== undefined)
@@ -115,27 +115,27 @@ export class ResearchManager
 				if (10*numWorkers < costMax)
 					continue;
 			}
-			for (const i in modifications)
+			for (const modification of modifications)
 			{
-				if (gameState.ai.HQ.geography.navalMap && modifications[i].value === "ResourceGatherer/Rates/food.fish")
+				if (gameState.ai.HQ.geography.navalMap && modification.value === "ResourceGatherer/Rates/food.fish")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value === "ResourceGatherer/Rates/food.fruit")
+				else if (modification.value === "ResourceGatherer/Rates/food.fruit")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value === "ResourceGatherer/Rates/food.grain")
+				else if (modification.value === "ResourceGatherer/Rates/food.grain")
 					return { "name": tech[0], "increasePriority": false };
-				else if (modifications[i].value === "ResourceGatherer/Rates/wood.tree")
+				else if (modification.value === "ResourceGatherer/Rates/wood.tree")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value.startsWith("ResourceGatherer/Capacities"))
+				else if (modification.value.startsWith("ResourceGatherer/Capacities"))
 					return { "name": tech[0], "increasePriority": false };
-				else if (modifications[i].value === "Attack/Ranged/MaxRange")
+				else if (modification.value === "Attack/Ranged/MaxRange")
 					return { "name": tech[0], "increasePriority": false };
 			}
 		}
-		return null;
+		return undefined;
 	}
 
 	/** Techs to be searched for as soon as they are available, but only after phase 2 */
-	researchPreferredTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): { name: TechName; increasePriority: boolean } | null
+	researchPreferredTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): { name: TechName; increasePriority: boolean } | undefined
 	{
 		const phase2 = gameState.currentPhase() === 2;
 		const available = phase2 ? gameState.ai.queueManager.getAvailableResources(gameState) : null;
@@ -154,21 +154,21 @@ export class ResearchManager
 				if (10*numWorkers < costMax)
 					continue;
 			}
-			for (const i in modifications)
+			for (const modification of modifications)
 			{
-				if (modifications[i].value === "ResourceGatherer/Rates/stone.rock")
+				if (modification.value === "ResourceGatherer/Rates/stone.rock")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value === "ResourceGatherer/Rates/metal.ore")
+				else if (modification.value === "ResourceGatherer/Rates/metal.ore")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value === "BuildingAI/DefaultArrowCount")
+				else if (modification.value === "BuildingAI/DefaultArrowCount")
 					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modifications[i].value === "Health/RegenRate")
+				else if (modification.value === "Health/RegenRate")
 					return { "name": tech[0], "increasePriority": false };
-				else if (modifications[i].value === "Health/IdleRegenRate")
+				else if (modification.value === "Health/IdleRegenRate")
 					return { "name": tech[0], "increasePriority": false };
 			}
 		}
-		return null;
+		return undefined;
 	}
 
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
@@ -257,12 +257,13 @@ export class ResearchManager
 		return costSum;
 	}
 
+	/** the manager keeps no state of its own: its save is empty */
 	Serialize(): Record<string, never>
 	{
 		return {};
 	}
 
-	Deserialize(data: Record<string, unknown>): void
+	Deserialize(data: Record<string, never>): void
 	{
 	}
 }

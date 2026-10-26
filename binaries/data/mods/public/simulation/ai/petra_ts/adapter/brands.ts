@@ -79,6 +79,12 @@ export function techName(value: string): TechName
 	return value as TechName;
 }
 
+/** A number known to be an attack plan's name. */
+export function attackPlanId(value: number): AttackPlanId
+{
+	return value as AttackPlanId;
+}
+
 /** No template: the empty name a search starts from before it finds one. */
 export const NO_TEMPLATE: TemplateName = templateName("");
 

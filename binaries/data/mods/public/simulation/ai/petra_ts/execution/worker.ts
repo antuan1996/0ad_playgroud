@@ -5,18 +5,19 @@ import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAcce
 import { TransportPlan } from "./transportPlan.ts";
 import type { ResourceSupply } from "../decision/baseManager.ts";
 import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
-import { GAIA, INVALID_ENTITY, NO_REGION } from "../adapter/brands.ts";
+import { GAIA, INVALID_ENTITY, NO_REGION, seconds } from "../adapter/brands.ts";
 import { requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
 import { hqOf } from "./hq.ts";
+import { isLent } from "./unitPlan.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
  */
 export class Worker
 {
-	declare base: WorkerBase;
+	base: WorkerBase;
 	declare baseAccess: AccessIndex;
-	declare baseID: number;
+	baseID: number;
 	declare ent: CommonEntity;
 	declare entAccess: AccessIndex;
 
@@ -46,7 +47,7 @@ export class Worker
 
 	update(gameState: CommonGameState, ent: CommonEntity): void
 	{
-		if (!ent.position() || ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
+		if (!ent.position() || isLent(ent.getMetadata(PlayerID, "plan")))
 			return;
 
 		const subrole = ent.getMetadata(PlayerID, "subrole");
@@ -72,10 +73,10 @@ export class Worker
 					const gatherType = ent.getMetadata(PlayerID, "gather-type") || "food";
 					for (const structure of gameState.getOwnStructures().values())
 					{
-						if (getLandAccess(gameState, structure) != plan.endIndex)
+						if (getLandAccess(gameState, structure) !== plan.endIndex)
 							continue;
 						const resourceDropsiteTypes = getBuiltEntity(gameState, structure).resourceDropsiteTypes();
-						if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) == -1)
+						if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
 							continue;
 						hasDropsite = true;
 						break;
@@ -84,10 +85,10 @@ export class Worker
 					{
 						for (const unit of gameState.getOwnUnits().filter(filters.byClass("Support")).values())
 						{
-							if (!unit.position() || getLandAccess(gameState, unit) != plan.endIndex)
+							if (!unit.position() || getLandAccess(gameState, unit) !== plan.endIndex)
 								continue;
 							const resourceDropsiteTypes = unit.resourceDropsiteTypes();
-							if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) == -1)
+							if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
 								continue;
 							hasDropsite = true;
 							break;
@@ -103,12 +104,12 @@ export class Worker
 
 		this.entAccess = requireValue(getLandAccess(gameState, ent));
 		// Base for unassigned entities has no accessIndex, so take the one from the entity.
-		if (this.baseID == hqOf(gameState).basesManager.baselessBase().ID)
+		if (this.baseID === hqOf(gameState).basesManager.baselessBase().ID)
 			this.baseAccess = this.entAccess;
 		else
 			this.baseAccess = this.base.accessIndex ?? NO_REGION;
 
-		if (subrole == undefined)	// subrole may-be undefined after a transport, garrisoning, army, ...
+		if (subrole === undefined)	// subrole may-be undefined after a transport, garrisoning, army, ...
 		{
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
 			this.base.reassignIdleWorkers(gameState, [ent]);
@@ -139,7 +140,7 @@ export class Worker
 					const target = gameState.getEntityById(orderData.target);
 					const targetPos = target ? target.position() : undefined;
 					const targetSupplyType = target ? target.resourceSupplyType() : undefined;
-					if (target && targetPos && targetSupplyType && targetSupplyType.generic == "food")
+					if (target && targetPos && targetSupplyType && targetSupplyType.generic === "food")
 					{
 						const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(targetPos);
 						if (gameState.isPlayerEnemy(territoryOwner))
@@ -162,9 +163,9 @@ export class Worker
 									continue;
 								const owner = dropsite.owner();
 								// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
-								if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
+								if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 									continue;
-								if (targetAccess != getLandAccess(gameState, dropsite))
+								if (targetAccess !== getLandAccess(gameState, dropsite))
 									continue;
 								if (SquareVectorDistance(targetPos, dropsitePos) < distanceSquare)
 								{
@@ -193,7 +194,7 @@ export class Worker
 		// If we're fighting or hunting, let's not start gathering except if inaccessible target
 		// but for fishers where UnitAI must have made us target a moving whale.
 		// Also, if we are attacking, do not capture
-		if (unitAIStateOrder == "COMBAT")
+		if (unitAIStateOrder === "COMBAT")
 		{
 			if (subrole === Worker.SUBROLE_FISHER)
 				this.startFishing(gameState);
@@ -204,7 +205,7 @@ export class Worker
 				if (orderData && orderData.target)
 				{
 					const target = gameState.getEntityById(orderData.target);
-					if (target && (!target.position() || getLandAccess(gameState, target) != this.entAccess))
+					if (target && (!target.position() || getLandAccess(gameState, target) !== this.entAccess))
 					{
 						if (this.retryWorking(gameState, subrole))
 							return;
@@ -216,7 +217,7 @@ export class Worker
 				!ent.getMetadata(PlayerID, "PartOfArmy"))
 			{
 				const orderData = ent.unitAIOrderData()[0];
-				if (orderData && orderData.target && orderData.attackType && orderData.attackType == "Capture")
+				if (orderData && orderData.target && orderData.attackType && orderData.attackType === "Capture")
 				{
 					// If we are here, an enemy structure must have targeted one of our workers
 					// and UnitAI sent it fight back with allowCapture=true
@@ -242,7 +243,7 @@ export class Worker
 				// TODO if we already carry the max we can ->  returnresources
 				const carrying = ent.resourceCarrying();
 				if (!carrying || !carrying.length ||
-					carrying[0].type == ent.getMetadata(PlayerID, "gather-type"))
+					carrying[0].type === ent.getMetadata(PlayerID, "gather-type"))
 				{
 					this.startGathering(gameState);
 				}
@@ -252,7 +253,7 @@ export class Worker
 					this.startGathering(gameState);
 				}
 			}
-			else if (unitAIStateOrder == "GATHER")
+			else if (unitAIStateOrder === "GATHER")
 			{
 				// we're already gathering. But let's check if there is nothing better
 				// in case UnitAI did something bad
@@ -263,7 +264,7 @@ export class Worker
 					// While returning resources UnitAI targets the dropsite, which is no supply:
 					// the return trip is checked below, the supply once the unit is back at work
 					if (supply && supply.resourceSupplyType() && !supply.hasClasses(["Field", "Animal"]) &&
-						supplyId != ent.getMetadata(PlayerID, "supply"))
+						supplyId !== ent.getMetadata(PlayerID, "supply"))
 					{
 						const nbGatherers = requireValue(supply.resourceSupplyNumGatherers()) + this.base.GetTCGatherer(supplyId);
 						if (nbGatherers > 1 && requireValue(supply.resourceSupplyAmount())/nbGatherers < 30)
@@ -275,7 +276,7 @@ export class Worker
 						{
 							const gatherType = ent.getMetadata(PlayerID, "gather-type") ?? "";
 							const nearby = this.base.resources.dropsiteSupplies[gatherType].nearby;
-							if (nearby.some((sup: ResourceSupply): boolean => sup.id == supplyId))
+							if (nearby.some((sup: ResourceSupply): boolean => sup.id === supplyId))
 								ent.setMetadata(PlayerID, "supply", supplyId);
 							else if (nearby.length)
 							{
@@ -285,7 +286,7 @@ export class Worker
 							else
 							{
 								const medium = this.base.resources.dropsiteSupplies[gatherType].medium;
-								if (medium.length && !medium.some((sup: ResourceSupply): boolean => sup.id == supplyId))
+								if (medium.length && !medium.some((sup: ResourceSupply): boolean => sup.id === supplyId))
 								{
 									this.base.RemoveTCGatherer(supplyId);
 									this.startGathering(gameState);
@@ -298,14 +299,14 @@ export class Worker
 				}
 				if (stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 				{
-					if (gameState.ai.playedTurn % 10 == 0)
+					if (gameState.ai.playedTurn % 10 === 0)
 					{
 						// Check from time to time that UnitAI does not send us to an inaccessible dropsite
 						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
-							this.entAccess != getLandAccess(gameState, dropsite))
+							this.entAccess !== getLandAccess(gameState, dropsite))
 						{
 							returnResources(gameState, this.ent);
 						}
@@ -316,20 +317,20 @@ export class Worker
 					// reordered to gather after having returned the resources (when comparing its supplyId with the UnitAI one).
 					const gatherType = ent.getMetadata(PlayerID, "gather-type") ?? "";
 					const influenceGroup = Resources.GetResource(gatherType)?.aiAnalysisInfluenceGroup;
-					if (influenceGroup && influenceGroup == "sparse")
+					if (influenceGroup && influenceGroup === "sparse")
 					{
 						const supplyId = ent.getMetadata(PlayerID, "supply");
 						if (supplyId)
 						{
 							const nearby = this.base.resources.dropsiteSupplies[gatherType].nearby;
-							if (!nearby.some((sup: ResourceSupply): boolean => sup.id == supplyId))
+							if (!nearby.some((sup: ResourceSupply): boolean => sup.id === supplyId))
 							{
 								if (nearby.length)
 									ent.setMetadata(PlayerID, "supply", undefined);
 								else
 								{
 									const medium = this.base.resources.dropsiteSupplies[gatherType].medium;
-									if (!medium.some((sup: ResourceSupply): boolean => sup.id == supplyId) && medium.length)
+									if (!medium.some((sup: ResourceSupply): boolean => sup.id === supplyId) && medium.length)
 										ent.setMetadata(PlayerID, "supply", undefined);
 								}
 							}
@@ -340,12 +341,12 @@ export class Worker
 		}
 		else if (subrole === Worker.SUBROLE_BUILDER)
 		{
-			if (unitAIStateOrder == "REPAIR")
+			if (unitAIStateOrder === "REPAIR")
 			{
 				// Update our target in case UnitAI sent us to a different foundation because of autocontinue
 				// and abandon it if UnitAI has sent us to build a field (as we build them only when needed)
 				const order = ent.unitAIOrderData()[0];
-				if (order && order.target && ent.getMetadata(PlayerID, "target-foundation") != order.target)
+				if (order && order.target && ent.getMetadata(PlayerID, "target-foundation") !== order.target)
 				{
 					const targetId = order.target;
 					const target = gameState.getEntityById(targetId);
@@ -357,7 +358,7 @@ export class Worker
 					ent.setMetadata(PlayerID, "target-foundation", undefined);
 					ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
 					ent.stopMoving();
-					if (this.baseID != hqOf(gameState).basesManager.baselessBase().ID)
+					if (this.baseID !== hqOf(gameState).basesManager.baselessBase().ID)
 					{
 						// reassign it to something useful
 						this.base.reassignIdleWorkers(gameState, [ent]);
@@ -382,7 +383,7 @@ export class Worker
 				// If worker elephant, move away to avoid being trapped in between constructions
 				if (ent.hasClass("Elephant"))
 					this.moveToGatherer(gameState, ent, true);
-				else if (this.baseID != hqOf(gameState).basesManager.baselessBase().ID)
+				else if (this.baseID !== hqOf(gameState).basesManager.baselessBase().ID)
 				{
 					// reassign it to something useful
 					this.base.reassignIdleWorkers(gameState, [ent]);
@@ -390,16 +391,13 @@ export class Worker
 					return;
 				}
 			}
-			else if (unitAIStateOrder == "RETURNRESOURCE" &&
-				ent.unitAIOrderData().some(order => order.target == targetFoundationId))
+			else if (unitAIStateOrder !== "RETURNRESOURCE" ||
+				!ent.unitAIOrderData().some(order => order.target === targetFoundationId))
 			{
-				// already walking its load home, the building queued after it
-			}
-			else
-			{
+				// (not while it walks its load home with the building queued after it)
 				const goalAccess = requireValue(getLandAccess(gameState, target));
 				const queued = returnResources(gameState, ent);
-				if (this.entAccess == goalAccess)
+				if (this.entAccess === goalAccess)
 					ent.repair(target, target.hasClass("House"), queued);  // autocontinue=true for houses
 				else
 					hqOf(gameState).navalManager.requireTransport(gameState, ent, this.entAccess, goalAccess, target.position());
@@ -423,7 +421,7 @@ export class Worker
 						if (this.startHunting(gameState, basePos))
 						{
 							ent.setMetadata(PlayerID, "base", base.ID);
-							if (base.accessIndex == this.entAccess)
+							if (base.accessIndex === this.entAccess)
 								ent.move(basePos[0], basePos[1]);
 							else
 								hqOf(gameState).navalManager.requireTransport(gameState, ent, this.entAccess, base.accessIndex ?? NO_REGION, basePos);
@@ -437,11 +435,11 @@ export class Worker
 			}
 			else	// Perform some sanity checks
 			{
-				if (unitAIStateOrder == "GATHER")
+				if (unitAIStateOrder === "GATHER")
 				{
 					// we may have drifted towards ennemy territory during the hunt, if yes go home
 					const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(ent.position());
-					if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
+					if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 						this.startHunting(gameState);
 					else if (stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 					{
@@ -450,7 +448,7 @@ export class Worker
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
-							this.entAccess != getLandAccess(gameState, dropsite))
+							this.entAccess !== getLandAccess(gameState, dropsite))
 						{
 							returnResources(gameState, ent);
 						}
@@ -465,7 +463,7 @@ export class Worker
 			else	// if we have drifted towards ennemy territory during the fishing, go home
 			{
 				const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(ent.position());
-				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
+				if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 					this.startFishing(gameState);
 			}
 		}
@@ -492,9 +490,9 @@ export class Worker
 	{
 		const targetFoundationId = this.ent.getMetadata(PlayerID, "target-foundation");
 		const target = gameState.getEntityById(targetFoundationId);
-		if (!target || target.foundationProgress() === undefined && target.needsRepair() == false)
+		if (!target || target.foundationProgress() === undefined && target.needsRepair() === false)
 			return false;
-		if (getLandAccess(gameState, target) != this.entAccess)
+		if (getLandAccess(gameState, target) !== this.entAccess)
 			return false;
 		this.ent.repair(target, target.hasClass("House"));  // autocontinue=true for houses
 		return true;
@@ -509,7 +507,7 @@ export class Worker
 		const resource = this.ent.getMetadata(PlayerID, "gather-type") ?? "";
 
 		// If we are gathering food, try to hunt first
-		if (resource == "food" && this.startHunting(gameState))
+		if (resource === "food" && this.startHunting(gameState))
 			return true;
 
 		const findSupply = function(worker: Worker, base: BaseView & SupplyUpkeep, resource: string, band: string): CommonEntity | false
@@ -538,14 +536,14 @@ export class Worker
 				// check if available resource is worth one additionnal gatherer (except for farms)
 				const nbGatherers = requireValue(entity.resourceSupplyNumGatherers()) + worker.base.GetTCGatherer(supplies[i].id);
 				const supplyTypeObj = entity.resourceSupplyType();
-				if (supplyTypeObj && supplyTypeObj.specific != "grain" && nbGatherers > 0 &&
+				if (supplyTypeObj && supplyTypeObj.specific !== "grain" && nbGatherers > 0 &&
 					requireValue(entity.resourceSupplyAmount())/(1+nbGatherers) < 30)
 				{
 					continue;
 				}
 				// not in ennemy territory
 				const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(entity.position());
-				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
+				if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))  // player is its own ally
 					continue;
 				worker.base.AddTCGatherer(supplies[i].id);
 				ent.setMetadata(PlayerID, "supply", supplies[i].id);
@@ -559,7 +557,7 @@ export class Worker
 		let supply;
 
 		// first look in our own base if accessible from our present position
-		if (this.baseAccess == this.entAccess)
+		if (this.baseAccess === this.entAccess)
 		{
 			supply = findSupply(this, this.base, resource, "nearby");
 			if (supply)
@@ -568,7 +566,7 @@ export class Worker
 				return true;
 			}
 			// --> for food, try to gather from fields if any, otherwise build one if any
-			if (resource == "food")
+			if (resource === "food")
 			{
 				supply = this.gatherNearestField(gameState, this.baseID);
 				if (supply)
@@ -594,9 +592,9 @@ export class Worker
 		// --> check other bases directly accessible
 		for (const base of basesOf(gameState))
 		{
-			if (base.ID == this.baseID)
+			if (base.ID === this.baseID)
 				continue;
-			if (base.accessIndex != this.entAccess)
+			if (base.accessIndex !== this.entAccess)
 				continue;
 			supply = findSupply(this, base, resource, "nearby");
 			if (supply)
@@ -606,13 +604,13 @@ export class Worker
 				return true;
 			}
 		}
-		if (resource == "food")	// --> for food, try to gather from fields if any, otherwise build one if any
+		if (resource === "food")	// --> for food, try to gather from fields if any, otherwise build one if any
 		{
 			for (const base of basesOf(gameState))
 			{
-				if (base.ID == this.baseID)
+				if (base.ID === this.baseID)
 					continue;
-				if (base.accessIndex != this.entAccess)
+				if (base.accessIndex !== this.entAccess)
 					continue;
 				supply = this.gatherNearestField(gameState, base.ID);
 				if (supply)
@@ -632,9 +630,9 @@ export class Worker
 		}
 		for (const base of basesOf(gameState))
 		{
-			if (base.ID == this.baseID)
+			if (base.ID === this.baseID)
 				continue;
-			if (base.accessIndex != this.entAccess)
+			if (base.accessIndex !== this.entAccess)
 				continue;
 			supply = findSupply(this, base, resource, "medium");
 			if (supply)
@@ -648,14 +646,14 @@ export class Worker
 		// Okay may-be we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any accessible foundation available
 		const foundations = gameState.getOwnFoundations().toEntityArray();
-		let shouldBuild = this.ent.isBuilder() && foundations.some((foundation: import("simulation/ai/common-api/entity.js").Entity): boolean =>
+		let shouldBuild = this.ent.isBuilder() && foundations.some((foundation: CommonEntity): boolean =>
 		{
-			if (!foundation || getLandAccess(gameState, foundation) != this.entAccess)
+			if (!foundation || getLandAccess(gameState, foundation) !== this.entAccess)
 				return false;
 			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
-			if (dropsiteTypes && dropsiteTypes.indexOf(resource) != -1)
+			if (dropsiteTypes && dropsiteTypes.indexOf(resource) !== -1)
 			{
-				if (foundation.getMetadata(PlayerID, "base") != this.baseID)
+				if (foundation.getMetadata(PlayerID, "base") !== this.baseID)
 					this.ent.setMetadata(PlayerID, "base", foundation.getMetadata(PlayerID, "base"));
 				this.ent.setMetadata(PlayerID, "target-foundation", foundation.id());
 				this.ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -670,33 +668,33 @@ export class Worker
 		// Still nothing ... try bases which need a transport
 		for (const base of basesOf(gameState))
 		{
-			if (base.accessIndex == this.entAccess)
+			if (base.accessIndex === this.entAccess)
 				continue;
 			supply = findSupply(this, base, resource, "nearby");
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
-				if (base.ID != this.baseID)
+				if (base.ID !== this.baseID)
 					this.ent.setMetadata(PlayerID, "base", base.ID);
 				return true;
 			}
 		}
-		if (resource == "food")	// --> for food, try to gather from fields if any, otherwise build one if any
+		if (resource === "food")	// --> for food, try to gather from fields if any, otherwise build one if any
 		{
 			for (const base of basesOf(gameState))
 			{
-				if (base.accessIndex == this.entAccess)
+				if (base.accessIndex === this.entAccess)
 					continue;
 				supply = this.gatherNearestField(gameState, base.ID);
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
-					if (base.ID != this.baseID)
+					if (base.ID !== this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
 					return true;
 				}
 				supply = this.buildAnyField(gameState, base.ID);
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
-					if (base.ID != this.baseID)
+					if (base.ID !== this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
 					return true;
 				}
@@ -704,29 +702,29 @@ export class Worker
 		}
 		for (const base of basesOf(gameState))
 		{
-			if (base.accessIndex == this.entAccess)
+			if (base.accessIndex === this.entAccess)
 				continue;
 			supply = findSupply(this, base, resource, "medium");
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
-				if (base.ID != this.baseID)
+				if (base.ID !== this.baseID)
 					this.ent.setMetadata(PlayerID, "base", base.ID);
 				return true;
 			}
 		}
 		// Okay so we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any non-accessible foundation available
-		shouldBuild = this.ent.isBuilder() && foundations.some((foundation: import("simulation/ai/common-api/entity.js").Entity): boolean =>
+		shouldBuild = this.ent.isBuilder() && foundations.some((foundation: CommonEntity): boolean =>
 		{
-			if (!foundation || getLandAccess(gameState, foundation) == this.entAccess)
+			if (!foundation || getLandAccess(gameState, foundation) === this.entAccess)
 				return false;
 			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
-			if (dropsiteTypes && dropsiteTypes.indexOf(resource) != -1)
+			if (dropsiteTypes && dropsiteTypes.indexOf(resource) !== -1)
 			{
 				const foundationAccess = requireValue(getLandAccess(gameState, foundation));
 				if (navalManager.requireTransport(gameState, this.ent, this.entAccess, foundationAccess, foundation.position()))
 				{
-					if (foundation.getMetadata(PlayerID, "base") != this.baseID)
+					if (foundation.getMetadata(PlayerID, "base") !== this.baseID)
 						this.ent.setMetadata(PlayerID, "base", foundation.getMetadata(PlayerID, "base"));
 					this.ent.setMetadata(PlayerID, "target-foundation", foundation.id());
 					this.ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -741,13 +739,13 @@ export class Worker
 		// Still nothing, we look now for faraway resources, first in the accessible ones, then in the others
 		// except for food when farms or corrals can be used
 		let allowDistant = true;
-		if (resource == "food")
+		if (resource === "food")
 		{
 			allowDistant = hqOf(gameState).allowsDistantFood(gameState);
 		}
 		if (allowDistant)
 		{
-			if (this.baseAccess == this.entAccess)
+			if (this.baseAccess === this.entAccess)
 			{
 				supply = findSupply(this, this.base, resource, "faraway");
 				if (supply)
@@ -758,9 +756,9 @@ export class Worker
 			}
 			for (const base of basesOf(gameState))
 			{
-				if (base.ID == this.baseID)
+				if (base.ID === this.baseID)
 					continue;
-				if (base.accessIndex != this.entAccess)
+				if (base.accessIndex !== this.entAccess)
 					continue;
 				supply = findSupply(this, base, resource, "faraway");
 				if (supply)
@@ -772,12 +770,12 @@ export class Worker
 			}
 			for (const base of basesOf(gameState))
 			{
-				if (base.accessIndex == this.entAccess)
+				if (base.accessIndex === this.entAccess)
 					continue;
 				supply = findSupply(this, base, resource, "faraway");
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
-					if (base.ID != this.baseID)
+					if (base.ID !== this.baseID)
 						this.ent.setMetadata(PlayerID, "base", base.ID);
 					return true;
 				}
@@ -824,9 +822,9 @@ export class Worker
 					continue;
 				const owner = dropsite.owner();
 				// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
-				if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
+				if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 					continue;
-				if (supplyAccess != getLandAccess(gameState, dropsite))
+				if (supplyAccess !== getLandAccess(gameState, dropsite))
 					continue;
 				if (SquareVectorDistance(supplyPosition, dropsitePos) < distSquare)
 					return true;
@@ -856,13 +854,13 @@ export class Worker
 			if (nbGatherers > 0 && requireValue(supply.resourceSupplyAmount())/(1+nbGatherers) < 30)
 				continue;
 
-			const canFlee = !supply.hasClass("Domestic") && supply.templateName().indexOf("resource|") == -1;
+			const canFlee = !supply.hasClass("Domestic") && supply.templateName().indexOf("resource|") === -1;
 			// Only FastMoving and Ranged units should hunt fleeing animals.
 			if (canFlee && !entIsFastMoving && !isRanged)
 				continue;
 
 			const supplyAccess = requireValue(getLandAccess(gameState, supply));
-			if (supplyAccess != this.entAccess)
+			if (supplyAccess !== this.entAccess)
 				continue;
 
 			// measure the distance to the resource.
@@ -876,14 +874,14 @@ export class Worker
 
 			// Avoid enemy territory.
 			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(supplyPos);
-			if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))  // Player is its own ally.
+			if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))  // Player is its own ally.
 				continue;
 			// And if in ally territory, don't hunt this ally's cattle.
-			if (territoryOwner != 0 && territoryOwner != PlayerID && supply.owner() == territoryOwner)
+			if (territoryOwner !== 0 && territoryOwner !== PlayerID && supply.owner() === territoryOwner)
 				continue;
 
 			// Only FastMoving should hunt far from dropsite (specially for non-Domestic animals which flee).
-			if (!entIsFastMoving && canFlee && territoryOwner == 0)
+			if (!entIsFastMoving && canFlee && territoryOwner === 0)
 				continue;
 			const distanceSquare = entIsFastMoving ? 35000 : (canFlee ? 7000 : 12000);
 			if (!hasFoodDropsiteWithinDistance(supplyPos, supplyAccess, distanceSquare))
@@ -937,9 +935,9 @@ export class Worker
 					continue;
 				const owner = dropsite.owner();
 				// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
-				if (owner != PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
+				if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
 					continue;
-				if (fisherSea != getSeaAccess(gameState, dropsite))
+				if (fisherSea !== getSeaAccess(gameState, dropsite))
 					continue;
 				distMin = Math.min(distMin, SquareVectorDistance(pos, dropsitePos));
 			}
@@ -948,13 +946,13 @@ export class Worker
 
 		let exhausted = true;
 		const gatherRates = requireValue(this.ent.resourceGatherRates());
-		resources.forEach((supply: import("simulation/ai/common-api/entity.js").Entity): void =>
+		resources.forEach((supply: CommonEntity): void =>
 		{
 			if (!supply.position())
 				return;
 
 			// check that it is accessible
-			if (hqOf(gameState).navalManager.getFishSea(gameState, supply) != fisherSea)
+			if (hqOf(gameState).navalManager.getFishSea(gameState, supply) !== fisherSea)
 				return;
 
 			exhausted = false;
@@ -1056,7 +1054,7 @@ export class Worker
 		const pos = this.ent.position();
 		for (const found of gameState.getOwnFoundations().values())
 		{
-			if (found.getMetadata(PlayerID, "base") != baseID || !found.hasClass("Field"))
+			if (found.getMetadata(PlayerID, "base") !== baseID || !found.hasClass("Field"))
 				continue;
 			const current = found.getBuildersNb();
 			const template = requireValue(gameState.getBuiltTemplate(found.templateName()));
@@ -1091,11 +1089,11 @@ export class Worker
 		for (const gatherer of gatherers.values())
 		{
 			const gathererType = gatherer.getMetadata(PlayerID, "gather-type") ?? "";
-			if (!gathererType || types.indexOf(gathererType) == -1)
+			if (!gathererType || types.indexOf(gathererType) === -1)
 				continue;
 			const gathererPos = gatherer.position();
 			if (!gathererPos || gatherer.getMetadata(PlayerID, "transport") !== undefined ||
-				getLandAccess(gameState, gatherer) != access || gatherer.isIdle())
+				getLandAccess(gameState, gatherer) !== access || gatherer.isIdle())
 			{
 				continue;
 			}
@@ -1105,7 +1103,7 @@ export class Worker
 			dist = distance;
 			destination = gathererPos;
 		}
-		ent.setMetadata(PlayerID, "nextMoveToGatherer", gameState.ai.elapsedTime + (destination ? 12 : 5));
+		ent.setMetadata(PlayerID, "nextMoveToGatherer", seconds(gameState.ai.elapsedTime + (destination ? 12 : 5)));
 		if (destination && dist > 10)
 			ent.move(destination[0], destination[1]);
 	}
@@ -1131,24 +1129,24 @@ export class Worker
 		const approachingTarget = this.ent.getMetadata(PlayerID, "approachingTarget");
 		const carrying = this.ent.resourceCarrying();
 		const carriedAmount = carrying && carrying.length > 0 ? carrying[0].amount : 0;
-		if (!approachingTarget || approachingTarget != targetId)
+		if (!approachingTarget || approachingTarget !== targetId)
 		{
 			this.ent.setMetadata(PlayerID, "approachingTarget", targetId);
 			this.ent.setMetadata(PlayerID, "approachingTime", undefined);
 			this.ent.setMetadata(PlayerID, "approachingPos", undefined);
 			this.ent.setMetadata(PlayerID, "carriedBefore", carriedAmount);
 			const alreadyTried = this.ent.getMetadata(PlayerID, "alreadyTried");
-			if (alreadyTried && alreadyTried != targetId)
+			if (alreadyTried && alreadyTried !== targetId)
 				this.ent.setMetadata(PlayerID, "alreadyTried", undefined);
 		}
 
 		const carriedBefore = this.ent.getMetadata(PlayerID, "carriedBefore");
-		if (carriedBefore != carriedAmount)
+		if (carriedBefore !== carriedAmount)
 		{
 			this.ent.setMetadata(PlayerID, "approachingTarget", undefined);
 			this.ent.setMetadata(PlayerID, "alreadyTried", undefined);
 			if (target.getMetadata(PlayerID, "inaccessibleTime"))
-				target.setMetadata(PlayerID, "inaccessibleTime", 0);
+				target.setMetadata(PlayerID, "inaccessibleTime", seconds(0));
 			return false;
 		}
 
@@ -1161,7 +1159,7 @@ export class Worker
 		{
 			const presentPos = this.ent.position();
 			const approachingPos = this.ent.getMetadata(PlayerID, "approachingPos");
-			if (!approachingPos || approachingPos[0] != presentPos[0] || approachingPos[1] != presentPos[1])
+			if (!approachingPos || approachingPos[0] !== presentPos[0] || approachingPos[1] !== presentPos[1])
 			{
 				this.ent.setMetadata(PlayerID, "approachingTime", gameState.ai.elapsedTime);
 				this.ent.setMetadata(PlayerID, "approachingPos", presentPos);
@@ -1171,7 +1169,7 @@ export class Worker
 			{
 				if (this.ent.getMetadata(PlayerID, "alreadyTried"))
 				{
-					target.setMetadata(PlayerID, "inaccessibleTime", gameState.ai.elapsedTime + 600);
+					target.setMetadata(PlayerID, "inaccessibleTime", seconds(gameState.ai.elapsedTime + 600));
 					return true;
 				}
 				// let's try again to reach it

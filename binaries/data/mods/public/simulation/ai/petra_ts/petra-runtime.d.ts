@@ -27,7 +27,7 @@ declare namespace PetraRuntime {
 /** Turn counter used to stagger expensive AI work every 8 turns. */
 		playedTurn: number;
 		queueManager: import("./execution/queueManager.ts").QueueManager;
-		queues: Record<string, import("./execution/queue.ts").Queue>;
+		queues: QueueCollection;
 		/**
 		 * baseAI: the engine's territory grid, copied onto the AI by baseAI.
 		 * Not the territory map the headquarters builds — that one is
@@ -44,8 +44,16 @@ declare namespace PetraRuntime {
 /** The three concrete plan kinds a Queue can hold (all extend PlanLike). */
 	type ConcretePlan = import("./execution/queueplanTraining.ts").TrainingPlan | import("./execution/queueplanBuilding.ts").ConstructionPlan | import("./execution/queueplanResearch.ts").ResearchPlan;
 
-/** All named Petra queues, keyed by their queue name (see Config.priorities). */
-	type QueueCollection = Record<string, import("./execution/queue.ts").Queue>;
+/** The queues the configuration sets up (Config.priorities). */
+	type ConfiguredQueueName = "villager" | "citizenSoldier" | "trader" | "healer" | "ships" | "house" |
+		"dropsites" | "field" | "dock" | "corral" | "economicBuilding" | "militaryBuilding" |
+		"defenseBuilding" | "civilCentre" | "majorTech" | "minorTech" | "wonder" | "emergency";
+/** The three queues an attack plan adds for itself while it trains (attackPlan.ts). */
+	type AttackQueueName = `plan_${number}` | `plan_${number}_champ` | `plan_${number}_siege`;
+	type QueueName = ConfiguredQueueName | AttackQueueName;
+/** All Petra queues by name: the configured ones always, an attack plan's while it prepares. */
+	type QueueCollection = { [K in ConfiguredQueueName]: import("./execution/queue.ts").Queue } &
+		{ [K in AttackQueueName]?: import("./execution/queue.ts").Queue };
 
 /**
  * The three adjustable personality axes Petra reads from the game settings

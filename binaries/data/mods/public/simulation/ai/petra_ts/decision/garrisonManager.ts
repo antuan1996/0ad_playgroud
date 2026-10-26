@@ -3,6 +3,7 @@ import { dumpEntity, isSiegeUnit, requireValue } from "../adapter/entityExtend.t
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { hasActivity } from "../adapter/unitState.ts";
+import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
 
 export type GarrisonHolderData = {
 	list: EntityId[];
@@ -28,7 +29,7 @@ export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decay
 
 export class GarrisonManager
 {
-	declare Config: Config;
+	Config: Config;
 
 	holders = new Map<EntityId, GarrisonHolderData>();
 	decayingStructures = new Map<EntityId, number>();
@@ -51,7 +52,7 @@ export class GarrisonManager
 		{
 			for (const id of this.holders.keys())
 			{
-				if (id != evt.entity)
+				if (id !== evt.entity)
 					continue;
 				const data = this.holders.get(id);
 				if (!data)
@@ -67,7 +68,7 @@ export class GarrisonManager
 					for (const entId of data.list)
 					{
 						const ent = gameState.getEntityById(entId);
-						if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") != id)
+						if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
 							continue;
 						this.leaveGarrison(ent);
 						ent.stopMoving();
@@ -101,7 +102,7 @@ export class GarrisonManager
 				for (const entId of list)
 				{
 					const ent = gameState.getEntityById(entId);
-					if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") != id)
+					if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
 						continue;
 					this.leaveGarrison(ent);
 					ent.stopMoving();
@@ -127,9 +128,9 @@ export class GarrisonManager
 				}
 				else
 				{
-					if (ent.unitAIOrderData().some((order: Record<string, unknown>): unknown => order.target && order.target == id))
+					if (ent.unitAIOrderData().some((order: Record<string, unknown>): unknown => order.target && order.target === id))
 						continue;
-					if (ent.getMetadata(PlayerID, "garrisonHolder") == id)
+					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 					{
 						// The garrison order must have failed
 						this.leaveGarrison(ent);
@@ -168,7 +169,7 @@ export class GarrisonManager
 					}
 					else if (ent.hasClass("Unit"))
 					{
-						if (ent.owner() == 0)
+						if (ent.owner() === 0)
 						{
 							if (!hasActivity(ent, "COMBAT"))
 								continue;
@@ -214,7 +215,7 @@ export class GarrisonManager
 						continue;
 					if (this.keepGarrisoned(ent, holder, around))
 						continue;
-					if (ent.getMetadata(PlayerID, "garrisonHolder") == id)
+					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 					{
 						this.leaveGarrison(ent);
 						ent.stopMoving();
@@ -277,10 +278,7 @@ export class GarrisonManager
 			     " and subrole " + ent.getMetadata(PlayerID, "subrole") + " and transport " + ent.getMetadata(PlayerID, "transport"));
 		}
 
-		if (ent.getMetadata(PlayerID, "plan") !== undefined)
-			ent.setMetadata(PlayerID, "plan", -2);
-		else
-			ent.setMetadata(PlayerID, "plan", -3);
+		ent.setMetadata(PlayerID, "plan", lentPlan(ent.getMetadata(PlayerID, "plan")));
 		ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_GARRISONING);
 		ent.setMetadata(PlayerID, "garrisonHolder", holder.id());
 		ent.setMetadata(PlayerID, "garrisonType", type);
@@ -296,10 +294,7 @@ export class GarrisonManager
 	leaveGarrison(ent: CommonEntity): void
 	{
 		ent.setMetadata(PlayerID, "subrole", undefined);
-		if (ent.getMetadata(PlayerID, "plan") === -2)
-			ent.setMetadata(PlayerID, "plan", -1);
-		else
-			ent.setMetadata(PlayerID, "plan", undefined);
+		ent.setMetadata(PlayerID, "plan", releasedPlan(ent.getMetadata(PlayerID, "plan")));
 		ent.setMetadata(PlayerID, "garrisonHolder", undefined);
 	}
 

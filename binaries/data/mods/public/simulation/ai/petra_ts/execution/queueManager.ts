@@ -33,17 +33,56 @@ import { requireValue } from "../adapter/entityExtend.ts";
  * name. The keys of `queues` are unique, so a tie is always between two
  * different names and everything is strictly ordered.
  */
-function sortedQueues(queues: Record<string, Queue>, priorities: PetraRuntime.Dict<number>): Array<[string, Queue]>
+function sortedQueues(queues: PetraRuntime.QueueCollection, priorities: PetraRuntime.Dict<number>): Array<[PetraRuntime.QueueName, Queue]>
 {
-	return Object.keys(queues)
-		.sort((a: string, b: string): number =>
+	return [...queueEntries(queues)]
+		.sort(([a]: [string, Queue], [b]: [string, Queue]): number =>
 		{
 			const priorityDifference = priorities[b] - priorities[a];
 			if (priorityDifference !== 0)
 				return priorityDifference;
 			return a < b ? -1 : 1;
-		})
-		.map((name: string): [string, Queue] => [name, queues[name]]);
+		});
+}
+
+/** an attack plan's queues (attackPlan.ts): plan_<name>, with _champ or _siege */
+const ATTACK_QUEUE = /^plan_\d+(_champ|_siege)?$/;
+
+/** Whether `name` names a queue: one of the configuration's or an attack plan's. */
+export function isQueueName(config: Config, name: string): name is PetraRuntime.QueueName
+{
+	return name in config.priorities || ATTACK_QUEUE.test(name);
+}
+
+/** The queues the configuration sets up, empty, in the order of Config.priorities. */
+export function configuredQueues(): PetraRuntime.QueueCollection
+{
+	return {
+		"villager": new Queue(), "citizenSoldier": new Queue(), "trader": new Queue(), "healer": new Queue(),
+		"ships": new Queue(), "house": new Queue(), "dropsites": new Queue(), "field": new Queue(),
+		"dock": new Queue(), "corral": new Queue(), "economicBuilding": new Queue(),
+		"militaryBuilding": new Queue(), "defenseBuilding": new Queue(), "civilCentre": new Queue(),
+		"majorTech": new Queue(), "minorTech": new Queue(), "wonder": new Queue(), "emergency": new Queue()
+	};
+}
+
+/** Whether the collection holds a queue of that name (every key it lists). */
+function holdsQueue(queues: PetraRuntime.QueueCollection, name: string): name is PetraRuntime.QueueName
+{
+	return Object.hasOwn(queues, name);
+}
+
+/** Each queue with its name, in the collection's order; lazy, as `for...in` over it would be. */
+function* queueEntries(queues: PetraRuntime.QueueCollection): Generator<[PetraRuntime.QueueName, Queue]>
+{
+	for (const name in queues)
+	{
+		if (!holdsQueue(queues, name))
+			continue;
+		const queue = queues[name];
+		if (queue)
+			yield [name, queue];
+	}
 }
 
 export class QueueManager
@@ -52,22 +91,28 @@ export class QueueManager
 	accounts: Record<string, ResourcesManager>;
 	finishingTime: GameSeconds | undefined;
 	priorities: PetraRuntime.Dict<number>;
-	queueArrays: Array<[string, Queue]>;
-	queues: Record<string, Queue>;
+	queueArrays: Array<[PetraRuntime.QueueName, Queue]>;
+	queues: PetraRuntime.QueueCollection;
 
-	constructor(Config: Config, queues: Record<string, Queue>)
+	constructor(Config: Config, queues: PetraRuntime.QueueCollection)
 	{
 		this.Config = Config;
 		this.queues = queues;
 		this.priorities = {};
-		for (const i in Config.priorities)
-			this.priorities[i] = Config.priorities[i];
+		for (const [name, priority] of Object.entries(Config.priorities))
+			this.priorities[name] = priority;
 		this.accounts = {};
 		for (const q in this.queues)
 			this.accounts[q] = new ResourcesManager();
 
 		// the sorting is updated on priority change.
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
+	}
+
+	/** Each queue with its name, in the order the queues were added. */
+	entries(): Generator<[PetraRuntime.QueueName, Queue]>
+	{
+		return queueEntries(this.queues);
 	}
 
 	getAvailableResources(gameState: CommonGameState): ResourcesManager
@@ -189,7 +234,7 @@ export class QueueManager
 	printQueues(gameState: CommonGameState): void
 	{
 		let numWorkers = 0;
-		gameState.getOwnUnits().forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+		gameState.getOwnUnits().forEach((ent: CommonEntity): void =>
 		{
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER &&
 				ent.getMetadata(PlayerID, "plan") === undefined)
@@ -199,9 +244,8 @@ export class QueueManager
 		});
 		aiWarn("---------- QUEUES ------------ with pop " + gameState.getPopulation() + " and workers " +
 			numWorkers);
-		for (const i in this.queues)
+		for (const [i, q] of queueEntries(this.queues))
 		{
-			const q = this.queues[i];
 			if (q.hasQueuedUnits())
 			{
 				aiWarn(i + ": ( with priority " + this.priorities[i] +" and accounts " +
@@ -229,14 +273,14 @@ export class QueueManager
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	clear(): void
 	{
-		for (const i in this.queues)
-			this.queues[i].empty();
+		for (const [, queue] of queueEntries(this.queues))
+			queue.empty();
 	}
 
 	/**
 	 * set accounts of queue i from the unaccounted resources
 	 */
-	setAccounts(gameState: CommonGameState, cost: ResourcesManager | Record<string, number>, i: string): void
+	setAccounts(gameState: CommonGameState, cost: ResourcesManager | Record<string, number>, i: PetraRuntime.QueueName): void
 	{
 		const available = this.getAvailableResources(gameState);
 		for (const res of Resources.GetCodes())
@@ -250,7 +294,7 @@ export class QueueManager
 	/**
 	 * transfer accounts from queue i to queue j
 	 */
-	transferAccounts(cost: ResourcesManager | Record<string, number>, i: string, j: string): void
+	transferAccounts(cost: ResourcesManager | Record<string, number>, i: PetraRuntime.QueueName, j: PetraRuntime.QueueName): void
 	{
 		for (const res of Resources.GetCodes())
 		{
@@ -300,17 +344,17 @@ export class QueueManager
 			//	-queues accounts are capped at "resources for the first + 60% of the next"
 			// This avoids getting a high priority queue with many elements hogging all of one resource
 			// uselessly while it awaits for other resources.
-			for (const j in this.queues)
+			for (const [j, queue] of queueEntries(this.queues))
 			{
 				// returns exactly the correct amount, ie 0 if we're not go.
-				const queueCost = this.queues[j].maxAccountWanted(gameState, 0.6);
-				if (this.queues[j].hasQueuedUnits() && this.accounts[j][res] < queueCost[res] && !this.queues[j].paused)
+				const queueCost = queue.maxAccountWanted(gameState, 0.6);
+				if (queue.hasQueuedUnits() && this.accounts[j][res] < queueCost[res] && !queue.paused)
 				{
 					// adding us to the list of queues that need an update.
 					tempPrio[j] = this.priorities[j];
 					maxNeed[j] = queueCost[res] - this.accounts[j][res];
 					// if we have enough of that resource for our first item in the queue, diminish our priority.
-					const nextPlan = this.queues[j].getNext();
+					const nextPlan = queue.getNext();
 					if (nextPlan && this.accounts[j][res] >= nextPlan.getCost()[res])
 						tempPrio[j] /= 2;
 
@@ -360,21 +404,19 @@ export class QueueManager
 		// We have no available resources, see if we can't "compact" them in one queue.
 		// compare queues 2 by 2, and if one with a higher priority could be completed by our amount, give it.
 		// TODO: this isn't perfect compression.
-		for (const j in this.queues)
+		for (const [j, queue] of queueEntries(this.queues))
 		{
-			if (!this.queues[j].hasQueuedUnits() || this.queues[j].paused)
+			if (!queue.hasQueuedUnits() || queue.paused)
 				continue;
 
-			const queue = this.queues[j];
 			const queueCost = queue.maxAccountWanted(gameState, 0);
 			if (this.accounts[j][res] >= queueCost[res])
 				continue;
 
-			for (const i in this.queues)
+			for (const [i, otherQueue] of queueEntries(this.queues))
 			{
 				if (i === j)
 					continue;
-				const otherQueue = this.queues[i];
 				if (this.priorities[i] >= this.priorities[j] || otherQueue.switched !== 0)
 					continue;
 				if (this.accounts[j][res] + this.accounts[i][res] < queueCost[res])
@@ -429,9 +471,9 @@ export class QueueManager
 	{
 		Engine.ProfileStart("Queue Manager");
 
-		for (const i in this.queues)
+		for (const [i, queue] of queueEntries(this.queues))
 		{
-			this.queues[i].check(gameState);  // do basic sanity checks on the queue
+			queue.check(gameState);  // do basic sanity checks on the queue
 			if (this.priorities[i] > 0)
 				continue;
 			aiWarn("QueueManager received bad priorities, please report this error: " +
@@ -459,39 +501,39 @@ export class QueueManager
 	{
 		const numWorkers = gameState.countOwnEntitiesAndQueuedWithRole(Worker.ROLE_WORKER);
 		const workersMin = Math.min(Math.max(12, 24 * this.Config.popScaling), this.Config.Economy.popPhase2);
-		for (const q in this.queues)
+		for (const [q, queue] of queueEntries(this.queues))
 		{
 			let toBePaused = false;
 			if (!hqOf(gameState).hasPotentialBase())
-				toBePaused = q != "dock" && q != "civilCentre";
+				toBePaused = q !== "dock" && q !== "civilCentre";
 			else if (numWorkers < workersMin / 3)
-				toBePaused = q != "citizenSoldier" && q != "villager" && q != "emergency";
+				toBePaused = q !== "citizenSoldier" && q !== "villager" && q !== "emergency";
 			else if (numWorkers < workersMin * 2 / 3)
-				toBePaused = q == "civilCentre" || q == "economicBuilding" ||
-					q == "militaryBuilding" || q == "defenseBuilding" || q == "healer" ||
-					q == "majorTech" || q == "minorTech" || q.indexOf("plan_") != -1;
+				toBePaused = q === "civilCentre" || q === "economicBuilding" ||
+					q === "militaryBuilding" || q === "defenseBuilding" || q === "healer" ||
+					q === "majorTech" || q === "minorTech" || q.indexOf("plan_") !== -1;
 			else if (numWorkers < workersMin)
-				toBePaused = q == "civilCentre" || q == "defenseBuilding" ||
-					q == "majorTech" || q.indexOf("_siege") != -1 || q.indexOf("_champ") != -1;
+				toBePaused = q === "civilCentre" || q === "defenseBuilding" ||
+					q === "majorTech" || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
 
 			if (toBePaused)
 			{
-				if (q == "field" && hqOf(gameState).needFarm &&
+				if (q === "field" && hqOf(gameState).needFarm &&
 					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "corral" && hqOf(gameState).needCorral &&
+				if (q === "corral" && hqOf(gameState).needCorral &&
 					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "dock" && hqOf(gameState).needFish &&
+				if (q === "dock" && hqOf(gameState).needFish &&
 					!gameState.getOwnStructures().filter(filters.byClass("Dock")).hasEntities())
 				{
 					toBePaused = false;
 				}
-				if (q == "ships" && hqOf(gameState).needFish &&
+				if (q === "ships" && hqOf(gameState).needFish &&
 					!hqOf(gameState).navalManager.ships.filter(filters.byClass("FishingBoat"))
 						.hasEntities())
 				{
@@ -499,7 +541,6 @@ export class QueueManager
 				}
 			}
 
-			const queue = this.queues[q];
 			if (!queue.paused && toBePaused)
 			{
 				queue.paused = true;
@@ -509,7 +550,7 @@ export class QueueManager
 				queue.paused = false;
 
 			// And reduce the batch sizes of attack queues
-			if (q.indexOf("plan_") != -1 && numWorkers < workersMin && queue.plans[0])
+			if (q.indexOf("plan_") !== -1 && numWorkers < workersMin && queue.plans[0])
 			{
 				queue.plans[0].number = 1;
 				if (queue.plans[1])
@@ -518,7 +559,7 @@ export class QueueManager
 		}
 	}
 
-	canAfford(queue: string, cost: ResourcesManager | Record<string, number>): boolean
+	canAfford(queue: PetraRuntime.QueueName, cost: ResourcesManager | Record<string, number>): boolean
 	{
 		if (!this.accounts[queue])
 			return false;
@@ -526,45 +567,47 @@ export class QueueManager
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	pauseQueue(queue: string, scrapAccounts: boolean): void
+	pauseQueue(queue: PetraRuntime.QueueName, scrapAccounts: boolean): void
 	{
-		if (!this.queues[queue])
+		const held = this.queues[queue];
+		if (!held)
 			return;
-		this.queues[queue].paused = true;
+		held.paused = true;
 		if (scrapAccounts)
 			this.accounts[queue].reset();
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	unpauseQueue(queue: string): void
+	unpauseQueue(queue: PetraRuntime.QueueName): void
 	{
-		if (this.queues[queue])
-			this.queues[queue].paused = false;
+		const held = this.queues[queue];
+		if (held)
+			held.paused = false;
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	pauseAll(scrapAccounts: boolean, but: string | undefined): void
+	pauseAll(scrapAccounts: boolean, but: PetraRuntime.QueueName | undefined): void
 	{
-		for (const q in this.queues)
+		for (const [q, queue] of queueEntries(this.queues))
 		{
-			if (q == but)
+			if (q === but)
 				continue;
 			if (scrapAccounts)
 				this.accounts[q].reset();
-			this.queues[q].paused = true;
+			queue.paused = true;
 		}
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	unpauseAll(but: string | undefined): void
+	unpauseAll(but: PetraRuntime.QueueName | undefined): void
 	{
-		for (const q in this.queues)
-			if (q != but)
-				this.queues[q].paused = false;
+		for (const [q, queue] of queueEntries(this.queues))
+			if (q !== but)
+				queue.paused = false;
 	}
 
 
-	addQueue(queueName: string, priority: number): void
+	addQueue(queueName: PetraRuntime.AttackQueueName, priority: number): void
 	{
 		if (this.queues[queueName] !== undefined)
 			return;
@@ -576,7 +619,7 @@ export class QueueManager
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
-	removeQueue(queueName: string): void
+	removeQueue(queueName: PetraRuntime.AttackQueueName): void
 	{
 		if (this.queues[queueName] === undefined)
 			return;
@@ -588,12 +631,12 @@ export class QueueManager
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
-	getPriority(queueName: string): number
+	getPriority(queueName: PetraRuntime.QueueName): number
 	{
 		return this.priorities[queueName];
 	}
 
-	changePriority(queueName: string, newPriority: number, metadata?: Record<string, unknown>): void
+	changePriority(queueName: PetraRuntime.QueueName, newPriority: number, metadata?: Record<string, unknown>): void
 	{
 		if (this.Config.debug > 1)
 		{
@@ -613,11 +656,11 @@ export class QueueManager
 	{
 		const accounts: Record<string, ReturnType<ResourcesManager["Serialize"]>> = {};
 		const queues: Record<string, ReturnType<Queue["Serialize"]>> = {};
-		for (const q in this.queues)
+		for (const [q, queue] of queueEntries(this.queues))
 		{
-			queues[q] = this.queues[q].Serialize();
+			queues[q] = queue.Serialize();
 			accounts[q] = this.accounts[q].Serialize();
-			if (this.Config.debug == -100)
+			if (this.Config.debug === -100)
 			{
 				aiWarn("queueManager serialization: queue " + q + " >>> " + uneval(queues[q]) +
 					" with accounts " + uneval(accounts[q]));
@@ -638,15 +681,22 @@ export class QueueManager
 	}): void
 	{
 		this.priorities = data.priorities;
-		this.queues = {};
+		// the configured queues, then an attack plan's, in the saved order
+		this.queues = configuredQueues();
 		this.accounts = {};
 
 		// the sorting is updated on priority change.
 		this.queueArrays = [];
 		for (const q in data.queues)
 		{
-			this.queues[q] = new Queue();
-			this.queues[q].Deserialize(gameState, data.queues[q]);
+			if (!isQueueName(this.Config, q))
+			{
+				aiWarn("Petra deserialization error: queue unknown " + q);
+				continue;
+			}
+			const queue = this.queues[q] ?? new Queue();
+			this.queues[q] = queue;
+			queue.Deserialize(gameState, data.queues[q]);
 			this.accounts[q] = new ResourcesManager();
 			this.accounts[q].Deserialize(data.accounts[q]);
 		}

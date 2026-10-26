@@ -4,8 +4,7 @@ import { Entity } from "simulation/ai/common-api/entity.js";
 import { Config, type SerializedConfig } from "./decision/config.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
-import { Queue } from "./execution/queue.ts";
-import { QueueManager } from "./execution/queueManager.ts";
+import { QueueManager, configuredQueues } from "./execution/queueManager.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { seconds, secondsOf } from "./adapter/brands.ts";
 
@@ -208,7 +207,7 @@ export class PetraBot extends BaseAI
 	playedTurn: number = 0;
 	declare player: PlayerId;
 	queueManager: QueueManager | undefined = undefined;
-	queues: Record<string, Queue> = {};
+	queues: PetraRuntime.QueueCollection = configuredQueues();
 	savedEvents: HeadquartersEvents;
 	turn: number = 0;
 	uniqueIDs: Record<string, number> = {};
@@ -253,7 +252,7 @@ export class PetraBot extends BaseAI
 
 			this.Config.Deserialize(this.data.config);
 
-			this.queueManager = new QueueManager(this.Config, {});
+			this.queueManager = new QueueManager(this.Config, configuredQueues());
 			this.queueManager.Deserialize(gameState, this.data.queueManager);
 			this.queues = this.queueManager.queues;
 
@@ -273,9 +272,7 @@ export class PetraBot extends BaseAI
 			this.Config.setConfig(gameState);
 
 			// this.queues can only be modified by the queue manager or things will go awry.
-			this.queues = {};
-			for (const i in this.Config.priorities)
-				this.queues[i] = new Queue();
+			this.queues = configuredQueues();
 
 			this.queueManager = new QueueManager(this.Config, this.queues);
 
@@ -293,14 +290,14 @@ export class PetraBot extends BaseAI
 		if (this.isDeserialized)
 			this.Init(PlayerID, sharedScript);
 
-		if (this.gameFinished || this.gameState.playerData.state == "defeated")
+		if (this.gameFinished || this.gameState.playerData.state === "defeated")
 			return;
 
 		mergeSharedEvents(this.savedEvents, sharedScript.events);
 
 		// Run the update every n turns, offset depending on player ID to balance the load
 		this.elapsedTime = secondsOf(this.gameState.getTimeElapsed());
-		if (!this.playedTurn || (this.turn + this.player) % 8 == 5)
+		if (!this.playedTurn || (this.turn + this.player) % 8 === 5)
 		{
 			Engine.ProfileStart("PetraBot bot (player " + this.player +")");
 

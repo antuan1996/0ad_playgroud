@@ -47,22 +47,22 @@ export interface SerializedTransportPlan {
 
 export class TransportPlan
 {
-	declare ID: number;
+	ID: number;
 	declare boardingPos: Record<string, CommonPosition | undefined>;
 	declare boardingRange: number;
 	declare canceled: boolean | undefined;
-	declare debug: number;
-	declare endIndex: AccessIndex;
-	declare endPos: CommonPosition;
+	debug: number;
+	endIndex: AccessIndex;
+	endPos: CommonPosition;
 	declare failed: boolean;
-	declare flotilla: boolean;
+	flotilla: boolean;
 	declare nTry: Record<number, number>;
-	declare needSplit: CommonEntity[];
+	needSplit: CommonEntity[];
 	declare needTransportShips: boolean;
 	declare recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
 	declare sea: SeaIndex;
 	declare ships: CommonEntityCollection;
-	declare startIndex: AccessIndex;
+	startIndex: AccessIndex;
 	declare state: string;
 	declare transportShips: CommonEntityCollection;
 	declare units: CommonEntityCollection;
@@ -80,7 +80,7 @@ export class TransportPlan
 		this.startIndex = startIndex;
 		// TODO only cases with land-sea-land are allowed for the moment
 		// we could also have land-sea-land-sea-land
-		if (startIndex == 1)
+		if (startIndex === 1)
 		{
 			// special transport from already garrisoned ship
 			if (!ship)
@@ -179,7 +179,7 @@ export class TransportPlan
 
 		for (const ship of this.transportShips.values())
 		{
-			if (this.countFreeSlotsOnShip(ship) == 0)
+			if (this.countFreeSlotsOnShip(ship) === 0)
 				continue;
 			ent.setMetadata(PlayerID, "onBoard", ship.id());
 			if (this.debug > 1)
@@ -254,7 +254,7 @@ export class TransportPlan
 	removeUnit(gameState: CommonGameState, unit: CommonEntity): void
 	{
 		const shipId = unit.getMetadata(PlayerID, "onBoard");
-		if (shipId == "onBoard")
+		if (shipId === "onBoard")
 			return;			// too late, already onBoard
 		else if (shipId !== undefined)
 			unit.stopMoving();	// cancel the garrison order
@@ -277,7 +277,7 @@ export class TransportPlan
 
 	releaseShip(ship: CommonEntity): void
 	{
-		if (ship.getMetadata(PlayerID, "transporter") != this.ID)
+		if (ship.getMetadata(PlayerID, "transporter") !== this.ID)
 		{
 			aiWarn(" Petra: try removing a transporter ship with " +
 				ship.getMetadata(PlayerID, "transporter") + " from " + this.ID + " and stance " +
@@ -332,7 +332,7 @@ export class TransportPlan
 			if (!base || !base.anchor || !base.anchor.position())
 				return false;
 			const baseForUnits = base;
-			this.units.forEach((unit: import("simulation/ai/common-api/entity.js").Entity): void => { unit.setMetadata(PlayerID, "base", baseForUnits.ID); });
+			this.units.forEach((unit: CommonEntity): void => { unit.setMetadata(PlayerID, "base", baseForUnits.ID); });
 		}
 		this.endIndex = this.startIndex;
 		if (base && base.anchor)
@@ -412,7 +412,7 @@ export class TransportPlan
 						{
 							const oldPos = requireMetadata(ent, "posGarrison");
 							const newPos = ent.position();
-							if (oldPos[0] == newPos[0] && oldPos[1] == newPos[1])
+							if (oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 								retry = true;
 							ent.setMetadata(PlayerID, "posGarrison", newPos);
 							ent.setMetadata(PlayerID, "timeGarrison", time);
@@ -451,7 +451,7 @@ export class TransportPlan
 				{
 					const oldPos = requireMetadata(ent, "posGarrison");
 					const newPos = ent.position();
-					if (oldPos[0] == newPos[0] && oldPos[1] == newPos[1])
+					if (oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 					{
 						if (distShip < this.boardingRange)	// looks like we are blocked ... try to go out of this trap
 						{
@@ -517,7 +517,7 @@ export class TransportPlan
 	{
 		for (const ship of this.transportShips.values())
 		{
-			if (ship.garrisoned().indexOf(ent.id()) == -1)
+			if (ship.garrisoned().indexOf(ent.id()) === -1)
 				continue;
 			ent.setMetadata(PlayerID, "onBoard", "onBoard");
 			return true;
@@ -556,7 +556,7 @@ export class TransportPlan
 			if (avoidEnnemy)
 			{
 				const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
-				if (territoryOwner != 0 && !gameState.isPlayerAlly(territoryOwner))
+				if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 					dist += 100000000;
 			}
 			// require a small distance between all ships of the transport plan to avoid path finder problems
@@ -642,7 +642,7 @@ export class TransportPlan
 				const ship = this.shipOf(gameState, ent);
 				if (ship)
 				{
-					if (ship.garrisoned().indexOf(entId) != -1)
+					if (ship.garrisoned().indexOf(entId) !== -1)
 						ent.setMetadata(PlayerID, "onBoard", "onBoard");
 					else
 					{
@@ -658,7 +658,7 @@ export class TransportPlan
 					ent.destroy();
 				}
 			}
-			else if (getLandAccess(gameState, ent) != this.endIndex)
+			else if (getLandAccess(gameState, ent) !== this.endIndex)
 			{
 				// unit unloaded on a wrong region - try to regarrison it and move a bit the ship
 				if (this.debug > 1)
@@ -739,7 +739,7 @@ export class TransportPlan
 
 			let recovering = 0;
 			for (const recov of this.recovered)
-				if (recov.shipId == shipId)
+				if (recov.shipId === shipId)
 					recovering++;
 
 			if (!remaining && !recovering)   // when empty, release the ship and move apart to leave room for other ships. TODO fight

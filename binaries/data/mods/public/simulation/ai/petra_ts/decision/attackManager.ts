@@ -1,12 +1,13 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { AttackPlan, type SerializedAttackPlan } from "../execution/attackPlan.ts";
+import { ATTACK_TYPES, AttackPlan, type AttackType, type SerializedAttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import * as chat from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "../execution/worker.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
+import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 
 export type SerializedAttackManager = {
     properties: {
@@ -20,31 +21,21 @@ export type SerializedAttackManager = {
         currentEnemyPlayer: PlayerId | undefined;
         defeated: Record<number, boolean>;
     };
-    upcomingAttacks: Record<string, SerializedAttackPlan[]>;
-    startedAttacks: Record<string, SerializedAttackPlan[]>;
+    upcomingAttacks: Record<AttackType, SerializedAttackPlan[]>;
+    startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
 };
 
 export class AttackManager
 {
-	declare Config: Config;
+	Config: Config;
 	declare outOfPlan: CommonEntityCollection;
 
 	totalNumber = 0;
 	attackNumber = 0;
 	rushNumber = 0;
 	raidNumber = 0;
-	upcomingAttacks: Record<string, AttackPlan[]> = {
-		[AttackPlan.TYPE_RUSH]: [],
-		[AttackPlan.TYPE_RAID]: [],
-		[AttackPlan.TYPE_DEFAULT]: [],
-		[AttackPlan.TYPE_HUGE_ATTACK]: []
-	};
-	startedAttacks: Record<string, AttackPlan[]> = {
-		[AttackPlan.TYPE_RUSH]: [],
-		[AttackPlan.TYPE_RAID]: [],
-		[AttackPlan.TYPE_DEFAULT]: [],
-		[AttackPlan.TYPE_HUGE_ATTACK]: []
-	};
+	upcomingAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
+	startedAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
 	bombingAttacks = new Map<EntityId, Set<EntityId>>();// Temporary attacks for siege units while waiting their current attack to start
 	debugTime = 0;
 	maxRushes = 0;
@@ -60,7 +51,7 @@ export class AttackManager
 	/** More initialisation for stuff that needs the gameState */
 	init(gameState: CommonGameState): void
 	{
-		this.outOfPlan = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", -1));
+		this.outOfPlan = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", PLAN_RESERVE));
 		this.outOfPlan.registerUpdates();
 	}
 
@@ -97,7 +88,7 @@ export class AttackManager
 				continue;
 			targetPlayer = evt.player;
 			let available = 0;
-			for (const attackType in this.upcomingAttacks)
+			for (const attackType of ATTACK_TYPES)
 			{
 				for (const attack of this.upcomingAttacks[attackType])
 				{
@@ -119,7 +110,7 @@ export class AttackManager
 
 			if (available > 12)	// launch the attack immediately
 			{
-				for (const attackType in this.upcomingAttacks)
+				for (const attackType of ATTACK_TYPES)
 				{
 					for (const attack of this.upcomingAttacks[attackType])
 					{
@@ -146,7 +137,7 @@ export class AttackManager
 		{
 			for (const [targetId, unitIds] of this.bombingAttacks)
 			{
-				if (targetId == evt.entity)
+				if (targetId === evt.entity)
 				{
 					this.bombingAttacks.set(evt.newentity, unitIds);
 					this.bombingAttacks.delete(evt.entity);
@@ -176,12 +167,12 @@ export class AttackManager
 				for (const entId of unitIds.values())
 				{
 					const ent = gameState.getEntityById(entId);
-					if (ent && ent.owner() == PlayerID)
+					if (ent && ent.owner() === PlayerID)
 					{
 						const plan = ent.getMetadata(PlayerID, "plan");
 						const orders = ent.unitAIOrderData();
 						const lastOrder = orders && orders.length ? orders[orders.length-1] : null;
-						if (lastOrder && lastOrder.target && lastOrder.target == targetId && plan != -2 && plan != -3)
+						if (lastOrder && lastOrder.target && lastOrder.target === targetId && !isLent(plan))
 							continue;
 					}
 					unitIds.delete(entId);
@@ -199,9 +190,9 @@ export class AttackManager
 			const ranged = ent.attackRange("Ranged");
 			if (!ent.position() || !ent.isIdle() || !ranged)
 				continue;
-			if (ent.getMetadata(PlayerID, "plan") == -2 || ent.getMetadata(PlayerID, "plan") == -3)
+			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				continue;
-			if (ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") != -1)
+			if (ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== PLAN_RESERVE)
 			{
 				const subrole = ent.getMetadata(PlayerID, "subrole");
 				if (subrole && (subrole === Worker.SUBROLE_COMPLETING ||
@@ -245,20 +236,20 @@ export class AttackManager
 						structPos[1] + (entPos[1] - structPos[1]) * safety / dist
 					);
 					const owner = gameState.ai.HQ.geography.territoryMap.getOwner(targetPos);
-					if (owner != 0 && gameState.isPlayerEnemy(owner))
+					if (owner !== 0 && gameState.isPlayerEnemy(owner))
 						continue;
 					targetPos = worldPos(
 						structPos[0] + (entPos[0] - structPos[0]) * range / dist,
 						structPos[1] + (entPos[1] - structPos[1]) * range / dist
 					);
-					if (gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) != PlayerID ||
-					    gameState.ai.accessibility.getAccessValue(targetPos) != access)
+					if (gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
+					    gameState.ai.accessibility.getAccessValue(targetPos) !== access)
 						continue;
 				}
 				let attackingUnits;
 				for (const [targetId, unitIds] of this.bombingAttacks)
 				{
-					if (targetId != struct.id())
+					if (targetId !== struct.id())
 						continue;
 					attackingUnits = unitIds;
 					break;
@@ -289,7 +280,7 @@ export class AttackManager
 		{
 			this.debugTime = gameState.ai.elapsedTime;
 			aiWarn(" upcoming attacks =================");
-			for (const attackType in this.upcomingAttacks)
+			for (const attackType of ATTACK_TYPES)
 			{
 				for (const attack of this.upcomingAttacks[attackType])
 				{
@@ -298,7 +289,7 @@ export class AttackManager
 				}
 			}
 			aiWarn(" started attacks ==================");
-			for (const attackType in this.startedAttacks)
+			for (const attackType of ATTACK_TYPES)
 			{
 				for (const attack of this.startedAttacks[attackType])
 				{
@@ -316,7 +307,7 @@ export class AttackManager
 			[AttackPlan.TYPE_DEFAULT]: 0,
 			[AttackPlan.TYPE_HUGE_ATTACK]: 0
 		};
-		for (const attackType in this.upcomingAttacks)
+		for (const attackType of ATTACK_TYPES)
 		{
 			for (let i = 0; i < this.upcomingAttacks[attackType].length; ++i)
 			{
@@ -367,7 +358,7 @@ export class AttackManager
 			}
 		}
 
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 		{
 			for (let i = 0; i < this.startedAttacks[attackType].length; ++i)
 			{
@@ -415,13 +406,13 @@ export class AttackManager
 				this.rushNumber++;
 			}
 		}
-		else if (unexecutedAttacks[AttackPlan.TYPE_DEFAULT] == 0 &&
-			unexecutedAttacks[AttackPlan.TYPE_HUGE_ATTACK] == 0 &&
+		else if (unexecutedAttacks[AttackPlan.TYPE_DEFAULT] === 0 &&
+			unexecutedAttacks[AttackPlan.TYPE_HUGE_ATTACK] === 0 &&
 			this.startedAttacks[AttackPlan.TYPE_DEFAULT].length +
 				this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length <
 				Math.min(2, 1 + Math.round(gameState.getPopulationMax() / 100)) &&
 			(this.startedAttacks[AttackPlan.TYPE_DEFAULT].length +
-				this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length == 0 ||
+				this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length === 0 ||
 			gameState.getPopulationMax() - gameState.getPopulation() > 12))
 		{
 			const phase2 = gameState.getPhaseName(2);
@@ -468,22 +459,22 @@ export class AttackManager
 		}
 
 		// Check if we have some unused ranged siege unit which could do something useful while waiting
-		if (this.Config.difficulty > difficulty.VERY_EASY && gameState.ai.playedTurn % 5 == 0)
+		if (this.Config.difficulty > difficulty.VERY_EASY && gameState.ai.playedTurn % 5 === 0)
 			this.assignBombers(gameState);
 	}
 
 	getPlan(planName: number): AttackPlan | undefined
 	{
-		for (const attackType in this.upcomingAttacks)
+		for (const attackType of ATTACK_TYPES)
 		{
 			for (const attack of this.upcomingAttacks[attackType])
-				if (attack.getName() == planName)
+				if (attack.getName() === planName)
 					return attack;
 		}
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 		{
 			for (const attack of this.startedAttacks[attackType])
-				if (attack.getName() == planName)
+				if (attack.getName() === planName)
 					return attack;
 		}
 		return undefined;
@@ -508,11 +499,11 @@ export class AttackManager
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	pauseAllPlans(): void
 	{
-		for (const attackType in this.upcomingAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.upcomingAttacks[attackType])
 				attack.setPaused(true);
 
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.startedAttacks[attackType])
 				attack.setPaused(true);
 	}
@@ -520,16 +511,16 @@ export class AttackManager
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	unpauseAllPlans(): void
 	{
-		for (const attackType in this.upcomingAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.upcomingAttacks[attackType])
 				attack.setPaused(false);
 
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.startedAttacks[attackType])
 				attack.setPaused(false);
 	}
 
-	getAttackInPreparation(type: string): AttackPlan | undefined
+	getAttackInPreparation(type: AttackType): AttackPlan | undefined
 	{
 		return this.upcomingAttacks[type].length ? this.upcomingAttacks[type][0] : undefined;
 	}
@@ -593,7 +584,7 @@ export class AttackManager
 			const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
 			for (const ourcc of ccEnts.values())
 			{
-				if (ourcc.owner() != PlayerID)
+				if (ourcc.owner() !== PlayerID)
 					continue;
 				const ourPos = ourcc.position();
 				const access = getLandAccess(gameState, ourcc);
@@ -662,7 +653,7 @@ export class AttackManager
 		let moreAdvanced;
 		for (const wonder of gameState.getEnemyStructures().filter(filters.byClass("Wonder")).values())
 		{
-			if (wonder.owner() == 0)
+			if (wonder.owner() === 0)
 				continue;
 			const progress = wonder.foundationProgress();
 			if (progress === undefined)
@@ -698,10 +689,10 @@ export class AttackManager
 		{
 			const i = playerId(iIndex);
 			if (!gameState.isPlayerEnemy(i) || this.defeated[i] ||
-			    i == 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
+			    i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
 				continue;
 
-			const relicsCount = allRelics.filter((relic: import("simulation/ai/common-api/entity.js").Entity): boolean => relic.owner() == i).length;
+			const relicsCount = allRelics.filter((relic: CommonEntity): boolean => relic.owner() === i).length;
 			if (relicsCount <= maxRelicsOwned)
 				continue;
 			maxRelicsOwned = relicsCount;
@@ -711,7 +702,7 @@ export class AttackManager
 		{
 			if (attack.targetPlayer === undefined)
 				this.currentEnemyPlayer = enemyPlayer;
-			if (enemyPlayer == 0)
+			if (enemyPlayer === 0)
 				gameState.ai.HQ.victoryManager.resetCaptureGaiaRelic(gameState);
 		}
 		return enemyPlayer;
@@ -720,12 +711,12 @@ export class AttackManager
 	/** f.e. if we have changed diplomacy with another player. */
 	cancelAttacksAgainstPlayer(gameState: CommonGameState, player: PlayerId): void
 	{
-		for (const attackType in this.upcomingAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.upcomingAttacks[attackType])
 				if (attack.targetPlayer === player)
 					attack.targetPlayer = undefined;
 
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (let i = 0; i < this.startedAttacks[attackType].length; ++i)
 			{
 				const attack = this.startedAttacks[attackType][i];
@@ -737,13 +728,13 @@ export class AttackManager
 			}
 	}
 
-	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlan | null
+	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlan | undefined
 	{
 		const data = { "target": ent };
 		const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber,
 			AttackPlan.TYPE_RAID, data, false);
 		if (attackPlan.failed)
-			return null;
+			return undefined;
 		if (this.Config.debug > 1)
 			aiWarn("Military Manager: Raiding plan " + this.totalNumber);
 		this.raidNumber++;
@@ -759,7 +750,7 @@ export class AttackManager
 	numAttackingUnitsAround(pos: CommonPosition, dist: number): number
 	{
 		let num = 0;
-		for (const attackType in this.startedAttacks)
+		for (const attackType of ATTACK_TYPES)
 			for (const attack of this.startedAttacks[attackType])
 			{
 				if (!attack.position)	// this attack may be inside a transport
@@ -806,7 +797,7 @@ export class AttackManager
 					continue;
 			}
 			// If range is not given, the entry check ensured armyID is set.
-			else if (army.ID != data.armyID)
+			else if (army.ID !== data.armyID)
 				continue;
 
 			while (army.foeEntities.length > 0)
@@ -821,7 +812,7 @@ export class AttackManager
 				// the original ORed in "transport metadata exists" here, but
 				// isAvailableUnit below always rejects transport-marked units, so the
 				// clause could never lead to an enlistment and was dropped
-				if (unit.position() && getLandAccess(gameState, unit) == targetAccess &&
+				if (unit.position() && getLandAccess(gameState, unit) === targetAccess &&
 					attackPlan.isAvailableUnit(gameState, unit))
 				{
 					unit.setMetadata(PlayerID, "plan", attackPlan.name);
@@ -858,13 +849,8 @@ export class AttackManager
 			"defeated": this.defeated
 		};
 
-		const upcomingAttacks: SerializedAttackManager["upcomingAttacks"] = {};
-		for (const key in this.upcomingAttacks)
-			upcomingAttacks[key] = this.upcomingAttacks[key].map(attack => attack.Serialize());
-
-		const startedAttacks: SerializedAttackManager["startedAttacks"] = {};
-		for (const key in this.startedAttacks)
-			startedAttacks[key] = this.startedAttacks[key].map(attack => attack.Serialize());
+		const upcomingAttacks = byAttackType(type => this.upcomingAttacks[type].map(attack => attack.Serialize()));
+		const startedAttacks = byAttackType(type => this.startedAttacks[type].map(attack => attack.Serialize()));
 
 		return { "properties": properties, "upcomingAttacks": upcomingAttacks, "startedAttacks": startedAttacks };
 	}
@@ -881,32 +867,15 @@ export class AttackManager
 		this.currentEnemyPlayer = data.properties.currentEnemyPlayer;
 		this.defeated = data.properties.defeated;
 
-		this.upcomingAttacks = {};
-		for (const key in data.upcomingAttacks)
+		const restore = (dataAttack: SerializedAttackPlan): AttackPlan =>
 		{
-			this.upcomingAttacks[key] = [];
-			for (const dataAttack of data.upcomingAttacks[key])
-			{
-				const attack = new AttackPlan(gameState, this.Config, dataAttack.properties.name,
-					undefined, undefined, true);
-				attack.Deserialize(gameState, dataAttack);
-				attack.init(gameState);
-				this.upcomingAttacks[key].push(attack);
-			}
-		}
-
-		this.startedAttacks = {};
-		for (const key in data.startedAttacks)
-		{
-			this.startedAttacks[key] = [];
-			for (const dataAttack of data.startedAttacks[key])
-			{
-				const attack = new AttackPlan(gameState, this.Config, dataAttack.properties.name,
-					undefined, undefined, true);
-				attack.Deserialize(gameState, dataAttack);
-				attack.init(gameState);
-				this.startedAttacks[key].push(attack);
-			}
-		}
+			const attack = new AttackPlan(gameState, this.Config, dataAttack.properties.name,
+				undefined, undefined, true);
+			attack.Deserialize(gameState, dataAttack);
+			attack.init(gameState);
+			return attack;
+		};
+		this.upcomingAttacks = byAttackType(type => data.upcomingAttacks[type].map(restore));
+		this.startedAttacks = byAttackType(type => data.startedAttacks[type].map(restore));
 	}
 }

@@ -5,7 +5,7 @@ import { hqOf } from "./hq.ts";
 export class ResearchPlan extends QueuePlan<CommonTechnology>
 {
 	declare category: "technology";
-	declare queueToReset: string | undefined;
+	declare queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
 	declare researchers: CommonEntity[] | undefined;
 	declare rush: boolean;
 
@@ -66,7 +66,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology>
 		const researchers = this.researchers;
 		if (!researchers)
 			return;
-		researchers.sort((a: import("simulation/ai/common-api/entity.js").Entity, b: import("simulation/ai/common-api/entity.js").Entity): number => (a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN));
+		researchers.sort((a: CommonEntity, b: CommonEntity): number => (a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN));
 		// Drop anything in the queue if we rush it.
 		if (this.rush)
 			researchers[0]?.stopAllProduction(0.45);
@@ -81,7 +81,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology>
 
 		for (let i = gameState.getNumberOfPhases(); i > 0; --i)
 		{
-			if (this.type != gameState.getPhaseName(i))
+			if (this.type !== gameState.getPhaseName(i))
 				continue;
 			hqOf(gameState).phaseResearched(gameState, i);
 			break;
@@ -96,7 +96,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology>
 		cost: { amounts: Record<string, number>; population: number };
 		number: number;
 		rush: boolean;
-		queueToReset: string | undefined;
+		queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
 	}
 	{
 		return {

@@ -32,7 +32,7 @@ type BasesManagerTurnCache = {
 
 export class BasesManager
 {
-	declare Config: Config;
+	Config: Config;
 	declare basesMap: InfoMap;
 
 	currentBase = 0;
@@ -102,7 +102,7 @@ export class BasesManager
 		let newbase;
 		for (const base of this.baseManagers)
 		{
-			if (base.accessIndex != access)
+			if (base.accessIndex !== access)
 				continue;
 			if (type !== BaseManager.STATE_ANCHORLESS && base.anchor)
 				continue;
@@ -162,7 +162,7 @@ export class BasesManager
 			if (evt && !evt.SuccessfulFoundation && evt.metadata?.[PlayerID]?.base)
 			{
 				// A new base foundation was created and destroyed on the same (AI) turn
-				if (evt.metadata[PlayerID].base == -1 || evt.metadata[PlayerID].base == -2)
+				if (evt.metadata[PlayerID].base === -1 || evt.metadata[PlayerID].base === -2)
 					continue;
 				const base = this.getBaseByID(evt.metadata[PlayerID].base);
 				if (!base)
@@ -177,7 +177,7 @@ export class BasesManager
 		{
 			const ent = gameState.getEntityById(evt.newentity);
 			const baseID = ent?.getMetadata(PlayerID, "base");
-			if (!ent || ent.owner() != PlayerID || baseID === undefined)
+			if (!ent || ent.owner() !== PlayerID || baseID === undefined)
 				continue;
 
 			const base = this.getBaseByID(baseID);
@@ -200,7 +200,7 @@ export class BasesManager
 			}
 
 			// Handle cases where a base anchor changes
-			if (!base.anchorId || base.anchorId != evt.entity)
+			if (!base.anchorId || base.anchorId !== evt.entity)
 				continue;
 			base.anchorId = evt.newentity;
 			base.anchor = ent;
@@ -211,10 +211,10 @@ export class BasesManager
 			// Let's check if we have a valuable foundation needing builders quickly
 			// (normal foundations are taken care in baseManager.assignToFoundations)
 			const ent = gameState.getEntityById(evt.entity);
-			if (!ent || ent.owner() != PlayerID || ent.foundationProgress() === undefined)
+			if (!ent || ent.owner() !== PlayerID || ent.foundationProgress() === undefined)
 				continue;
 
-			if (ent.getMetadata(PlayerID, "base") == -1)	// Standard base around a cc
+			if (ent.getMetadata(PlayerID, "base") === -1)	// Standard base around a cc
 			{
 				// Okay so let's try to create a new base around this.
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
@@ -222,7 +222,7 @@ export class BasesManager
 				const builders = this.bulkPickWorkers(gameState, newbase, 10);
 				if (builders !== false)
 				{
-					builders.forEach((worker: import("simulation/ai/common-api/entity.js").Entity): void =>
+					builders.forEach((worker: CommonEntity): void =>
 					{
 						worker.setMetadata(PlayerID, "base", newbase.ID);
 						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -230,14 +230,14 @@ export class BasesManager
 					});
 				}
 			}
-			else if (ent.getMetadata(PlayerID, "base") == -2)	// anchorless base around a dock
+			else if (ent.getMetadata(PlayerID, "base") === -2)	// anchorless base around a dock
 			{
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 				// Let's get a few units from other bases there to build this.
 				const builders = this.bulkPickWorkers(gameState, newbase, 4);
-				if (builders != false)
+				if (builders !== false)
 				{
-					builders.forEach((worker: import("simulation/ai/common-api/entity.js").Entity): void =>
+					builders.forEach((worker: CommonEntity): void =>
 					{
 						worker.setMetadata(PlayerID, "base", newbase.ID);
 						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -249,10 +249,10 @@ export class BasesManager
 
 		for (const evt of events.ConstructionFinished)
 		{
-			if (evt.newentity == evt.entity)  // repaired building
+			if (evt.newentity === evt.entity)  // repaired building
 				continue;
 			const ent = gameState.getEntityById(evt.newentity);
-			if (!ent || ent.owner() != PlayerID)
+			if (!ent || ent.owner() !== PlayerID)
 				continue;
 			const baseID = ent.getMetadata(PlayerID, "base");
 			if (baseID === undefined)
@@ -274,7 +274,7 @@ export class BasesManager
 
 		for (const evt of events.OwnershipChanged)
 		{
-			if (evt.from == PlayerID)
+			if (evt.from === PlayerID)
 			{
 				const ent = gameState.getEntityById(evt.entity);
 				if (!ent)
@@ -291,7 +291,7 @@ export class BasesManager
 					base.anchorLost(gameState);
 			}
 
-			if (evt.to != PlayerID)
+			if (evt.to !== PlayerID)
 				continue;
 			const ent = gameState.getEntityById(evt.entity);
 			if (!ent)
@@ -368,7 +368,7 @@ export class BasesManager
 					let goal;
 					for (const dropsite of dropsites.values())
 					{
-						if (!dropsite.position() || getLandAccess(gameState, dropsite) != access)
+						if (!dropsite.position() || getLandAccess(gameState, dropsite) !== access)
 							continue;
 						const dist = SquareVectorDistance(pos, dropsite.position());
 						if (dist > distmin)
@@ -400,9 +400,9 @@ export class BasesManager
 		baseBest.push(this.noBase);
 		baseBest.sort((a: BaseManager, b: BaseManager): 0 | 1 | -1 =>
 		{
-			if (a.accessIndex == accessIndex && b.accessIndex != accessIndex)
+			if (a.accessIndex === accessIndex && b.accessIndex !== accessIndex)
 				return -1;
-			else if (b.accessIndex == accessIndex && a.accessIndex != accessIndex)
+			else if (b.accessIndex === accessIndex && a.accessIndex !== accessIndex)
 				return 1;
 			return 0;
 		});
@@ -411,7 +411,7 @@ export class BasesManager
 		const workers = new EntityCollection(gameState.sharedScript);
 		for (const base of baseBest)
 		{
-			if (base.ID == baseRef.ID)
+			if (base.ID === baseRef.ID)
 				continue;
 			base.pickBuilders(gameState, workers, needed);
 			if (workers.length >= number)
@@ -605,7 +605,7 @@ export class BasesManager
 				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
 				const orders = worker.unitAIOrderData();
-				if (orders.length < 2 || !orders[1].target || orders[1].target != worker.getMetadata(PlayerID, "supply"))
+				if (orders.length < 2 || !orders[1].target || orders[1].target !== worker.getMetadata(PlayerID, "supply"))
 					continue;
 				this.AddTCGatherer(orders[1].target);
 			}
@@ -620,8 +620,8 @@ export class BasesManager
 		let bestbase;
 		for (const base of this.baseManagers)
 		{
-			if ((!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") != base.ID) &&
-			    base.territoryIndices.indexOf(territoryIndex) == -1)
+			if ((!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
+			    base.territoryIndices.indexOf(territoryIndex) === -1)
 				continue;
 			base.assignEntity(gameState, ent);
 			bestbase = base;
@@ -682,13 +682,13 @@ export class BasesManager
 	removeBaseFromTerritoryIndex(territoryIndex: CellIndex<"territory">): void
 	{
 		const baseID = this.basesMap.map[territoryIndex];
-		if (baseID == 0)
+		if (baseID === 0)
 			return;
 		const base = this.getBaseByID(baseID);
 		if (base)
 		{
 			const index = base.territoryIndices.indexOf(territoryIndex);
-			if (index != -1)
+			if (index !== -1)
 				base.territoryIndices.splice(index, 1);
 			else
 				aiWarn(" problem in headquarters::updateTerritories for base " + baseID);
@@ -703,7 +703,7 @@ export class BasesManager
 	 */
 	addTerritoryIndexToBase(gameState: CommonGameState, territoryIndex: CellIndex<"territory">, passabilityMap: CommonPassabilityMap): boolean
 	{
-		if (this.baseAtIndex(territoryIndex) != 0)
+		if (this.baseAtIndex(territoryIndex) !== 0)
 			return false;
 		let landPassable = false;
 		const ind = getMapIndices(territoryIndex, gameState.ai.HQ.geography.territoryMap, passabilityMap);
@@ -725,7 +725,7 @@ export class BasesManager
 		{
 			if (!base.anchor || !base.anchor.position())
 				continue;
-			if (base.accessIndex != access)
+			if (base.accessIndex !== access)
 				continue;
 			const dist = SquareVectorDistance(base.anchor.position(), pos);
 			if (dist >= distmin)
@@ -753,7 +753,7 @@ export class BasesManager
 		let nbBases = this.baseManagers.length;
 		let activeBase = false;
 		this.noBase.update(gameState, queues, events);
-		while (!activeBase && nbBases != 0)
+		while (!activeBase && nbBases !== 0)
 		{
 			this.currentBase %= this.baseManagers.length;
 			activeBase = this.baseManagers[this.currentBase++].update(gameState, queues, events);

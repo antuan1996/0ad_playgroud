@@ -7,6 +7,7 @@ import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { seconds } from "../adapter/brands.ts";
+import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -33,14 +34,14 @@ export type SerializedVictoryManager = {
 
 export class VictoryManager
 {
-	declare Config: Config;
-	declare criticalEnts: Map<EntityId, CriticalEntState>;
-	declare guardEnts: Map<EntityId, boolean>;
-	declare healersPerCriticalEnt: number;
+	Config: Config;
+	criticalEnts: Map<EntityId, CriticalEntState>;
+	guardEnts: Map<EntityId, boolean>;
+	healersPerCriticalEnt: number;
 	/** Gaia relics we are after, each with the attack plans raiding it; changed only here. */
-	declare private targetedGaiaRelics: Map<EntityId, number[]>;
-	declare tryCaptureGaiaRelic: boolean;
-	declare tryCaptureGaiaRelicLapseTime: GameSeconds;
+	private targetedGaiaRelics: Map<EntityId, number[]>;
+	tryCaptureGaiaRelic: boolean;
+	tryCaptureGaiaRelicLapseTime: GameSeconds;
 
 	constructor(Config: Config)
 	{
@@ -71,7 +72,7 @@ export class VictoryManager
 			for (const hero of gameState.getOwnEntitiesByClass("Hero", true).values())
 			{
 				const defaultStance = hero.hasClass("Soldier") ? "aggressive" : "passive";
-				if (hero.getStance() != defaultStance)
+				if (hero.getStance() !== defaultStance)
 					hero.setStance(defaultStance);
 				this.criticalEnts.set(hero.id(), {
 					"garrisonEmergency": false,
@@ -87,7 +88,7 @@ export class VictoryManager
 			for (const relic of
 				gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).values())
 			{
-				if (relic.owner() == PlayerID)
+				if (relic.owner() === PlayerID)
 					this.criticalEnts.set(relic.id(), { "guardsAssigned": new Set(), "guards": new Map() });
 			}
 		}
@@ -148,7 +149,7 @@ export class VictoryManager
 
 				const plan = target.getMetadata(PlayerID, "plan");
 				const hero = this.criticalEnts.get(evt.target);
-				if (plan != -2 && plan != -3)
+				if (!isLent(plan))
 				{
 					target.stopMoving();
 
@@ -233,7 +234,7 @@ export class VictoryManager
 
 					// Current military guards (with Soldier class) will have been assigned plan metadata, but healer guards
 					// are not assigned a plan, and so they could be already moving to garrison somewhere due to low health.
-					if (!guardEnt.hasClass("Soldier") && (plan == -2 || plan == -3))
+					if (!guardEnt.hasClass("Soldier") && isLent(plan))
 						continue;
 
 					const pos = holderEnt.position();
@@ -327,15 +328,15 @@ export class VictoryManager
 
 		for (const evt of events.OwnershipChanged)
 		{
-			if (evt.from == PlayerID && this.criticalEnts.has(evt.entity))
+			if (evt.from === PlayerID && this.criticalEnts.has(evt.entity))
 			{
 				this.removeCriticalEnt(gameState, evt.entity);
 				continue;
 			}
-			if (evt.from == 0 && this.targetedGaiaRelics.has(evt.entity))
+			if (evt.from === 0 && this.targetedGaiaRelics.has(evt.entity))
 				this.abortCaptureGaiaRelic(gameState, evt.entity);
 
-			if (evt.to != PlayerID)
+			if (evt.to !== PlayerID)
 				continue;
 
 			const ent = gameState.getEntityById(evt.entity);
@@ -361,11 +362,11 @@ export class VictoryManager
 			if (!guardEnt)
 				continue;
 
-			if (role == "healer")
+			if (role === "healer")
 				this.guardEnts.set(guardId, false);
 			else
 			{
-				guardEnt.setMetadata(PlayerID, "plan", -1);
+				guardEnt.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 				guardEnt.setMetadata(PlayerID, "role", undefined);
 				this.guardEnts.delete(guardId);
 			}
@@ -420,7 +421,7 @@ export class VictoryManager
 						continue;
 
 					guardEnt.removeGuard();
-					guardEnt.setMetadata(PlayerID, "plan", -1);
+					guardEnt.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 					guardEnt.setMetadata(PlayerID, "role", undefined);
 					this.guardEnts.delete(guardId);
 					data.guardsAssigned.add(guardId);
@@ -514,16 +515,17 @@ export class VictoryManager
 	{
 		// a unit out of any plan (-1, the attack manager's reserve) may guard
 		const plan = guardEnt.getMetadata(PlayerID, "plan");
-		if (plan !== undefined && plan !== -1 ||
+		if (plan !== undefined && plan !== PLAN_RESERVE ||
 		    guardEnt.getMetadata(PlayerID, "transport") !== undefined || this.criticalEnts.has(guardEnt.id()) ||
 		    checkForSameAccess && (!guardEnt.position() || !criticalEnt.position() ||
-		    getLandAccess(gameState, criticalEnt) != getLandAccess(gameState, guardEnt)))
+		    getLandAccess(gameState, criticalEnt) !== getLandAccess(gameState, guardEnt)))
 			return false;
 
 		if (!this.assignGuardToCriticalEnt(gameState, guardEnt, criticalEnt.id()))
 			return false;
 
-		guardEnt.setMetadata(PlayerID, "plan", -2);
+		// lent as a guard; released, it goes to the reserve whatever it had
+		guardEnt.setMetadata(PlayerID, "plan", PLAN_LENT_FROM_PLAN);
 		guardEnt.setMetadata(PlayerID, "role", Worker.ROLE_CRITICAL_ENT_GUARD);
 		return true;
 	}
@@ -533,7 +535,7 @@ export class VictoryManager
 		gameState.ai.HQ.defenseManager.garrisonAttackedUnit(gameState, criticalEnt, emergency);
 		const plan = criticalEnt.getMetadata(PlayerID, "plan");
 
-		if (plan == -2 || plan == -3)
+		if (isLent(plan))
 			return;
 
 		const critData = this.criticalEnts.get(criticalEnt.id());
@@ -541,11 +543,11 @@ export class VictoryManager
 			critData.garrisonEmergency = false;
 
 		// Couldn't find a place to garrison, so the ent will flee from attacks
-		if (!criticalEnt.hasClass("Relic") && criticalEnt.getStance() != "passive")
+		if (!criticalEnt.hasClass("Relic") && criticalEnt.getStance() !== "passive")
 			criticalEnt.setStance("passive");
 		const accessIndex = getLandAccess(gameState, criticalEnt);
 		const bestBase = getBestBase(gameState, criticalEnt, true);
-		if (bestBase && bestBase.accessIndex == accessIndex)
+		if (bestBase && bestBase.accessIndex === accessIndex)
 		{
 			const bestBaseAnchor = bestBase.anchor;
 			if (bestBaseAnchor)
@@ -620,12 +622,12 @@ export class VictoryManager
 			return false;
 		}
 
-		if (guardEnt.getMetadata(PlayerID, "guardedEnt") != criticalEntId)
+		if (guardEnt.getMetadata(PlayerID, "guardedEnt") !== criticalEntId)
 			guardEnt.setMetadata(PlayerID, "guardedEnt", criticalEntId);
 
 		const guardEntAccess = getLandAccess(gameState, guardEnt);
 		const criticalEntAccess = getLandAccess(gameState, criticalEnt);
-		if (guardEntAccess == criticalEntAccess)
+		if (guardEntAccess === criticalEntAccess)
 		{
 			const queued = returnResources(gameState, guardEnt);
 			guardEnt.guard(criticalEnt, queued);
@@ -645,7 +647,7 @@ export class VictoryManager
 				gameState.ai.HQ.navalManager.requireTransport(gameState, guardEnt, guardEntAccess, criticalEntAccess, criticalEntPos);
 		}
 
-		this.guardEnts.set(guardEnt.id(), guardEntAccess == criticalEntAccess);
+		this.guardEnts.set(guardEnt.id(), guardEntAccess === criticalEntAccess);
 		return true;
 	}
 
@@ -659,12 +661,12 @@ export class VictoryManager
 	update(gameState: CommonGameState, events: EngineAIEvents, queues: PetraRuntime.QueueCollection): void
 	{
 		// Wait a turn for trigger scripts to spawn any critical ents (i.e. in regicide)
-		if (gameState.ai.playedTurn == 1)
+		if (gameState.ai.playedTurn === 1)
 			this.init(gameState);
 
 		this.checkEvents(gameState, events);
 
-		if (gameState.ai.playedTurn % 10 != 0 ||
+		if (gameState.ai.playedTurn % 10 !== 0 ||
 		    !gameState.getVictoryConditions().has("wonder") && !gameState.getVictoryConditions().has("regicide") &&
 		    !gameState.getVictoryConditions().has("capture_the_relic"))
 			return;
@@ -680,7 +682,7 @@ export class VictoryManager
 			{
 				const ent = gameState.getEntityById(id);
 				if (ent && ent.healthLevel() > this.Config.garrisonHealthLevel.high && ent.hasClass("Soldier") &&
-				    ent.getStance() != "aggressive")
+				    ent.getStance() !== "aggressive")
 					ent.setStance("aggressive");
 			}
 			this.manageCriticalEntHealers(gameState, queues);
@@ -695,7 +697,7 @@ export class VictoryManager
 			for (const relicId of this.targetedGaiaRelics.keys())
 			{
 				const relic = gameState.getEntityById(relicId);
-				if (!relic || relic.owner() != 0)
+				if (!relic || relic.owner() !== 0)
 					this.abortCaptureGaiaRelic(gameState, relicId);
 				else
 					this.captureGaiaRelic(gameState, relic);
@@ -703,21 +705,21 @@ export class VictoryManager
 			// And look for some new gaia relics visible by any of our units
 			// or that may be on our territory
 			const allGaiaRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"))
-				.filter((relic: import("simulation/ai/common-api/entity.js").Entity): boolean => relic.owner() == 0);
+				.filter((relic: CommonEntity): boolean => relic.owner() === 0);
 			for (const relic of allGaiaRelics.values())
 			{
 				const relicPosition = relic.position();
 				if (!relicPosition || this.targetedGaiaRelics.has(relic.id()))
 					continue;
 				const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(relicPosition);
-				if (territoryOwner == PlayerID)
+				if (territoryOwner === PlayerID)
 				{
 					this.targetedGaiaRelics.set(relic.id(), []);
 					this.captureGaiaRelic(gameState, relic);
 					break;
 				}
 
-				if (territoryOwner != 0 && gameState.isPlayerEnemy(territoryOwner))
+				if (territoryOwner !== 0 && gameState.isPlayerEnemy(territoryOwner))
 					continue;
 
 				for (const ent of gameState.getOwnUnits().values())
@@ -760,7 +762,7 @@ export class VictoryManager
 			return;
 		const relicPosition = relic.position();
 		const access = getLandAccess(gameState, relic);
-		const units = gameState.getOwnUnits().filter((ent: import("simulation/ai/common-api/entity.js").Entity): boolean =>
+		const units = gameState.getOwnUnits().filter((ent: CommonEntity): boolean =>
 		{
 			if (!ent.position() || !ent.canCapture(relic))
 				return false;
@@ -769,7 +771,7 @@ export class VictoryManager
 			if (ent.getMetadata(PlayerID, "PartOfArmy") !== undefined)
 				return false;
 			const plan = ent.getMetadata(PlayerID, "plan");
-			if (plan == -2 || plan == -3)
+			if (isLent(plan))
 				return false;
 			if (plan !== undefined && plan >= 0)
 			{
@@ -780,7 +782,7 @@ export class VictoryManager
 					return false;
 				}
 			}
-			if (getLandAccess(gameState, ent) != access)
+			if (getLandAccess(gameState, ent) !== access)
 				return false;
 			return true;
 		}).filterNearest(relicPosition);

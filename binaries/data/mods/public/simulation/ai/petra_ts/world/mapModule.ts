@@ -8,10 +8,8 @@ import { debugShade } from "../adapter/commands.ts";
 
 /** map functions */
 
-/* eslint-disable prefer-const -- Mods should be able to change them */
-let TERRITORY_PLAYER_MASK = 0x1F;
-let TERRITORY_BLINKING_MASK = 0x40;
-/* eslint-enable prefer-const */
+const TERRITORY_PLAYER_MASK = 0x1F;
+const TERRITORY_BLINKING_MASK = 0x40;
 
 export function createObstructionMap(gameState: CommonGameState, accessIndex: AccessIndex | undefined,
 	template?: CommonTemplate): InfoMap
@@ -41,7 +39,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 
 	let passMap;
 	let obstructionMask;
-	if (placementType == "shore")
+	if (placementType === "shore")
 	{
 		passMap = gameState.ai.accessibility.navalPassMap;
 		obstructionMask = gameState.getPassabilityClassMask("building-shore");
@@ -56,7 +54,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 	for (let k = 0; k < territoryMap.data.length; ++k)
 	{
 		const tilePlayer = playerId(territoryMap.data[k] & TERRITORY_PLAYER_MASK);
-		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) == 0;
+		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) === 0;
 		if (tilePlayer === PlayerID)
 		{
 			if (!buildOwn || !buildNeutral && !isConnected)
@@ -85,7 +83,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 			for (let iy = 0; iy < ratio; ++iy)
 			{
 				const i = x + ix + (y + iy)*passabilityMap.width;
-				if (placementType != "shore" && accessIndex && accessIndex !== passMap[i])
+				if (placementType !== "shore" && accessIndex && accessIndex !== passMap[i])
 					continue;
 				if (!(passabilityMap.data[i] & obstructionMask))
 					obstructionTiles[i] = 255;
@@ -151,7 +149,7 @@ export class TerritoryMap extends InfoMap<"territory">
 
 	isBlinking(p: CommonPosition): boolean
 	{
-		return (this.point(p) & TERRITORY_BLINKING_MASK) != 0;
+		return (this.point(p) & TERRITORY_BLINKING_MASK) !== 0;
 	}
 }
 
@@ -232,7 +230,7 @@ function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 {
 	const width = map.width;
 	const cell = map.cellSize;
-	gameState.getEntities().forEach((ent: import("simulation/ai/common-api/entity.js").Entity): void =>
+	gameState.getEntities().forEach((ent: CommonEntity): void =>
 	{
 		const pos = ent.position();
 		if (!pos)
@@ -240,11 +238,11 @@ function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 		const x = Math.round(pos[0] / cell);
 		const z = Math.round(pos[1] / cell);
 		const id = x + width*z;
-		if (map.map[id] == 1)
+		if (map.map[id] === 1)
 			debugShade([ent.id()], [2, 0, 0]);
-		else if (map.map[id] == 2)
+		else if (map.map[id] === 2)
 			debugShade([ent.id()], [0, 2, 0]);
-		else if (map.map[id] == 3)
+		else if (map.map[id] === 3)
 			debugShade([ent.id()], [0, 0, 2]);
 	});
 }

@@ -95,6 +95,15 @@ type TemplateName = string & { readonly __brand: "TemplateName" };
  * this name returns a Technology, not a Template.
  */
 type TechName = string & { readonly __brand: "TechName" };
+/** An attack plan's name, numbered from 0 by the attack manager (not an entity id). */
+type AttackPlanId = number & { readonly __brand: "AttackPlanId" };
+/**
+ * A unit's `plan` metadata: the attack plan it serves, or a state
+ * (execution/unitPlan.ts): -1 out of any plan, free for the next attack;
+ * -2 lent (to a defense army, a garrison, a guard) while it had a plan;
+ * -3 lent while it had none.
+ */
+type UnitPlan = AttackPlanId | -1 | -2 | -3;
 /**
  * The two grids the AI's maps come in: the territory grid (terrain tiles,
  * also the resource and influence maps) and the passability grid (navcells,
