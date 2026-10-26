@@ -9,7 +9,7 @@ import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 
-type BuildingPosition = {
+export type BuildingPosition = {
 	x: number;
 	z: number;
 	angle: number;

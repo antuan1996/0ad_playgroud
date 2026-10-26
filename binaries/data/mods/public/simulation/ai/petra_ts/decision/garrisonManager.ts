@@ -4,7 +4,7 @@ import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 
-type GarrisonHolderData = {
+export type GarrisonHolderData = {
 	list: EntityId[];
 	allowMelee: boolean;
 };

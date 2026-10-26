@@ -14,7 +14,7 @@ import { debugShade, postCommand } from "../adapter/commands.ts";
 import { basesOf } from "../world/bases.ts";
 import { hqOf } from "./hq.ts";
 
-type AttackUnitStat = {
+export type AttackUnitStat = {
 	priority: number;
 	minSize: number;
 	targetSize: number;
@@ -23,7 +23,7 @@ type AttackUnitStat = {
 	interests?: Array<[string, number, ...string[]]>;
 };
 
-type AttackBuildOrder = [
+export type AttackBuildOrder = [
 	number,
 	string[],
 	CommonEntityCollection,

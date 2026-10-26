@@ -12,7 +12,7 @@ import { INVALID_ENTITY, landRegion } from "../adapter/brands.ts";
 import { requiredStateWithin } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 
-type TradeRoute = {
+export type TradeRoute = {
 	source: EntityId;
 	target: EntityId;
 	gain: number;
