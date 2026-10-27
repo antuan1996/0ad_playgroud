@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, entityMetadata, eventsWith } from "./harness/fakes.ts";
+import { emptyEvents, entityMetadata, eventsWith, orders } from "./harness/fakes.ts";
 import {
 	bookCentreSupplies, doorManagers, ENEMY, type HqSeatOptions, type HqWorld, type HqWorldOptions,
 	makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate,
@@ -46,7 +46,6 @@ function hand(world: HqWorld, host: BaseManager, id: number, metadata: Record<st
 		"classes": ["Unit", "Infantry", "CitizenSoldier", "Worker"] }, {
 		"isIdle": () => false,
 		"unitAIState": () => "INDIVIDUAL.IDLE",
-		"currentGatherRate": () => 0,
 		"canGather": () => true,
 		"isGatherer": () => true,
 		"isBuilder": () => true,
@@ -665,7 +664,7 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 			{ "supply": 5001 },
 			{
 				"unitAIState": () => "INDIVIDUAL.RETURNRESOURCE.APPROACHING",
-				"unitAIOrderData": () => [{ "target": 4000 }, { "target": 5001 }]
+				"unitAIOrderData": () => orders({ "target": entityId(4000) }, { "target": entityId(5001) })
 			});
 
 		bs.assignGatherers();
@@ -681,7 +680,7 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 			{ "supply": 5011 },
 			{
 				"unitAIState": () => "INDIVIDUAL.RETURNRESOURCE.APPROACHING",
-				"unitAIOrderData": () => [{ "target": 5012 }, { "target": 5013 }]
+				"unitAIOrderData": () => orders({ "target": entityId(5012) }, { "target": entityId(5013) })
 			});
 
 		bs.assignGatherers();

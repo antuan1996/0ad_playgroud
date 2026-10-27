@@ -104,7 +104,16 @@ happen, and every minute while it prepares a snapshot of its units per
 category against minimum and target, queued units, paused queues, free
 population, workers and stock; `node build/petra_ts/attack-log.ts <batch or
 match dir>` summarises them per attack type, why plans were aborted, what the
-long preparations lacked, and won against lost sides), the replay's
+long preparations lacked, and won against lost sides), `economy.txt` with `-b`
+(its economy every 30 game seconds, when the replay samples its statistics:
+per resource its own gather-rate estimate, the rate its queues want, the order
+`pickMostNeededResources` gives, gatherers and what they do (gathering,
+walking, carrying), the sum of the gathering units' rates, the median trip from
+supply to dropsite, and in the first line each base's supply lists, the
+start's layout; `node build/petra_ts/economy-log.ts <batch or match dir>` sets
+it beside what the statistics say was really gathered, per band of minutes,
+won against lost sides, and the seed pairs won from one slot and lost from the
+other), the replay's
 `metadata.json` (each
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's
@@ -182,7 +191,7 @@ from both slots, errors, game lengths, mean statistics, and determinism: games
 played twice by `--twice` must share a fingerprint). Time-limit games are
 draws, outside the win-rate. An existing `--out` resumes the batch.
 `--bot-state` builds Petra TS with the state dump and plays every game with
-`-b` (each game's `botstate.txt` and `attacks.txt`; the games are the same,
+`-b` (each game's `botstate.txt`, `attacks.txt` and `economy.txt`; the games are the same,
 checked on 196 games). `--game-timeout M` (default 15) kills a game still
 running after M minutes of wall time and marks it failed: the engine can
 deadlock, rarely and not reproducibly (`FINDINGS.md` §16); a resumed batch,
@@ -190,6 +199,15 @@ and the smoke test, play it again. For analyses across a batch, the paired
 games of `--slots both` compare the same map from both slots; the replays'
 `metadata.json` hold each statistic by unit class every 30 game seconds
 (`total` is recorded as 0 for units lost and killed: use the `Unit` class).
+`node build/petra_ts/pair-score.ts <batch> [--minute M] [--compare <batch>]`
+is the early proxy for tuning (`PLAN.md` §5.3): blue's lead at minute M
+(default 8) in units trained and in resources gathered, averaged over a seed
+pair's two games so the slot cancels; exactly 0 for a bot that plays as red
+until then (the two games mirror each other), so any lead is the change's.
+It also prints how often the side ahead won at minutes 4-12 (gathered at
+minute 8: 79% in stage 4's games), and with `--compare` the pair-by-pair
+difference to another batch on the same pairs (a change against its control).
+It chooses what to try; the SPRT on the win-rate still decides.
 The names and colors use autostart options added on this branch
 (`-autostart-name`, `-autostart-color`, `-autostart-script`; see
 `autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
@@ -212,7 +230,7 @@ decision with the game's reason ("last player alive", "wonder victory",
 - `petra_ts/` — the port, in layers (stage 3, `PLAN.md` §3.4): `_petrabot.ts`
   and the `.d.ts` declarations at the root; `adapter/` (the engine boundary:
   `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
-  unit does, `commands.ts` where the bot's own commands leave it); `world/` (the
+  unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
   AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
   border maps and the land/sea regions, owned by the HQ; `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
@@ -274,7 +292,7 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes, 28 in all.
+  more pin stage-4 fixes and one stage 5's (the engine's order shape), 29 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
@@ -306,6 +324,11 @@ untested branches.
   `noUnusedLocals`.
 - The attack plan's state changes only through `changeState(from, to)`
   (the moves are in `AttackTransitions`, `attackPlan.ts`).
+- What a unit has been ordered to do is read through `adapter/orders.ts`
+  (`ordersOf`: each order's data; `gatherRate`): `Entity.unitAIOrderData()`
+  returns UnitAI's orders, `{type, data}`, since the engine's commit
+  4b516b336e, and the common API's `currentGatherRate` has returned 0 since
+  (`FINDINGS.md` §18). Fakes give orders with `orders(...)` (`harness/fakes.ts`).
 - What a unit is doing is read through `adapter/unitState.ts` (`isInState`,
   `hasActivity`, `stateIs`, ...), never by comparing `unitAIState()` strings:
   the state names are the union `UnitAIStateName`, taken from `UnitAI.js`

@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { emptyEvents, eventsWith, makeEntity, type Methods } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, makeEntity, type Methods, orders } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
 import { entityId, seconds } from "../adapter/brands.ts";
@@ -57,7 +57,7 @@ function walker(id: number, holderId: number, methods: Methods = {}, metadata: R
 		id, owner: PLAYER, position: [20, 20], classes: ["Unit", "Infantry"]
 	}, {
 		canGarrison: () => true,
-		unitAIOrderData: () => [{ "target": holderId }],
+		unitAIOrderData: () => orders({ "target": entityId(holderId) }),
 		...methods
 	}, metadata);
 }
@@ -267,7 +267,7 @@ describe("garrisonManager", () =>
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 			// the worker's office reseated him on another structure, engine order too
 			archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
-			archer.unitAIOrderData = () => [{ "target": entityId(5001) }];
+			archer.unitAIOrderData = () => orders({ "target": entityId(5001) });
 
 			manager.update(world.gameState, emptyEvents());
 
@@ -684,7 +684,7 @@ describe("garrisonManager", () =>
 				manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 				// the worker's office reseated him on another structure
 				archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
-				archer.unitAIOrderData = () => [{ "target": entityId(5001) }];
+				archer.unitAIOrderData = () => orders({ "target": entityId(5001) });
 				let events = emptyEvents();
 				if (fall === "destroyed")
 					world.removeEntity(5000);
@@ -736,7 +736,7 @@ describe("garrisonManager", () =>
 				attackRange: (t: string) => t == "Ranged" ? ({ "max": 80 }) : undefined
 			}));
 			// the engine relabels the marcher's order together with the tower
-			archer.unitAIOrderData = () => [{ "target": entityId(5050) }];
+			archer.unitAIOrderData = () => orders({ "target": entityId(5050) });
 
 			manager.update(world.gameState, eventsWith({
 				"EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }]

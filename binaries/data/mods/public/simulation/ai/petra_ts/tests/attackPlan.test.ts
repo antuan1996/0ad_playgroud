@@ -17,8 +17,7 @@ import { describe, it } from "node:test";
 
 import { commands, logs, resetRecorder, sent } from "./harness/engine.ts";
 import {
-	emptyEvents, fake, makeEntity, makeTemplate, type Methods, override, restoreEngine, stubEngine,
-	withPath
+	emptyEvents, fake, makeEntity, makeTemplate, type Methods, orders, override, restoreEngine, stubEngine, withPath
 } from "./harness/fakes.ts";
 import { collectionOf, ENEMY, GAIA, makeWorld, mapOf, PLAYER, type World } from "./harness/world.ts";
 
@@ -1029,7 +1028,7 @@ describe("availability and small queries", () =>
 		// the metadata the data argument looks for
 		const ordered = world.addEntity(makeEntity({
 			id: 1012, owner: PLAYER, position: [11, 12], classes: ["Unit"]
-		}, { unitAIOrderData: () => [{ "target": 5, "targetPos": [5, 5], "force": true }] },
+		}, { unitAIOrderData: () => orders({ "target": entityId(5), "targetPos": [5, 5], "force": true }) },
 		{ "plan": 1, "target": 5 }));
 		plan.unitCollection.updateEnt(ordered);
 		assert.equal(plan.hasForceOrder(), true, "the forced order was seen");
@@ -1076,7 +1075,7 @@ describe("updatePreparation: the completing step", () =>
 		plan.maxCompletingTime = seconds(150);
 		const blocked = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"],
-		}, { unitAIOrderData: () => [{ "target": 5, "targetPos": [5, 5], "force": true }] },
+		}, { unitAIOrderData: () => orders({ "target": entityId(5), "targetPos": [5, 5], "force": true }) },
 		{ "plan": 1 }));
 		plan.unitCollection.updateEnt(blocked);
 
@@ -1756,7 +1755,7 @@ describe("updating an executing plan", () =>
 			attackTypes: () => ["Ranged"],
 			attackRange: () => ({ "max": 60 }),
 			canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3001, "targetPos": [28, 28] }]
+			unitAIOrderData: () => orders({ "target": entityId(3001), "targetPos": [28, 28] })
 		}, { "plan": 1, "lastAttackPlanUpdateTime": 80 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2772,13 +2771,13 @@ describe("the retaliating crowd", () =>
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2808,7 +2807,7 @@ describe("the retaliating crowd", () =>
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3001 }]
+			unitAIOrderData: () => orders({ "target": entityId(3001) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2841,7 +2840,7 @@ describe("the retaliating crowd", () =>
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2891,7 +2890,7 @@ describe("the retaliating crowd", () =>
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 2006 }]
+			unitAIOrderData: () => orders({ "target": entityId(2006) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2924,7 +2923,7 @@ describe("directing the swarm", () =>
 			}, {
 				isIdle: () => true,
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
-				unitAIOrderData: () => [{ "target": 3000 }]
+				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2952,7 +2951,7 @@ describe("directing the swarm", () =>
 				id: 1010 + i, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
 			}, {
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
-				unitAIOrderData: () => [{ "target": 3000 }]
+				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -2984,7 +2983,7 @@ describe("directing the swarm", () =>
 				id: 1010 + i, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee"]
 			}, {
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
-				unitAIOrderData: () => [{ "target": prey }]
+				unitAIOrderData: () => orders({ "target": entityId(prey) })
 			}, { "plan": 1 }));
 		});
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
@@ -3111,13 +3110,13 @@ describe("directing the swarm", () =>
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Siege"]
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
-			unitAIOrderData: () => [{ "target": 9999 }]   // long dead
+			unitAIOrderData: () => orders({ "target": entityId(9999) })   // long dead
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3201,7 +3200,7 @@ describe("directing the swarm", () =>
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3228,7 +3227,7 @@ describe("directing the swarm", () =>
 			attackTypes: () => ["Ranged"], attackRange: () => ({ "max": 60 }),
 			canAttackTarget: () => true,
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3257,7 +3256,7 @@ describe("directing the swarm", () =>
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3293,7 +3292,7 @@ describe("directing the swarm", () =>
 		}, {
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3361,7 +3360,7 @@ describe("directing the swarm", () =>
 				id: 1010 + i, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege"]
 			}, {
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
-				unitAIOrderData: () => [{ "target": 3000 }]
+				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, init: true, data: { target } });
 		plan.state = "";
@@ -3934,11 +3933,11 @@ describe("second pass: the army at work", () =>
 			const world = makeWorld();
 			const target = makeTarget(world, {}, 2005);
 			foe(world, 3000, [85, 57], ["Unit", "Melee"]);
-			const first = fighter(world, 1010, [80, 60], ["Melee"], { unitAIOrderData: () => [{ "target": 3000 }] });
+			const first = fighter(world, 1010, [80, 60], ["Melee"], { unitAIOrderData: () => orders({ "target": entityId(3000) }) });
 			for (const id of [1011, 1012])
-				fighter(world, id, [80, 60], ["Melee"], { unitAIOrderData: () => [{ "target": 3000 }] });
+				fighter(world, id, [80, 60], ["Melee"], { unitAIOrderData: () => orders({ "target": entityId(3000) }) });
 			fighter(world, 1013, [80, 60], withFourthHunter ? ["Melee"] : ["Ship", "Warship"],
-				{ unitAIOrderData: () => [{ "target": 3000 }] });
+				{ unitAIOrderData: () => orders({ "target": entityId(3000) }) });
 			attacking(world, target).update(world.gameState, emptyEvents());
 			return first.marches.length;
 		};
@@ -3975,9 +3974,9 @@ describe("second pass: the army at work", () =>
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		foe(world, 3000, [25, 25], ["Unit", "Melee"]);
-		const engine = fighter(world, 1010, [20, 20], ["Siege"], { unitAIOrderData: () => [{ "target": 3000 }], canAttackClass: () => false });
+		const engine = fighter(world, 1010, [20, 20], ["Siege"], { unitAIOrderData: () => orders({ "target": entityId(3000) }), canAttackClass: () => false });
 		for (const id of [1011, 1012, 1013])
-			fighter(world, id, [20, 21], ["Melee"], { unitAIOrderData: () => [{ "target": 3000 }] });
+			fighter(world, id, [20, 21], ["Melee"], { unitAIOrderData: () => orders({ "target": entityId(3000) }) });
 		attacking(world, target).update(world.gameState, emptyEvents());
 		assert.deepEqual(engine.strikes, [[2005, false]]);
 	});
@@ -3988,7 +3987,7 @@ describe("second pass: the army at work", () =>
 		const target = makeTarget(world, {}, 2005);
 		foe(world, 3000, [200, 200], ["Unit", "Ship"]);
 		const hunter = fighter(world, 1010, [80, 60], ["Melee"], {
-			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING", unitAIOrderData: () => [{ "target": 3000 }]
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING", unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "lastAttackPlanUpdateTime": world.ai.elapsedTime - 2 });
 		attacking(world, target).update(world.gameState, emptyEvents());
 		assert.deepEqual(hunter.marches, []);
@@ -4075,11 +4074,11 @@ describe("second pass: the army at work", () =>
 		});
 		// brothers: aboard a ship, gathering, fighting a foe now dead, the nearest fighter, a farther one
 		fighter(world, 1011, undefined, ["Melee"],
-			{ unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => [{ "target": 3001 }] });
-		fighter(world, 1012, [21, 20], ["Melee"], { unitAIState: () => "INDIVIDUAL.GATHER.GATHERING", unitAIOrderData: () => [{ "target": 3001 }] });
-		fighter(world, 1013, [21, 21], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => [{ "target": 3999 }] });
-		fighter(world, 1014, [22, 22], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => [{ "target": 3000 }] });
-		fighter(world, 1015, [60, 60], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => [{ "target": 3001 }] });
+			{ unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => orders({ "target": entityId(3001) }) });
+		fighter(world, 1012, [21, 20], ["Melee"], { unitAIState: () => "INDIVIDUAL.GATHER.GATHERING", unitAIOrderData: () => orders({ "target": entityId(3001) }) });
+		fighter(world, 1013, [21, 21], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => orders({ "target": entityId(3999) }) });
+		fighter(world, 1014, [22, 22], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => orders({ "target": entityId(3000) }) });
+		fighter(world, 1015, [60, 60], ["Melee"], { unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING", unitAIOrderData: () => orders({ "target": entityId(3001) }) });
 		attacking(world, target).update(world.gameState, emptyEvents());
 		assert.deepEqual(lonely.strikes, [[3000, false]]);
 	});

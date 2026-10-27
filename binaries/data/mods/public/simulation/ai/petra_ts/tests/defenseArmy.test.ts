@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, makeEntity, type Methods, override } from "./harness/fakes.ts";
+import { emptyEvents, makeEntity, type Methods, orders, override } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
 import { armyId, entityId, seconds, templateName, worldPos } from "../adapter/brands.ts";
@@ -367,7 +367,7 @@ describe("choosing whom to fight", () =>
 		const { world, army } = raidedWorld();
 		const defender = world.ents.get(3000)!;
 		// the raider already charged our defender — the engine order data says so
-		world.ents.get(2000)!.unitAIOrderData = () => [{ "target": entityId(3000) }];
+		world.ents.get(2000)!.unitAIOrderData = () => orders({ "target": entityId(3000) });
 
 		const strikes: unknown[][] = [];
 		override(defender, { "attack": (target: unknown, capture?: unknown, queued?: unknown) =>
@@ -1034,7 +1034,7 @@ describe("walking the daily cycle", () =>
 		const busy = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
 		// already in combat with something else (order target set, no capture)
-		busy.unitAIOrderData = () => [{ "target": entityId(2222) }];
+		busy.unitAIOrderData = () => orders({ "target": entityId(2222) });
 
 		const strikes: unknown[][] = [];
 		override(busy, { "attack": (target: unknown) => strikes.push([target]) });
@@ -1054,7 +1054,7 @@ describe("walking the daily cycle", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		const capturer = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
-		capturer.unitAIOrderData = () => [{ "target": entityId(2000), "attackType": "Capture" }];
+		capturer.unitAIOrderData = () => orders({ "target": entityId(2000), "attackType": "Capture" });
 		capturer.canCapture = () => true;
 
 		const strikes: unknown[][] = [];
@@ -1070,7 +1070,7 @@ describe("walking the daily cycle", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		const defender = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
-		defender.unitAIOrderData = () => [{ "target": entityId(2000), "attackType": "Capture" }];
+		defender.unitAIOrderData = () => orders({ "target": entityId(2000), "attackType": "Capture" });
 		defender.canCapture = () => false; // a plain hacker never captures
 
 		const strikes: unknown[][] = [];

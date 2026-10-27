@@ -93,7 +93,6 @@ function freshHQ(world: HqWorld, config = makeHQConfig()): Headquarters
 const unitAnswers = {
 	"isIdle": () => false,
 	"unitAIState": () => "INDIVIDUAL.IDLE",
-	"currentGatherRate": () => 0,
 	"canGather": () => true,
 	"isGatherer": () => true,
 	"isBuilder": () => true,

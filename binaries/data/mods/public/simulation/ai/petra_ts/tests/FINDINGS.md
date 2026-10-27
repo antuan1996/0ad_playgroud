@@ -19,9 +19,10 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (28 tests in all; the
+Each is pinned by a test that only the port passes (29 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
-were fixed after the original stopped being a test target). Each row says
+and the stage-5 one were fixed after the original stopped being a test
+target). Each row says
 whether a game can reach it.
 
 | Where | Original behaviour | Port | Test |
@@ -49,6 +50,7 @@ whether a game can reach it.
 | `researchManager` (stage 4) | the filter of techs for units the AI does not use matches the class list exactly, so `cost_healer` (`"Healer !Champion !Hero"`) is researched | reads the list's first class | researchManager: "from the third phase, any other tech may be researched…" |
 | `victoryManager.tryAssignMilitaryGuard` (stage 4) | refuses any unit with a plan, so the units out of any plan (−1) it is offered from the attack manager's `outOfPlan` are never taken | takes a unit of plan −1 | victoryManager: "guards are drawn from the champions first, then units out of any plan…" |
 | `attackPlan.updatePreparation` at the population cap (stage 4) | aborts a plan that cannot start yet "so that its units serve other plans"; the attack manager creates the next one at once, which takes the same reserve back and is aborted in turn: 124 plans aborted within 30 s of creation in 200 games, 81 in one (§16) | the plan waits, gathering units as below the cap | attackPlan: "waits when the population is full…", "waits with its few units…" |
+| every read of a unit's orders (stage 5) | reads `order.target` off `Entity.unitAIOrderData()`, which since the engine's commit 4b516b336e returns UnitAI's orders (`{type, data}`), not their data: every check of what a unit targets fails (the workers' hunting and supply checks, the defense and attack target checks, garrisons, captures), and `Entity.currentGatherRate()` gives 0, so the town's gather-rate estimate is empty and the gatherer split follows the queues alone (§18). Every game | `adapter/orders.ts`: `ordersOf` reads the data, `gatherRate` replaces `currentGatherRate`; the declared shape is the engine's | baseManager: "a gatherer on the wood adds its rate, ..."; orders.test.ts |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -647,3 +649,84 @@ A scan of the port's syntax trees and, for inferred types, its type checker
   `init()`, `Deserialize` or later: the managers' and plans' two-step
   set-up, so no small change removes them. Both groups go with stage 5, as
   each class is rewritten.
+
+## 18. Stage 5: the economy, measured (2026-10-27)
+
+Batch `stage5-a-economy`: stage 4's 100 seed pairs (pool seed 4, both slots,
+`petra_out` vs `petra_parity`) played with `--bot-state`, the economy log on
+(`economy.txt`, `bot-state.js`; `economy-log.ts`). All 200 games have stage
+4's fingerprints (`stage4-h-capwait`): the log only reads. 50.3%.
+
+- **The gather-rate estimate is always 0** (an engine change, shared by both
+  bots and by the original): since commit 4b516b336e ("Get the UnitAI order
+  data directly", April 2026) `Entity.unitAIOrderData()` returns UnitAI's
+  orders, `{type, data}`, not their data; every caller still reads
+  `order.target`. So:
+  - `Entity.currentGatherRate()` finds no target and returns 0: the
+    estimate (`GetCurrentGatherRates`) is 0.5 per gatherer assigned this turn
+    and nothing else (0.04-0.17 against a real income of 6-15 per second).
+    `pickMostNeededResources` then sorts by the wanted rate alone, and puts a
+    resource that got a worker this turn behind those that did not: the split
+    of minutes 2-8 follows the queues' wishes and ignores the income. Food
+    heads the order 72-75% of the time from minute 4.
+  - `basesManager` (the gatherers carrying back to a supply, counted for it
+    in the turn cache) and `garrisonManager` (a unit already ordered into its
+    holder) never match; in the original also the attack plan's and defense
+    army's checks of what a unit targets (`attackPlan.js`, `defenseArmy.js`,
+    `attackManager.js`). The port's `common-api.d.ts` declares the old shape.
+  - The sum of the gathering units' rates, read from the order's `data`
+    (the log's `rawRate`), follows the real income closely (food 6.3 against
+    6.6, wood 9.3 against 8.8 at minutes 2-4; 13.2 against 11.7 for food at
+    8-10): with the reader fixed, the estimate means what it was made to.
+- **Food is the slow resource.** (The trips below are read from the
+  workers' `supply` metadata, which the worker's supply check, itself broken
+  by the order shape, keeps current: before the fix they are partly stale;
+  see the fix's figures at the end.) Per gatherer-minute: food 52 at minutes 0-2
+  (berries by the CC), then 36, 23, 21, 24 to minute 10, 31 at 10-12; wood a
+  steady 50-54. Food gatherers gather 37-45% of the time at minutes 4-8 (wood
+  61-64%), with trips of 100-120 from supply to dropsite (wood 70-90, falling
+  to 40 as storehouses follow). Food takes 16-30 gatherers to bring 6-12 a
+  second.
+- **The split pairs** (93 seed pairs won from one slot, lost from the other):
+  the start differs in the food trip. At minutes 4-6 the lost game's food
+  trip is 23 longer (shorter in the won game in 65 of 92 pairs), its food
+  per gatherer-minute 2.4 lower (61 of 93) and its gatherers gather 6% less;
+  it puts 1.4 more gatherers on food and 2.1 fewer on wood (60 of 93), and
+  gathers 1.8 less wood a second. From minute 6 the won game is ahead in
+  both. Stage 4's reading holds (§16): the layout makes food slow, the bot
+  answers with more food gatherers and falls behind in wood and production.
+- **The early proxy** (`pair-score.ts`): over the 197 decided games, the side
+  that had gathered more by minute 8 won 79% (correlation 0.60; units trained
+  66%, 0.43); at minute 6, 71%; at 10, 86%. The pair score of this batch is
+  exactly 0: both bots play the same until then. On stage 4's earlier army
+  (`alpha` 0.6) against its control it reads +111 ± 96 gathered at minute 8
+  over 93 pairs (excludes 0), where the win difference did not show.
+- So stage 5's first change: read the order's `data` in the port (a reader in
+  `adapter/unitState.ts`, the declared shape fixed), which revives the rate
+  estimate and the other checks; then the split by the measured income per
+  gatherer, the food trip included.
+
+### The fix: the orders' data read again (2026-10-27)
+
+`adapter/orders.ts` (`ordersOf`, each order's data as UnitAI.GetOrderData
+gave it; `gatherRate`, in place of `Entity.currentGatherRate`), all 34 reads
+of a unit's orders in the port through it, the declared shape the engine's
+(§1, stage-5 row). Same code paths as before the engine change, so the bot
+plays as Petra was written to.
+
+- `stage5-b-orders` (stage 4's 100 pairs, pool seed 4): **58.1%** (115 to 83,
+  CI 51.1-64.7%); against `stage5-a-economy` on the same pairs +0.2 ± 0.1
+  wins per pair, +213 ± 110 gathered at minute 8 (`pair-score.ts`).
+- `stage5-c-orders-seed5` (150 fresh pairs, pool seed 5): **62.9%** (185 to
+  109, CI 57.3-68.2%); SPRT 50% against 55% accepts 55% (LLR 6.15). Both
+  slots alike (64.2%, 61.6%); 46 pairs won from both slots against 10.
+  Gathered 81 400 against 63 600 a game; 0 errors.
+- The estimate now follows the income (food 4.4 against 5.9 a second at
+  minutes 0-2, 8.8 against 7.3 at 4-6; wood 9.1 against 11.6), so
+  `pickMostNeededResources` weighs both again: food heads it 27-61% of the
+  time at minutes 0-8 (before: 7-75%, by the queues alone). Wood trips read
+  20-26 (before 70-90: stale metadata, or woodcutters chasing far trees
+  while the supply check could not see their target); food per gatherer-
+  minute is still about 22-25 at minutes 4-10: the slow food remains.
+- The smoke reference was recorded anew with it.
+

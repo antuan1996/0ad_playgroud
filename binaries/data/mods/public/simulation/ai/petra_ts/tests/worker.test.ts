@@ -9,13 +9,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, override } from "./harness/fakes.ts";
+import { fake, orders, override } from "./harness/fakes.ts";
 import {
 	bookCentreSupplies, doorCalls, doorManagers, ENEMY, type HqSeatOptions, type HqWorld,
 	type HqWorldOptions, makeGaiaSupply, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate
 } from "./harness/hqWorld.ts";
 
-import { landRegion, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { entityId, landRegion, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { BaseManager } from "../decision/baseManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
@@ -50,7 +50,6 @@ function hand(world: HqWorld, host: BaseManager, id: number, metadata: Record<st
 		"isIdle": () => true,
 		"unitAIState": () => "INDIVIDUAL.IDLE",
 		"unitAIOrderData": () => [],
-		"currentGatherRate": () => 0,
 		"canGather": () => true,
 		"isGatherer": () => true,
 		"isBuilder": () => true,
@@ -571,7 +570,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 	it("a hand whose crop has vanished is stuck", () =>
 	{
 		const { world, base, worker } = seat();
-		const ent = hand(world, base, 6311, {}, { "unitAIOrderData": () => [{ "target": 9999 }] });
+		const ent = hand(world, base, 6311, {}, { "unitAIOrderData": () => orders({ "target": entityId(9999) }) });
 		prime(worker, ent);
 
 		assert.equal(worker.isInaccessibleSupply(world.gameState), true);
@@ -582,7 +581,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		const { world, base, worker } = seat();
 		const store = storehouse(world, 6321, [40, 40]);
 		base.assignEntity(world.gameState, store);
-		const ent = hand(world, base, 6322, {}, { "unitAIOrderData": () => [{ "target": 6321 }] });
+		const ent = hand(world, base, 6322, {}, { "unitAIOrderData": () => orders({ "target": entityId(6321) }) });
 		prime(worker, ent);
 
 		assert.equal(worker.isInaccessibleSupply(world.gameState), false);
@@ -595,7 +594,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		let carrying = 0;
 		const ent = hand(world, base, 6332, { "subrole": Worker.SUBROLE_GATHERER },
 			{
-				"unitAIOrderData": () => [{ "target": 6331 }],
+				"unitAIOrderData": () => orders({ "target": entityId(6331) }),
 				"resourceCarrying": () => carrying > 0 ? [{ "type": "wood", "amount": carrying }] : []
 			});
 		prime(worker, ent);
@@ -613,7 +612,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6342, { "subrole": Worker.SUBROLE_GATHERER },
 			{
-				"unitAIOrderData": () => [{ "target": 6341 }],
+				"unitAIOrderData": () => orders({ "target": entityId(6341) }),
 				"gather": (target: CommonEntity) => gathered.push(target.id())
 			});
 		prime(worker, ent);
@@ -1066,7 +1065,7 @@ describe("a worker on the approach: update while walking to its crop", () =>
 		const ent = hand(world, base, 6802, { "gather-type": "wood" }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 9999 }],
+			"unitAIOrderData": () => orders({ "target": entityId(9999) }),
 			"gather": ids(gathered)
 		});
 
@@ -1082,7 +1081,7 @@ describe("a worker on the approach: update while walking to its crop", () =>
 		const ent = hand(world, base, 6811, { "gather-type": "wood" }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 9999 }],
+			"unitAIOrderData": () => orders({ "target": entityId(9999) }),
 			"stopMoving": () => stopped.push(1)
 		});
 
@@ -1098,7 +1097,7 @@ describe("a worker on the approach: update while walking to its crop", () =>
 		return rider(world, base, id, {}, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": target }],
+			"unitAIOrderData": () => orders({ "target": entityId(target) }),
 			"gather": ids(sink),
 			"stopMoving": () => stops.push(1)
 		});
@@ -1236,7 +1235,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 			"id": 6903, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship", "FishingBoat"]
 		}, {
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 6904 }],
+			"unitAIOrderData": () => orders({ "target": entityId(6904) }),
 			"resourceGatherRates": () => ({ "food.fish": 1 }),
 			"gather": ids(gathered)
 		}, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 }));
@@ -1258,7 +1257,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6913, { "gather-type": "wood" }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 6911 }],
+			"unitAIOrderData": () => orders({ "target": entityId(6911) }),
 			"gather": ids(gathered)
 		});
 
@@ -1280,7 +1279,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6923, { "subrole": Worker.SUBROLE_BUILDER, "target-foundation": 6922 }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 6921 }],
+			"unitAIOrderData": () => orders({ "target": entityId(6921) }),
 			"repair": ids(repaired)
 		});
 
@@ -1298,7 +1297,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6932, { "subrole": Worker.SUBROLE_IDLE }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 6931 }],
+			"unitAIOrderData": () => orders({ "target": entityId(6931) }),
 			"stopMoving": () => stops.push(1)
 		});
 
@@ -1317,7 +1316,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6942, { "subrole": "defender", "PartOfArmy": 3, "plan": -3 }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 6941 }],
+			"unitAIOrderData": () => orders({ "target": entityId(6941) }),
 			"stopMoving": () => stops.push(1)
 		});
 
@@ -1341,7 +1340,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6952, { "subrole": Worker.SUBROLE_GATHERER }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => [{ "target": 6951, "attackType": "Capture" }],
+			"unitAIOrderData": () => orders({ "target": entityId(6951), "attackType": "Capture" }),
 			"canCapture": () => true, "captureStrength": () => 2.5, "get": () => undefined,
 			"attack": (id: number, capture: boolean) => attacks.push([id, capture])
 		});
@@ -1359,7 +1358,7 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const ent = hand(world, base, 6962, { "subrole": Worker.SUBROLE_GATHERER }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => [{ "target": 6961, "attackType": "Capture" }],
+			"unitAIOrderData": () => orders({ "target": entityId(6961), "attackType": "Capture" }),
 			"attack": (id: number, capture: boolean) => attacks.push([id, capture])
 		});
 
@@ -1378,7 +1377,7 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 		return hand(world, base, id, { "gather-type": gatherType, "supply": noted }, {
 			"isIdle": () => false,
 			"unitAIState": () => state,
-			"unitAIOrderData": () => [{ "target": target }],
+			"unitAIOrderData": () => orders({ "target": entityId(target) }),
 			"gather": ids(sink),
 			...extra
 		});
@@ -1885,7 +1884,7 @@ describe("a worker's smaller judgements", () =>
 	{
 		const { world, base, worker } = seat();
 		rawSupply(world, 7351, [30, 30], "wood", "tree");
-		const ent = hand(world, base, 7352, {}, { "unitAIOrderData": () => [{ "target": 7351 }] });
+		const ent = hand(world, base, 7352, {}, { "unitAIOrderData": () => orders({ "target": entityId(7351) }) });
 		prime(worker, ent);
 
 		assert.equal(worker.isInaccessibleSupply(world.gameState), false);
@@ -1983,7 +1982,7 @@ describe("a builder through its turn: update", () =>
 		return hand(world, base, id, { "subrole": Worker.SUBROLE_BUILDER, "target-foundation": foundation }, {
 			"isIdle": () => state === "INDIVIDUAL.IDLE",
 			"unitAIState": () => state,
-			"unitAIOrderData": () => orderTarget === undefined ? [] : [{ "target": orderTarget }],
+			"unitAIOrderData": () => orderTarget === undefined ? [] : orders({ "target": entityId(orderTarget) }),
 			...methods
 		});
 	}
@@ -2111,7 +2110,7 @@ describe("a builder through its turn: update", () =>
 		const ent = builder(world, base, 7466, 7465, "INDIVIDUAL.RETURNRESOURCE.APPROACHING", undefined, {
 			"isIdle": () => false,
 			// UnitAI's queue: the drop at the centre, then the building
-			"unitAIOrderData": () => [{ "target": 1000 }, { "target": 7465 }],
+			"unitAIOrderData": () => orders({ "target": entityId(1000) }, { "target": entityId(7465) }),
 			"resourceCarrying": () => [{ "type": "wood", "amount": 10 }],
 			"returnResources": ids(returned),
 			"repair": (t: CommonEntity) => repaired.push(t.id())
@@ -2174,7 +2173,7 @@ describe("a hunter and a fisher through their turn: update", () =>
 		const ent = rider(world, base, 7523, {}, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.GATHERING",
-			"unitAIOrderData": () => [{ "target": 7521 }],
+			"unitAIOrderData": () => orders({ "target": entityId(7521) }),
 			"gather": ids(gathered)
 		}, [100, 60]);
 
@@ -2192,7 +2191,7 @@ describe("a hunter and a fisher through their turn: update", () =>
 		const ent = rider(world, base, 7532, {}, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 7531 }],
+			"unitAIOrderData": () => orders({ "target": entityId(7531) }),
 			"resourceCarrying": () => [{ "type": "food", "amount": 20 }],
 			"returnResources": ids(returned)
 		}, [150, 150]);
@@ -2214,7 +2213,7 @@ describe("a hunter and a fisher through their turn: update", () =>
 		const ent = boat(world, base, 7543, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.GATHERING",
-			"unitAIOrderData": () => [{ "target": 7542 }],
+			"unitAIOrderData": () => orders({ "target": entityId(7542) }),
 			"gather": ids(gathered)
 		}, [100, 100]);
 
@@ -2566,7 +2565,7 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 		const ent = hand(world, base, 8003, { "gather-type": "wood" }, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 8001 }],
+			"unitAIOrderData": () => orders({ "target": entityId(8001) }),
 			"gather": ids(gathered)
 		});
 
@@ -2582,7 +2581,7 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 		tree.setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		let carrying = 0;
 		const ent = hand(world, base, 8012, {}, {
-			"unitAIOrderData": () => [{ "target": 8011 }],
+			"unitAIOrderData": () => orders({ "target": entityId(8011) }),
 			"resourceCarrying": () => carrying ? [{ "type": "wood", "amount": carrying }] : []
 		});
 		prime(worker, ent);
@@ -2597,7 +2596,7 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 	{
 		const { world, base, worker } = seat();
 		rawSupply(world, 8021, [30, 30], "wood", "tree");
-		const ent = hand(world, base, 8022, { "alreadyTried": 8099 }, { "unitAIOrderData": () => [{ "target": 8021 }] });
+		const ent = hand(world, base, 8022, { "alreadyTried": 8099 }, { "unitAIOrderData": () => orders({ "target": entityId(8021) }) });
 		prime(worker, ent);
 
 		worker.isInaccessibleSupply(world.gameState);
@@ -2721,7 +2720,7 @@ describe("allies' dropsites, when shared", () =>
 		const ent = rider(world, base, 8235, {}, {
 			"isIdle": () => false,
 			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => [{ "target": 8231 }],
+			"unitAIOrderData": () => orders({ "target": entityId(8231) }),
 			"stopMoving": () => stops.push(1)
 		});
 

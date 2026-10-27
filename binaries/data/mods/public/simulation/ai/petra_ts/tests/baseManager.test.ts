@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { emptyEvents, fake, override } from "./harness/fakes.ts";
+import { emptyEvents, fake, orders, override } from "./harness/fakes.ts";
 import {
 	doorManagers, dropsiteCC, ENEMY, type HqSeatOptions, type HqWorld, type HqWorldOptions,
 	makeGaiaSupply, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate, territoryCellAt
@@ -17,7 +17,7 @@ import {
 
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 
-import { entityId, templateName, worldPos } from "../adapter/brands.ts";
+import { GAIA, entityId, templateName, worldPos } from "../adapter/brands.ts";
 import { BaseManager } from "../decision/baseManager.ts";
 import { EASY, HARD, MEDIUM } from "../decision/difficultyLevel.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
@@ -590,7 +590,7 @@ function hand(world: HqWorld, base: BaseManager, id: number,
 	const ent = world.addEntity(makeHqEntity({ id, "owner": PLAYER, position, classes }, {
 		"isIdle": () => false,
 		"unitAIState": () => "INDIVIDUAL.IDLE",
-		"currentGatherRate": () => 0,
+		"resourceGatherRates": () => ({ "wood.tree": 0.7 }),
 		"canGather": () => true,
 		"isGatherer": () => true,
 		"isBuilder": () => false,
@@ -602,20 +602,42 @@ function hand(world: HqWorld, base: BaseManager, id: number,
 	return ent;
 }
 
+/** a gaia supply of the given "generic.specific" type */
+function supply(world: HqWorld, id: number, type: string): void
+{
+	const [generic, specific] = type.split(".");
+	world.addEntity(makeHqEntity({ id, "owner": GAIA, "position": [70, 70], "classes": [] },
+		{ "resourceSupplyType": () => ({ generic, specific }) }));
+}
+
+/** what a unit gathering from the supply says: its state, its order, its rates */
+function gathering(supplyId: number, rates: Record<string, number>): Record<string, unknown>
+{
+	return {
+		"unitAIState": () => "INDIVIDUAL.GATHER.GATHERING",
+		"unitAIOrderData": () => orders({ "target": entityId(supplyId) }),
+		"resourceGatherRates": () => rates
+	};
+}
+
 const CIVILIAN = ["Unit", "Support", "Civilian", "Worker"];
 const SOLDIER = ["Unit", "Infantry", "CitizenSoldier", "Worker"];
 
 describe("the workers' trade: what they bring in and where they go", () =>
 {
+	// only the port passes: the original reads the order's target off the
+	// order itself, which the engine has wrapped ({type, data}) since its
+	// commit 4b516b336e, so every gatherer adds 0 (FINDINGS §18)
 	it("a gatherer on the wood adds its rate, discounted for the walk, to the town's wood estimate", () =>
 	{
 		const { world, base } = seat();
+		supply(world, 2891, "wood.tree");
 		hand(world, base, 2801, CIVILIAN, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
-			{ "currentGatherRate": () => 1 });
+			gathering(2891, { "wood.tree": 1 }));
 		hand(world, base, 2802, CIVILIAN, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
-			{ "currentGatherRate": () => 3 });
+			gathering(2891, { "wood.tree": 3 }));
 		hand(world, base, 2803, CIVILIAN, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "wood" },
-			{ "currentGatherRate": () => 9, "isIdle": () => true });
+			{ ...gathering(2891, { "wood.tree": 9 }), "isIdle": () => true });
 		const rates: Record<string, number> = { "food": 0, "wood": 0, "stone": 0, "metal": 0 };
 
 		base.addGatherRates(world.gameState, rates);
@@ -628,10 +650,12 @@ describe("the workers' trade: what they bring in and where they go", () =>
 	it("hunters and fishers add their rates to the town's food estimate", () =>
 	{
 		const { world, base } = seat();
+		supply(world, 2892, "food.meat");
+		supply(world, 2893, "food.fish");
 		hand(world, base, 2811, ["Unit", "Cavalry", "FastMoving"],
-			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_HUNTER }, { "currentGatherRate": () => 1 });
+			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_HUNTER }, gathering(2892, { "food.meat": 1 }));
 		hand(world, base, 2812, ["Unit", "FishingBoat"],
-			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER }, { "currentGatherRate": () => 2 });
+			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER }, gathering(2893, { "food.fish": 2 }));
 		const rates: Record<string, number> = { "food": 0, "wood": 0, "stone": 0, "metal": 0 };
 
 		base.addGatherRates(world.gameState, rates);

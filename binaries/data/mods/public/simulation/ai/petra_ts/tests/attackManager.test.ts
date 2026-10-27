@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder, sent } from "./harness/engine.ts";
-import { emptyEvents, fake, makeEntity, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import { emptyEvents, fake, makeEntity, orders, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from "./harness/world.ts";
 
 import { armyId, attackPlanId, entityId, playerId, worldPos } from "../adapter/brands.ts";
@@ -343,7 +343,7 @@ describe("attack manager", () =>
 			makeEnemyWall(world); // survives, its force still under orders
 			world.addEntity(makeEntity({ id: 5002, owner: PLAYER, position: [32, 30], classes: ["Structure"] }));
 			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => false, "unitAIOrderData": () => [{ "target": 5000 }] }));
+				{ "isIdle": () => false, "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
 			manager.bombingAttacks.set(entityId(5002), new Set([entityId(1100)]));
 			manager.bombingAttacks.set(entityId(5003), new Set([entityId(1100)]));
 			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100)]));
@@ -358,9 +358,9 @@ describe("attack manager", () =>
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
 			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => [{ "target": 5000 }] }));
+				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
 			world.addEntity(makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => [{ "target": 6000 }] }));
+				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => orders({ "target": entityId(6000) }) }));
 			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100), entityId(1101)]));
 
 			manager.assignBombers(world.gameState);
@@ -490,7 +490,7 @@ describe("attack manager", () =>
 			for (let i = 0; i < 5; ++i)
 			{
 				world.addEntity(makeEntity({ id: 7001 + i, owner: PLAYER },
-					{ "unitAIOrderData": () => [{ "target": 5000 }] }));
+					{ "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
 				crowd.add(entityId(7001 + i));
 			}
 			manager.bombingAttacks.set(entityId(5000), crowd);

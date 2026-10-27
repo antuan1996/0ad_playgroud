@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { eventsWith, fake, makeTemplate, override, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import {
 	centerOfCell, doorCalls, doorManagers, dropsiteCC, ENEMY, GAIA, type HqSeatOptions, type HqWorld,
 	type HqWorldOptions, makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ,
@@ -2854,7 +2854,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		bonus?: Record<string, Record<string, unknown>>;
 		/** null: the engine reports no UnitAI state */
 		state?: string | null;
-		orderData?: Array<Record<string, unknown>>;
+		orderData?: CommonUnitOrderData[];
 	} = {}): CommonEntity
 	{
 		return world.addEntity(makeHqEntity({
@@ -2873,7 +2873,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			"canCapture": () => true,
 			"captureStrength": () => opts.strength,
 			"unitAIState": () => opts.state === null ? undefined : opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => opts.orderData ?? [{ "target": 2601, "attackType": "Capture" }]
+			"unitAIOrderData": () => orders(...opts.orderData ?? [{ "target": entityId(2601), "attackType": "Capture" }])
 		}));
 	}
 
@@ -2976,7 +2976,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		// a capturer with no order on record
 		capturer(world, 2612, { "strength": 30, "orderData": [] });
 		// a capturer aimed at ground nobody holds
-		capturer(world, 2613, { "strength": 30, "orderData": [{ "target": 2699, "attackType": "Capture" }] });
+		capturer(world, 2613, { "strength": 30, "orderData": [{ "target": entityId(2699), "attackType": "Capture" }] });
 		// a capturer whose order carries no target at all
 		capturer(world, 2614, { "strength": 30, "orderData": [{ "attackType": "Capture" }] });
 

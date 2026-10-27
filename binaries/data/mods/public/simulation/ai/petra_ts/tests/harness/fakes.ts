@@ -19,6 +19,16 @@ export function fake<T>(value: unknown): T
 }
 
 /**
+ * A unit's UnitAI orders as `Entity.unitAIOrderData()` returns them
+ * (UnitAI.GetOrders): each order's data wrapped with its type. The type is
+ * not read by the bot; "Order" stands for any.
+ */
+export function orders(...data: CommonUnitOrderData[]): CommonUnitOrder[]
+{
+	return data.map((order) => ({ "type": "Order", "data": order }));
+}
+
+/**
  * Whether the classes are those of a gatherer, as the templates have it:
  * workers, citizen soldiers and fishing boats carry a ResourceGatherer, but
  * mercenaries do not (mixins/mercenary.xml disables it), whatever classes

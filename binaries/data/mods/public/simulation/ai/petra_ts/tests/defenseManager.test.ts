@@ -16,7 +16,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, eventsWith, makeEntity, type Methods } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, makeEntity, type Methods, orders } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
 import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
@@ -125,7 +125,7 @@ describe("watching the field", () =>
 		const builder = makeSoldier(2000, [60, 60], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(builder);
@@ -145,7 +145,7 @@ describe("watching the field", () =>
 		const builder = makeSoldier(2000, [60, 60], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(builder);
@@ -166,7 +166,7 @@ describe("watching the field", () =>
 		const builder = makeSoldier(2000, [80, 80], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(builder);
@@ -202,7 +202,7 @@ describe("watching the field", () =>
 		const builder = makeSoldier(2000, [60, 60], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(builder);
@@ -218,7 +218,7 @@ describe("watching the field", () =>
 		const mechanic = makeSoldier(2000, [60, 60], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(mechanic);
@@ -238,7 +238,7 @@ describe("watching the field", () =>
 		const builder = makeSoldier(2000, [200, 200], {
 			methods: {
 				unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-				unitAIOrderData: () => [{ "target": 4000 }]
+				unitAIOrderData: () => orders({ "target": entityId(4000) })
 			}
 		});
 		world.addEntity(builder);
@@ -545,7 +545,7 @@ describe("the turn rota", () =>
 		const beast = makeSoldier(2000, [30, 30], {
 			owner: GAIA, classes: ["Animal"], methods: {
 				unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-				unitAIOrderData: () => [{ "target": 3000 }]
+				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}
 		});
 		world.addEntity(beast);
@@ -586,7 +586,7 @@ describe("the turn rota", () =>
 		world.addEntity(makeSoldier(2000, [30, 30], {
 			owner: GAIA, classes: ["Animal"], methods: {
 				unitAIState: () => undefined,
-				unitAIOrderData: () => [{ "target": 3000 }]
+				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}
 		}));
 		const manager = makeDefenseManager(world);
@@ -598,7 +598,7 @@ describe("the turn rota", () =>
 
 	it("leaves the beast fighting an enemy's hunter, or fighting nobody in particular", () =>
 	{
-		for (const orders of [[{ "target": 3000 }], []])
+		for (const queue of [orders({ "target": entityId(3000) }), orders()])
 		{
 			const world = makeWorld();
 			world.ai.playedTurn = 0;
@@ -607,12 +607,12 @@ describe("the turn rota", () =>
 			world.addEntity(makeSoldier(2000, [30, 30], {
 				owner: GAIA, classes: ["Animal"], methods: {
 					unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-					unitAIOrderData: () => orders
+					unitAIOrderData: () => queue
 				}
 			}));
 			const manager = makeDefenseManager(world);
 			manager.update(world.gameState, emptyEvents());
-			assert.equal(manager.armies.length, 0, `orders ${JSON.stringify(orders)}`);
+			assert.equal(manager.armies.length, 0, `orders ${JSON.stringify(queue)}`);
 		}
 	});
 
@@ -1175,7 +1175,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeDefender(3000, [20, 20], {
 			attack: (target) => { calls.push(target); },
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 2000 }]
+			unitAIOrderData: () => orders({ "target": entityId(2000) })
 		}));
 		world.addEntity(makeSoldier(2000, [21, 21]));
 
@@ -1198,7 +1198,7 @@ describe("when our own are hit", () =>
 		world.addEntity(makeDefender(3000, [28, 30], {
 			attack: (target) => { calls.push(target); },
 			unitAIState: () => "INDIVIDUAL.REPAIR.REPAIRING",
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		world.addEntity(makeSoldier(2000, [35, 30]));
 
@@ -1218,12 +1218,12 @@ describe("when our own are hit", () =>
 		const mateCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [70, 60], {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		world.addEntity(makeDefender(3001, [71, 60], {
 			attack: (target) => { mateCalls.push(target); },
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		world.addEntity(makeSoldier(2000, [72, 60]));
 
@@ -1249,18 +1249,18 @@ describe("when our own are hit", () =>
 		const calls: Array<[number, number]> = [];
 		world.addEntity(makeDefender(3000, [70, 60], {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		// the nearer mate is in no known state, the farther one still fights
 		world.addEntity(makeDefender(3001, [71, 60], {
 			attack: (target) => { calls.push([3001, target]); },
 			unitAIState: () => undefined,
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		world.addEntity(makeDefender(3002, [74, 60], {
 			attack: (target) => { calls.push([3002, target]); },
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 5000 }]
+			unitAIOrderData: () => orders({ "target": entityId(5000) })
 		}));
 		world.addEntity(makeSoldier(2000, [72, 60]));
 
@@ -1915,7 +1915,7 @@ describe("rarer turns of the defence", () =>
 	{
 		return world.addEntity(makeDefender(id, position, {
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
-			unitAIOrderData: () => [{ "target": 4000 }],
+			unitAIOrderData: () => orders({ "target": entityId(4000) }),
 			attack: () => undefined,
 			...methods
 		}));
@@ -1935,7 +1935,7 @@ describe("rarer turns of the defence", () =>
 		capturerOf(world, 3001, [71, 71], fighter(3001));
 		capturerOf(world, 3002, [71, 72], { canAttackTarget: () => false, ...fighter(3002) });
 		capturerOf(world, 3003, [72, 71], { unitAIState: () => "INDIVIDUAL.GATHER.GATHERING", ...fighter(3003) });
-		capturerOf(world, 3004, [73, 72], { unitAIOrderData: () => [{ "target": 2000 }], ...fighter(3004) });
+		capturerOf(world, 3004, [73, 72], { unitAIOrderData: () => orders({ "target": entityId(2000) }), ...fighter(3004) });
 		capturerOf(world, 3005, [75, 75], fighter(3005));
 		capturerOf(world, 3006, [90, 90], fighter(3006));
 		world.ai.HQ.capturableTargets.set(entityId(4000), { "strength": 10, "ents": new Set([entityId(3000), entityId(3001), entityId(3002), entityId(3003), entityId(3004), entityId(3005), entityId(3006)]) });
