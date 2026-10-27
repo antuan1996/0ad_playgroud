@@ -414,6 +414,68 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		assert.equal(hq.needFarm, true);
 	});
 
+	// only the port passes: Petra waits until the berries in reach fall below
+	// 600, however far its gatherers walk for them
+	it("a town whose berries bring in less than a field plants one, plenty of berries or not", () =>
+	{
+		const { world, hq, base } = seat();
+		farmCards(world, hq);
+		berries(world, base, 2000);
+		// eight women on far bushes, 0.4 a second each, the walk included
+		hq.gatherEconomy.foodGatherers = { "fruit": 8, "grain": 0, "meat": 0, "fish": 0 };
+		hq.gatherEconomy.perFoodGatherer = { "fruit": 0.4 };
+
+		base.checkResourceLevels(world.gameState, world.ai.queues);
+
+		assert.equal(world.ai.queues.field.plans.length, 1);
+		assert.equal(hq.needFarm, true);
+	});
+
+	it("berries that still pay, or too few on them to tell, plant no field", () =>
+	{
+		for (const [gatherers, rate] of [[8, 0.7], [2, 0.3]])
+		{
+			const { world, hq, base } = seat();
+			farmCards(world, hq);
+			berries(world, base, 2000);
+			hq.gatherEconomy.foodGatherers = { "fruit": gatherers, "grain": 0, "meat": 0, "fish": 0 };
+			hq.gatherEconomy.perFoodGatherer = { "fruit": rate };
+
+			base.checkResourceLevels(world.gameState, world.ai.queues);
+
+			assert.equal(world.ai.queues.field.plans.length, 0, `${gatherers} on berries at ${rate}`);
+		}
+	});
+
+	it("while the berries bring in less than a field, one more field is laid out at a time", () =>
+	{
+		const laidOut = (berriesSlow: boolean): number =>
+		{
+			const { world, hq, base } = seat();
+			farmCards(world, hq);
+			berries(world, base, 0);
+			hq.maxFields = false;
+			world.addEntity(makeHqEntity({
+				"id": 2702, "owner": PLAYER, "position": [60, 60],
+				"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
+			}));
+			const goal = hq.Config.Economy.provisionFields;
+			for (let i = 0; i < goal; ++i)
+				world.addEntity(makeHqEntity({
+					"id": 2710 + i, "owner": PLAYER, "position": [70 + 4 * i, 70],
+					"classes": ["Structure", "Economic", "Field"], "templateName": FIELD
+				}, { "foundationProgress": () => 0.2 }));
+			hq.gatherEconomy.foodGatherers = { "fruit": 6, "grain": 5, "meat": 0, "fish": 0 };
+			hq.gatherEconomy.perFoodGatherer = { "fruit": berriesSlow ? 0.35 : 0.8, "grain": 0.55 };
+
+			base.checkResourceLevels(world.gameState, world.ai.queues);
+			return world.ai.queues.field.plans.length;
+		};
+
+		assert.equal(laidOut(false), 0, "the goal's foundations are laid out");
+		assert.equal(laidOut(true), 1, "one more while the berries are slow");
+	});
+
 	it("with a field standing, the next field is planned while the town is short of its goal", () =>
 	{
 		const { world, hq, base } = seat();

@@ -19,9 +19,9 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (29 tests in all; the
+Each is pinned by a test that only the port passes (30 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
-and the stage-5 one were fixed after the original stopped being a test
+and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
 whether a game can reach it.
 
@@ -51,6 +51,7 @@ whether a game can reach it.
 | `victoryManager.tryAssignMilitaryGuard` (stage 4) | refuses any unit with a plan, so the units out of any plan (−1) it is offered from the attack manager's `outOfPlan` are never taken | takes a unit of plan −1 | victoryManager: "guards are drawn from the champions first, then units out of any plan…" |
 | `attackPlan.updatePreparation` at the population cap (stage 4) | aborts a plan that cannot start yet "so that its units serve other plans"; the attack manager creates the next one at once, which takes the same reserve back and is aborted in turn: 124 plans aborted within 30 s of creation in 200 games, 81 in one (§16) | the plan waits, gathering units as below the cap | attackPlan: "waits when the population is full…", "waits with its few units…" |
 | every read of a unit's orders (stage 5) | reads `order.target` off `Entity.unitAIOrderData()`, which since the engine's commit 4b516b336e returns UnitAI's orders (`{type, data}`), not their data: every check of what a unit targets fails (the workers' hunting and supply checks, the defense and attack target checks, garrisons, captures), and `Entity.currentGatherRate()` gives 0, so the town's gather-rate estimate is empty and the gatherer split follows the queues alone (§18). Every game | `adapter/orders.ts`: `ordersOf` reads the data, `gatherRate` replaces `currentGatherRate`; the declared shape is the engine's | baseManager: "a gatherer on the wood adds its rate, ..."; orders.test.ts |
+| `baseManager.checkResourceLevels` first field (stage 5) | queues the first field only once the berries within reach fall below 600 food, however far its gatherers walk for them: by minutes 6-8 they gather 45% of the time on trips of 128, about 0.4 food a second against a field's 0.54 (§20) | also as soon as a gatherer brings in less at the berries than at a field, measured (`decision/foodSource.ts`); one more field at a time while that lasts | baseManager: "a town whose berries bring in less than a field plants one, ..." |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -553,6 +554,13 @@ attacks up (`PLAN.md` §6).
   workers); played again it ran to the end with the same fingerprint as in an
   earlier batch. batch.ts now kills a game after 15 minutes of wall time
   (`--game-timeout`), so a resumed batch, and the smoke test, play it again.
+  Stage 5 met it three times in about 1500 games, in two forms: every thread
+  waiting, no CPU used (the deadlock, twice), and once the main thread
+  spinning a core for 15 minutes while holding the process's memory lock, so
+  that reading its `/proc/<pid>/cmdline` (and `ps`) blocked; the timeout's
+  SIGKILL then left it in state D for a while before it went. Look for a hung
+  game in `/proc/<pid>/stat` (the engine's main thread is named `main`; field
+  14+15 is its CPU time), never with `ps` while one may hold its lock.
 - **A quirk of the game's statistics**: the replays' `sequences` record
   `total` as 0 for units lost and killed; the `Unit` class holds all units.
 
@@ -730,3 +738,84 @@ plays as Petra was written to.
   minute is still about 22-25 at minutes 4-10: the slow food remains.
 - The smoke reference was recorded anew with it.
 
+
+## 19. Stage 5: the gatherer split by measured rates (2026-10-27)
+
+Branch `stage5`. The first utility decision: `world/gatherEconomy.ts` measures
+each resource's rate per gatherer, the walk included (what the units
+gathering bring in over all its gatherers, smoothed over a minute), and
+`decision/gatherSplit.ts` gives each resource a target share of the gatherers;
+`pickMostNeededResources` orders by the gatherers each lacks, and a gatherer is
+moved when two resources' deficits differ by 2. Measured against
+`petra_prev` (the port at `main`, `e308f613d2`; `baselines.ts prev`), each
+variant on seed pool 6 (100 pairs, both slots):
+
+| Variant | vs `petra_prev` | What went wrong |
+|---|---|---|
+| shares by wanted rate / measured rate | 42.4% (CI 35.7-49.4%), SPRT rejects 55% | `wantedGatherRates` starts each resource's short horizon at the config's reserve (`Config.queues.short`: 200 food and wood, 100 stone and metal): divided by metal's slow rate, a reserve took gatherers off wood (metal 128 against 5 gathered by minute 8, wood 200 less) |
+| queued costs / rate, reserves as their rate (`QueueManager.gatherDemand`) | 52.5% (CI 45.6-59.3%) | ranked by deficit alone, an unwanted resource (0) came before an over-staffed wanted one (-1): an idle worker food turned away went to metal |
+| and unwanted resources last (`byDeficit`) | 56.1% (CI 49.1-62.9%) on pool 6; **48.6%** (CI 43.0-54.3%) on 150 fresh pairs, pool 7 | the integration match: with only food queued and every stock over its reserve, the share sent 82 women to 14 fields (5 each), ten idle for minutes; the share rewards saturation (idle gatherers lower the measured rate, a lower rate asks for more) |
+| and a resource with idle gatherers capped at those at work, its share to the others (`capAtSaturation`) | **43.6%** (CI 38.1-49.3%) on 150 fresh pairs, pool 8; SPRT rejects 55% | 11% less gathered (69 000 against 77 900), 2.2 units behind at minute 8: a woman idle for a moment between tasks caps food early |
+
+- **Dropped.** Over pools 6 and 7 the third variant made 257 of 494, 52.0%:
+  no gain shown (pool 6's 56% was the pairs the order was fixed on), and it
+  idles women on full fields where Petra's order does not; the cap that
+  stops that loses. `pickMostNeededResources` keeps Petra's order (with the
+  order data read, its estimate works, §18); the smoke test shows the branch
+  plays as `main` again (24 of 24). Kept for later decisions: the measured
+  rates (`world/gatherEconomy.ts`, updated and saved, read by no decision),
+  `QueueManager.gatherDemand` (queued costs and reserves apart) and
+  `decision/gatherSplit.ts` with its property tests, not wired.
+- What it changes: about 150-200 more food (2-3%) by minutes 8-15, the same
+  wood, stone and metal, four more units by minute 15; even by minute 20. The
+  early proxy sees it (+125 ± 68 gathered at minute 8 on pool 7, excludes 0),
+  but a 2-3% food gain does not decide games.
+- So the split is not where food is lost: its gatherers gather 40% of the
+  time at minutes 4-8, on trips of 90-113 from their supply to the dropsite
+  (wood: 65%, 26). Where the food is gathered (far berries and hunt against
+  fields by a farmstead) is the next domain.
+- The early proxy's lesson: a lead at minute 8 that comes from the economy
+  alone predicts less than the same lead in stage 4's games, where it came
+  from the start's layout and compounded; it ranks variants of one decision,
+  the SPRT on fresh pairs still decides.
+
+## 20. Stage 5: where food comes from (2026-10-27)
+
+Branch `stage5`. The economy log by food source (`economy.txt`'s
+`foodSources`: the supply each food gatherer's orders name, the trip from it
+to our nearest food dropsite), 100 games of `main` against itself (pool 9):
+
+| Minutes 6-8 | Gatherers | Gathering | Per gatherer, the walk included | Trip |
+|---|---|---|---|---|
+| fields (grain) | 7.9 | 91% | 0.54 | 33 |
+| berries (fruit) | 10.0 | 45% | 0.57 | 128 |
+| hunt (meat) | 1.3 | 23% | 1.46 | 164 |
+| no supply in their orders | 8.5 | 0% | 0 | - |
+
+- A field keeps its women gathering 90-95% of the time at any minute (0.54
+  a second at minutes 4-8, 0.72 at 10-15 with the farming techs). Berries
+  bring in 0.70-0.75 a second by the civic centre at minutes 0-4, then their
+  bushes are ever further away: trips of 40-50, 128 by minutes 6-8, 150 by
+  8-10, gathering 38-45% of the time.
+- The gatherers with no supply in their orders, 30% of the food gatherers at
+  minutes 4-10: carrying food back from a supply that is gone, mostly bushes
+  picked clean (54%), building fields (30%), idle hunters (8%). The berries'
+  real rate counts the first: about 0.4 a second at minutes 6-10, a field's
+  0.54-0.66. Petra queued its first field once the berries within reach fell
+  below 600 food (§4), at a time the berries already paid less.
+- **The rule** (`decision/foodSource.ts`, `baseManager.checkResourceLevels`):
+  a field is wanted as soon as a gatherer brings in less at the berries than
+  at a field, measured (`world/gatherEconomy.ts`: per food source, the rate
+  of those gathering over all its gatherers, smoothed over a minute; one
+  carrying back from a supply gone counts on the berries' side) on 3 berry
+  gatherers or more. The first field comes then, or below 600 berries as
+  before; while the berries are slower, one more field is laid out at a time.
+- Against `petra_prev` (`main`): tuned on pool 10, 55.3% (CI 48.3-62.0%,
+  fields 16 gatherers at minutes 6-8 against 8, berries 5 against 10);
+  decided on 150 fresh pairs, pool 11: **56.3%** (169 to 131, CI 50.7-61.8%;
+  42 pairs won from both slots against 23), 81 400 gathered a game against
+  72 300; SPRT 50% against 55% undecided (LLR 2.31), 55% for `petra_prev`
+  rejected. Kept: 279 of 499 over both pools, 55.9%.
+- The early proxy saw it (+141 ± 88 gathered at minute 8), and this time the
+  win-rate followed, where the gatherer split's +125 did not (§19): the split
+  moved 2-3% of the food, the fields 13% of all resources.

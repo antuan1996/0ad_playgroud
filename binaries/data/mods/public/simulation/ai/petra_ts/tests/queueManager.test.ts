@@ -781,6 +781,53 @@ describe("QueueManager", () =>
 		assert.ok(Math.abs(rates.food - (200 / 30 + 50 / 60)) < 1e-9);
 	});
 
+	it("splits what it wants into the queued costs and the reserve still to fill", () =>
+	{
+		const gameState = worldWithResources({ food: 150, wood: 40 });
+		gameState.ai.playedTurn = 2;
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ getCost: costOf(100) }), makePlan({ type: "second", getCost: costOf(80) })],
+			citizenSoldier: [makePlan({ type: "later", getCost: costOf(300), isGo: () => false })]
+		});
+		const reserve = (res: string): number => manager.Config.queues.short[res] || manager.Config.queues.short.default;
+
+		const { costs, floors } = manager.gatherDemand(gameState);
+
+		// the 150 food pays the first item (100) and 50 of the second: 30 of it
+		// over 60 s, and the held-back item's 300 over 300 s
+		assert.ok(Math.abs(costs.food - (30 / 60 + 300 / 300)) < 1e-9);
+		// all the stock went to the queue: the whole reserve is still to fill
+		assert.ok(Math.abs(floors.food - reserve("food") / 30) < 1e-9);
+		// nothing queued costs wood (costOf is food), and the 40 in stock go
+		// toward the reserve
+		assert.equal(costs.wood, 0);
+		assert.ok(Math.abs(floors.wood - (reserve("wood") - 40) / 30) < 1e-9);
+	});
+
+	it("with stock over the queue and the reserve, wants nothing", () =>
+	{
+		const gameState = worldWithResources({ food: 5000 });
+		gameState.ai.playedTurn = 2;
+		const manager = makeManager(makeConfig(), { villager: [makePlan({ getCost: costOf(100) })] });
+
+		const { costs, floors } = manager.gatherDemand(gameState);
+
+		assert.equal(costs.food, 0);
+		assert.equal(floors.food, 0);
+	});
+
+	it("on the first turn, the first-turn rates are what it wants, and no reserve", () =>
+	{
+		const gameState = worldWithResources();
+		gameState.ai.playedTurn = 0;
+		const manager = makeManager(makeConfig());
+
+		const { costs, floors } = manager.gatherDemand(gameState);
+
+		assert.deepEqual(costs, manager.wantedGatherRates(gameState));
+		assert.ok(Object.values(floors).every((floor) => floor === 0));
+	});
+
 	it("writes an overview of itself, its queues and its plans for the log", () =>
 	{
 		const gameState = worldWithResources({ food: 111 });

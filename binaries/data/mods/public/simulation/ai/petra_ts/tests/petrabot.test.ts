@@ -17,7 +17,7 @@ import { logs, resetRecorder } from "./harness/engine.ts";
 import { emptyEvents, eventsWith, fake, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import { ENEMY, type HqWorld, type HqWorldOptions, makeHqWorld, PLAYER } from "./harness/hqWorld.ts";
 
-import { PetraBot } from "../_petrabot.ts";
+import { PetraBot, SAVE_VERSION } from "../_petrabot.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 
 interface Game
@@ -228,7 +228,7 @@ describe("saving and loading", () =>
 	{
 		const g = game();
 		const saved = playedBot(g).Serialize();
-		assert.equal(saved.saveVersion, 1, "a save says its version");
+		assert.equal(saved.saveVersion, SAVE_VERSION, "a save says its version");
 		g.shared["_entityMetadata"] = { [PLAYER]: { 1000: { "base": 7 } } };
 
 		logs.length = 0;

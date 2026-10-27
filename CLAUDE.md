@@ -73,7 +73,7 @@ the bot id is `petra_out`.
 options: map, seeds, difficulty, civ, `-w` victory conditions (default
 conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` minutes a wonder or the relics must be
 held (default 20), `-o` the blue bot, `-p` the red bot (each `petra_out`,
-`petra`, `petra_parity` or `petra_fixed`), `-x` swap slots, `-B` do not build,
+`petra`, `petra_parity`, `petra_prev` or `petra_fixed`), `-x` swap slots, `-B` do not build,
 `-v` speed, `-n` headless, `-t` timeline, `-l` command log and notices, `-b`
 the bot's own state (both for debugging), `-P` each AI's script time per turn
 (`aitimes.txt`, measured by the engine: `PYROGENESIS_AI_TIMES` in
@@ -160,7 +160,11 @@ Baselines (`PLAN.md` §2; `build/petra_ts/baselines.ts`, gitignored outputs):
 `petra_parity` ("Petra TS parity") is the port compiled from the tag
 `petra-ts-parity` (git archive of that tag's `petra_ts/` and tsconfigs, tsc,
 `prepare-bot.ts --bot=petra_parity`), so it stays fixed while `petra_ts`
-changes; `petra_fixed` ("Petra fixed") is `petra/*.js` with
+changes; `petra_prev` ("Petra TS previous", `baselines.ts prev`, built only
+when a batch or match names it) is the port at the tag `petra-ts-prev` the
+same way, the version before the change being measured (move the tag with
+`git tag -f petra-ts-prev <commit>` when a change is kept; tune on one seed
+pool and decide on another: `FINDINGS.md` §19); `petra_fixed` ("Petra fixed") is `petra/*.js` with
 `upstream/petra-fixes.patch` applied and its imports pointed at
 `simulation/ai/petra_fixed/`. With the patch's 15 fixes the two play the same
 games command for command (stage 1, `FINDINGS.md` §14: a game with the slots
@@ -232,10 +236,11 @@ decision with the game's reason ("last player alive", "wonder victory",
   `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
   unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
   AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
-  border maps and the land/sea regions, owned by the HQ; `baseResources.ts`,
+  border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
+  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
-  read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel and
-  the managers); `execution/` (attack and transport plans, defense armies, queues,
+  read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
+  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
   the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
   ended with the tag `petra-ts-parity`.
 - `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
@@ -292,7 +297,8 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and one stage 5's (the engine's order shape), 29 in all.
+  more pin stage-4 fixes and two stage 5's (the engine's order shape, the first
+  field by what berries bring in), 30 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
