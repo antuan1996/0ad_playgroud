@@ -868,3 +868,22 @@ Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
   between the raid and the gatherers, or the gatherers pulled back to the
   civic centre while an army is in our land.
 - The engine hung in 4 of these 200 games (killed by a 6-minute timeout).
+- **The town bell** (the game's alert, AlertRaiser: a civic centre calls the
+  civilians within 120 into any building of ours with room, a storehouse or
+  farmstead within 50; Petra never rings it), rung where enemy soldiers are
+  within a bell's range, ended 15 s after they left:
+  - at 3 enemy soldiers: **41.2%** (82 to 117, CI 34.6-48.1%, pool 15), 14%
+    less gathered, and warnings in 178 of 199 games: the women it sent in
+    carry no garrison type, so the garrison manager booked them as
+    protection and kept them in while any enemy was around the building;
+  - with those women left to the bell (in while an alert is up), rung only
+    for 5+ enemy soldiers outnumbering ours there: **47.5%** (95 to 105, CI
+    40.7-54.4%, the same pool), no warnings, 2% less gathered; the women the
+    losing side lost while defending fell from 25.4 to 15.1 a game, and the
+    games went the same way.
+  - Reverted, never committed (`decision/townBell.ts` and its tests). The
+    women are not what decides these games: the losing side also loses about
+    68 soldiers a game while defending, for 61-65 killed, the winner about 30
+    for 26-38. The soldiers' fight at home is the gap, which is the defense
+    armies' (`defenseManager`, `defenseArmy`) and the fight estimator's
+    (stage 6) ground.
