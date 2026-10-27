@@ -80,7 +80,8 @@ the bot's own state (both for debugging), `-P` each AI's script time per turn
 `CCmpAIManager.cpp`, two clock reads per AI and turn kept in memory and written
 at the end; `build/petra_ts/ai-times.ts <dir>...` summarises, `--compare
 <batch>` sets two bots' times side by side, the turn budget's check),
-`-k` how many match folders to keep, default 5) builds the bots and starts an
+`-k` how many match folders to keep, default 5; `-K MIN` and `-S SEC` the
+watchdog's limits, below) builds the bots and starts an
 observed match of Petra TS (`petra_out`) against itself, or with
 `-o`/`-p` against the original, Petra JS (`petra`), or a baseline; it needs the
 engine built from this repo. Petra TS against itself is the default: the original
@@ -118,6 +119,13 @@ other), the replay's
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's
 `mainlog.html`/`interestinglog.html`.
+Every match runs under a watchdog (`match.sh`): every 5 s it reads the
+engine's CPU time from `/proc/<pid>/stat` and kills the engine once that has
+not moved for `-S` seconds (default 60: a deadlock, every thread waiting) or
+the game has run `-K` minutes of wall time (default 10 headless, none
+visual: the engine spinning for good); a killed game says `watchdog: ...` in
+`match.txt` and its exit status is 137, and an engine the kill leaves stuck in
+the kernel is left behind after 30 s (`FINDINGS.md` §16).
 Matches are deterministic: an explicit `-autostart-seed` also picks the
 settings the game setup leaves random (biome, placement, ...), so the same
 seeds and code replay the same game and print the same fingerprint.
@@ -196,10 +204,11 @@ played twice by `--twice` must share a fingerprint). Time-limit games are
 draws, outside the win-rate. An existing `--out` resumes the batch.
 `--bot-state` builds Petra TS with the state dump and plays every game with
 `-b` (each game's `botstate.txt`, `attacks.txt` and `economy.txt`; the games are the same,
-checked on 196 games). `--game-timeout M` (default 15) kills a game still
-running after M minutes of wall time and marks it failed: the engine can
-deadlock, rarely and not reproducibly (`FINDINGS.md` §16); a resumed batch,
-and the smoke test, play it again. For analyses across a batch, the paired
+checked on 196 games). `--game-timeout M` (default 15) is each game's wall-time
+limit, passed to the watchdog as `-K` (which also catches a deadlock within a
+minute); a killed game is marked failed with the watchdog's reason, and a
+resumed batch, and the smoke test, play it again; the batch itself kills a
+`match.sh` still running two minutes past the limit. For analyses across a batch, the paired
 games of `--slots both` compare the same map from both slots; the replays'
 `metadata.json` hold each statistic by unit class every 30 game seconds
 (`total` is recorded as 0 for units lost and killed: use the `Unit` class).

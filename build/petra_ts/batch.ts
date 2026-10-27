@@ -29,10 +29,13 @@
  *                     per game; attack-log.ts and economy-log.ts read a
  *                     batch's); the games are the
  *                     same as without
- *   --game-timeout M  kill a game still running after M minutes of wall time
- *                     (default 15; the longest games take 4): the engine can
- *                     deadlock, rarely and not reproducibly (FINDINGS §16); the
- *                     game is marked failed and a resumed batch plays it again
+ *   --game-timeout M  each game's wall-time limit (default 15; the longest
+ *                     games take 4), passed to match.sh's watchdog (-K), which
+ *                     also kills an engine whose CPU time stops for 60 s: the
+ *                     engine can deadlock or spin, rarely and not reproducibly
+ *                     (FINDINGS §16); the game is marked failed with the
+ *                     watchdog's reason and a resumed batch plays it again; the
+ *                     batch kills a match.sh still running 2 minutes later
  *   --keep-replays    keep each game's replay (by default deleted: the rerun
  *                     line of its match.txt plays the same game again)
  *
@@ -240,6 +243,7 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 		"-o", options.blue, "-p", options.red,
 		...(game.swapped ? ["-x"] : []),
 		...(options.botState ? ["-b"] : []),
+		"-K", String(options.gameTimeout),
 		...options.extra,
 		"-r", game.dir
 	];
@@ -255,7 +259,7 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 			hung = true;
 			if (child.pid !== undefined)
 				killTree(child.pid);
-		}, options.gameTimeout * 60000);
+		}, (options.gameTimeout + 2) * 60000);
 		child.on("close", status =>
 		{
 			clearTimeout(timer);
@@ -320,6 +324,10 @@ function row(options: Options, game: Game, status: number | null, wall: number, 
 	// match.sh finishes its record whatever the engine did; -T decides every
 	// game it does not crash in.
 	const engineStatus = Number(/game exit status (\d+)/.exec(report)?.[1] ?? "0");
+	const watchdog = /^watchdog: (.*)$/m.exec(report)?.[1];
+	if (watchdog)
+		return { ...base, "fingerprint": result.fingerprint, "problem": `${watchdog} by match.sh's watchdog, at ` +
+			`${Math.round(result.played / 60000)} game min (resume the batch to play it again)` };
 	if (engineStatus != 0 || result.decided === undefined)
 	{
 		const crash = engineStatus != 0 ? `the engine exited with status ${engineStatus}` : "the game was not decided";

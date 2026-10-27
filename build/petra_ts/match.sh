@@ -87,6 +87,11 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              older ones (default 5; 0 keeps them all)
   -B         do not build: play the bots as they are (batch.ts builds them
              once for all its games)
+  -K MINUTES the watchdog's wall-time limit: kill the engine still running
+             after MINUTES (default 10 with -n, none for a visual game; 0 none)
+  -S SECONDS the watchdog's stall limit: kill the engine once its CPU time
+             has not moved for SECONDS (default 60; 0 none), a deadlock; a
+             killed game reports "watchdog: ..." in match.txt
   -h         this help
 Blue is the -o bot, red the -p one, whichever slot they play; a bot against
 itself is named with its color, like "Petra TS (blue)" and "Petra TS (red)".
@@ -114,7 +119,9 @@ limitMinutes=""
 botState=false
 aiTimes=false
 record=""
-while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:Bh" option; do
+wallLimit=""
+stallLimit=60
+while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:BK:S:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -140,6 +147,8 @@ while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:Bh" option; do
 		P) aiTimes=true ;;
 		r) record="$OPTARG" ;;
 		k) keep="$OPTARG" ;;
+		K) wallLimit="$OPTARG" ;;
+		S) stallLimit="$OPTARG" ;;
 		h)
 			usage
 			exit 0
@@ -374,13 +383,66 @@ fi
 } >"$out/match.txt"
 cat "$out/match.txt"
 
+# The watchdog: the engine can deadlock (every thread waiting, no CPU used)
+# or spin for good holding its memory lock (FINDINGS §16), and a match must
+# not run forever. Every 5 s it reads the engine's CPU time from
+# /proc/<pid>/stat (which, unlike cmdline, never blocks on that lock); a CPU
+# time that has not moved for the stall limit, or a run past the wall-time
+# limit, kills the engine. One that the kill leaves stuck in the kernel
+# (state D) is left behind after 30 s, and the match goes on to its report.
+if [ -z "$wallLimit" ]; then
+	if [ "$nonvisual" = true ]; then wallLimit=10; else wallLimit=0; fi
+fi
+watchdog=""
 set +e
 if [ "$aiTimes" = true ]; then
-	PYROGENESIS_AI_TIMES="$out/aitimes.txt" "$game" "${args[@]}" 2>&1 | tee "$out/game.log"
+	PYROGENESIS_AI_TIMES="$out/aitimes.txt" "$game" "${args[@]}" >"$out/game.log" 2>&1 &
 else
-	"$game" "${args[@]}" 2>&1 | tee "$out/game.log"
+	"$game" "${args[@]}" >"$out/game.log" 2>&1 &
 fi
-status=${PIPESTATUS[0]}
+pid=$!
+tail --pid="$pid" -n +1 -f "$out/game.log" &
+tailPid=$!
+started=$SECONDS
+lastCpu=""
+stillSince=$SECONDS
+nextCheck=$((SECONDS + 5))
+killedAt=""
+while kill -0 "$pid" 2>/dev/null; do
+	sleep 1
+	if [ -n "$killedAt" ]; then
+		if [ $((SECONDS - killedAt)) -ge 30 ]; then
+			watchdog="$watchdog; the engine (pid $pid) did not die, left behind"
+			break
+		fi
+		continue
+	fi
+	[ "$SECONDS" -ge "$nextCheck" ] || continue
+	nextCheck=$((SECONDS + 5))
+	cpu=$(awk '{print $14 + $15}' "/proc/$pid/stat" 2>/dev/null) || break
+	if [ "$cpu" != "$lastCpu" ]; then
+		lastCpu=$cpu
+		stillSince=$SECONDS
+	fi
+	if [ "$stallLimit" -gt 0 ] && [ $((SECONDS - stillSince)) -ge "$stallLimit" ]; then
+		watchdog="the engine hung: no CPU time used for $((SECONDS - stillSince)) s"
+	elif [ "$wallLimit" -gt 0 ] && [ $((SECONDS - started)) -ge $((wallLimit * 60)) ]; then
+		watchdog="the engine hung: still running after $wallLimit min of wall time"
+	fi
+	if [ -n "$watchdog" ]; then
+		echo "watchdog: $watchdog, killed" >&2
+		kill -9 "$pid" 2>/dev/null
+		killedAt=$SECONDS
+	fi
+done
+if [ -n "$killedAt" ] && kill -0 "$pid" 2>/dev/null; then
+	status=137
+	kill "$tailPid" 2>/dev/null
+else
+	wait "$pid"
+	status=$?
+	wait "$tailPid" 2>/dev/null
+fi
 set -e
 if [ "$aiTimes" = true ] && [ -e "$out/aitimes.txt" ]; then
 	node "$repo/build/petra_ts/ai-times.ts" "$out" >"$out/aitimes-summary.txt" || true
@@ -409,6 +471,9 @@ done
 wall=$(($(date +%s) - $(date -r "$out/match.txt" +%s)))
 {
 	echo "ended $(date '+%Y-%m-%d %H:%M:%S') after $((wall / 60))m$((wall % 60))s, game exit status $status"
+	if [ -n "$watchdog" ]; then
+		echo "watchdog: $watchdog, killed"
+	fi
 	node "$repo/build/petra_ts/match-report.ts" "$out" "$blue" "$blueName" "$red" "$redName"
 } | tee -a "$out/match.txt"
 

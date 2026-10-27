@@ -561,6 +561,10 @@ attacks up (`PLAN.md` §6).
   SIGKILL then left it in state D for a while before it went. Look for a hung
   game in `/proc/<pid>/stat` (the engine's main thread is named `main`; field
   14+15 is its CPU time), never with `ps` while one may hold its lock.
+  `match.sh` now does that itself, for every match: its watchdog kills an
+  engine whose CPU time has not moved for 60 s, or that has run past its
+  wall-time limit (10 minutes headless), and goes on to its report (tested by
+  freezing the engine with SIGSTOP: killed 14 s after its CPU time stopped).
 - **A quirk of the game's statistics**: the replays' `sequences` record
   `total` as 0 for units lost and killed; the `Unit` class holds all units.
 
