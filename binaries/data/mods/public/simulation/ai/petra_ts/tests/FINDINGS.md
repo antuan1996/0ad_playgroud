@@ -887,3 +887,20 @@ Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
     for 26-38. The soldiers' fight at home is the gap, which is the defense
     armies' (`defenseManager`, `defenseArmy`) and the fight estimator's
     (stage 6) ground.
+- **The defense armies** (the defense log, `defense.txt` with `match.sh -b`:
+  each army's creation, a snapshot every 30 s, and its end with the defenders
+  it ever had that died and the foes it fought that are gone; 100 games of
+  `petra_prev` against itself, pool 16; 2226 armies against 3+ foes before
+  minute 25). "Killed" counts foes that walked out of sight too, so the
+  ratios below are high; they compare armies, not fights.
+  - How far its defenders were from the foes 30 s in matters little: a
+    median of 0-40, 40-80 or 80-150 gives 1.3-1.6 kills per loss; only the
+    few armies whose defenders were 150 or more away do worse (0.96, 34).
+    Picking the nearest defenders first (the code's own TODO) would change
+    little.
+  - What separates the games is how many defenders there are at all: in
+    games won, a median 10 defenders against 6 foes; in games lost, 2 against
+    8 (1555 of the 2226 armies). The losing side does not fight its home
+    battles badly; it has no soldiers at home to fight them, dead or away.
+    The fights are lost before the defense: in the army a side has when the
+    raid comes, which the economy and the rush decide.

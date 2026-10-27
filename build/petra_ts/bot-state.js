@@ -37,6 +37,9 @@
  * supply lists (count, amount and median distance per band), the start's layout.
  * economy-log.ts reads it with the replay's 30 s statistics (what was really
  * gathered).
+ * And the defense armies' lives (defense.txt with match.sh -b, one line per
+ * event: created, progress every 30 s, ended with its dead and killed):
+ *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
  * It only reads: the game is the same with it or without (same fingerprint).
  *
  * It is for reading while debugging, nothing checks it (match-checks.ts): it
@@ -78,6 +81,9 @@ export class PetraBotState extends PetraBot
 		const log = section(() => this.logAttacks());
 		if (log && "error" in log)
 			print("ATTACKLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...log }) + "\n");
+		const defense = section(() => this.logDefense());
+		if (defense && "error" in defense)
+			print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...defense }) + "\n");
 		this.nextEconomyLine ??= ECONOMY_EVERY;
 		if (this.elapsedTime >= this.nextEconomyLine)
 		{
@@ -449,6 +455,91 @@ export class PetraBotState extends PetraBot
 			}
 			return { "id": base.ID, supplies };
 		});
+	}
+
+	/**
+	 * The defense armies' lives (defense.txt with match.sh -b): each army's
+	 * creation, a snapshot every 30 s while it lives, and its end, with how
+	 * many of the defenders it ever had died and how many of its foes it
+	 * killed (gone from the game while it fought them; a foe that walked out
+	 * of sight counts as gone too, so "killed" is an upper bound).
+	 */
+	logDefense()
+	{
+		const defenseManager = this.HQ?.defenseManager;
+		if (!defenseManager)
+			return undefined;
+		this.defenseArmies ??= new Map();
+		const now = Math.round(this.elapsedTime);
+		const live = new Set();
+		for (const army of defenseManager.armies)
+		{
+			live.add(army.ID);
+			let known = this.defenseArmies.get(army.ID);
+			if (!known)
+			{
+				known = { "created": now, "own": new Set(), "foes": new Set(), "maxOwn": 0, "maxFoes": 0, "lastLine": now, "army": army };
+				this.defenseArmies.set(army.ID, known);
+			}
+			for (const id of army.ownEntities)
+				known.own.add(id);
+			for (const id of army.foeEntities)
+				known.foes.add(id);
+			known.maxOwn = Math.max(known.maxOwn, army.ownEntities.length);
+			known.maxFoes = Math.max(known.maxFoes, army.foeEntities.length);
+			known.type = army.type;
+			const snapshot = this.defenseSnapshot(army);
+			known.last = snapshot;
+			if (known.created == now)
+				this.defenseLine("created", army.ID, known, snapshot);
+			else if (now - known.lastLine >= 30)
+			{
+				known.lastLine = now;
+				this.defenseLine("progress", army.ID, known, snapshot);
+			}
+		}
+		for (const [id, known] of this.defenseArmies)
+		{
+			if (live.has(id))
+				continue;
+			const dead = [...known.own].filter(ent => !this.gameState.getEntityById(ent)).length;
+			const killed = [...known.foes].filter(ent => !this.gameState.getEntityById(ent)).length;
+			this.defenseLine("ended", id, known, { "defenders": known.own.size, "foesSeen": known.foes.size,
+				"maxOwn": known.maxOwn, "maxFoes": known.maxFoes, dead, killed, "last": known.last });
+			this.defenseArmies.delete(id);
+		}
+		return undefined;
+	}
+
+	/** An army now: its foes and defenders, their strengths, and how far its defenders are from the foes. */
+	defenseSnapshot(army)
+	{
+		const at = army.foePosition;
+		const dists = [];
+		if (at)
+			for (const id of army.ownEntities)
+			{
+				const pos = this.gameState.getEntityById(id)?.position();
+				if (pos)
+					dists.push(Math.round(VectorDistance(pos, at)));
+			}
+		dists.sort((a, b) => a - b);
+		const territory = this.HQ.geography?.territoryMap ?? this.HQ.territoryMap;
+		const owner = at ? territory.getOwner(at) : undefined;
+		return {
+			"foes": army.foeEntities.length, "own": army.ownEntities.length,
+			"foeStrength": Math.round(army.foeStrength), "ownStrength": Math.round(army.ownStrength),
+			"where": owner == PlayerID ? "home" : owner == 0 ? "neutral" : "other",
+			"distMedian": dists.length ? dists[Math.floor(dists.length / 2)] : undefined,
+			"distMax": dists.length ? dists[dists.length - 1] : undefined,
+			"near": dists.filter(d => d <= 40).length
+		};
+	}
+
+	defenseLine(event, id, known, detail)
+	{
+		print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, event, "army": id,
+			"type": known.type, "age": Math.round(this.elapsedTime) - known.created, ...detail }) + "\n");
 	}
 
 	/** One line of the attack log. */

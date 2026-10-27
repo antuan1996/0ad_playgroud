@@ -28,6 +28,8 @@
 #                      line per player: estimated and wanted gather rates,
 #                      gatherers and what they do, trip distances (bot-state.js,
 #                      read by economy-log.ts)
+#   defense.txt        with -b: the defense armies' lives, one JSON line per event
+#                      (created, progress, ended with its dead and killed)
 #   aitimes.txt        with -P: each AI's script time per turn, measured by the
 #                      engine (PYROGENESIS_AI_TIMES, CCmpAIManager.cpp), and
 #                      aitimes-summary.txt (ai-times.ts)
@@ -460,6 +462,7 @@ if [ "$botState" = true ]; then
 	grep -oE 'BOTSTATE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/botstate.txt" || true
 	grep -oE 'ATTACKLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/attacks.txt" || true
 	grep -oE 'ECONLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/economy.txt" || true
+	grep -oE 'DEFENSELOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/defense.txt" || true
 fi
 
 for log in mainlog.html interestinglog.html; do
