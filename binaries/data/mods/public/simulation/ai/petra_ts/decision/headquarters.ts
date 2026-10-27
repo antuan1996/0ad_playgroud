@@ -1677,7 +1677,14 @@ export class Headquarters
 				this.researchManager.researchPopulationBonus(gameState, queues);
 			}
 			else
-				priority = 2 * this.Config.priorities.house;
+			{
+				// a house blocks every unit after it: it goes before the
+				// training queues, where Petra's 500 stayed below the citizen
+				// soldiers' 600, which took the wood (FINDINGS §22: at minute
+				// 3 half the games were at the population limit)
+				const training = Math.max(this.Config.priorities.villager, this.Config.priorities.citizenSoldier);
+				priority = Math.max(2 * this.Config.priorities.house, training + 1);
+			}
 		}
 		else
 			priority = this.Config.priorities.house;
