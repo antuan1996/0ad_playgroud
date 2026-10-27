@@ -21,6 +21,20 @@
  * start and the build orders it had left), and its state and units as it went
  * (the attack manager updates one turn in eight, so the snapshot can be a few
  * turns old); analysed by attack-log.ts.
+ * And its economy every 30 game seconds, at the times the replay samples its
+ * statistics (economy.txt with match.sh -b):
+ *   ECONLOG {"t":..,"player":..,"estimate":{..},"wanted":{..},"order":[..],"gatherers":{..},
+ *            "states":{..},"rawRate":{..},"tripDist":{..},"stock":{..},"workers":..,"pop":..[,"layout":[..]]}
+ * per resource: the bot's estimate of its gather rate (GetCurrentGatherRates),
+ * the rate its queues want (wantedGatherRates), the order pickMostNeededResources
+ * gives them, the gatherers on it (food: gatherers, hunters, fishers), what they
+ * do (gathering, walking to the supply, carrying back, other), the sum of the
+ * gather rates of those gathering (read from their orders, see gatherRate: the
+ * bot's estimate reads 0 for them), and the median distance from their supply to its
+ * dropsite (from the bases' supply lists); the first line also has each base's
+ * supply lists (count, amount and median distance per band), the start's layout.
+ * economy-log.ts reads it with the replay's 30 s statistics (what was really
+ * gathered).
  * It only reads: the game is the same with it or without (same fingerprint).
  *
  * It is for reading while debugging, nothing checks it (match-checks.ts): it
@@ -34,6 +48,8 @@ const DUMP_FIRST = 60;
 const DUMP_EVERY = 120;
 /** seconds between two progress lines of a plan in preparation */
 const PROGRESS_EVERY = 60;
+/** seconds between two economy lines: the replay's statistics are sampled as often */
+const ECONOMY_EVERY = 30;
 
 /** The value of read(), or what went wrong reading it. */
 function section(read)
@@ -58,6 +74,13 @@ export class PetraBotState extends PetraBot
 		const log = section(() => this.logAttacks());
 		if (log && "error" in log)
 			print("ATTACKLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...log }) + "\n");
+		this.nextEconomyLine ??= ECONOMY_EVERY;
+		if (this.elapsedTime >= this.nextEconomyLine)
+		{
+			this.nextEconomyLine += ECONOMY_EVERY;
+			const economy = section(() => this.economyLine());
+			print("ECONLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, ...economy }) + "\n");
+		}
 		this.nextStateDump ??= DUMP_FIRST;
 		if (this.elapsedTime < this.nextStateDump)
 			return;
@@ -191,6 +214,160 @@ export class PetraBotState extends PetraBot
 			};
 		}
 		return queues;
+	}
+
+	/**
+	 * What the bot believes about its gathering and what its gatherers do. The
+	 * rate estimates are cached per turn by the bot, and the caches live until
+	 * the headquarters' next update: one turn in eight. Reading them here must
+	 * not fill a cache a later turn would use, so each is left as it was found.
+	 */
+	economyLine()
+	{
+		const gameState = this.gameState;
+		const HQ = this.HQ;
+		const basesManager = HQ.basesManager;
+		const codes = Resources.GetCodes();
+		const hadCurrent = "currentRates" in basesManager.turnCache;
+		const current = basesManager.turnCache.currentRates;
+		const hadWanted = "wantedRates" in HQ.turnCache;
+		const wanted = HQ.turnCache.wantedRates;
+		let estimate, wantedRates, order;
+		try
+		{
+			estimate = { ...HQ.GetCurrentGatherRates(gameState) };
+			wantedRates = { ...HQ.GetWantedGatherRates(gameState) };
+			order = HQ.pickMostNeededResources(gameState).map(need => need.type);
+		}
+		finally
+		{
+			if (hadCurrent)
+				basesManager.turnCache.currentRates = current;
+			else
+				delete basesManager.turnCache.currentRates;
+			if (hadWanted)
+				HQ.turnCache.wantedRates = wanted;
+			else
+				delete HQ.turnCache.wantedRates;
+		}
+		const round = (record) => Object.fromEntries(Object.entries(record).map(([k, v]) => [k, Math.round(v * 100) / 100]));
+
+		// the distance of each listed supply to its dropsite
+		const tripOf = new Map();
+		for (const base of basesManager.baseManagers)
+			for (const type in base.dropsiteSupplies)
+				for (const band of ["nearby", "medium", "faraway"])
+					for (const supply of base.dropsiteSupplies[type][band])
+						if (!tripOf.has(supply.id) || tripOf.get(supply.id) > supply.dist)
+							tripOf.set(supply.id, supply.dist);
+
+		const gatherers = {};
+		const states = {};
+		const rawRate = {};
+		const trips = {};
+		for (const res of codes)
+		{
+			states[res] = { "gathering": 0, "approaching": 0, "returning": 0, "other": 0 };
+			rawRate[res] = 0;
+			trips[res] = [];
+		}
+		gatherers.food = { "gatherer": 0, "hunter": 0, "fisher": 0 };
+		for (const ent of gameState.getOwnEntitiesByRole("worker", true).values())
+		{
+			const subrole = ent.getMetadata(PlayerID, "subrole");
+			let res;
+			if (subrole == "gatherer")
+				res = ent.getMetadata(PlayerID, "gather-type");
+			else if (subrole == "hunter" || subrole == "fisher")
+				res = "food";
+			if (!res || !(res in states))
+				continue;
+			if (res == "food")
+				++gatherers.food[subrole];
+			else
+				gatherers[res] = (gatherers[res] ?? 0) + 1;
+			const state = ent.unitAIState() ?? "";
+			const kind = state.endsWith("GATHER.GATHERING") ? "gathering" :
+				state.includes("RETURNINGRESOURCE") ? "returning" :
+					state.includes("GATHER.APPROACHING") || state.includes("GATHER.FINDINGNEWTARGET") ? "approaching" : "other";
+			++states[res][kind];
+			if (kind == "gathering" && ent.position())
+				rawRate[res] += this.gatherRate(ent);
+			const supply = ent.getMetadata(PlayerID, "supply");
+			if (supply !== undefined && tripOf.has(supply))
+				trips[res].push(Math.sqrt(tripOf.get(supply)));
+		}
+		const median = (values) =>
+		{
+			if (!values.length)
+				return undefined;
+			const sorted = [...values].sort((a, b) => a - b);
+			return Math.round(sorted[Math.floor(sorted.length / 2)]);
+		};
+		const resources = gameState.getResources();
+		const line = {
+			"estimate": round(estimate),
+			"wanted": round(wantedRates),
+			order,
+			gatherers,
+			states,
+			"rawRate": round(rawRate),
+			"tripDist": Object.fromEntries(codes.map(res => [res, median(trips[res])])),
+			"stock": Object.fromEntries(codes.map(res => [res, Math.round(resources[res])])),
+			"workers": gameState.getOwnEntitiesByRole("worker", true).length,
+			"pop": gameState.getPopulation()
+		};
+		if (!this.loggedLayout)
+		{
+			this.loggedLayout = true;
+			line.layout = section(() => this.layout());
+		}
+		return line;
+	}
+
+	/**
+	 * The rate a unit gathers at while gathering: what Entity.currentGatherRate
+	 * computes, but read from the order's data. Since the engine's commit
+	 * 4b516b336e unitAIOrderData() returns the orders ({type, data}), not their
+	 * data, so currentGatherRate finds no target and returns 0 (FINDINGS §18).
+	 */
+	gatherRate(ent)
+	{
+		const target = ent.unitAIOrderData()[0]?.data?.target;
+		const supply = target === undefined ? undefined : this.gameState.getEntityById(target);
+		const type = supply?.resourceSupplyType();
+		if (!type)
+			return 0;
+		return (+ent.get("ResourceGatherer/BaseSpeed") * +ent.get("ResourceGatherer/Rates/" + type.generic + "." + type.specific)) || 0;
+	}
+
+	/** Each base's supply lists: per resource and band, the count, the amount and the median distance to the dropsite. */
+	layout()
+	{
+		return this.HQ.basesManager.baseManagers.map(base =>
+		{
+			const supplies = {};
+			for (const type in base.dropsiteSupplies)
+			{
+				supplies[type] = {};
+				for (const band of ["nearby", "medium", "faraway"])
+				{
+					const list = base.dropsiteSupplies[type][band];
+					let amount = 0;
+					const dists = [];
+					for (const supply of list)
+					{
+						const ent = this.gameState.getEntityById(supply.id);
+						amount += ent?.resourceSupplyAmount() ?? 0;
+						dists.push(Math.sqrt(supply.dist));
+					}
+					dists.sort((a, b) => a - b);
+					supplies[type][band] = [list.length, Math.round(amount),
+						dists.length ? Math.round(dists[Math.floor(dists.length / 2)]) : undefined];
+				}
+			}
+			return { "id": base.ID, supplies };
+		});
 	}
 
 	/** One line of the attack log. */

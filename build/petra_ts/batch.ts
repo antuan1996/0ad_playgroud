@@ -25,12 +25,13 @@
  *                     checks each pair has the same fingerprint (determinism,
  *                     and that parallel games do not disturb each other)
  *   --bot-state       build Petra TS with its state dump and play every game
- *                     with match.sh -b (botstate.txt, attacks.txt per game;
- *                     attack-log.ts reads a batch's attacks); the games are the
+ *                     with match.sh -b (botstate.txt, attacks.txt, economy.txt
+ *                     per game; attack-log.ts and economy-log.ts read a
+ *                     batch's); the games are the
  *                     same as without
  *   --game-timeout M  kill a game still running after M minutes of wall time
  *                     (default 15; the longest games take 4): the engine can
- *                     deadlock, rarely and not reproducibly (FINDINGS §17); the
+ *                     deadlock, rarely and not reproducibly (FINDINGS §16); the
  *                     game is marked failed and a resumed batch plays it again
  *   --keep-replays    keep each game's replay (by default deleted: the rerun
  *                     line of its match.txt plays the same game again)

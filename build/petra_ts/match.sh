@@ -24,6 +24,10 @@
 #   attacks.txt        with -b: the attack plans' lives, one JSON line per event
 #                      (created, started, aborted, finished, progress; bot-state.js,
 #                      read by attack-log.ts)
+#   economy.txt        with -b: Petra TS's economy every 30 game seconds, one JSON
+#                      line per player: estimated and wanted gather rates,
+#                      gatherers and what they do, trip distances (bot-state.js,
+#                      read by economy-log.ts)
 #   aitimes.txt        with -P: each AI's script time per turn, measured by the
 #                      engine (PYROGENESIS_AI_TIMES, CCmpAIManager.cpp), and
 #                      aitimes-summary.txt (ai-times.ts)
@@ -67,7 +71,8 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              tells the bots back, refusals and chat (notices.txt), for debugging
   -b         Petra TS dumps its own state every two game minutes (botstate.txt:
              roles, base resource lists, queues, plans) and logs its attack plans'
-             lives (attacks.txt), for debugging; the game is the same
+             lives (attacks.txt) and its economy every 30 s (economy.txt), for
+             debugging; the game is the same
   -P         time each AI's turn in the engine (aitimes.txt; ai-times.ts
              summarises it): two clock reads per AI and turn, kept in memory
              and written when the game ends, so the times are the bot's own
@@ -386,6 +391,7 @@ fi
 if [ "$botState" = true ]; then
 	grep -oE 'BOTSTATE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/botstate.txt" || true
 	grep -oE 'ATTACKLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/attacks.txt" || true
+	grep -oE 'ECONLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/economy.txt" || true
 fi
 
 for log in mainlog.html interestinglog.html; do
