@@ -60,7 +60,8 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              conquest; e.g. conquest,wonder,capture_the_relic)
   -W MINUTES how long a wonder or all relics must be held to win (default 20)
   -o BOT     the blue bot: petra_out, Petra TS (default); petra, Petra JS;
-             petra_parity, Petra TS parity; petra_fixed, Petra fixed
+             petra_parity, Petra TS parity; petra_prev, Petra TS previous
+             (the tag petra-ts-prev); petra_fixed, Petra fixed
   -p BOT     the red bot, the same choice (default petra_out), or a
              petra_hybrid* bot of baselines.ts hybrid (never built here)
   -x         swap slots: the red bot plays player 1, the blue one player 2
@@ -156,10 +157,11 @@ botName()
 		petra) echo "Petra JS" ;;
 		petra_out) echo "Petra TS" ;;
 		petra_parity) echo "Petra TS parity" ;;
+		petra_prev) echo "Petra TS previous" ;;
 		petra_fixed) echo "Petra fixed" ;;
 		petra_hybrid*) echo "Petra hybrid ${1#petra_hybrid}" ;;
 		*)
-			echo "-$2 takes petra_out, petra, petra_parity or petra_fixed, not '$1'" >&2
+			echo "-$2 takes petra_out, petra, petra_parity, petra_prev or petra_fixed, not '$1'" >&2
 			return 1
 			;;
 	esac
@@ -220,6 +222,7 @@ if [ "$build" = true ]; then
 	for bot in "${bots[@]}"; do
 		case "$bot" in
 			petra_parity) baselines+=(parity) ;;
+			petra_prev) baselines+=(prev) ;;
 			petra_fixed) baselines+=(fixed) ;;
 		esac
 	done
@@ -356,6 +359,9 @@ fi
 	done
 	if [[ " ${bots[*]} " == *" petra_parity "* ]]; then
 		echo "petra_parity from tag petra-ts-parity $(git -C "$repo" rev-parse --short=10 'petra-ts-parity^{commit}' 2>/dev/null || echo "(missing)")"
+	fi
+	if [[ " ${bots[*]} " == *" petra_prev "* ]]; then
+		echo "petra_prev from tag petra-ts-prev $(git -C "$repo" rev-parse --short=10 'petra-ts-prev^{commit}' 2>/dev/null || echo "(missing)")"
 	fi
 	echo "engine built $(date -r "$game" '+%Y-%m-%d %H:%M:%S')"
 	echo "started $(date '+%Y-%m-%d %H:%M:%S')"

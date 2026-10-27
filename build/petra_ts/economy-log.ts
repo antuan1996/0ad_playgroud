@@ -16,7 +16,10 @@
  *     gatherRate), the estimate the bot means to make, before its log;
  *   - gatherers, the income per gatherer-minute, the share of them gathering
  *     (the rest walk or carry), and the median trip from supply to dropsite;
- *   - first: how often the resource heads pickMostNeededResources' order.
+ *   - first: how often the resource heads pickMostNeededResources' order;
+ *   - food by source (fruit, grain, meat, fish): gatherers, the share
+ *     gathering, the rate per gatherer the walk included, the trip from the
+ *     supply to our nearest food dropsite.
  *
  * Then the same for the sides that won against those that lost, and for the
  * seed pairs of a --slots both batch that the logged bot won from one slot and
@@ -42,6 +45,8 @@ interface EconLine
 	states: Record<Res, { gathering: number; approaching: number; returning: number; other: number }>;
 	rawRate: Record<Res, number>;
 	tripDist: Partial<Record<Res, number>>;
+	/** food by source (fruit, grain, meat, fish, none): gatherers, those gathering, their rate, the median trip to our nearest food dropsite */
+	foodSources?: Record<string, { gatherers: number; gathering: number; rate: number; trip?: number }>;
 	stock: Record<Res, number>;
 	workers: number;
 	pop: number;
@@ -264,6 +269,44 @@ function table(title: string, sides: Side[], until: number, resources: readonly 
 	return out;
 }
 
+/**
+ * Food by where it comes from, per band: each source's gatherers, the share
+ * gathering, the rate per gatherer the walk included (the rates of those
+ * gathering over all its gatherers), and the trip to the nearest dropsite.
+ */
+function foodTable(title: string, sides: Side[], until: number): string[]
+{
+	const out = [`food by source, ${title} (means per side, then over the sides):`,
+		"  minutes  source  gatherers  gathering  rate/gatherer  trip"];
+	const sources = ["fruit", "grain", "meat", "fish", "none"];
+	for (const [from, to] of bands(until))
+		for (const source of sources)
+		{
+			const perSide: Array<{ gatherers: number; gathering: number; rate: number; trip: number }> = [];
+			for (const side of sides)
+			{
+				const samples = side.samples.filter((s) => s.t > from * 60 && s.t <= to * 60);
+				if (!samples.length)
+					continue;
+				const entries = samples.map((s) => s.line.foodSources?.[source]);
+				const n = entries.map((e) => e?.gatherers ?? 0);
+				perSide.push({
+					"gatherers": mean(n),
+					"gathering": mean(entries.map((e) => e && e.gatherers ? e.gathering / e.gatherers : NaN)),
+					"rate": mean(entries.map((e) => e && e.gatherers ? e.rate / e.gatherers : NaN)),
+					"trip": median(entries.map((e) => e?.trip ?? NaN))
+				});
+			}
+			const gatherers = mean(perSide.map((p) => p.gatherers));
+			if (!(gatherers >= 0.05))
+				continue;
+			out.push(`  ${`${from}-${to}`.padEnd(7)}  ${source.padEnd(6)} ${fmt(gatherers).padStart(10)}` +
+				` ${fmt(100 * mean(perSide.map((p) => p.gathering)), 0).padStart(9)}%` +
+				` ${fmt(mean(perSide.map((p) => p.rate)), 3).padStart(14)} ${fmt(median(perSide.map((p) => p.trip)), 0).padStart(5)}`);
+		}
+	return out;
+}
+
 /** The pairs the logged bot won from one slot and lost from the other: won minus lost, per band. */
 function splitPairs(sides: Side[], until: number): string[]
 {
@@ -325,6 +368,8 @@ function main(args: string[]): void
 		"of the gathering units' rates; per-gath-min: income per gatherer-minute; gathering: share of the",
 		"gatherers gathering; trip: median supply-dropsite distance; first: share heading pickMostNeededResources", ""];
 	out.push(...table("all sides", sides, until), "");
+	if (sides.some((side) => side.samples.some((s) => s.line.foodSources)))
+		out.push(...foodTable("all sides", sides, until), "");
 	for (const result of ["won", "lost"] as const)
 	{
 		const some = sides.filter((s) => s.result === result);

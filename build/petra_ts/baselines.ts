@@ -6,11 +6,15 @@
  *                 petra-ts-parity, compiled from that tag's sources (git
  *                 archive into a temporary folder, tsc, prepare-bot.ts), so it
  *                 stays the same whatever petra_ts becomes.
+ *   petra_prev    "Petra TS previous": the port at the tag petra-ts-prev, built
+ *                 the same way: the version before the change being measured
+ *                 (stage 5: each change must not lose to it; move the tag,
+ *                 git tag -f petra-ts-prev <commit>, when a change is kept).
  *   petra_fixed   "Petra fixed": the original petra/*.js with
  *                 upstream/petra-fixes.patch applied, a fair Petra (the
  *                 unpatched one loses to its removeSupply bug).
  *
- *   node build/petra_ts/baselines.ts [parity] [fixed]   (both by default)
+ *   node build/petra_ts/baselines.ts [parity] [prev] [fixed]   (parity and fixed by default)
  *   node build/petra_ts/baselines.ts hybrid ID MODULE...
  *
  * hybrid, for the parity proof (parity-bisect.ts): builds the bot
@@ -32,6 +36,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PARITY_TAG = "petra-ts-parity";
+export const PREV_TAG = "petra-ts-prev";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const aiDir = join(repoRoot, "binaries/data/mods/public/simulation/ai");
@@ -56,24 +61,25 @@ function run(command: string, args: string[], options: { cwd?: string; input?: B
 	return result.stdout;
 }
 
-function buildParity(): void
+/** Compiles the port's sources at a tag into simulation/ai/<bot> and finishes it as that bot. */
+function buildFromTag(tag: string, bot: string): void
 {
-	const commit = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${PARITY_TAG}^{commit}`],
+	const commit = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${tag}^{commit}`],
 		{ "cwd": repoRoot, "encoding": "utf8" }).stdout.trim();
 	if (!commit)
-		fail(`no tag ${PARITY_TAG}: it marks the port the baseline is built from (PLAN.md §2)`);
-	const sources = mkdtempSync(join(tmpdir(), "petra-parity-"));
+		fail(`no tag ${tag}: it marks the port the baseline ${bot} is built from (PLAN.md §2)`);
+	const sources = mkdtempSync(join(tmpdir(), `${bot}-`));
 	try
 	{
 		const archive = run("git", ["archive", commit, "binaries/data/mods/public/simulation/ai/petra_ts",
 			"build/petra_ts/tsconfig.json", "build/petra_ts/tsconfig.build.json"]);
 		run("tar", ["-x", "-C", sources], { "input": archive });
-		const outDir = join(aiDir, "petra_parity");
+		const outDir = join(aiDir, bot);
 		rmSync(outDir, { "recursive": true, "force": true });
 		run(process.execPath, [join(repoRoot, "node_modules/typescript/bin/tsc"),
 			"-p", join(sources, "build/petra_ts/tsconfig.build.json"), "--outDir", outDir]);
-		process.stdout.write(run(process.execPath, [join(repoRoot, "build/petra_ts/prepare-bot.ts"), "--bot=petra_parity"]));
-		console.log(`baselines: petra_parity built from ${PARITY_TAG} (${commit.slice(0, 10)})`);
+		process.stdout.write(run(process.execPath, [join(repoRoot, "build/petra_ts/prepare-bot.ts"), `--bot=${bot}`]));
+		console.log(`baselines: ${bot} built from ${tag} (${commit.slice(0, 10)})`);
 	}
 	finally
 	{
@@ -174,9 +180,11 @@ if (wanted[0] == "hybrid")
 	process.exit(0);
 }
 for (const name of wanted)
-	if (name != "parity" && name != "fixed")
-		fail(`unknown baseline ${name}: parity or fixed`);
+	if (name != "parity" && name != "prev" && name != "fixed")
+		fail(`unknown baseline ${name}: parity, prev or fixed`);
 if (!wanted.length || wanted.includes("parity"))
-	buildParity();
+	buildFromTag(PARITY_TAG, "petra_parity");
+if (wanted.includes("prev"))
+	buildFromTag(PREV_TAG, "petra_prev");
 if (!wanted.length || wanted.includes("fixed"))
 	buildFixed();

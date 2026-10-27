@@ -30,7 +30,9 @@
  * gives them, the gatherers on it (food: gatherers, hunters, fishers), what they
  * do (gathering, walking to the supply, carrying back, other), the sum of the
  * gather rates of those gathering (read from their orders, see gatherRate: the
- * bot's estimate reads 0 for them), and the median distance from their supply to its
+ * bot's estimate reads 0 for them), the food by source (fruit, grain, meat,
+ * fish: gatherers, those gathering, their rate, the median trip from the supply
+ * to our nearest food dropsite), and the median distance from their supply to its
  * dropsite (from the bases' supply lists); the first line also has each base's
  * supply lists (count, amount and median distance per band), the start's layout.
  * economy-log.ts reads it with the replay's 30 s statistics (what was really
@@ -42,6 +44,8 @@
  * that no longer fits it becomes {"error": "..."} in its line, so a refactor
  * cannot make the dump break the bot's turn.
  */
+import * as filters from "simulation/ai/common-api/filters.js";
+import { VectorDistance } from "simulation/ai/common-api/utils.js";
 import { PetraBot } from "simulation/ai/petra_out/_petrabot.js";
 
 const DUMP_FIRST = 60;
@@ -272,6 +276,12 @@ export class PetraBotState extends PetraBot
 			trips[res] = [];
 		}
 		gatherers.food = { "gatherer": 0, "hunter": 0, "fisher": 0 };
+		// food by where it comes from: the supply its gatherers' orders name
+		// (fruit, grain, meat, fish; "none" without one), and the trip from that
+		// supply to the nearest built dropsite of ours that takes food
+		const foodDropsites = gameState.getOwnStructures().filter(filters.isBuilt()).toEntityArray()
+			.filter(drop => drop.resourceDropsiteTypes()?.includes("food") && drop.position());
+		const foodSources = {};
 		for (const ent of gameState.getOwnEntitiesByRole("worker", true).values())
 		{
 			const subrole = ent.getMetadata(PlayerID, "subrole");
@@ -296,6 +306,37 @@ export class PetraBotState extends PetraBot
 			const supply = ent.getMetadata(PlayerID, "supply");
 			if (supply !== undefined && tripOf.has(supply))
 				trips[res].push(Math.sqrt(tripOf.get(supply)));
+			if (res == "food")
+			{
+				const data = ent.unitAIOrderData().map(order => order.data).filter(Boolean);
+				const target = data[0]?.target ?? data[1]?.target;
+				let source = target === undefined ? undefined : gameState.getEntityById(target);
+				if (source && !source.resourceSupplyType())
+				{
+					// carrying back to a dropsite: the supply is the next order's
+					const next = data[1]?.target;
+					source = next === undefined ? undefined : gameState.getEntityById(next);
+				}
+				const specific = source?.resourceSupplyType()?.specific ?? "none";
+				const entry = foodSources[specific] ??= { "gatherers": 0, "gathering": 0, "rate": 0, "trips": [] };
+				++entry.gatherers;
+				if (specific == "none")
+				{
+					// what the gatherers with no supply do: their state and orders
+					const what = (state.split(".").slice(1).join(".") || "-") + " [" +
+						ent.unitAIOrderData().map(order => order.type).join(",") + "] " + subrole +
+						(ent.isIdle() ? " idle" : "");
+					(entry.doing ??= {})[what] = (entry.doing[what] ?? 0) + 1;
+				}
+				if (kind == "gathering")
+				{
+					++entry.gathering;
+					entry.rate += this.gatherRate(ent);
+				}
+				const at = source?.position();
+				if (at && foodDropsites.length)
+					entry.trips.push(Math.min(...foodDropsites.map(drop => VectorDistance(at, drop.position()))));
+			}
 		}
 		const median = (values) =>
 		{
@@ -313,6 +354,9 @@ export class PetraBotState extends PetraBot
 			states,
 			"rawRate": round(rawRate),
 			"tripDist": Object.fromEntries(codes.map(res => [res, median(trips[res])])),
+			"foodSources": Object.fromEntries(Object.entries(foodSources).map(([source, entry]) => [source,
+				{ "gatherers": entry.gatherers, "gathering": entry.gathering, "rate": round({ "r": entry.rate }).r,
+					"trip": median(entry.trips), ...(entry.doing ? { "doing": entry.doing } : {}) }])),
 			"stock": Object.fromEntries(codes.map(res => [res, Math.round(resources[res])])),
 			"workers": gameState.getOwnEntitiesByRole("worker", true).length,
 			"pop": gameState.getPopulation()

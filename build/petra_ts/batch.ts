@@ -5,7 +5,7 @@
  *   node build/petra_ts/batch.ts [options] [-- extra match.sh options]
  *   npm run batch:petra -- [options]
  *
- *   --blue BOT        petra_out, petra, petra_parity or petra_fixed (default petra_parity)
+ *   --blue BOT        petra_out, petra, petra_parity, petra_prev or petra_fixed (default petra_parity)
  *   --red BOT         the same choice (default petra_fixed)
  *   --games N         seed pairs to play (default 10)
  *   --slots one|both  both: each seed pair twice, the bots swapping slots, so
@@ -60,7 +60,7 @@ import { summarise, type BatchRow } from "./batch-stats.ts";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const matchScript = join(repoRoot, "build/petra_ts/match.sh");
 const aiDir = join(repoRoot, "binaries/data/mods/public/simulation/ai");
-const BOTS = ["petra_out", "petra", "petra_parity", "petra_fixed"];
+const BOTS = ["petra_out", "petra", "petra_parity", "petra_prev", "petra_fixed"];
 /** match.sh options the batch sets itself */
 const RESERVED = ["-o", "-p", "-x", "-s", "-a", "-m", "-c", "-d", "-w", "-r", "-k", "-b", "-B", "-n", "-T", "-h"];
 
@@ -202,7 +202,8 @@ function build(options: Options): void
 {
 	const bots = new Set([options.blue, options.red]);
 	const steps: [string, string[]][] = [["npm", ["run", "--silent", "build:petra:out"]]];
-	const baselines = [...bots].flatMap(bot => bot == "petra_parity" ? ["parity"] : bot == "petra_fixed" ? ["fixed"] : []);
+	const baselines = [...bots].flatMap(bot =>
+		bot == "petra_parity" ? ["parity"] : bot == "petra_prev" ? ["prev"] : bot == "petra_fixed" ? ["fixed"] : []);
 	if (baselines.length)
 		steps.push([process.execPath, [join(repoRoot, "build/petra_ts/baselines.ts"), ...baselines]]);
 	if (options.botState)
@@ -395,6 +396,8 @@ async function main(): Promise<void>
 		`red ${options.red} ${botHash(options.red)}`,
 		...(options.blue == "petra_parity" || options.red == "petra_parity"
 			? [`petra_parity from tag petra-ts-parity ${bash("git rev-parse --short=10 'petra-ts-parity^{commit}'")}`] : []),
+		...(options.blue == "petra_prev" || options.red == "petra_prev"
+			? [`petra_prev from tag petra-ts-prev ${bash("git rev-parse --short=10 'petra-ts-prev^{commit}'")}`] : []),
 		`games ${games.length} (${options.pairs ? `the seed pairs ${options.pairs.map(p => p.join("/")).join(",")}` :
 			`${options.games} seed pairs, pool seed ${options.seed}`}, slots ${options.slots}` +
 		`${options.twice ? `, the first ${options.twice} played twice` : ""})`,

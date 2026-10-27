@@ -9,7 +9,8 @@
  *
  * `npm run build:petra:out` runs: clean, tsc, then this script.
  * `--bot=petra_parity` (after the mode, if any) finishes the frozen port that
- * baselines.ts compiled from the tag petra-ts-parity instead (PLAN.md §2).
+ * baselines.ts compiled from the tag petra-ts-parity instead (PLAN.md §2);
+ * `--bot=petra_prev` the port at the tag petra-ts-prev, the previous version.
  *
  * Finishing means:
  * - import specifiers: the engine's module loader takes a specifier as a VFS
@@ -36,6 +37,11 @@ const BOTS: Record<string, { name: string; description: string }> = {
 		"name": "Petra TS parity",
 		"description": "The TypeScript port of Petra as it was frozen at the tag petra-ts-parity, " +
 			"one file per original file: the baseline Petra TS is measured against.\n\n" + LEVELS
+	},
+	"petra_prev": {
+		"name": "Petra TS previous",
+		"description": "Petra TS as it was at the tag petra-ts-prev: the version a change to Petra TS " +
+			"must not lose to.\n\n" + LEVELS
 	}
 };
 
