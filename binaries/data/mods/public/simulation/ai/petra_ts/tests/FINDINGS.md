@@ -819,3 +819,48 @@ to our nearest food dropsite), 100 games of `main` against itself (pool 9):
 - The early proxy saw it (+141 ± 88 gathered at minute 8), and this time the
   win-rate followed, where the gatherer split's +125 did not (§19): the split
   moved 2-3% of the food, the fields 13% of all resources.
+
+## 21. Stage 5: the first fights, and a rush that drafts less (2026-10-27)
+
+Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
+
+- **What decides games now** (the field rule's tuning batch, pool 10, 199
+  decided games): in the seed pairs won from one slot and lost from the
+  other, a gatherer brings in the same in both (within 1-3 per minute, trips
+  within 2), but the won game has more of them (+2.8 on wood at minutes 6-8,
+  +7.3 on food at 8-10). The gap opens in the fights: units lost by the winner
+  and the loser 5 and 7 by minute 8, 12 and 16 by minute 10, 41 and 58 by
+  minute 12 (killed the reverse). Dropsites (wood gatherers gather 64% of the
+  time on trips of 26) would gain less than the first fights decide.
+- **Petra's rush is all in**: its infantry target is 16-24 (`rushSize`), but
+  while it prepares it drafts every citizen-soldier worker but eight
+  (`assignUnits`, `keep = 8` for a rush), and starts with a median 53 units.
+  A first attack started at minutes 8-10 won 45% of games, at 12-16 74% (a
+  correlation: a side that starts late may have just beaten an attack off).
+- **Capping the rush's draft at its target size** (a median 31 units at the
+  start): **40.6%** (80 to 117, CI 34.0-47.6%, pool 12; SPRT rejects 55%), and
+  *less* gathered over the game (78 900 against 90 900): the all-in rush pays
+  for the soldier-gatherers it takes, by what it kills of the enemy's army
+  and economy. Reverted. Its early proxy read exactly 0: the rush leaves
+  after minute 8, so the proxy cannot see a change to the fights.
+- The engine hung in 3 of these 200 games (killed by the 15-minute timeout).
+- **Where the losses are** (the fronts log, `economy.txt`'s `fronts`: our
+  soldiers at home, in no one's land and in an enemy's, and the enemy units we
+  see in our land, every 30 s; 99 games of `petra_prev` against itself, pool
+  13, joined with the replay's losses per 30 s, minutes 0-20): attacking
+  pays, 1.3-1.8 kills per loss (12.9 killed against 7.3 lost per sample on the
+  winner's side); defending at home with 5+ enemies in our land does not, 0.6
+  to 0.8 (the losing side 9.6 lost against 5.7 killed). While defending, the
+  side that lost the game lost 25 women a game, the winner 2.5; attacking
+  winners killed 1166 women in all. The rush pays by the gatherers it kills.
+- **Sheltering a woman as soon as a fighter attacks her** (Petra waits for
+  half her health, then takes her to a healing building), in the nearest of
+  our buildings with room within 60: **49.2%** (96 to 99, CI 42.3-56.2%, pool
+  14), the women lost while defending unchanged (25.8 a game against 25.4).
+  Only houses (3 places), civic centres (20) and towers (3) take a garrison,
+  and women work at fields, bushes and woodlines out of reach of one with
+  room: the rule seldom fires, and three places do not save a work party.
+  Reverted. What would protect them is at the scale of the town: soldiers
+  between the raid and the gatherers, or the gatherers pulled back to the
+  civic centre while an army is in our land.
+- The engine hung in 4 of these 200 games (killed by a 6-minute timeout).

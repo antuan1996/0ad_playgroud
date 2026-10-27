@@ -359,7 +359,8 @@ export class PetraBotState extends PetraBot
 					"trip": median(entry.trips), ...(entry.doing ? { "doing": entry.doing } : {}) }])),
 			"stock": Object.fromEntries(codes.map(res => [res, Math.round(resources[res])])),
 			"workers": gameState.getOwnEntitiesByRole("worker", true).length,
-			"pop": gameState.getPopulation()
+			"pop": gameState.getPopulation(),
+			"fronts": section(() => this.fronts())
 		};
 		if (!this.loggedLayout)
 		{
@@ -383,6 +384,42 @@ export class PetraBotState extends PetraBot
 		if (!type)
 			return 0;
 		return (+ent.get("ResourceGatherer/BaseSpeed") * +ent.get("ResourceGatherer/Rates/" + type.generic + "." + type.specific)) || 0;
+	}
+
+	/**
+	 * Where the fighting is: our soldiers (units that can attack, not support)
+	 * in our territory, in no one's and in an enemy's, and those of them in an
+	 * attack plan; and the enemy units we see in our territory.
+	 */
+	fronts()
+	{
+		const territory = this.HQ.geography?.territoryMap ?? this.HQ.territoryMap;
+		const where = (pos) =>
+		{
+			const owner = territory.getOwner(pos);
+			return owner == PlayerID ? "home" : owner == 0 ? "neutral" : this.gameState.isPlayerEnemy(owner) ? "enemy" : "home";
+		};
+		const ours = { "home": 0, "neutral": 0, "enemy": 0 };
+		const attacking = { "home": 0, "neutral": 0, "enemy": 0 };
+		for (const ent of this.gameState.getOwnUnits().values())
+		{
+			const pos = ent.position();
+			if (!pos || ent.hasClass("Support") || !ent.attackTypes())
+				continue;
+			const place = where(pos);
+			++ours[place];
+			if (ent.getMetadata(PlayerID, "role") == "attack" || typeof ent.getMetadata(PlayerID, "plan") == "number" &&
+				ent.getMetadata(PlayerID, "plan") >= 0)
+				++attacking[place];
+		}
+		let enemiesHome = 0;
+		for (const ent of this.gameState.getEnemyUnits().values())
+		{
+			const pos = ent.position();
+			if (pos && territory.getOwner(pos) == PlayerID && !ent.hasClass("Support"))
+				++enemiesHome;
+		}
+		return { ours, attacking, enemiesHome };
 	}
 
 	/** Each base's supply lists: per resource and band, the count, the amount and the median distance to the dropsite. */
