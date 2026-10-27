@@ -153,33 +153,14 @@ export class QueueManager
 		return needed;
 	}
 
-	// calculate the gather rates we'd want to be able to start all elements in our queues
-	// TODO: many things.
-	wantedGatherRates(gameState: CommonGameState): PetraRuntime.Dict<number>
+	/**
+	 * Adds the costs of the first items of the unpaused queues to the totals of
+	 * their horizon: the first item ready to go in 30 s (short), the second in
+	 * 60 s (medium), one not yet ready in 300 s (long).
+	 */
+	addQueuedCosts(gameState: CommonGameState, totalShort: Record<string, number>,
+		totalMedium: Record<string, number>, totalLong: Record<string, number>): void
 	{
-		// default values for first turn when we have not yet set our queues.
-		if (gameState.ai.playedTurn === 0)
-		{
-			const ret: Record<string, number> = {};
-			for (const res of Resources.GetCodes())
-				ret[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
-			return ret;
-		}
-
-		// get out current resources, not removing accounts.
-		const current = gameState.getResources();
-		// short queue is the first item of a queue, assumed to be ready in 30s
-		// medium queue is the second item of a queue, assumed to be ready in 60s
-		// long queue contains the isGo=false items, assumed to be ready in 300s
-		const totalShort: Record<string, number> = {};
-		const totalMedium: Record<string, number> = {};
-		const totalLong: Record<string, number> = {};
-		for (const res of Resources.GetCodes())
-		{
-			totalShort[res] = this.Config.queues.short[res] || this.Config.queues.short.default;
-			totalMedium[res] = this.Config.queues.medium[res] || this.Config.queues.medium.default;
-			totalLong[res] = this.Config.queues.long[res] || this.Config.queues.long.default;
-		}
 		let total;
 		// queueArrays because it's faster.
 		for (const q of this.queueArrays)
@@ -207,6 +188,86 @@ export class QueueManager
 					break;
 			}
 		}
+	}
+
+	/**
+	 * What the gatherers are wanted for, in two parts (decision/gatherSplit.ts):
+	 * `costs`, the rates that pay for what is queued over the horizons of
+	 * wantedGatherRates, the stock spent on them first; and `floors`, the rate
+	 * that brings what stock is left up to the config's short-queue amounts
+	 * (Config.queues.short: a reserve, not a purchase) within 30 s. On the first
+	 * turn, before any queue is set, the config's first-turn rates are costs.
+	 * TODO never called since the gatherer split was dropped (FINDINGS §19):
+	 * for the decisions of stage 5 that weigh queued costs.
+	 */
+	gatherDemand(gameState: CommonGameState): { costs: Record<string, number>; floors: Record<string, number> }
+	{
+		const costs: Record<string, number> = {};
+		const floors: Record<string, number> = {};
+		if (gameState.ai.playedTurn === 0)
+		{
+			for (const res of Resources.GetCodes())
+			{
+				costs[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
+				floors[res] = 0;
+			}
+			return { costs, floors };
+		}
+		const stock = gameState.getResources();
+		const totalShort: Record<string, number> = {};
+		const totalMedium: Record<string, number> = {};
+		const totalLong: Record<string, number> = {};
+		for (const res of Resources.GetCodes())
+		{
+			totalShort[res] = 0;
+			totalMedium[res] = 0;
+			totalLong[res] = 0;
+		}
+		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
+		for (const res of Resources.GetCodes())
+		{
+			let left = Math.max(0, stock[res]);
+			const short = Math.max(0, totalShort[res] - left);
+			left = Math.max(0, left - totalShort[res]);
+			const medium = Math.max(0, totalMedium[res] - left);
+			left = Math.max(0, left - totalMedium[res]);
+			const long = Math.max(0, totalLong[res] - left);
+			left = Math.max(0, left - totalLong[res]);
+			costs[res] = short / 30 + medium / 60 + long / 300;
+			const reserve = this.Config.queues.short[res] || this.Config.queues.short.default;
+			floors[res] = Math.max(0, reserve - left) / 30;
+		}
+		return { costs, floors };
+	}
+
+	// calculate the gather rates we'd want to be able to start all elements in our queues
+	// TODO: many things.
+	wantedGatherRates(gameState: CommonGameState): PetraRuntime.Dict<number>
+	{
+		// default values for first turn when we have not yet set our queues.
+		if (gameState.ai.playedTurn === 0)
+		{
+			const ret: Record<string, number> = {};
+			for (const res of Resources.GetCodes())
+				ret[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
+			return ret;
+		}
+
+		// get out current resources, not removing accounts.
+		const current = gameState.getResources();
+		// short queue is the first item of a queue, assumed to be ready in 30s
+		// medium queue is the second item of a queue, assumed to be ready in 60s
+		// long queue contains the isGo=false items, assumed to be ready in 300s
+		const totalShort: Record<string, number> = {};
+		const totalMedium: Record<string, number> = {};
+		const totalLong: Record<string, number> = {};
+		for (const res of Resources.GetCodes())
+		{
+			totalShort[res] = this.Config.queues.short[res] || this.Config.queues.short.default;
+			totalMedium[res] = this.Config.queues.medium[res] || this.Config.queues.medium.default;
+			totalLong[res] = this.Config.queues.long[res] || this.Config.queues.long.default;
+		}
+		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
 		// global rates
 		const rates: Record<string, number> = {};
 		let diff;

@@ -15,6 +15,7 @@ import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { gatherRate } from "../adapter/orders.ts";
+import { fieldsBeatBerries } from "./foodSource.ts";
 
 /**
  * Base Manager
@@ -386,14 +387,17 @@ export class BaseManager
 				if (gameState.ai.HQ.canBuild(gameState, "structures/{civ}/field"))	// let's see if we need to add new farms.
 				{
 					const count = this.getResourceLevel(gameState, type, prox);  // animals are not accounted
+					// a field is wanted as soon as it brings in more than the berries (decision/foodSource.ts)
+					const economy = gameState.ai.HQ.gatherEconomy;
+					const fieldsFirst = fieldsBeatBerries({ "fruit": economy.foodRateOf("fruit"),
+						"grain": economy.foodRateOf("grain"), "fruitGatherers": economy.foodGatherers.fruit });
 					const numFarms = gameState.getOwnStructures().filter(filters.byClass("Field"))
 						.length;  // including foundations
 					const numQueue = queues.field.countQueuedUnits();
 
-					// TODO  if not yet farms, add a check on time used/lost and build farmstead if needed
-					if (numFarms + numQueue === 0)	// starting game, rely on fruits as long as we have enough of them
+					if (numFarms + numQueue === 0)	// starting game, rely on fruits as long as we have enough of them, and they pay
 					{
-						if (count < 600)
+						if (count < 600 || fieldsFirst)
 						{
 							queues.field.addPlan(new ConstructionPlan(gameState,
 								"structures/{civ}/field", { "favoredBase": this.ID }));
@@ -407,6 +411,9 @@ export class BaseManager
 						let goal = this.Config.Economy.provisionFields;
 						if (gameState.ai.HQ.saveResources || gameState.ai.HQ.saveSpace || count > 300 || numFarms > 5)
 							goal = Math.max(goal-1, 1);
+						// while the berries bring in less than a field, one more field at a time
+						if (fieldsFirst)
+							++goal;
 						if (numFound + numQueue < goal)
 						{
 							queues.field.addPlan(new ConstructionPlan(gameState,

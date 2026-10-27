@@ -30,6 +30,7 @@ import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seaRegion, secon
 import { footprintHalves } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
+import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -61,6 +62,7 @@ export type HeadquartersSerializedData = {
 	garrisonManager: ReturnType<GarrisonManager["Serialize"]>;
 	victoryManager: ReturnType<VictoryManager["Serialize"]>;
 	emergencyManager: ReturnType<EmergencyManager["Serialize"]>;
+	gatherEconomy: ReturnType<GatherEconomy["Serialize"]>;
 };
 
 /**
@@ -124,6 +126,8 @@ export class Headquarters
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
 	geography: Geography;
+	/** How fast each resource comes in per gatherer, measured (world/gatherEconomy.ts). */
+	gatherEconomy: GatherEconomy = new GatherEconomy();
 
 	get territoryMap(): TerritoryMap { return this.geography.territoryMap; }
 	set territoryMap(map: TerritoryMap) { this.geography.territoryMap = map; }
@@ -2426,6 +2430,7 @@ export class Headquarters
 		Engine.ProfileStart("Headquarters update");
 		this.emergencyManager.update(gameState);
 		this.turnCache = {};
+		this.gatherEconomy.update(gameState);
 		this.geography.territoryMap = createTerritoryMap(gameState);
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt())
 			.hasEntities();
@@ -2589,6 +2594,7 @@ export class Headquarters
 			"garrisonManager": this.garrisonManager.Serialize(),
 			"victoryManager": this.victoryManager.Serialize(),
 			"emergencyManager": this.emergencyManager.Serialize(),
+			"gatherEconomy": this.gatherEconomy.Serialize()
 		};
 	}
 
@@ -2618,6 +2624,9 @@ export class Headquarters
 		this.decayingStructures = properties.decayingStructures;
 		this.capturableTargets = properties.capturableTargets;
 		this.capturableTargetsTime = properties.capturableTargetsTime;
+
+		this.gatherEconomy = new GatherEconomy();
+		this.gatherEconomy.Deserialize(data.gatherEconomy);
 
 		this.basesManager = new BasesManager(this.Config);
 		this.basesManager.init(gameState, true);

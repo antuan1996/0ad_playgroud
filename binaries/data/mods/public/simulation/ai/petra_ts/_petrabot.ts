@@ -18,7 +18,7 @@ type PetraBotSettings = Record<string, unknown> & {
  * version is refused with a message, and the bot starts afresh from the game
  * as it stands, as it does in a new game.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** The version a save says it is of, if it says one. */
 function savedVersion(data: unknown): unknown
