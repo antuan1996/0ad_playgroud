@@ -3883,14 +3883,19 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 			"two souls of room left and no spot to build: the research office is asked");
 	});
 
-	it("a tight census with room to build raises the house queue's priority", () =>
+	// only the port passes: Petra doubled the house queue's priority to 500,
+	// still below the citizen soldiers' 600, which took the wood
+	it("a tight census with room to build puts the house queue before the training queues", () =>
 	{
 		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 60, "population": 58 });
 		houseCards(world, hq);
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
-		assert.equal(world.ai.queueManager.getPriority("house"), 2 * hq.Config.priorities.house);
+		const house = world.ai.queueManager.getPriority("house");
+		assert.ok(house > world.ai.queueManager.getPriority("citizenSoldier"), "before the soldiers");
+		assert.ok(house > world.ai.queueManager.getPriority("villager"), "and the women");
+		assert.ok(house >= 2 * hq.Config.priorities.house, "never below Petra's doubling");
 	});
 
 	it("a roomy census restores the house queue to its ordinary priority", () =>

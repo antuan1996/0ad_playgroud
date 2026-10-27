@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (30 tests in all; the
+Each is pinned by a test that only the port passes (31 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -52,6 +52,7 @@ whether a game can reach it.
 | `attackPlan.updatePreparation` at the population cap (stage 4) | aborts a plan that cannot start yet "so that its units serve other plans"; the attack manager creates the next one at once, which takes the same reserve back and is aborted in turn: 124 plans aborted within 30 s of creation in 200 games, 81 in one (§16) | the plan waits, gathering units as below the cap | attackPlan: "waits when the population is full…", "waits with its few units…" |
 | every read of a unit's orders (stage 5) | reads `order.target` off `Entity.unitAIOrderData()`, which since the engine's commit 4b516b336e returns UnitAI's orders (`{type, data}`), not their data: every check of what a unit targets fails (the workers' hunting and supply checks, the defense and attack target checks, garrisons, captures), and `Entity.currentGatherRate()` gives 0, so the town's gather-rate estimate is empty and the gatherer split follows the queues alone (§18). Every game | `adapter/orders.ts`: `ordersOf` reads the data, `gatherRate` replaces `currentGatherRate`; the declared shape is the engine's | baseManager: "a gatherer on the wood adds its rate, ..."; orders.test.ts |
 | `baseManager.checkResourceLevels` first field (stage 5) | queues the first field only once the berries within reach fall below 600 food, however far its gatherers walk for them: by minutes 6-8 they gather 45% of the time on trips of 128, about 0.4 food a second against a field's 0.54 (§20) | also as soon as a gatherer brings in less at the berries than at a field, measured (`decision/foodSource.ts`); one more field at a time while that lasts | baseManager: "a town whose berries bring in less than a field plants one, ..." |
+| `headquarters.buildMoreHouses` (stage 5) | short of 5 places, doubles the house queue's priority to 500, still below the citizen soldiers' 600, which keep the wood: half the games stand at the population limit at minute 3 (§22) | the house queue goes before the training queues | headquarters: "a tight census with room to build puts the house queue before the training queues" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -904,3 +905,30 @@ Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
     battles badly; it has no soldiers at home to fight them, dead or away.
     The fights are lost before the defense: in the army a side has when the
     raid comes, which the economy and the rush decide.
+
+## 22. Stage 5: the houses (2026-10-28)
+
+Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
+
+- **Growth stops at minute 3** (the timeline's `pop` and `popLimit`, 100
+  games of `petra_prev` against itself, pool 16): half the games stand at
+  the population limit at minute 3 (29 of 30), 8% at minute 5, none from
+  minute 11. Petra's rule to start a house is sound (below 30 population a
+  house goes with 10 places left), but the house queue has the lowest
+  priority of all (250; women 300, military buildings 330, fields 480,
+  citizen soldiers 600): at minute 3 it holds a median 24 of a house's 150
+  wood. Short of 5 places it doubles to 500, still below the soldiers, who
+  keep the wood.
+- **The rule** (`headquarters.buildMoreHouses`): short of 5 places, the house
+  queue goes before the training queues (one above the citizen soldiers),
+  never below Petra's doubling.
+- Tuned on pool 17: 50.0% (99 to 99), the games at the limit at minute 3 from
+  56% to 32%, two more units at minutes 5-9, 5.5% more gathered; decided on
+  150 fresh pairs, pool 18: **56.0%** (167 to 131, CI 50.4-61.6%; 41 pairs won
+  from both slots against 23), 88 100 gathered a game against 81 300; SPRT
+  50% against 55% undecided (LLR 2.11), 55% for `petra_prev` rejected. Kept:
+  266 of 496 over both pools, 53.6%.
+- The early proxy read its largest lead yet on both pools (+252 ± 57
+  gathered and +2.4 ± 0.5 units at minute 8 on pool 18), and the tuning
+  pool's 50% shows how far a few units at minute 8 are from deciding a game:
+  the proxy tells a change's direction, 150 fresh pairs its worth.

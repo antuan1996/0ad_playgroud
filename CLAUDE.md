@@ -306,8 +306,8 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and two stage 5's (the engine's order shape, the first
-  field by what berries bring in), 30 in all.
+  more pin stage-4 fixes and three stage 5's (the engine's order shape, the first
+  field by what berries bring in, the house before the training queues), 31 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
