@@ -19,6 +19,7 @@ import { playerId } from "../adapter/brands.ts";
 import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
 	Attacked: Array<{ target: EntityId; attacker: EntityId }>;
@@ -131,7 +132,7 @@ export class DefenseManager
 		// and if yes, add this base in our target list.
 		if (isInState(entity, "INDIVIDUAL.REPAIR.REPAIRING"))
 		{
-			const targetId = entity.unitAIOrderData()[0].target;
+			const targetId = ordersOf(entity)[0].target;
 			if (targetId !== undefined)
 			{
 				if (this.targetList.indexOf(targetId) !== -1)
@@ -281,7 +282,7 @@ export class DefenseManager
 			{
 				if (!hasActivity(ent, "COMBAT"))
 					continue;
-				const orders = ent.unitAIOrderData();
+				const orders = ordersOf(ent);
 				if (!orders || !orders.length || !orders[0].target)
 					continue;
 				const target = gameState.getEntityById(orders[0].target);
@@ -745,7 +746,7 @@ export class DefenseManager
 				// Consider whether we should retaliate or continue our task.
 				if (target.hasClass("Support") || target.attackTypes() === undefined)
 					continue;
-				const orderData = target.unitAIOrderData();
+				const orderData = ordersOf(target);
 				const orderId = orderData.length ? orderData[0].target : undefined;
 				const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
 				if (currentTarget)
@@ -778,7 +779,7 @@ export class DefenseManager
 							// Check that the unit is still attacking the structure (since the last played turn).
 							if (!hasActivity(ent, "COMBAT"))
 								continue;
-							const entOrderData = ent.unitAIOrderData();
+							const entOrderData = ordersOf(ent);
 							if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||
 							     entOrderData[0].target !== orderId)
 								continue;

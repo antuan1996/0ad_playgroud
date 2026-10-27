@@ -17,6 +17,7 @@ import { hqOf } from "./hq.ts";
 import { PLAN_RESERVE } from "./unitPlan.ts";
 import { type PlanMetadata } from "./queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 export type AttackUnitStat = {
 	priority: number;
@@ -1691,7 +1692,7 @@ export class AttackPlan
 							const shouldCapture = allowCapture(gameState, ent, attacker);
 							if (isSiegeUnit(ent) || !ent.canAttackTarget(attacker, shouldCapture))
 								continue;
-							const orderData = ent.unitAIOrderData();
+							const orderData = ordersOf(ent);
 							if (orderData && orderData.length && orderData[0].target)
 							{
 								if (orderData[0].target === attacker.id())
@@ -1705,7 +1706,7 @@ export class AttackPlan
 						}
 						// Then the unit under attack: abandon its target (if it was a structure or a support) and retaliate
 						// also if our unit is attacking a range unit and the attacker is a melee unit, retaliate
-						const orderData = ourUnit.unitAIOrderData();
+						const orderData = ordersOf(ourUnit);
 						if (orderData && orderData.length && orderData[0].target)
 						{
 							if (orderData[0].target === attacker.id())
@@ -1736,7 +1737,7 @@ export class AttackPlan
 			{
 				if (ent.hasClass("Ship"))	// TODO What to do with ships
 					continue;
-				const orderData = ent.unitAIOrderData();
+				const orderData = ordersOf(ent);
 				if (!orderData || !orderData.length || !orderData[0].target)
 					continue;
 				const targetId = orderData[0].target;
@@ -1803,7 +1804,7 @@ export class AttackPlan
 					continue;
 
 				let targetId;
-				const orderData = ent.unitAIOrderData();
+				const orderData = ordersOf(ent);
 				if (orderData && orderData.length && orderData[0].target)
 					targetId = orderData[0].target;
 
@@ -2046,7 +2047,7 @@ export class AttackPlan
 								const unitPos = unit.position();
 								if (!unitPos)
 									return;
-								const orderData = unit.unitAIOrderData();
+								const orderData = ordersOf(unit);
 								if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length ||
 									!orderData[0].target)
 									return;
@@ -2475,7 +2476,7 @@ export class AttackPlan
 		{
 			if (data && Number(ent.getMetadata(PlayerID, data)) !== Number(value))
 				continue;
-			const orders = ent.unitAIOrderData();
+			const orders = ordersOf(ent);
 			for (const order of orders)
 				if (order.force)
 					return true;

@@ -4,6 +4,7 @@ import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 export type GarrisonHolderData = {
 	list: EntityId[];
@@ -128,7 +129,7 @@ export class GarrisonManager
 				}
 				else
 				{
-					if (ent.unitAIOrderData().some((order: Record<string, unknown>): unknown => order.target && order.target === id))
+					if (ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id))
 						continue;
 					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 					{
@@ -143,7 +144,7 @@ export class GarrisonManager
 							aiWarn("Petra garrison error: unit " + ent.id() + " (" +
 								ent.genericName() + ") is expected to garrison in " + id + " (" +
 								holder.genericName() + "), but has no such garrison order " +
-								uneval(ent.unitAIOrderData()));
+								uneval(ordersOf(ent)));
 							dumpEntity(ent);
 						}
 						list.splice(j--, 1);

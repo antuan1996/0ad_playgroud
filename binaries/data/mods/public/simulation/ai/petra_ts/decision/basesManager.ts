@@ -8,6 +8,7 @@ import { getBestBase, getLandAccess } from "../adapter/entityExtend.ts";
 import { Worker } from "../execution/worker.ts";
 import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
 import { requireStateName } from "../adapter/unitState.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 export interface SerializedBasesManager {
 	properties: {
@@ -592,7 +593,7 @@ export class BasesManager
 				const aiState = requireStateName(worker);
 				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
-				const orders = worker.unitAIOrderData();
+				const orders = ordersOf(worker);
 				if (orders.length < 2 || !orders[1].target || orders[1].target !== worker.getMetadata(PlayerID, "supply"))
 					continue;
 				this.AddTCGatherer(orders[1].target);

@@ -9,6 +9,7 @@ import { Worker } from "../execution/worker.ts";
 import { playerId, worldPos } from "../adapter/brands.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 export type SerializedAttackManager = {
     properties: {
@@ -165,7 +166,7 @@ export class AttackManager
 					if (ent && ent.owner() === PlayerID)
 					{
 						const plan = ent.getMetadata(PlayerID, "plan");
-						const orders = ent.unitAIOrderData();
+						const orders = ordersOf(ent);
 						const lastOrder = orders && orders.length ? orders[orders.length-1] : null;
 						if (lastOrder && lastOrder.target && lastOrder.target === targetId && !isLent(plan))
 							continue;

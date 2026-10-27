@@ -14,6 +14,7 @@ import { footprintHalves } from "../adapter/templateData.ts";
 import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { isLent } from "../execution/unitPlan.ts";
+import { gatherRate } from "../adapter/orders.ts";
 
 /**
  * Base Manager
@@ -507,7 +508,7 @@ export class BaseManager
 			{
 				if (ent.isIdle() || !ent.position())
 					return;
-				const gRate = ent.currentGatherRate();
+				const gRate = gatherRate(gameState, ent);
 				if (gRate)
 					currentRates[res] += Math.log(1+gRate)/1.1;
 			});
@@ -517,7 +518,7 @@ export class BaseManager
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
-					const gRate = ent.currentGatherRate();
+					const gRate = gatherRate(gameState, ent);
 					if (gRate)
 						currentRates[res] += Math.log(1+gRate)/1.1;
 				});
@@ -525,7 +526,7 @@ export class BaseManager
 				{
 					if (ent.isIdle() || !ent.position())
 						return;
-					const gRate = ent.currentGatherRate();
+					const gRate = gatherRate(gameState, ent);
 					if (gRate)
 						currentRates[res] += Math.log(1+gRate)/1.1;
 				});

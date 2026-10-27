@@ -63,6 +63,18 @@ type CommonTrainingQueueItem = {
 	timeRemaining: number;
 	metadata?: Record<string, unknown>;
 };
+/**
+ * One order of a unit's UnitAI queue, as `Entity.unitAIOrderData()` returns it
+ * since the engine's commit 4b516b336e (UnitAI.GetOrders): its type ("Gather",
+ * "Attack", "Walk", ...) and its data, which some orders lack. Read the data
+ * through `adapter/orders.ts`.
+ */
+type CommonUnitOrder = {
+	type: string;
+	data?: CommonUnitOrderData;
+};
+/** An order's data: its target entity and the rest of what the order carries. */
+type CommonUnitOrderData = { target?: EntityId; force?: boolean; [key: string]: unknown };
 type CommonResourceSupplyType = {
 	generic: string;
 	specific: string | undefined;
@@ -1159,8 +1171,8 @@ declare module "simulation/ai/common-api/entity.js"
 		getStance(): string | undefined;
 /** UnitAI state name (undefined unless the UnitAI is active). */
 		unitAIState(): string | undefined;
-/** Order targets of the UnitAI (target entity ids and other per-order data; empty for complex orders). */
-		unitAIOrderData(): Array<{ target?: EntityId; force?: boolean; [key: string]: unknown }>;
+/** The UnitAI's orders, live (UnitAI.GetOrders: type and data, not the data alone): read them through adapter/orders.ts. */
+		unitAIOrderData(): CommonUnitOrder[];
 /** Current hitpoints from the snapshot (0 for entities the engine reports none for). */
 		hitpoints(): number;
 /** Whether the entity is below full health. */
@@ -1201,8 +1213,6 @@ declare module "simulation/ai/common-api/entity.js"
 		isFull(): boolean | undefined;
 /** Carried resources of a gatherer ({class, type, amount} entries; undefined for non-gatherers). */
 		resourceCarrying(): Array<{ class?: string; type: string; amount: number }> | undefined;
-/** Current gather rate of the unit (undefined when not gathering). */
-		currentGatherRate(): number | undefined;
 /** Id of the entity this unit is garrisoned in (undefined unless garrisoned). */
 		garrisonHolderID(): EntityId | undefined;
 /** Entity ids of the units garrisoned in this holder (empty for empty holder). */

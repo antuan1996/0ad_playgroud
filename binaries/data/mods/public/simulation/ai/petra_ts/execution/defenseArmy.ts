@@ -7,6 +7,7 @@ import type { Config } from "../decision/config.ts";
 import { armyId, playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 import { lentPlan, releasedPlan } from "./unitPlan.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 /** The fields a save keeps. */
 export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePosition" | "positionLastUpdate" | "assignedAgainst" | "assignedTo" | "foeEntities" | "foeStrength" | "ownEntities" | "ownStrength">;
@@ -323,8 +324,8 @@ export class DefenseArmy
 			if (!ent.canAttackTarget(eEnt, allowCapture(gameState, ent, eEnt)))
 				continue;
 
-			if (eEnt.hasClass("Unit") && eEnt.unitAIOrderData() && eEnt.unitAIOrderData().length &&
-				eEnt.unitAIOrderData()[0].target && eEnt.unitAIOrderData()[0].target === entID)
+			if (eEnt.hasClass("Unit") && ordersOf(eEnt) && ordersOf(eEnt).length &&
+				ordersOf(eEnt)[0].target && ordersOf(eEnt)[0].target === entID)
 			{   // being attacked  >>> target the unit
 				idMin = id;
 				break;
@@ -583,7 +584,7 @@ export class DefenseArmy
 			const ent = gameState.getEntityById(entId);
 			if (!ent)
 				continue;
-			const orderData = ent.unitAIOrderData();
+			const orderData = ordersOf(ent);
 			if (!orderData.length && !ent.getMetadata(PlayerID, "transport"))
 				this.assignUnit(gameState, entId);
 			else if (orderData.length && orderData[0].target && orderData[0].attackType && orderData[0].attackType === "Capture")

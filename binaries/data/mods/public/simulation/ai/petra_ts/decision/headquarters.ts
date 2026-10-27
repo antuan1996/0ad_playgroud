@@ -33,6 +33,7 @@ import { Geography } from "../world/geography.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -2292,7 +2293,7 @@ export class Headquarters
 				continue;
 			if (!hasActivity(ent, "COMBAT"))
 				continue;
-			const orderData = ent.unitAIOrderData();
+			const orderData = ordersOf(ent);
 			if (!orderData || !orderData.length || !orderData[0].target)
 				continue;
 			const targetId = orderData[0].target;
@@ -2330,7 +2331,7 @@ export class Headquarters
 					continue;
 				if (shouldCapture === undefined)
 					shouldCapture = allowCapture(gameState, ent, target);
-				const orderData = ent.unitAIOrderData();
+				const orderData = ordersOf(ent);
 				if (!orderData || !orderData.length || !orderData[0].attackType)
 					continue;
 				if ((orderData[0].attackType === "Capture") !== shouldCapture)

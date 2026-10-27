@@ -10,6 +10,7 @@ import { requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
 import { hqOf } from "./hq.ts";
 import { isLent } from "./unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { ordersOf } from "../adapter/orders.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
@@ -132,9 +133,9 @@ export class Worker
 				ent.stopMoving();
 			}
 
-			if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ent.unitAIOrderData().length)
+			if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ordersOf(ent).length)
 			{
-				const orderData = ent.unitAIOrderData()[0];
+				const orderData = ordersOf(ent)[0];
 				if (orderData && orderData.target)
 				{
 					// Check that we have not drifted too far when hunting
@@ -199,10 +200,10 @@ export class Worker
 		{
 			if (subrole === Worker.SUBROLE_FISHER)
 				this.startFishing(gameState);
-			else if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ent.unitAIOrderData().length &&
+			else if (stateIs(state, "INDIVIDUAL.COMBAT.APPROACHING") && ordersOf(ent).length &&
 				!ent.getMetadata(PlayerID, "PartOfArmy"))
 			{
-				const orderData = ent.unitAIOrderData()[0];
+				const orderData = ordersOf(ent)[0];
 				if (orderData && orderData.target)
 				{
 					const target = gameState.getEntityById(orderData.target);
@@ -214,10 +215,10 @@ export class Worker
 					}
 				}
 			}
-			else if (stateIs(state, "INDIVIDUAL.COMBAT.ATTACKING") && ent.unitAIOrderData().length &&
+			else if (stateIs(state, "INDIVIDUAL.COMBAT.ATTACKING") && ordersOf(ent).length &&
 				!ent.getMetadata(PlayerID, "PartOfArmy"))
 			{
-				const orderData = ent.unitAIOrderData()[0];
+				const orderData = ordersOf(ent)[0];
 				if (orderData && orderData.target && orderData.attackType && orderData.attackType === "Capture")
 				{
 					// If we are here, an enemy structure must have targeted one of our workers
@@ -258,9 +259,9 @@ export class Worker
 			{
 				// we're already gathering. But let's check if there is nothing better
 				// in case UnitAI did something bad
-				if (ent.unitAIOrderData().length)
+				if (ordersOf(ent).length)
 				{
-					const supplyId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
+					const supplyId = ordersOf(ent)[0].target ?? INVALID_ENTITY;
 					const supply = gameState.getEntityById(supplyId);
 					// While returning resources UnitAI targets the dropsite, which is no supply:
 					// the return trip is checked below, the supply once the unit is back at work
@@ -303,7 +304,7 @@ export class Worker
 					if (gameState.ai.playedTurn % 10 === 0)
 					{
 						// Check from time to time that UnitAI does not send us to an inaccessible dropsite
-						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
+						const dropsiteId = ordersOf(ent)[0].target ?? INVALID_ENTITY;
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
@@ -346,7 +347,7 @@ export class Worker
 			{
 				// Update our target in case UnitAI sent us to a different foundation because of autocontinue
 				// and abandon it if UnitAI has sent us to build a field (as we build them only when needed)
-				const order = ent.unitAIOrderData()[0];
+				const order = ordersOf(ent)[0];
 				if (order && order.target && ent.getMetadata(PlayerID, "target-foundation") !== order.target)
 				{
 					const targetId = order.target;
@@ -393,7 +394,7 @@ export class Worker
 				}
 			}
 			else if (unitAIStateOrder !== "RETURNRESOURCE" ||
-				!ent.unitAIOrderData().some(order => order.target === targetFoundationId))
+				!ordersOf(ent).some(order => order.target === targetFoundationId))
 			{
 				// (not while it walks its load home with the building queued after it)
 				const goalAccess = requireValue(getLandAccess(gameState, target));
@@ -445,7 +446,7 @@ export class Worker
 					else if (stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 					{
 						// Check that UnitAI does not send us to an inaccessible dropsite
-						const dropsiteId = ent.unitAIOrderData()[0].target ?? INVALID_ENTITY;
+						const dropsiteId = ordersOf(ent)[0].target ?? INVALID_ENTITY;
 						const dropsite = gameState.getEntityById(dropsiteId);
 						const dropsitePos = dropsite ? dropsite.position() : undefined;
 						if (dropsite && dropsitePos &&
@@ -1115,7 +1116,7 @@ export class Worker
 	 */
 	isInaccessibleSupply(gameState: CommonGameState): boolean
 	{
-		const order = this.ent.unitAIOrderData()[0];
+		const order = ordersOf(this.ent)[0];
 		if (!order || !order.target)
 			return false;
 		const targetId = order.target;
