@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (34 tests in all; the
+Each is pinned by a test that only the port passes (35 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -56,6 +56,7 @@ whether a game can reach it.
 | `queueManager` funding (stage 5) | splits each resource between every queue that wants it, so that often none can start: 424 food in stock and three queues holding 105, 117 and 182 of the 150, 150 and 200 they need; its compaction (`switchResource`) runs only when not a unit is left unbooked (§24) | each turn, the first plan of the highest-priority queue that the free resources and the lower queues' accounts can pay in full is paid and starts (`completeBestPlan`) | queueManager: "starts the best plan its stock can pay for when every queue holds a part of it" |
 | `config.priorities` (stage 5) | the women's queue at 300, below the citizen soldiers' 600 "to not get all the food": with the best plan paid first (§24) the soldiers took the food and the civic centre stood idle 43% of minutes 3-6 (§25) | the women's queue at 650, above the soldiers' | queueManager: "pays the women before the soldiers when the food covers one of them" |
 | `config.Economy.supportRatio` (stage 5) | 0.3 at the hard difficulties: at most 45 women of a 150-worker target, about 21 at 40 workers, and from minute 6 no woman queued while the civic centre waited on the soldiers' food (§26) | 0.5: at most 75 | headquarters: "a fresh town: sixteen supports stand below the peaceful share" |
+| `researchManager.update` economy techs (stage 5) | queued the economy techs at the research queue's priority (250), below the women's, the soldiers', the houses' and the fields', one at a time: a capacity tech waited unpaid from minute 5 to 15 and the plough came at minute 11.6 with 26-40 women on the fields since minute 4 (§28) | a tech that pays back within 240 s from the income it adds, measured, goes just above the women's queue and takes the place of a plan waiting there (`decision/economyScore.ts`) | researchManager: "twenty-six farmers: the plough goes before the women" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1146,3 +1147,49 @@ enemy; the late one is a reserve that does no harm.
 147, city phase at 13. `popPhase2` 100: 30.3% (tuning pool), at minute 12
 -22.7 ± 2.8 units and -1852 ± 496 gathered: the phase's 500 food and 500
 wood are better spent on growth. Dropped.
+
+## 28. Stage 5: research by payback, the first of the economy scoring module (2026-10-28)
+
+Measured first, on the logs of the current code (pool 18, 50 pairs, with
+the state dump; and 20 pairs with the command log):
+
+- **Hunting** is small: under two hunters at any time, so its 19-26% of
+  time gathering on trips of 140-170 costs little. **The food gatherers
+  without a supply** (4.6-10 of them) are mostly carrying back from a supply
+  picked clean (about 3) or building fields (about 3.6); under one idle.
+  The fields gather 92% of the time, wood 51-65% on trips of 18-33. Nothing
+  large left in how the gatherers spend their time.
+- **Research** (blue's first command per tech, 80 sides): the iron axes at
+  minute 2.7, then the fruit tech at 9.7 (the berries done by then), the
+  first capacity tech at 10.0 and the plough at 11.6, with 25-40 women on
+  the fields since minute 4. The research queue (`minorTech`, 250) is paid
+  after the women's, the soldiers', the fields' and the houses', and the
+  research manager queues nothing while it holds a plan: in a game the
+  capacity tech (200 food, 200 wood) waited there unpaid from minute 5 to 15.
+
+**The change**: `decision/economyScore.ts`, the first part of the scoring
+module (PLAN.md §6.1): an option's payback, the seconds until the income it
+adds has repaid its cost (`paybackSeconds`: its delay plus its cost over its
+gain), the gain read off the measured rates (`incomeGain`: for each gather
+rate a tech multiplies, what our gatherers of that supply type bring in now
+times the gain; `incomeOf`). The research manager queues the economy tech
+that pays back soonest, if within `PAYBACK_HORIZON` (240 s), with the
+research queue just above the women's (reset when it starts), in place of a
+plan of Petra's rules waiting there. The plough on 26 farmers: +3.4 food a
+second, 127 s.
+
+| variant (tuning pool 18, against petra_prev) | win-rate | at minute 8 / 12, gathered | the plough |
+|---|---|---|---|
+| a tech that pays back sooner than a new woman (67 s) | 52.0% | +61 / +147 | minute 11.5 |
+| within 240 s | 49.0% | +246 / +545 | 9.9 |
+| within 240 s, taking the waiting plan's place | 54.5% | +700 / +1839 | 5.1 (fruit tech 2.0) |
+
+A woman pays back sooner than any tech, but the civic centre trains one at
+a time, within the housing and the share (§26): she is not the
+alternative a tech competes with.
+
+Decided on fresh pairs (pool seed 36): 150 pairs gave 55.4% (CI
+49.7-60.9%, SPRT undecided); 300 pairs, **54.4%** (325/597, CI 50.4-58.4%,
+SPRT 50% against 55% undecided, LLR 2.3), 10% more gathered (102k against
+92k). Kept, on the interval as §22: a gain, smaller than the 55% the SPRT
+asks about.

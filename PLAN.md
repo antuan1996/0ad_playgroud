@@ -490,8 +490,16 @@ and nothing noticed (§18), the change worth the most of all.
    100 population (30.3%).
 4. Dropsites, hunting and the housing that still blocks, in the same module:
    all come down to how far gatherers walk, scored by the trips they save.
-5. Research timing (the gather-rate techs).
-6. Rush timing, tested directly; then the fights, with stage 6's estimator.
+   Measured 2026-10-28 (`FINDINGS.md` §28): hunting and the gatherers' time
+   leave little (under two hunters; the fields gather 92% of the time).
+5. Research timing (the gather-rate techs). Done 2026-10-28 (§28), the
+   economy scoring module begun with it (`decision/economyScore.ts`: an
+   option's payback from the income it adds, measured): a tech that repays
+   its cost within 240 s goes before the women; the plough at minute 5.1,
+   not 11.6. 54.4% against `petra_prev` on 300 fresh pairs (CI
+   50.4-58.4%), kept.
+6. Rush timing, tested directly (done, §27: an earlier rush loses, none
+   gains nothing); then the fights, with stage 6's estimator.
 
 Each step as before: measured first, tuned on one seed pool, decided on 150
 fresh pairs against `petra_prev`; the early proxy tells a change's direction,

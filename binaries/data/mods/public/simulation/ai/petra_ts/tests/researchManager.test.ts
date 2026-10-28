@@ -338,6 +338,71 @@ describe("the research of a turn: update", () =>
 	});
 });
 
+describe("the techs that pay back within the horizon", () =>
+{
+	/** a town in the village phase with `farmers` on the fields, each bringing in 0.66 food a second */
+	function farmingTown(farmers: number, techs: string[])
+	{
+		const s = seat({ "phase": 1 }, techs);
+		s.hq.gatherEconomy.foodGatherers.grain = farmers;
+		s.hq.gatherEconomy.perFoodGatherer.grain = 0.66;
+		return s;
+	}
+
+	// only the port passes: Petra queued the plough at the research queue's own priority, below the women's
+	it("twenty-six farmers: the plough goes before the women", () =>
+	{
+		// +20% on 26 · 0.66 = 17.2 food a second is 3.4 more: its 300 wood and
+		// metal and 40 s of research pay back in 127 s, within the 240 s
+		const { world, manager, queues, hq } = farmingTown(26, ["gather_farming_plows"]);
+
+		manager.update(world.gameState, queues);
+
+		assert.deepEqual(queued(queues.minorTech), ["gather_farming_plows"]);
+		assert.equal(world.ai.queueManager.getPriority("minorTech"), hq.Config.priorities.villager + 1,
+			"the research queue goes just above the women's");
+		const plan = queues.minorTech.plans[0];
+		assert.ok(plan instanceof ResearchPlan);
+		assert.equal(plan.queueToReset, "minorTech", "and back to its own priority once the plough starts");
+	});
+
+	it("four farmers: the plough would take ten minutes to pay, and is left to Petra's rules", () =>
+	{
+		// 4 · 0.66 · 0.2 = 0.53 food a second: 40 + 300/0.53 = 608 s. Petra's
+		// village-phase rule waits until ten times the workers cover the
+		// cost; this town has none on the books
+		const { world, manager, queues, hq } = farmingTown(4, ["gather_farming_plows"]);
+
+		manager.update(world.gameState, queues);
+
+		assert.deepEqual(queued(queues.minorTech), []);
+		assert.equal(world.ai.queueManager.getPriority("minorTech"), hq.Config.priorities.minorTech, "at its own priority");
+	});
+
+	it("a paying tech takes the place of one of Petra's rules waiting unpaid", () =>
+	{
+		const { world, manager, queues } = farmingTown(26, ["gather_farming_plows"]);
+		tech(world, "gather_capacity_basket");
+		queues.minorTech.addPlan(new ResearchPlan(world.gameState, techName("gather_capacity_basket")));
+
+		manager.update(world.gameState, queues);
+
+		assert.deepEqual(queued(queues.minorTech), ["gather_farming_plows"], "the capacity tech waited from minute 5 to 15 in a game");
+	});
+
+	it("the paying tech already waiting is left in its place", () =>
+	{
+		const { world, manager, queues } = farmingTown(26, ["gather_farming_plows"]);
+		manager.update(world.gameState, queues);
+		const plan = queues.minorTech.plans[0];
+
+		manager.update(world.gameState, queues);
+
+		assert.equal(queues.minorTech.plans.length, 1);
+		assert.equal(queues.minorTech.plans[0], plan, "the same plan, its account kept");
+	});
+});
+
 describe("the research manager's bookkeeping", () =>
 {
 	it("sums a cost, and saves nothing", () =>

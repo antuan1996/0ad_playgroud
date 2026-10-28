@@ -258,7 +258,7 @@ decision with the game's reason ("last player alive", "wonder victory",
   each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
   read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
-  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
+  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
   the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
   ended with the tag `petra-ts-parity`.
 - `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
@@ -315,10 +315,10 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and six stage 5's (the engine's order shape, the first
+  more pin stage-4 fixes and seven stage 5's (the engine's order shape, the first
   field by what berries bring in, the house before the training queues, the
   best plan paid from the split accounts, the women paid before the
-  soldiers, the women's share of 0.5), 34 in all.
+  soldiers, the women's share of 0.5, research by payback), 35 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
