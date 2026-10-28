@@ -1,6 +1,7 @@
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
+import { PAYBACK_HORIZON, incomeGain, paybackSeconds } from "./economyScore.ts";
 import { techName } from "../adapter/brands.ts";
 
 /**
@@ -134,6 +135,34 @@ export class ResearchManager
 		return undefined;
 	}
 
+	/**
+	 * The economy tech that pays back soonest, if it pays back within the
+	 * horizon (decision/economyScore.ts, FINDINGS §28).
+	 */
+	researchPayingTech(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): TechName | undefined
+	{
+		const economy = gameState.ai.HQ.gatherEconomy;
+		let best: TechName | undefined;
+		let bestPayback = PAYBACK_HORIZON;
+		for (const [name, tech] of techs)
+		{
+			const modifications = tech.modifications();
+			if (!modifications)
+				continue;
+			const cost = tech.cost();
+			let costSum = 0;
+			for (const res in cost)
+				costSum += cost[res];
+			const payback = paybackSeconds(costSum, tech.researchTime(), incomeGain(economy, modifications));
+			if (payback < bestPayback)
+			{
+				best = name;
+				bestPayback = payback;
+			}
+		}
+		return best;
+	}
+
 	/** Techs to be searched for as soon as they are available, but only after phase 2 */
 	researchPreferredTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): { name: TechName; increasePriority: boolean } | undefined
 	{
@@ -173,10 +202,26 @@ export class ResearchManager
 
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		if (queues.minorTech.hasQueuedUnits() || queues.majorTech.hasQueuedUnits())
+		if (queues.majorTech.hasQueuedUnits())
 			return;
 
 		const techs = gameState.findAvailableTech();
+
+		// a tech that pays back within the horizon is paid before the women; it
+		// takes the place of a plan of Petra's rules waiting in the queue (the
+		// capacity tech waited there unpaid from minute 5 to 15, FINDINGS §28)
+		const paying = this.researchPayingTech(gameState, techs);
+		if (paying && queues.minorTech.getNext()?.type !== paying)
+		{
+			queues.minorTech.empty();
+			gameState.ai.queueManager.changePriority("minorTech", this.Config.priorities.villager + 1);
+			const plan = new ResearchPlan(gameState, paying);
+			plan.queueToReset = "minorTech";
+			queues.minorTech.addPlan(plan);
+			return;
+		}
+		if (queues.minorTech.hasQueuedUnits())
+			return;
 
 		let techName = this.researchWantedTechs(gameState, techs);
 		if (techName)
