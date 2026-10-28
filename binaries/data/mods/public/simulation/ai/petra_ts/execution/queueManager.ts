@@ -495,6 +495,60 @@ export class QueueManager
 		}
 	}
 
+	/**
+	 * Pay for the first plan of the highest-priority queue that can be paid in
+	 * full from the resources no queue holds and the accounts of the queues of
+	 * lower priority. distributeResources splits each resource between all the
+	 * queues that want it, so that often none can start: 424 food in stock and
+	 * the women's, the soldiers' and an attack's queues holding 105, 117 and
+	 * 182 of the 150, 150 and 200 they need (FINDINGS §24); switchResource
+	 * gathers them only when not a unit of the resource is left unbooked.
+	 */
+	completeBestPlan(gameState: CommonGameState): void
+	{
+		const codes = Resources.GetCodes();
+		const free = this.getAvailableResources(gameState);
+		for (let k = 0; k < this.queueArrays.length; ++k)
+		{
+			const [name, queue] = this.queueArrays[k];
+			if (!queue.hasQueuedUnits() || queue.paused)
+				continue;
+			const plan = requireValue(queue.getNext());
+			if (!plan.isGo(gameState))
+				continue;
+			const cost = plan.getCost();
+			const account = this.accounts[name];
+			if (account.canAfford(cost))
+				return;
+			// the queues below this one, the lowest first
+			const donors = this.queueArrays.slice(k + 1)
+				.filter(([j]) => this.priorities[j] < this.priorities[name])
+				.reverse();
+			if (!codes.every(res => cost[res] - account[res] <=
+				Math.max(0, free[res]) + donors.reduce((sum, [j]) => sum + this.accounts[j][res], 0)))
+				continue;
+			for (const res of codes)
+			{
+				let short = cost[res] - account[res];
+				if (short <= 0)
+					continue;
+				const fromFree = Math.min(short, Math.max(0, free[res]));
+				account[res] += fromFree;
+				short -= fromFree;
+				for (const [j] of donors)
+				{
+					if (short <= 0)
+						break;
+					const taken = Math.min(short, this.accounts[j][res]);
+					this.accounts[j][res] -= taken;
+					account[res] += taken;
+					short -= taken;
+				}
+			}
+			return;
+		}
+	}
+
 	// Start the next item in the queue if we can afford it.
 	startNextItems(gameState: CommonGameState): void
 	{
@@ -545,6 +599,7 @@ export class QueueManager
 
 		// Let's assign resources to plans that need them
 		this.distributeResources(gameState);
+		this.completeBestPlan(gameState);
 
 		// Start the next item in the queue if we can afford it.
 		this.startNextItems(gameState);
