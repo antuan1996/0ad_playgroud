@@ -59,7 +59,7 @@ export class Config
 		"targetNumWorkers": 60,	// dummy, will be changed later
 		"targetNumTraders": 1,	// Target number of traders
 		"targetNumFishers": 1,	// Target number of fishers per sea
-		"supportRatio": 0.3,	// fraction of support workers among the workforce
+		"supportRatio": 0.5,	// fraction of support workers among the workforce (Petra: 0.3; FINDINGS §26)
 		"provisionFields": 2
 	};
 
