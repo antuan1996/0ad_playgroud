@@ -1193,20 +1193,21 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		}
 	});
 
-	// one census, two answers: the town holds 30 paid workers of which 13
+	// one census, two answers: the town holds 30 paid workers of which 16
 	// are support hands. The office's share formula reads
-	// supportNum(α) = 18 · (1 − e^−α·30/18) — 18 being supportRatio 0.3 ×
-	// targetNumWorkers 60 — so peace (α 0.85) books 13.6 supports and a
-	// rush getting ready (α 0.7) only 12.4. Thirteen supports stand above
-	// the ready-for-rush share but below the peaceful one: the two answers
-	// part exactly at this census.
-	it("a fresh town: thirteen supports stand below the peaceful share", async () =>
+	// supportNum(α) = 30 · (1 − e^−α·30/30) — 30 being supportRatio 0.5 ×
+	// targetNumWorkers 60 (Petra's 0.3 gave 18; FINDINGS §26) — so peace
+	// (α 0.85) books 17.2 supports and a rush getting ready (α 0.7) only
+	// 15.1. Sixteen supports stand above the ready-for-rush share but below
+	// the peaceful one: the two answers part exactly at this census.
+	// only the port passes: Petra's share of 0.3 sent the sixteenth hand to the barracks
+	it("a fresh town: sixteen supports stand below the peaceful share", async () =>
 	{
 		const { world, hq } = seat();
 		trainerTown(world);
-		for (let i = 0; i < 13; ++i)
+		for (let i = 0; i < 16; ++i)
 			hand(world, 500 + i, false);
-		for (let i = 0; i < 17; ++i)
+		for (let i = 0; i < 14; ++i)
 			hand(world, 600 + i, true);
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
@@ -1225,12 +1226,12 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 	{
 		// the attack manager (as setRushes books for a second wave) allows
 		// one more rush: alpha drops to 0.7, the share falls under the
-		// thirteen standing supports and the order goes to the barracks
+		// sixteen standing supports and the order goes to the barracks
 		const { world, hq } = seat();
 		trainerTown(world);
-		for (let i = 0; i < 13; ++i)
+		for (let i = 0; i < 16; ++i)
 			hand(world, 500 + i, false);
-		for (let i = 0; i < 17; ++i)
+		for (let i = 0; i < 14; ++i)
 			hand(world, 600 + i, true);
 		hq.attackManager.maxRushes = 1;
 
@@ -1262,9 +1263,9 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged", "Archer", "Worker", "Mercenary"],
 			"cost": { "food": 50, "metal": 50 }, "walkSpeed": 9, "getPaths": { "Cost": { "Population": 1 } }
 		});
-		for (let i = 0; i < 13; ++i)
+		for (let i = 0; i < 16; ++i)
 			hand(world, 500 + i, false);
-		for (let i = 0; i < 17; ++i)
+		for (let i = 0; i < 14; ++i)
 			hand(world, 600 + i, true);
 		hq.attackManager.maxRushes = 1;
 
@@ -1285,19 +1286,19 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 
 	it("a truce day: the peace lobe books one hand more", async () =>
 	{
-		// arming the truce boost: with 14 supports of 30 the peaceful share
-		// (13.6) stays below them, while the boosted alpha reads
+		// arming the truce boost: with 18 supports of 30 the peaceful share
+		// (17.2) stays below them, while the boosted alpha reads
 		// α = 0.85 + (1 − 0.85) · min(max(600 − 120, 0), 180)/180 = 1.0 →
-		// 18 · (1 − e^−30/18) = 14.6 — one hand beyond the standing count,
+		// 30 · (1 − e^−1) = 19.0 — one hand beyond the standing count,
 		// so the truce town trains a civilian where the open town would
 		// not
 		const { world, hq } = seat({
 			"ceasefire": true
 		});
 		trainerTown(world);
-		for (let i = 0; i < 14; ++i)
+		for (let i = 0; i < 18; ++i)
 			hand(world, 500 + i, false);
-		for (let i = 0; i < 16; ++i)
+		for (let i = 0; i < 12; ++i)
 			hand(world, 600 + i, true);
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
@@ -1343,9 +1344,9 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 
 	it("fields under the walls: the same roster still asks for civilians", async () =>
 	{
-		// the same 8/22 census with a field template on offer: the full 0.3
-		// share applies and 8 supports stand below 18·(1 − e^−0.85·30/18) =
-		// 13.6, so the villager line books the next order
+		// the same 8/22 census with a field template on offer: the full 0.5
+		// share applies and 8 supports stand below 30·(1 − e^−0.85·30/30) =
+		// 17.2, so the villager line books the next order
 		const { world, hq } = seat();
 		trainerTown(world);
 		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
@@ -1616,13 +1617,13 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 				"resistanceStrengths": { "Hack": 1, "Pierce": 1 },
 				"maxHitpoints": 50
 			});
-		// eighteen supports and twenty-seven hoplites on the payroll: the
-		// support share 18·(1 − e^−0.85·45/18) = 15.9 stands below the
+		// twenty-three supports and twenty-two hoplites on the payroll: the
+		// support share 30·(1 − e^−0.85·45/30) = 21.6 stands below the
 		// standing supports, so the barracks answers, and 45 in total
 		// pushes the sweep to the strength table
-		for (let i = 0; i < 18; ++i)
+		for (let i = 0; i < 23; ++i)
 			hand(world, 500 + i, false);
-		for (let i = 0; i < 27; ++i)
+		for (let i = 0; i < 22; ++i)
 			hand(world, 600 + i, true);
 
 		// pin the class dice to Infantry so both cards face the sweep

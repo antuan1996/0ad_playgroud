@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (33 tests in all; the
+Each is pinned by a test that only the port passes (34 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -55,6 +55,7 @@ whether a game can reach it.
 | `headquarters.buildMoreHouses` (stage 5) | short of 5 places, doubles the house queue's priority to 500, still below the citizen soldiers' 600, which keep the wood: half the games stand at the population limit at minute 3 (§22) | the house queue goes before the training queues | headquarters: "a tight census with room to build puts the house queue before the training queues" |
 | `queueManager` funding (stage 5) | splits each resource between every queue that wants it, so that often none can start: 424 food in stock and three queues holding 105, 117 and 182 of the 150, 150 and 200 they need; its compaction (`switchResource`) runs only when not a unit is left unbooked (§24) | each turn, the first plan of the highest-priority queue that the free resources and the lower queues' accounts can pay in full is paid and starts (`completeBestPlan`) | queueManager: "starts the best plan its stock can pay for when every queue holds a part of it" |
 | `config.priorities` (stage 5) | the women's queue at 300, below the citizen soldiers' 600 "to not get all the food": with the best plan paid first (§24) the soldiers took the food and the civic centre stood idle 43% of minutes 3-6 (§25) | the women's queue at 650, above the soldiers' | queueManager: "pays the women before the soldiers when the food covers one of them" |
+| `config.Economy.supportRatio` (stage 5) | 0.3 at the hard difficulties: at most 45 women of a 150-worker target, about 21 at 40 workers, and from minute 6 no woman queued while the civic centre waited on the soldiers' food (§26) | 0.5: at most 75 | headquarters: "a fresh town: sixteen supports stand below the peaceful share" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1090,3 +1091,28 @@ which is paid first.
 Women are the cheap gatherers (50 food, no wood): paid first, they bring in
 the resources the soldiers then cost. That the soldiers' raids decide the
 first fights (§21) did not make soldiers the better buy at minutes 3-9.
+
+## 26. Stage 5: the women's share (2026-10-28)
+
+With the women paid first (§25) the civic centre still stood idle 25-31% of
+minutes 3-9, now with food the short resource (113 in stock at minutes 3-6,
+nearly all booked) and from minute 6 hardly a woman queued (0.1 on average):
+`trainMoreWorkers` books a woman only while the support units are below
+`supportMax · (1 − e^(−α · total / supportMax))`, `supportMax` being
+`supportRatio` times the worker target, and Petra's `supportRatio` at the
+hard difficulties is 0.3 (the easy ones have 0.4-0.5): at difficulty 5 at
+most 45 women of 150 workers, 21 at 40 workers, the rest citizen soldiers,
+who cost wood too and gather slower.
+
+- `supportRatio` 0.5 (tuning pool 18, 50 pairs, against petra_prev with
+  §25): 61.6%; at minute 8 +4.9 ± 1.2 units, +212 ± 127 gathered; the civic
+  centre trained 88% of minutes 3-6 (74%). 0.7: 59.0%, and against 0.5 pair
+  by pair -69 ± 136 gathered: past 0.5 more women bring in no more.
+- 0.5 decided on 150 fresh pairs (pool seed 34): **61.3%** against
+  petra_prev (184/300, CI 55.7-66.7%, SPRT accepts 55%, LLR 5.3); 50 pairs
+  won from both slots, 16 lost from both; 22% more gathered (96k against
+  79k), buildings lost 17 against 26. Kept.
+
+The start of the share (α, 0.7 while a rush is planned, 0.85 otherwise) is
+unchanged; the cap moved. The four changes of §24-26 are all the same
+lesson as §20 and §22: the early economy had blocks, not a wrong balance.
