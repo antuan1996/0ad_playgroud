@@ -341,6 +341,122 @@ describe("QueueManager", () =>
 		assert.equal(manager.queues.trader.switched, 0);
 	});
 
+	// only the port passes: Petra split the food so that no queue could start
+	it("starts the best plan its stock can pay for when every queue holds a part of it", () =>
+	{
+		// a game's minute 7: 424 food, of which the soldiers hold 117 of their
+		// 150, the women 105 of theirs, the techs 182 of their 200; 20 unbooked
+		const gameState = worldWithResources({ food: 424 });
+		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
+		let started = "";
+		const plan = (type: string, cost: number): PetraRuntime.ConcretePlan =>
+			makePlan({ type, getCost: costOf(cost), start: () => { started += type; } });
+		const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, villager: 300, minorTech: 200 } }), {
+			citizenSoldier: [plan("soldier", 150)],
+			villager: [plan("woman", 150)],
+			minorTech: [plan("tech", 200)]
+		});
+		account(manager, "citizenSoldier").food = 117;
+		account(manager, "villager").food = 105;
+		account(manager, "minorTech").food = 182;
+
+		manager.update(gameState);
+
+		assert.equal(started, "soldier", "the soldiers' queue, the first, starts its plan");
+		assert.ok(account(manager, "villager").food >= 105, "the women's queue, next below, keeps its share");
+		assert.ok(account(manager, "minorTech").food < 182, "the shortfall the free food left came from the lowest queue");
+	});
+
+	describe("pays the best plan it can complete", () =>
+	{
+		it("from the free resources first, then from the lowest queue up", () =>
+		{
+			const gameState = worldWithResources({ food: 230 });
+			const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, villager: 300, minorTech: 200 } }), {
+				citizenSoldier: [makePlan({ getCost: costOf(150) })],
+				villager: [makePlan({ type: "woman", getCost: costOf(150) })],
+				minorTech: [makePlan({ type: "tech", getCost: costOf(200) })]
+			});
+			account(manager, "citizenSoldier").food = 100;
+			account(manager, "villager").food = 60;
+			account(manager, "minorTech").food = 50;
+
+			manager.completeBestPlan(gameState);
+
+			assert.equal(account(manager, "citizenSoldier").food, 150);
+			assert.equal(account(manager, "minorTech").food, 20, "20 free, then 30 of the techs' 50");
+			assert.equal(account(manager, "villager").food, 60);
+		});
+
+		it("passes over a queue it cannot complete to the next one down", () =>
+		{
+			const gameState = worldWithResources({ food: 200 });
+			const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, villager: 300, minorTech: 200 } }), {
+				citizenSoldier: [makePlan({ getCost: costOf(500) })],
+				villager: [makePlan({ type: "woman", getCost: costOf(150) })],
+				minorTech: [makePlan({ type: "tech", getCost: costOf(200) })]
+			});
+			account(manager, "citizenSoldier").food = 50;
+			account(manager, "villager").food = 70;
+			account(manager, "minorTech").food = 40;
+
+			manager.completeBestPlan(gameState);
+
+			assert.equal(account(manager, "citizenSoldier").food, 50, "200 food cannot pay 500: the soldiers keep theirs");
+			assert.equal(account(manager, "villager").food, 150, "the women take the 40 free and the 40 below them");
+			assert.equal(account(manager, "minorTech").food, 0);
+		});
+
+		it("never takes from a queue above the one it pays", () =>
+		{
+			const gameState = worldWithResources({ food: 150 });
+			const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, villager: 300 } }), {
+				citizenSoldier: [makePlan({ getCost: costOf(500) })],
+				villager: [makePlan({ type: "woman", getCost: costOf(150) })]
+			});
+			account(manager, "citizenSoldier").food = 140;
+			account(manager, "villager").food = 10;
+
+			manager.completeBestPlan(gameState);
+
+			assert.equal(account(manager, "citizenSoldier").food, 140);
+			assert.equal(account(manager, "villager").food, 10, "the women cannot reach 150 without the soldiers' share");
+		});
+
+		it("moves nothing while the first queue can pay for its plan", () =>
+		{
+			const gameState = worldWithResources({ food: 300 });
+			const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, villager: 300 } }), {
+				citizenSoldier: [makePlan({ getCost: costOf(100) })],
+				villager: [makePlan({ type: "woman", getCost: costOf(150) })]
+			});
+			account(manager, "citizenSoldier").food = 100;
+			account(manager, "villager").food = 10;
+
+			manager.completeBestPlan(gameState);
+
+			assert.equal(account(manager, "villager").food, 10, "the first queue starts on its own: no more this turn");
+		});
+
+		it("passes over a paused queue and a plan not ready to go", () =>
+		{
+			const gameState = worldWithResources({ food: 200 });
+			const manager = makeManager(makeConfig({ priorities: { citizenSoldier: 600, healer: 400, villager: 300 } }), {
+				citizenSoldier: [makePlan({ getCost: costOf(150), isGo: () => false })],
+				healer: [makePlan({ type: "healer", getCost: costOf(150) })],
+				villager: [makePlan({ type: "woman", getCost: costOf(150) })]
+			});
+			manager.queues.healer.paused = true;
+
+			manager.completeBestPlan(gameState);
+
+			assert.equal(account(manager, "citizenSoldier").food, 0, "a plan not ready to go is not paid for");
+			assert.equal(account(manager, "healer").food, 0, "nor a paused queue's");
+			assert.equal(account(manager, "villager").food, 150);
+		});
+	});
+
 	it("starts the next item when the account can afford it", () =>
 	{
 		const gameState = worldWithResources();

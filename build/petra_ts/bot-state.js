@@ -24,7 +24,8 @@
  * And its economy every 30 game seconds, at the times the replay samples its
  * statistics (economy.txt with match.sh -b):
  *   ECONLOG {"t":..,"player":..,"estimate":{..},"wanted":{..},"order":[..],"gatherers":{..},
- *            "states":{..},"rawRate":{..},"tripDist":{..},"stock":{..},"workers":..,"pop":..[,"layout":[..]]}
+ *            "states":{..},"rawRate":{..},"tripDist":{..},"stock":{..},"workers":..,"pop":..,"fronts":{..},
+ *            "production":{..}[,"layout":[..]]}
  * per resource: the bot's estimate of its gather rate (GetCurrentGatherRates),
  * the rate its queues want (wantedGatherRates), the order pickMostNeededResources
  * gives them, the gatherers on it (food: gatherers, hunters, fishers), what they
@@ -103,6 +104,7 @@ export class PetraBotState extends PetraBot
 		const defense = section(() => this.logDefense());
 		if (defense && "error" in defense)
 			print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...defense }) + "\n");
+		section(() => this.sampleProduction());
 		this.nextEconomyLine ??= ECONOMY_EVERY;
 		if (this.elapsedTime >= this.nextEconomyLine)
 		{
@@ -398,7 +400,8 @@ export class PetraBotState extends PetraBot
 			"stock": Object.fromEntries(codes.map(res => [res, Math.round(resources[res])])),
 			"workers": gameState.getOwnEntitiesByRole("worker", true).length,
 			"pop": gameState.getPopulation(),
-			"fronts": section(() => this.fronts())
+			"fronts": section(() => this.fronts()),
+			"production": section(() => this.productionLine())
 		};
 		if (!this.loggedLayout)
 		{
@@ -835,5 +838,83 @@ export class PetraBotState extends PetraBot
 				probeObject("template", template, false);
 		}
 		return { probe };
+	}
+
+	/**
+	 * What each of our built trainers does this turn, added up in seconds
+	 * until the next economy line: training, waiting for housing (its first
+	 * batch lacks population room), or idle; an idle one while our unit queues
+	 * hold a plan not yet started (unfunded: waiting for resources) or none
+	 * (gated: trainMoreWorkers queued nothing).
+	 */
+	sampleProduction()
+	{
+		const now = this.elapsedTime;
+		const dt = now - (this.lastProductionSample ?? now);
+		this.lastProductionSample = now;
+		if (dt <= 0)
+			return;
+		const queues = this.queues;
+		const waiting = ["villager", "citizenSoldier"].some(name => queues[name]?.plans.length);
+		const production = this.production ??= {};
+		for (const ent of this.gameState.getOwnTrainingFacilities().values())
+		{
+			if (ent.foundationProgress() !== undefined)
+				continue;
+			const kind = ent.hasClass("CivCentre") ? "CivCentre" : ent.hasClass("Barracks") ? "Barracks" : "other";
+			const queue = SimEngine.QueryInterface(ent.id(), Sim.IID_ProductionQueue)?.GetQueue() ?? [];
+			const first = queue.find(item => item.unitTemplate);
+			const state = first ? (first.neededSlots > 0 ? "housing" : "training") :
+				queue.length ? "researching" : waiting ? "unfunded" : "gated";
+			const entry = production[kind] ??= {};
+			entry[state] = (entry[state] ?? 0) + dt;
+		}
+	}
+
+	/** The trainers' seconds by state since the last economy line, and what gates worker training. */
+	productionLine()
+	{
+		const production = Object.fromEntries(Object.entries(this.production ?? {}).map(([kind, entry]) =>
+			[kind, Object.fromEntries(Object.entries(entry).map(([state, time]) => [state, Math.round(time)]))]));
+		this.production = {};
+		const HQ = this.HQ;
+		const queues = this.queues;
+		const villager = queues.villager;
+		const soldier = queues.citizenSoldier;
+		return {
+			...production,
+			"queued": { "villager": villager.countQueuedUnits(), "citizenSoldier": soldier.countQueuedUnits() },
+			"targetNumWorkers": HQ.targetNumWorkers,
+			"popPhase2": this.Config.Economy.popPhase2,
+			"phase": HQ.currentPhase,
+			"saveResources": !!HQ.saveResources,
+			"popLimit": this.gameState.getPopulationLimit(),
+			"accounts": this.accountsLine()
+		};
+	}
+
+	/** Each queue holding resources in its account: the account, its first plan's cost and whether that plan can go. */
+	accountsLine()
+	{
+		const gameState = this.gameState;
+		const queueManager = this.queueManager;
+		const codes = Resources.GetCodes();
+		const accounts = {};
+		for (const name in queueManager.accounts)
+		{
+			const account = queueManager.accounts[name];
+			if (!codes.some(res => account[res] > 0))
+				continue;
+			const queue = queueManager.queues[name];
+			const next = queue?.getNext?.();
+			const cost = next?.getCost?.();
+			accounts[name] = {
+				"account": Object.fromEntries(codes.filter(res => account[res] > 0).map(res => [res, Math.round(account[res])])),
+				...(cost ? { "cost": Object.fromEntries(codes.filter(res => cost[res] > 0).map(res => [res, Math.round(cost[res])])) } : {}),
+				...(next ? { "go": next.isGo(gameState), "plans": queue.plans.length } : {}),
+				...(queue?.paused ? { "paused": true } : {})
+			};
+		}
+		return accounts;
 	}
 }

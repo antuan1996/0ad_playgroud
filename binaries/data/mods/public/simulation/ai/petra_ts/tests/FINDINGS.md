@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (31 tests in all; the
+Each is pinned by a test that only the port passes (32 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -53,6 +53,7 @@ whether a game can reach it.
 | every read of a unit's orders (stage 5) | reads `order.target` off `Entity.unitAIOrderData()`, which since the engine's commit 4b516b336e returns UnitAI's orders (`{type, data}`), not their data: every check of what a unit targets fails (the workers' hunting and supply checks, the defense and attack target checks, garrisons, captures), and `Entity.currentGatherRate()` gives 0, so the town's gather-rate estimate is empty and the gatherer split follows the queues alone (§18). Every game | `adapter/orders.ts`: `ordersOf` reads the data, `gatherRate` replaces `currentGatherRate`; the declared shape is the engine's | baseManager: "a gatherer on the wood adds its rate, ..."; orders.test.ts |
 | `baseManager.checkResourceLevels` first field (stage 5) | queues the first field only once the berries within reach fall below 600 food, however far its gatherers walk for them: by minutes 6-8 they gather 45% of the time on trips of 128, about 0.4 food a second against a field's 0.54 (§20) | also as soon as a gatherer brings in less at the berries than at a field, measured (`decision/foodSource.ts`); one more field at a time while that lasts | baseManager: "a town whose berries bring in less than a field plants one, ..." |
 | `headquarters.buildMoreHouses` (stage 5) | short of 5 places, doubles the house queue's priority to 500, still below the citizen soldiers' 600, which keep the wood: half the games stand at the population limit at minute 3 (§22) | the house queue goes before the training queues | headquarters: "a tight census with room to build puts the house queue before the training queues" |
+| `queueManager` funding (stage 5) | splits each resource between every queue that wants it, so that often none can start: 424 food in stock and three queues holding 105, 117 and 182 of the 150, 150 and 200 they need; its compaction (`switchResource`) runs only when not a unit is left unbooked (§24) | each turn, the first plan of the highest-priority queue that the free resources and the lower queues' accounts can pay in full is paid and starts (`completeBestPlan`) | queueManager: "starts the best plan its stock can pay for when every queue holds a part of it" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1010,3 +1011,56 @@ the whole interface was checked against the engine as it is now.
 Nothing else of the order data's kind: the interface the port reads is the
 one the engine gives. Run the probe again after an engine or common-API
 update.
+
+## 24. Stage 5: idle production and the queues' accounts (2026-10-28)
+
+Step 3 of `PLAN.md` §6.1 began with a measurement: the economy log
+(`economy.txt`, `match.sh -b`) now has each 30 s window's seconds per trainer
+by what it did (`production`: training, waiting for housing, idle with a unit
+plan queued but not funded, idle with none queued, researching), and each
+queue's account against its first plan's cost (`accounts`), sampled every
+turn from the engine's production queues. On 50 seed pairs of pool 18
+(petra_out against petra_prev, the same code):
+
+| minutes | CC training | CC idle, unfunded | CC housing | barracks training | stock |
+|---|---|---|---|---|---|
+| 0-3 | 91% | 6% | 0% | - | 880 |
+| 3-6 | 60% | 31% | 8% | 50% | 1010 |
+| 6-9 | 50% | 48% | 2% | 70% | 1110 |
+| 9-12 | 70% | 27% | 3% | 84% | 1080 |
+
+The won and lost sides alike (the same code): a cost both pay. The civic
+centre stood idle a third to a half of minutes 3-9 with 8-15 women and 36-44
+soldiers queued and about 1000 resources in stock. Not one queue hoarding
+it: in minutes 3-9 the soldiers' queue held 245 on average, the minor
+techs' 164, the attack plans' 141, the military buildings' 98, the women's
+60, the houses' 37, and 281 were booked by none (mostly stone and metal no
+plan wanted yet). The queue manager splits each resource between every
+queue that wants it by priority (`distributeResources`), so that none can
+pay: in game 1 at 7:00, 424 food, the women's queue holding 105 of its 150,
+the soldiers' 117 of 150, an attack's 182 of 200, nothing started. Its own
+header says as much ("if all queues have 70% of their needs, nothing gets
+done"). Its compaction, `switchResource`, runs only when not a unit of the
+resource is left unbooked, and the split's rounding nearly always leaves a
+few.
+
+**The change** (`QueueManager.completeBestPlan`, kept): after the split,
+each turn, the first plan of the highest-priority queue that can be paid in
+full from the unbooked resources and the accounts of the queues below it is
+paid (unbooked first, then the lowest queue up) and starts the same turn; a
+queue above is never taken from, a paused queue or a plan not ready to go is
+passed over, and nothing moves while the first queue can pay on its own.
+
+- Tuning pool (pool 18, 50 pairs): 57.0%; against the same pairs without
+  it, +7.2 ± 1.1 units and +245 ± 134 gathered at minute 8. Stock in
+  minutes 3-9 fell from about 1050 to 680; the barracks trained 78% of
+  minutes 3-6 (54% before). The civic centre stood idle more in minutes 3-6
+  (43% against 31%): the soldiers' queue (600) goes before the women's
+  (300), and now gets paid first.
+- Decided on 150 fresh pairs (pool seed 32): **61.0%** against petra_prev
+  (183/300, CI 55.4-66.3%, SPRT accepts 55%, LLR 5.1); 52 pairs won from
+  both slots, 19 lost from both; 11% more gathered (83k against 75k),
+  buildings lost 13 against 21.
+
+Next in the same step: the women's priority below the soldiers' (the civic
+centre idle while soldiers are paid), and the worker targets.

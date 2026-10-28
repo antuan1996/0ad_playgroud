@@ -111,7 +111,9 @@ per resource its own gather-rate estimate, the rate its queues want, the order
 `pickMostNeededResources` gives, gatherers and what they do (gathering,
 walking, carrying), the sum of the gathering units' rates, the median trip from
 supply to dropsite, and in the first line each base's supply lists, the
-start's layout; `node build/petra_ts/economy-log.ts <batch or match dir>` sets
+start's layout; each trainer's seconds by what it did (training, waiting for
+housing, idle with a plan unfunded or none queued) and each queue's account
+against its next plan's cost; `node build/petra_ts/economy-log.ts <batch or match dir>` sets
 it beside what the statistics say was really gathered, per band of minutes,
 won against lost sides, and the seed pairs won from one slot and lost from the
 other), `apiprobe.txt` with `-b` (at game minutes 6 and 20, every read-only
@@ -313,8 +315,9 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and three stage 5's (the engine's order shape, the first
-  field by what berries bring in, the house before the training queues), 31 in all.
+  more pin stage-4 fixes and four stage 5's (the engine's order shape, the first
+  field by what berries bring in, the house before the training queues, the
+  best plan paid from the split accounts), 32 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
