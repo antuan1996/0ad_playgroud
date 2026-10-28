@@ -1237,3 +1237,23 @@ One game of the 300 (and two of stage 4's, before any of these changes)
 logged the game's own `UnitAI.js` error in `FINDINGNEWTARGET`
 ("cmpResourceGatherer is null", line 2920): a unit in a gather order
 without a ResourceGatherer, a fault of the game's, not the bot's.
+
+## 30. Stage 5: expansion, and what the stock is for (2026-10-28)
+
+With five barracks (§29) the stock still holds 2000-3800 after minute 15,
+the civic centre trains alone. Petra plans a new civic centre once it has
+more than about 70 units a base and is past the village phase (minute 10),
+in a queue of priority 1, paid from what the others leave: the second is
+ordered at minute 16 (median; 14 of 46 lost sides never order one, on the
+command logs of 50 pairs). It costs 850 (300 wood, 300 stone, 250 metal)
+and takes 500 s to build.
+
+| variant (tuning pool 18, against petra_prev with §29) | win-rate | at minute 16 / 20 |
+|---|---|---|
+| the civic centre queue at 500, not 1 (the second ordered at minute 13) | 43.4% | -5.4 / -11.4 units, -221 / -2781 gathered |
+| up to eight barracks, not five | 49.0% | -0.7 / -2.4 units |
+
+Both dropped. An earlier civic centre is 850 resources and eight minutes
+of building away from paying anything back; the army a fifth barracks can
+train is as much as the town feeds. The stock after minute 15 is the
+surplus of a won economy, not a block.

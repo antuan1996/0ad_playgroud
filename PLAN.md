@@ -501,6 +501,8 @@ and nothing noticed (§18), the change worth the most of all.
    (§29: the barracks train 90% of the time from minute 10, 2000-3000 in
    stock): one more barracks while those it has are busy, measured
    (`world/production.ts`): 66.4% (CI 60.9-71.6%), kept.
+   Tried and dropped (§30): an earlier civic centre (43.4%), eight barracks
+   (49.0%).
 6. Rush timing, tested directly (done, §27: an earlier rush loses, none
    gains nothing); then the fights, with stage 6's estimator.
 
