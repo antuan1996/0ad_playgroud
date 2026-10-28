@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (35 tests in all; the
+Each is pinned by a test that only the port passes (36 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -57,6 +57,7 @@ whether a game can reach it.
 | `config.priorities` (stage 5) | the women's queue at 300, below the citizen soldiers' 600 "to not get all the food": with the best plan paid first (§24) the soldiers took the food and the civic centre stood idle 43% of minutes 3-6 (§25) | the women's queue at 650, above the soldiers' | queueManager: "pays the women before the soldiers when the food covers one of them" |
 | `config.Economy.supportRatio` (stage 5) | 0.3 at the hard difficulties: at most 45 women of a 150-worker target, about 21 at 40 workers, and from minute 6 no woman queued while the civic centre waited on the soldiers' food (§26) | 0.5: at most 75 | headquarters: "a fresh town: sixteen supports stand below the peaceful share" |
 | `researchManager.update` economy techs (stage 5) | queued the economy techs at the research queue's priority (250), below the women's, the soldiers', the houses' and the fields', one at a time: a capacity tech waited unpaid from minute 5 to 15 and the plough came at minute 11.6 with 26-40 women on the fields since minute 4 (§28) | a tech that pays back within 240 s from the income it adds, measured, goes just above the women's queue and takes the place of a plan waiting there (`decision/economyScore.ts`) | researchManager: "twenty-six farmers: the plough goes before the women" |
+| `headquarters.constructTrainingBuildings` (stage 5) | builds the barracks, ranges and stables by population thresholds, about three in all, while from minute 10 the barracks train 90% of the time and 2000-3000 resources lie in stock (§29) | one more barracks (or range) while those it has train 85% of the time, measured (`world/production.ts`), and the unbooked stock covers two of them, up to five | headquarters: "barracks always training and the stock unbooked: one more barracks" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1203,3 +1204,36 @@ woodcutters. The first capacity tech came at minute 5.5 (10.9), and nothing
 else moved: 53.0% on the tuning pool, at minute 8 +50 ± 103 gathered, at 12
 -155 ± 608, -1.6 ± 1.0 units. Its 400 resources at minute 5 buy about what
 they cost.
+
+## 29. Stage 5: a town that cannot spend what it gathers (2026-10-28)
+
+After §24-28 the early economy has no block left that the logs show, and the
+stock grows from minute 10 (current code, pool 18, 50 pairs): 2200 at
+minutes 10-15, 2500 at 15-20, 3000 at 20-25, while the trainers train
+88-94% of the time and the population stays at 155-165 of the 300 limit.
+Petra builds its military buildings by population thresholds, about three
+(1-2 barracks or ranges, 1-2 stables; the stables seldom train, the army
+asks for few riders).
+
+**The change**: `world/production.ts`, how busy the infantry trainers
+(barracks and ranges) are, the share of them with a batch in their queue
+smoothed over about a minute, owned by the headquarters and not saved (it
+measures again within a minute after a load); and after Petra's rules in
+`constructTrainingBuildings`, one more barracks (or range) while those it
+has train 85% of the time and the unbooked stock covers two of them, up to
+five.
+
+- Counting the stables in the share (first try): they idle, the share
+  stays near 0.6 and the rule hardly fires: 50.0%, the games as before.
+- Barracks and ranges only (tuning pool 18): 62.0%; at minute 16 +23.7 ±
+  6.5 units; the barracks 5.7 at minutes 15-20 (2.0), the population 176-183
+  (156-164).
+- Decided on 150 fresh pairs (pool seed 37): **66.4%** against petra_prev
+  (198/298, CI 60.9-71.6%, SPRT accepts 55%, LLR 8.3); 57 pairs won from
+  both slots, 8 lost from both; 31% more gathered (111k against 84k),
+  buildings lost 15 against 29. Kept.
+
+One game of the 300 (and two of stage 4's, before any of these changes)
+logged the game's own `UnitAI.js` error in `FINDINGNEWTARGET`
+("cmpResourceGatherer is null", line 2920): a unit in a gather order
+without a ResourceGatherer, a fault of the game's, not the bot's.

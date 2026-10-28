@@ -4183,6 +4183,44 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, RANGE);
 	});
 
+	// only the port passes: Petra built no fourth infantry house however busy the barracks were
+	it("barracks always training and the stock unbooked: one more barracks", () =>
+	{
+		// three barracks and a range training 95% of the time; 2000 wood and
+		// 1000 stone lie in no queue's account, ten times a barracks' 300
+		const { world, hq } = seat({ "population": 160, "stock": { "wood": 2000, "stone": 1000 } });
+		world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"], "cost": { "wood": 200, "stone": 100 } });
+		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
+		armed(world, 3, 1, 1);
+		hq.productionLoad.trainers = 4;
+		hq.productionLoad.busy = 0.95;
+
+		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+
+		const plans = world.ai.queues.militaryBuilding.plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.type, BARRACKS);
+		assert.equal(plans[0]?.metadata?.militaryBase, true);
+	});
+
+	it("no more barracks while they stand idle, the stock is booked, or five stand", () =>
+	{
+		const town = (busy: number, trainers: number, stock: Record<string, number>) =>
+		{
+			const { world, hq } = seat({ "population": 160, stock });
+			world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"], "cost": { "wood": 200, "stone": 100 } });
+			bookBuilder(world, hq, ["structures/{civ}/barracks"]);
+			armed(world, 3, 1, 1);
+			hq.productionLoad.trainers = trainers;
+			hq.productionLoad.busy = busy;
+			hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+			return world.ai.queues.militaryBuilding.plans.length;
+		};
+		assert.equal(town(0.6, 4, { "wood": 2000, "stone": 1000 }), 0, "the barracks keep up: some stand idle");
+		assert.equal(town(0.95, 4, { "wood": 400, "stone": 100 }), 0, "500 unbooked: less than two barracks");
+		assert.equal(town(0.95, 5, { "wood": 2000, "stone": 1000 }), 0, "five stand: enough");
+	});
+
 	it("a saving town with a barracks standing lays no second one while it cannot barter", () =>
 	{
 		const { world, hq } = seat({ "population": 60 });

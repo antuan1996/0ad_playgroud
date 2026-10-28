@@ -497,7 +497,10 @@ and nothing noticed (§18), the change worth the most of all.
    option's payback from the income it adds, measured): a tech that repays
    its cost within 240 s goes before the women; the plough at minute 5.1,
    not 11.6. 54.4% against `petra_prev` on 300 fresh pairs (CI
-   50.4-58.4%), kept.
+   50.4-58.4%), kept. Then the town that cannot spend what it gathers
+   (§29: the barracks train 90% of the time from minute 10, 2000-3000 in
+   stock): one more barracks while those it has are busy, measured
+   (`world/production.ts`): 66.4% (CI 60.9-71.6%), kept.
 6. Rush timing, tested directly (done, §27: an earlier rush loses, none
    gains nothing); then the fights, with stage 6's estimator.
 

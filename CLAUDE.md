@@ -255,7 +255,7 @@ decision with the game's reason ("last player alive", "wonder victory",
   unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
   AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
   border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
-  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `baseResources.ts`,
+  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
   read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
   the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
@@ -315,10 +315,11 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and seven stage 5's (the engine's order shape, the first
+  more pin stage-4 fixes and eight stage 5's (the engine's order shape, the first
   field by what berries bring in, the house before the training queues, the
   best plan paid from the split accounts, the women paid before the
-  soldiers, the women's share of 0.5, research by payback), 35 in all.
+  soldiers, the women's share of 0.5, research by payback, one more barracks while
+  the barracks are busy), 36 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
