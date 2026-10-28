@@ -138,7 +138,7 @@ export class Config
 
 	priorities: Record<PetraRuntime.ConfiguredQueueName, number> =
 		{
-			"villager": 300,      // should be slightly lower than the citizen soldier one to not get all the food
+			"villager": 650,      // above the citizen soldiers: paid first, the civic centre idles less (FINDINGS §25)
 			"citizenSoldier": 600,
 			"trader": 1,
 			"healer": 20,

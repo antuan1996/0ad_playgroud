@@ -3,32 +3,32 @@
 # petra_out against petra_parity, random/mainland, athen, difficulty 5 (very hard),
 # conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit f64e6777edce99bf5b0b75accf8084bb53069bb8 with uncommitted changes to the game,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261028-085725.
+# Recorded from commit 731364bef3a206e9e207990ee1b5759fa2993115 with uncommitted changes to the game,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261028-100611.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint
-1	49765995	128618844	false	blue	last player alive	1175400	1a8ac3bd39548939
-2	49765995	128618844	true	blue	last player alive	1235200	4126d56c7bf14cfd
-3	464365697	387224098	false	blue	last player alive	1933800	e5ebb5041b01c6d5
-4	464365697	387224098	true	blue	last player alive	1908400	020b17075ae0270e
-5	432832614	163304524	false	blue	last player alive	2022200	d992a7687a60d6b5
-6	432832614	163304524	true	red	last player alive	2294400	d71cf290fa4c8dc4
-7	343709746	131020175	false	red	last player alive	1026800	b35a608b9701f003
-8	343709746	131020175	true	blue	last player alive	1379200	2c4d2fc6982ad97b
-9	462725104	860388854	false	blue	last player alive	1484600	4eec1eb1f3c1c49c
-10	462725104	860388854	true	blue	last player alive	1678000	65c3c7e818ef410a
-11	988024885	401668228	false	blue	last player alive	1677200	dbc50b0bbf331cd9
-12	988024885	401668228	true	blue	last player alive	1474800	dde9623228179dd8
-13	730040291	731036029	false	blue	last player alive	1785000	f8d2fcf3eae3562c
-14	730040291	731036029	true	blue	last player alive	1226800	079687b76930e655
-15	779659345	690691362	false	blue	last player alive	1656200	a3d3463967af8e8e
-16	779659345	690691362	true	blue	last player alive	1678200	0f3fcfc155e06269
-17	766714254	112125970	false	blue	last player alive	2033200	5c2396aef4a5d974
-18	766714254	112125970	true	red	last player alive	1469800	90b5cf9f6dd85f09
-19	626711260	545303125	false	blue	last player alive	1703400	a809bea2728295df
-20	626711260	545303125	true	red	last player alive	3402000	73881002183437aa
-21	354373809	547528647	false	red	last player alive	1926000	241867456950d6c4
-22	354373809	547528647	true	blue	last player alive	1525000	446a64c5faad7789
-23	416963839	328731430	false	blue	last player alive	1426600	122bb996335d45af
-24	416963839	328731430	true	blue	last player alive	1371400	0e481690634e11d6
+1	49765995	128618844	false	blue	last player alive	1341800	445a6a9e7528ffd8
+2	49765995	128618844	true	blue	last player alive	1271600	a50e2198b66636c8
+3	464365697	387224098	false	blue	last player alive	1866600	6f20a97a8450da84
+4	464365697	387224098	true	blue	last player alive	1986800	253358a0ef51d4b4
+5	432832614	163304524	false	blue	last player alive	1330600	14a76611d5937048
+6	432832614	163304524	true	blue	last player alive	1502000	3e56f202a273e03c
+7	343709746	131020175	false	red	last player alive	1404400	8ee7d5fba9672f73
+8	343709746	131020175	true	blue	last player alive	1025800	c458a21c1072de1d
+9	462725104	860388854	false	blue	last player alive	1584800	eeff0c5d9bcfaf7b
+10	462725104	860388854	true	blue	last player alive	2129200	f2902afc8933d8d5
+11	988024885	401668228	false	blue	last player alive	1580000	69b3bc2ac0364e73
+12	988024885	401668228	true	blue	last player alive	1185000	1842a46ac9714262
+13	730040291	731036029	false	blue	last player alive	2158600	e1b40375a4102618
+14	730040291	731036029	true	red	last player alive	1968400	55b0f98d4bcc8763
+15	779659345	690691362	false	blue	last player alive	1562600	067589bfab2439a4
+16	779659345	690691362	true	blue	last player alive	1150000	59e52a22a3116924
+17	766714254	112125970	false	blue	last player alive	1489000	60bc02994b0faac8
+18	766714254	112125970	true	blue	last player alive	1486000	b1b89777c15c18de
+19	626711260	545303125	false	blue	last player alive	1607800	54bc6f464707f887
+20	626711260	545303125	true	blue	last player alive	1888200	db8e032fd3118e65
+21	354373809	547528647	false	red	last player alive	1652800	924f9bbb63c5f7c6
+22	354373809	547528647	true	blue	last player alive	1894800	75f3c519eacdf54f
+23	416963839	328731430	false	blue	last player alive	1452200	fd016aaeb14f4fae
+24	416963839	328731430	true	blue	last player alive	1393000	588cdb57b6894f1c
