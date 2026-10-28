@@ -1116,3 +1116,33 @@ who cost wood too and gather slower.
 The start of the share (α, 0.7 while a rush is planned, 0.85 otherwise) is
 unchanged; the cap moved. The four changes of §24-26 are all the same
 lesson as §20 and §22: the early economy had blocks, not a wrong balance.
+
+## 27. Stage 5: the rush and the town phase, after the economy fixes (2026-10-28)
+
+A second checkpoint after §24-26, 150 fresh seed pairs (pool seed 35) from
+both slots: **92.3% against petra_parity** (277/300, CI 88.8-94.8%; 131
+pairs won from both slots, 4 lost from both; 88k gathered against 37k,
+buildings lost 3 against 26). The first checkpoint (§6.1 of PLAN.md) gave
+78.7%.
+
+**The rush.** Since §24-26 the first rush starts at minute 16 (median; it
+was 10.6 before §24): a rush leaves only when every category reaches its
+target size (`mustStart`: 20 infantry and 4 riders), and its queue (priority
+250) is paid after the women's, the soldiers', the fields' and the houses'.
+By then it is the army, not a rush. Variants against petra_prev, tuning pool
+18, 50 pairs each, all dropped:
+
+| variant | win-rate | first rush leaves | at minute 8 (units, gathered) |
+|---|---|---|---|
+| no minimum of riders (`minSize` 0) | 49.5% | 15.5 | 0, 0 (`mustStart` reads the target) |
+| infantry only (no riders' category) | 30.0% | 7.8 | -0.8, -330 |
+| no rush at all (`setRushes(0)`) | 47.0% | - | +3.2, +63 |
+
+A rush that leaves at minute 8 costs the economy more than it takes from the
+enemy; the late one is a reserve that does no harm.
+
+**The town phase.** The bot asks for it at `popPhase2` 150 (at difficulty
+5, the cap: half the population limit) and gets it at minute 10, population
+147, city phase at 13. `popPhase2` 100: 30.3% (tuning pool), at minute 12
+-22.7 ± 2.8 units and -1852 ± 496 gathered: the phase's 500 food and 500
+wood are better spent on growth. Dropped.

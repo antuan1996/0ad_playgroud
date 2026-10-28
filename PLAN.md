@@ -484,7 +484,10 @@ and nothing noticed (§18), the change worth the most of all.
    61.0% against `petra_prev` on 150 fresh pairs (CI 55.4-66.3%), kept;
    the women's queue paid before the soldiers' (§25): 74.2% (CI
    68.9-78.8%), kept; the women's share `supportRatio` 0.5, not 0.3
-   (§26): 61.3% (CI 55.7-66.7%), kept.
+   (§26): 61.3% (CI 55.7-66.7%), kept. A second checkpoint after these three
+   (pool seed 35): 92.3% against `petra_parity` (CI 88.8-94.8%). Tried and
+   dropped (§27): an earlier rush (30.0%), no rush (47.0%), town phase at
+   100 population (30.3%).
 4. Dropsites, hunting and the housing that still blocks, in the same module:
    all come down to how far gatherers walk, scored by the trips they save.
 5. Research timing (the gather-rate techs).
