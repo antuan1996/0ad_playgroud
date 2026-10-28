@@ -367,6 +367,11 @@ imports, a loop the original also left doing nothing, unused test names).
   `XDG_*` folders: at 12 at a time, 50–60 s of wall time per game, about 100
   games in 8 minutes (1000 games in under 1.5 hours). Results go to one table
   (`results.tsv`: seeds, slot, bots, outcome, decision time, metrics).
+- **Same starts:** `random/mainland_mirror` gives both players the same land
+  (one half turned onto the other). The start's layout turned out to be a
+  small part of the noise: on it half the seed pairs still split, and the
+  interval is as wide as on Mainland (`FINDINGS.md` §22). It checks that a
+  gain does not depend on unequal starts; Mainland decides.
 - **Slots:** player 2 wins more mirror games (42.2% for player 1, CI
   35.6–49.0%, §13). Compare two bots only from both slots (`--slots both`,
   the default for two bots), never from fixed ones.

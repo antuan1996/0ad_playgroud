@@ -315,7 +315,16 @@ function row(options: Options, game: Game, status: number | null, wall: number, 
 	const resultFile = join(game.dir, "result.json");
 	if (status !== 0 || !existsSync(resultFile))
 		return { ...base, "problem": `match.sh exit status ${status}${existsSync(resultFile) ? "" : ", no result.json"}` };
-	const result: MatchResult = JSON.parse(readFileSync(resultFile, "utf8"));
+	let result: MatchResult;
+	try
+	{
+		result = JSON.parse(readFileSync(resultFile, "utf8"));
+	}
+	catch
+	{
+		// a match cut off while it wrote its record (the batch was stopped)
+		return { ...base, "problem": "an unreadable result.json (resume the batch to play it again)" };
+	}
 	const report = readFileSync(join(game.dir, "match.txt"), "utf8");
 	const replay = /^replay: (.*)$/m.exec(report)?.[1] ?? "";
 	const problems: string[] = [];

@@ -209,7 +209,11 @@ limit, passed to the watchdog as `-K` (which also catches a deadlock within a
 minute); a killed game is marked failed with the watchdog's reason, and a
 resumed batch, and the smoke test, play it again; the batch itself kills a
 `match.sh` still running two minutes past the limit. For analyses across a batch, the paired
-games of `--slots both` compare the same map from both slots; the replays'
+games of `--slots both` compare the same map from both slots; `--map
+random/mainland_mirror` (`maps/random/mainland_mirror.js`) plays Mainland with
+player 1's half turned onto player 2's, the same start for both (two players,
+one civilisation), which takes the slot's advantage down but not the noise
+(`FINDINGS.md` §22: mainland stays the deciding pool); the replays'
 `metadata.json` hold each statistic by unit class every 30 game seconds
 (`total` is recorded as 0 for units lost and killed: use the `Unit` class).
 `node build/petra_ts/pair-score.ts <batch> [--minute M] [--compare <batch>]`

@@ -932,3 +932,27 @@ Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
   gathered and +2.4 ± 0.5 units at minute 8 on pool 18), and the tuning
   pool's 50% shows how far a few units at minute 8 are from deciding a game:
   the proxy tells a change's direction, 150 fresh pairs its worth.
+- **A map with the same start for both** (`random/mainland_mirror`: Mainland
+  with player 1's half turned by 180° onto player 2's, heights, textures,
+  trees and every entity; two players of one civilisation on a circle; the
+  two starts' supply lists identical in a test game). The game has none: of
+  its 42 two-player skirmish maps, no transform that swaps the civic centres
+  matches more than 14 of 95 berry bushes, and none of the mines. The house
+  fix against the field rule on the same 150 seed pairs (pool 18):
+
+  | | `mainland` | `mainland_mirror` |
+  |---|---|---|
+  | win-rate | 56.0% (CI 50.4-61.6%) | 50.5% (CI 44.8-56.1%) |
+  | interval width | 11.2 | 11.3 |
+  | player 1's games won | 54.4% | 51.5% |
+  | pairs won by one bot from both slots | 43% | 50% |
+  | median game length | 30 min | 36 min |
+
+  The start's layout is a small part of the noise: on identical starts half
+  the pairs still split, and the interval is as wide; most of a game's
+  outcome is made in the game (the AI seed, small differences the first
+  fights amplify). The mirror takes the slot's advantage down to what the
+  engine's order of the players leaves (51.5%). The house fix shows no gain
+  on it (its value may lie in the poorer of two unequal starts, or partly in
+  pool 18's luck; 53.6% over the 496 mainland games). Mainland stays the
+  pool that decides; the mirrored map is a check on fair starts.
