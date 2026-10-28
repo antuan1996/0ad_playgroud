@@ -32,6 +32,8 @@ import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { ProductionLoad } from "../world/production.ts";
+import { censusOf } from "../world/census.ts";
+import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -1613,7 +1615,7 @@ export class Headquarters
 			return;
 
 		const numPlanned = queues.house.length();
-		if (numPlanned < 3 || numPlanned < 5 && gameState.getPopulation() > 80)
+		if (planAnotherHouse(numPlanned, gameState.getPopulation()))
 		{
 			const plan = new ConstructionPlan(gameState, houseTemplateString);
 			// change the starting condition according to the situation.
@@ -1677,7 +1679,7 @@ export class Headquarters
 		const popBonus = houseTemplate.getPopulationBonus();
 		const freeSlots = gameState.getPopulationLimit() + HouseNb*popBonus - this.getAccountedPopulation(gameState);
 		let priority;
-		if (freeSlots < 5)
+		if (freeSlots < TIGHT_SLOTS)
 		{
 			if (this.buildManager.isUnbuildable(gameState, house))
 			{
@@ -1685,20 +1687,19 @@ export class Headquarters
 				this.researchManager.researchPopulationBonus(gameState, queues);
 			}
 			else
-			{
-				// a house blocks every unit after it: it goes before the
-				// training queues, where Petra's 500 stayed below the citizen
-				// soldiers' 600, which took the wood (FINDINGS §22: at minute
-				// 3 half the games were at the population limit)
-				const training = Math.max(this.Config.priorities.villager, this.Config.priorities.citizenSoldier);
-				priority = Math.max(2 * this.Config.priorities.house, training + 1);
-			}
+				priority = urgentHousePriority(this.Config.priorities);
 		}
 		else
 			priority = this.Config.priorities.house;
 
 		if (priority && priority !== gameState.ai.queueManager.getPriority("house"))
 			gameState.ai.queueManager.changePriority("house", priority);
+	}
+
+	/** Whether a planned house may be paid now (decision/housing.ts). */
+	houseNeeded(gameState: CommonGameState): boolean
+	{
+		return houseNeeded(censusOf(gameState), !!this.saveResources);
 	}
 
 	/** Checks the status of the territory expansion. If no new economic bases created, build some strategic ones. */

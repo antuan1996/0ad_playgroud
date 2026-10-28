@@ -936,19 +936,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate>
 			if (!hqOf(gameState).canBuild(gameState, "structures/{civ}/house") &&
 			    !hqOf(gameState).canBuild(gameState, "structures/{civ}/apartment"))
 				return false;
-			if (gameState.getPopulationMax() <= gameState.getPopulationLimit())
-				return false;
-			let freeSlots = gameState.getPopulationLimit() - gameState.getPopulation();
-			for (const ent of gameState.getOwnFoundations().values())
-				freeSlots += requireValue(gameState.getBuiltTemplate(ent.templateName())).getPopulationBonus();
-
-			if (hqOf(gameState).saveResources)
-				return freeSlots <= 10;
-			if (gameState.getPopulation() > 55)
-				return freeSlots <= 21;
-			if (gameState.getPopulation() > 30)
-				return freeSlots <= 15;
-			return freeSlots <= 10;
+			return hqOf(gameState).houseNeeded(gameState);
 		}
 		return true;
 	}

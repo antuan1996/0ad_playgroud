@@ -29,7 +29,7 @@ export type ExecutionHQ = {
 	| "baseAtIndex" | "canBuild" | "findBestBaseForMilitary" | "findBestTrainableUnit"
 	| "findDefensiveLocation" | "findEconomicCCLocation" | "findMarketLocation" | "findStrategicCCLocation"
 	| "GetCurrentGatherRates" | "getSeaBetweenIndices" | "GetWantedGatherRates"
-	| "hasPotentialBase" | "isDangerousLocation" | "isNearInvadingArmy" | "pickMostNeededResources"
+	| "hasPotentialBase" | "houseNeeded" | "isDangerousLocation" | "isNearInvadingArmy" | "pickMostNeededResources"
 	// what they report
 	| "allowsDistantFood" | "markBuildingStarted" | "noteNothingToGather" | "phaseResearched"
 >>;
