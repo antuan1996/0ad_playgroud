@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (32 tests in all; the
+Each is pinned by a test that only the port passes (33 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -54,6 +54,7 @@ whether a game can reach it.
 | `baseManager.checkResourceLevels` first field (stage 5) | queues the first field only once the berries within reach fall below 600 food, however far its gatherers walk for them: by minutes 6-8 they gather 45% of the time on trips of 128, about 0.4 food a second against a field's 0.54 (§20) | also as soon as a gatherer brings in less at the berries than at a field, measured (`decision/foodSource.ts`); one more field at a time while that lasts | baseManager: "a town whose berries bring in less than a field plants one, ..." |
 | `headquarters.buildMoreHouses` (stage 5) | short of 5 places, doubles the house queue's priority to 500, still below the citizen soldiers' 600, which keep the wood: half the games stand at the population limit at minute 3 (§22) | the house queue goes before the training queues | headquarters: "a tight census with room to build puts the house queue before the training queues" |
 | `queueManager` funding (stage 5) | splits each resource between every queue that wants it, so that often none can start: 424 food in stock and three queues holding 105, 117 and 182 of the 150, 150 and 200 they need; its compaction (`switchResource`) runs only when not a unit is left unbooked (§24) | each turn, the first plan of the highest-priority queue that the free resources and the lower queues' accounts can pay in full is paid and starts (`completeBestPlan`) | queueManager: "starts the best plan its stock can pay for when every queue holds a part of it" |
+| `config.priorities` (stage 5) | the women's queue at 300, below the citizen soldiers' 600 "to not get all the food": with the best plan paid first (§24) the soldiers took the food and the civic centre stood idle 43% of minutes 3-6 (§25) | the women's queue at 650, above the soldiers' | queueManager: "pays the women before the soldiers when the food covers one of them" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1063,4 +1064,29 @@ passed over, and nothing moves while the first queue can pay on its own.
   buildings lost 13 against 21.
 
 Next in the same step: the women's priority below the soldiers' (the civic
-centre idle while soldiers are paid), and the worker targets.
+centre idle while soldiers are paid, §25), and the worker targets.
+
+## 25. Stage 5: the women before the soldiers (2026-10-28)
+
+Petra set the women's queue at 300, below the citizen soldiers' 600, "to
+not get all the food". With the split accounts (§24) the order hardly
+mattered: no queue could pay. With the best plan paid first it does: the
+soldiers' queue took the food, the barracks trained more and the civic
+centre stood idle 43% of minutes 3-6 (31% before §24). The change: the
+women's queue at 650, above the soldiers' (`config.ts`). Which units the
+bot wants is unchanged (`trainMoreWorkers`' share of support units); only
+which is paid first.
+
+- Tuning pool (pool 18, 50 pairs, against petra_prev with §24): 71.0%; at
+  minute 8, +11.3 ± 1.0 units and +1522 ± 130 gathered, the proxy's largest
+  lead yet. The civic centre idle 25% of minutes 3-6 (43%), the women queued
+  down from 18 to 3 and the soldiers up from 31 to 50 in minutes 3-6; stock
+  in minutes 3-9 about 780.
+- Decided on 150 fresh pairs (pool seed 33): **74.2%** against petra_prev
+  (221/298, CI 68.9-78.8%, SPRT accepts 55%, LLR 13.0); 84 pairs won from
+  both slots, 13 lost from both; 54% more gathered (94k against 61k),
+  buildings lost 11 against 30, peak map control 61% against 36%.
+
+Women are the cheap gatherers (50 food, no wood): paid first, they bring in
+the resources the soldiers then cost. That the soldiers' raids decide the
+first fights (§21) did not make soldiers the better buy at minutes 3-9.

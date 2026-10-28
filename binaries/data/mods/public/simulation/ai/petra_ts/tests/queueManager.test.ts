@@ -368,6 +368,23 @@ describe("QueueManager", () =>
 		assert.ok(account(manager, "minorTech").food < 182, "the shortfall the free food left came from the lowest queue");
 	});
 
+	// only the port passes: Petra paid the soldiers before the women, the civic centre idle
+	it("pays the women before the soldiers when the food covers one of them", () =>
+	{
+		const gameState = worldWithResources({ food: 150 });
+		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
+		let started = "";
+		const manager = makeManager(makeConfig(), {
+			villager: [makePlan({ type: "woman", getCost: costOf(150), start: () => { started += "woman"; } })],
+			citizenSoldier: [makePlan({ type: "soldier", getCost: costOf(150), start: () => { started += "soldier"; } })]
+		});
+
+		manager.update(gameState);
+
+		assert.equal(started, "woman", "Petra's own priorities: the women's queue goes first");
+	});
+
 	describe("pays the best plan it can complete", () =>
 	{
 		it("from the free resources first, then from the lowest queue up", () =>
