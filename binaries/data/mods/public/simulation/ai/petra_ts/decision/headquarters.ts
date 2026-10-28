@@ -31,6 +31,7 @@ import { footprintHalves } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
+import { ProductionLoad } from "../world/production.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -78,6 +79,11 @@ export type HeadquartersSerializedData = {
  *  -planning attacks -> attackManager
  *  -picking new CC locations.
  */
+
+/** The share of the time our infantry trainers train above which another one is built (FINDINGS §29). */
+const BUSY_TRAINERS = 0.85;
+/** The most infantry trainers that rule builds up to. */
+const MAX_MILITARY_TRAINERS = 5;
 
 export class Headquarters
 {
@@ -128,6 +134,8 @@ export class Headquarters
 	geography: Geography;
 	/** How fast each resource comes in per gatherer, measured (world/gatherEconomy.ts). */
 	gatherEconomy: GatherEconomy = new GatherEconomy();
+	/** How busy our military trainers are, measured (world/production.ts); not saved. */
+	productionLoad: ProductionLoad = new ProductionLoad();
 
 	get territoryMap(): TerritoryMap { return this.geography.territoryMap; }
 	set territoryMap(map: TerritoryMap) { this.geography.territoryMap = map; }
@@ -1902,6 +1910,24 @@ export class Headquarters
 					return;
 				}
 			}
+
+			// One more while those we have are nearly always training and the
+			// stock lies unbooked: the town cannot spend what it gathers (FINDINGS §29)
+			const template = barracksTemplate || rangeTemplate;
+			if (template && this.productionLoad.trainers >= 1 && this.productionLoad.trainers < MAX_MILITARY_TRAINERS &&
+			    this.productionLoad.busy >= BUSY_TRAINERS)
+			{
+				const cost = gameState.getTemplate(gameState.applyCiv(template))?.costSum() ?? Infinity;
+				const unbooked = gameState.ai.queueManager.getAvailableResources(gameState);
+				let free = 0;
+				for (const res of Resources.GetCodes())
+					free += Math.max(0, unbooked[res]);
+				if (free >= 2 * cost)
+				{
+					queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, template, { "militaryBase": true }));
+					return;
+				}
+			}
 		}
 
 		if (this.saveResources)
@@ -2438,6 +2464,7 @@ export class Headquarters
 		this.emergencyManager.update(gameState);
 		this.turnCache = {};
 		this.gatherEconomy.update(gameState);
+		this.productionLoad.update(gameState);
 		this.geography.territoryMap = createTerritoryMap(gameState);
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt())
 			.hasEntities();
