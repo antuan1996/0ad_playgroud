@@ -463,6 +463,7 @@ if [ "$botState" = true ]; then
 	grep -oE 'ATTACKLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/attacks.txt" || true
 	grep -oE 'ECONLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/economy.txt" || true
 	grep -oE 'DEFENSELOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/defense.txt" || true
+	grep -oE 'APIPROBE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/apiprobe.txt" || true
 fi
 
 for log in mainlog.html interestinglog.html; do

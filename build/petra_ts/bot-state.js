@@ -40,6 +40,16 @@
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
  * event: created, progress every 30 s, ended with its dead and killed):
  *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
+ * And a probe of the common API at game minutes 6 and 20 (apiprobe.txt with
+ * match.sh -b, one line per call, probe and player):
+ *   APIPROBE {"t":..,"player":..,"call":"<kind> <method>(<args>)","n":..,"undefined":..,"nan":..,..,"values":[..]}
+ * every read-only method of Entity and Template, called on up to three
+ * entities of each template (own, gaia, enemy) and on our trainable and
+ * buildable templates, with each argument it takes, and per call what came
+ * back: how often undefined, null, NaN (or NaN inside), 0, false, empty, thrown,
+ * and a few distinct values. An accessor that reads what the engine no longer
+ * provides shows as always undefined, 0 or NaN (the order data's change,
+ * FINDINGS §18, would have shown as currentGatherRate always 0).
  * It only reads: the game is the same with it or without (same fingerprint).
  *
  * It is for reading while debugging, nothing checks it (match-checks.ts): it
@@ -57,6 +67,15 @@ const DUMP_EVERY = 120;
 const PROGRESS_EVERY = 60;
 /** seconds between two economy lines: the replay's statistics are sampled as often */
 const ECONOMY_EVERY = 30;
+/** game seconds at which the common API is probed (apiProbe) */
+const API_PROBE_AT = [360, 1200];
+/** entity methods that send a command or write metadata: the probe never calls them */
+const API_PROBE_SKIP = new Set(["constructor", "get", "queryInterface", "hasClass", "hasClasses",
+	"getMetadata", "setMetadata", "deleteMetadata", "deleteAllMetadata",
+	"attack", "attackMove", "barter", "collectTreasure", "construct", "destroy", "flee", "garrison", "gather",
+	"guard", "move", "moveApart", "moveToRange", "removeGuard", "repair", "research", "returnResources",
+	"setRallyPoint", "setStance", "stopAllProduction", "stopMoving", "stopProduction", "tradeRoute", "train",
+	"unload", "unloadAll", "unsetRallyPoint"]);
 
 /** The value of read(), or what went wrong reading it. */
 function section(read)
@@ -90,6 +109,19 @@ export class PetraBotState extends PetraBot
 			this.nextEconomyLine += ECONOMY_EVERY;
 			const economy = section(() => this.economyLine());
 			print("ECONLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, ...economy }) + "\n");
+		}
+		this.nextApiProbe ??= 0;
+		if (this.nextApiProbe < API_PROBE_AT.length && this.elapsedTime >= API_PROBE_AT[this.nextApiProbe])
+		{
+			++this.nextApiProbe;
+			// one line per accessor: the engine's print drops a line of tens of kilobytes
+			const result = section(() => this.apiProbe());
+			const head = { "t": Math.round(this.elapsedTime), "player": PlayerID };
+			if ("error" in result)
+				print("APIPROBE " + JSON.stringify({ ...head, ...result }) + "\n");
+			else
+				for (const key in result.probe)
+					print("APIPROBE " + JSON.stringify({ ...head, "call": key, ...result.probe[key] }) + "\n");
 		}
 		this.nextStateDump ??= DUMP_FIRST;
 		if (this.elapsedTime < this.nextStateDump)
@@ -685,5 +717,123 @@ export class PetraBotState extends PetraBot
 			"unitStates": states,
 			"holders": holders
 		};
+	}
+
+	/** What every read-only common-API accessor returns on a sample of entities and templates (APIPROBE). */
+	apiProbe()
+	{
+		const gameState = this.gameState;
+		const civ = gameState.getPlayerCiv();
+		const resources = Resources.GetCodes();
+		const enemies = gameState.getEnemyEntities().toEntityArray();
+		const target = enemies.find(ent => ent.hasClass("Unit")) ?? enemies[0];
+		const targetStructure = enemies.find(ent => ent.hasClass("Structure"));
+		const researcher = gameState.getOwnEntitiesByClass("CivCentre", true).toEntityArray()[0];
+		const attackTypes = ["Melee", "Ranged", "Capture", "Slaughter"];
+		/** argument lists to call a method with, by the names of its parameters */
+		const argumentsFor = params =>
+		{
+			let lists = [[]];
+			for (const name of params)
+			{
+				const values = {
+					"type": [...attackTypes, ...resources],
+					"gameState": [gameState],
+					"civ": [civ],
+					"researcher": [undefined, researcher],
+					"aClass": ["Unit", "Structure", "Cavalry"],
+					"target": [target, targetStructure],
+					"allowCapture": [true],
+					"productionQueue": [undefined],
+					"againstClass": ["Cavalry", "Structure"],
+					"territory": ["own", "neutral", "enemy"],
+					"player": [PlayerID],
+					"resourceType": resources,
+					"percentToStopAt": [],
+					"iid": []
+				}[name] ?? (name == "type" ? resources : undefined);
+				if (!values)
+					return undefined;
+				lists = lists.flatMap(list => values.map(value => [...list, value]));
+			}
+			return lists;
+		};
+		const label = value => value === undefined ? "undefined" : value === gameState ? "gameState" :
+			typeof value == "object" && value?.id ? "ent:" + (value.hasClass("Structure") ? "structure" : "unit") : String(value);
+		const methods = [];
+		for (let proto = Object.getPrototypeOf(enemies[0] ?? gameState.getOwnEntities().toEntityArray()[0]);
+			proto && proto !== Object.prototype; proto = Object.getPrototypeOf(proto))
+			for (const name of Object.getOwnPropertyNames(proto))
+			{
+				const fn = Object.getOwnPropertyDescriptor(proto, name).value;
+				if (typeof fn != "function" || API_PROBE_SKIP.has(name) || methods.some(m => m.name == name))
+					continue;
+				const params = (/\(([^)]*)\)/.exec(fn.toString())?.[1] ?? "").split(",")
+					.map(p => p.split("=")[0].trim()).filter(p => p);
+				const lists = argumentsFor(params);
+				if (lists)
+					methods.push({ name, isEntityOnly: proto.constructor.name == "Entity", lists });
+			}
+		const hasNaN = value => typeof value == "number" ? isNaN(value) :
+			value && typeof value == "object" && !value.id && Object.values(value).some(hasNaN);
+		const probe = {};
+		const record = (key, call) =>
+		{
+			const stats = probe[key] ??= { "n": 0 };
+			const add = what => { stats[what] = (stats[what] ?? 0) + 1; };
+			++stats.n;
+			let value;
+			try
+			{
+				value = call();
+			}
+			catch(e)
+			{
+				add("threw");
+				stats.error ??= String(e).slice(0, 120);
+				return;
+			}
+			if (value === undefined) add("undefined");
+			else if (value === null) add("null");
+			else if (hasNaN(value)) add("nan");
+			else if (value === 0) add("zero");
+			else if (value === false) add("false");
+			else if (typeof value == "object" && !value.id && !Object.keys(value).length) add("empty");
+			const sample = typeof value == "object" && value?.id ? "ent" : JSON.stringify(value)?.slice(0, 60);
+			const samples = stats.values ??= [];
+			if (samples.length < 4 && !samples.includes(sample))
+				samples.push(sample);
+		};
+		const probeObject = (kind, object, isEntity) =>
+		{
+			for (const method of methods)
+			{
+				if (method.isEntityOnly && !isEntity)
+					continue;
+				for (const args of method.lists)
+					record(kind + " " + method.name + "(" + args.map(label).join(",") + ")", () => object[method.name](...args));
+			}
+		};
+		const seen = {};
+		for (const ent of gameState.entities.values())
+		{
+			const owner = ent.owner();
+			const kind = owner == PlayerID ? "own" : owner == 0 ? "gaia" : gameState.isPlayerEnemy(owner) ? "enemy" : "other";
+			const key = kind + ent.templateName();
+			if ((seen[key] = (seen[key] ?? 0) + 1) > 3)
+				continue;
+			probeObject(kind, ent, true);
+		}
+		const templates = new Set();
+		for (const ent of gameState.getOwnEntities().values())
+			for (const name of [...(ent.trainableEntities(civ) ?? []), ...(ent.buildableEntities(civ) ?? [])])
+				templates.add(name);
+		for (const name of templates)
+		{
+			const template = gameState.getTemplate(name);
+			if (template)
+				probeObject("template", template, false);
+		}
+		return { probe };
 	}
 }

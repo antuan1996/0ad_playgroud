@@ -409,6 +409,72 @@ Running throughout: determinism and save/load checks (5.2), `FINDINGS.md`
 for what each stage finds, and upstream reports for bugs that are the
 original's or the game's (`build/petra_ts/upstream/`).
 
+### 6.1 Stage 5: where it stands, and what is left
+
+**Where it stands** (2026-10-28). Three changes kept, each measured against
+the version before it on fresh seed pairs: the units' orders read as the
+engine hands them over (62.9% against `petra_parity`, `FINDINGS.md` §18), a
+field as soon as the berries bring in less (56.3%, §20), a needed house before
+the training queues (56.0%, §22). Tried and dropped: the gatherer split (§19),
+a rush that drafts only its own size, sheltering an attacked woman, the town
+bell, defenders by distance (§21). Only the field rule is a utility decision;
+the rest of the bot is Petra's threshold rules (fixed numbers each rule
+compares on its own: 600 berries, priorities 250-600, rushes of 16-24 that
+draft all but 8). The kept changes all removed a block on early growth; the
+fights are decided by the soldiers a side has when the raid comes (§21), the
+economy's output.
+
+**The conversion to utility scores**, from the next domain on: one economy
+module that scores the economy's options on one scale (resources gained per
+second for resources spent: the next women or soldiers, a house, a field, a
+dropsite, research), reading a model in `world/` (`gatherEconomy`'s measured
+rates; population against the housing limit; production buildings and their
+idle time; stock against costs), and sets the queues' priorities from the
+scores instead of the config's constants. The house and field fixes become
+two cases of it. Measured against `petra_prev` like any change; then, inside
+it and one at a time, the thresholds of housing, fields, training (batch
+sizes, `targetNumWorkers`, `supportRatio`), dropsites and research. The
+military side (when and how big to attack, how to defend) waits for stage
+6's fight estimator.
+
+**What the measurements point at, not yet acted on:**
+
+| What | Evidence | Lever |
+|---|---|---|
+| housing still blocks | 32% of games at the limit at minute 3 after the fix (56% before) | the first houses earlier, not only funded first |
+| hunting | hunters gather 20-23% of the time, trips of 160-180, for 1.2-1.5 food a second | a dropsite by the hunt, or no far hunting |
+| berries' walk | ~30% of food gatherers at minutes 4-10 have no supply, mostly carrying back from bushes picked clean | a farmstead by the bushes, fields sooner |
+| wood's walk | woodcutters gather 64% of the time, trips of 26 | storehouses by the trips they save (+5-10% wood) |
+| stone and metal | gathering 70-75%, trips of about 45 | the same, smaller |
+| rush timing | first attacks at minutes 8-10 win 45%, at 12-16 74% (a correlation) | the timing, tested (its size was: 40.6%) |
+| soldiers away when raided | a losing side's defense army: a median 2 defenders against 8 foes | where they are (dead or away), then keeping some home |
+| HugeAttack churn | 224 plans made and dropped within 30 s, no target to start on | probably harmless; reserves and releases resources |
+
+**Never measured:** idle production (do the civic centre and barracks train
+all the time?), phasing up (when, at what cost), research (which techs, when:
+gather-rate techs compound as fields do), army composition, and other engine
+interfaces the port reads: `unitAIOrderData()` changed shape after the port
+and nothing noticed (§18), the change worth the most of all.
+
+**The order:**
+1. An audit of the engine interface: the common API's and the engine's
+   changes since the port against what the port reads. Cheap; the last such
+   fault was worth more than everything since. Done (`FINDINGS.md` §23):
+   nothing of the kind left; the probe (`apiprobe.txt`) reruns it.
+2. A checkpoint against `petra_parity` and `petra_fixed` (150 fresh pairs
+   each): the stage's exit criteria are the sum, not single changes.
+3. Idle production and the worker/soldier targets, as the first part of the
+   economy scoring module.
+4. Dropsites, hunting and the housing that still blocks, in the same module:
+   all come down to how far gatherers walk, scored by the trips they save.
+5. Research timing (the gather-rate techs).
+6. Rush timing, tested directly; then the fights, with stage 6's estimator.
+
+Each step as before: measured first, tuned on one seed pool, decided on 150
+fresh pairs against `petra_prev`; the early proxy tells a change's direction,
+not its worth; `random/mainland_mirror` checks that a gain does not depend on
+unequal starts.
+
 ## 7. Open questions
 
 - Answered in stage 3: the AI context offers no clock; the engine times the

@@ -114,7 +114,10 @@ supply to dropsite, and in the first line each base's supply lists, the
 start's layout; `node build/petra_ts/economy-log.ts <batch or match dir>` sets
 it beside what the statistics say was really gathered, per band of minutes,
 won against lost sides, and the seed pairs won from one slot and lost from the
-other), the replay's
+other), `apiprobe.txt` with `-b` (at game minutes 6 and 20, every read-only
+common-API accessor called on a sample of entities and templates, with how
+often it came back undefined, NaN, 0 or threw: the engine-interface audit,
+`FINDINGS.md` §23; rerun after an engine update), the replay's
 `metadata.json` (each
 statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
 (stdout/stderr: script errors and the end-of-game statistics) and the engine's

@@ -956,3 +956,57 @@ Branch `stage5`, against `petra_prev` at the field rule (`0fc9b921c8`).
   on it (its value may lie in the poorer of two unequal starts, or partly in
   pool 18's luck; 53.6% over the 496 mainland games). Mainland stays the
   pool that decides; the mirrored map is a check on fair starts.
+
+## 23. Stage 5: an audit of the engine interface (2026-10-28)
+
+The order data's change of shape (§18) was worth more than every tuned rule
+since, and nothing had flagged it: a common-API accessor that reads what the
+engine no longer provides returns undefined, NaN or 0 without an error. So
+the whole interface was checked against the engine as it is now.
+
+- **Static checks**, all clean: every template path the common API and the
+  port read, against every template (`_string` leaves aside); the 56 class
+  names the port filters by, against the templates' `Classes` and
+  `VisibleClasses`; the 21 AI events and the fields the port reads off them;
+  every `_entity` field the common API reads, against what `AIProxy.js`
+  sends; every `playerData` field, against `GuiInterface`'s player state; the
+  34 command types the bot sends (`helpers/Commands.js` has each), and the
+  fields each carries in a real command log against those its handler reads;
+  the hard-coded template names for each of the 15 civilisations and the
+  hard-coded technology names; the modification paths the research manager
+  matches (each is still in use); the commits since mid-2025 to the
+  components the AI reads (gatherer, supply, trainer, researcher, garrisons,
+  dropsites, player, technologies, commands). The two renames among them,
+  gendered civilians (`support_civilian`) and Persians to Achaemenids, appear
+  in no port code; some tests keep `support_female_citizen` and `pers` as
+  fake names, which is harmless.
+- **A runtime probe** (`APIPROBE`, `apiprobe.txt` with `match.sh -b`,
+  `build/petra_ts/bot-state.js`): at game minutes 6 and 20, every read-only
+  method of `Entity` and `Template`, with each argument it takes, on up to
+  three entities of each template (own, gaia, enemy) and on our trainable and
+  buildable templates, counting what came back (undefined, null, NaN, 0,
+  false, empty, thrown). Most NaN and undefined values are an entity without
+  the component (a tree's `walkSpeed`, a house's `attackTypes`). The game is
+  the same with the probe (fingerprint c52844322fe0c989 with and without it).
+  One line per call: the engine's `print` drops a line of 59 KB whole.
+- **`obstructionRadius()` is NaN for a unit**: it reads
+  `Obstruction/Unit/@radius`, and units' obstructions are now `<Unit/>`, their
+  size the clearance of their passability class. The port calls it on
+  structures, and once on a relic's holder (`victoryManager.ts`, Capture the
+  Relic), which is normally a structure. Minor, not fixed.
+- **`unitAIOrderData()` throws for an entity without UnitAI** (a structure,
+  a tree): since 4b516b336e it queries `IID_UnitAI` directly. Every port call
+  is behind a unit state or class, and no game has logged it. It returns the
+  simulation's own order objects (`GetOrders` is a shallow copy of the queue):
+  the port must never write to them; it only reads them. The proxy's cached
+  `unitAIOrderData` (`GetOrderData`) is no longer read.
+- **Not a fault, a lead for the research step**: two technologies change
+  `ResourceGatherer/BaseSpeed` and two `ResourceGatherer/Rates/food.meat`,
+  paths the research manager's early checks never match, so they wait for
+  the generic research later.
+- `currentGatherRate` is still 0 for every gatherer (§18; the port reads
+  `gatherRate`, `adapter/orders.ts`).
+
+Nothing else of the order data's kind: the interface the port reads is the
+one the engine gives. Run the probe again after an engine or common-API
+update.
