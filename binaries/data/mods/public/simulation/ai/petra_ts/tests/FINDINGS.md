@@ -1193,3 +1193,13 @@ Decided on fresh pairs (pool seed 36): 150 pairs gave 55.4% (CI
 SPRT 50% against 55% undecided, LLR 2.3), 10% more gathered (102k against
 92k). Kept, on the interval as §22: a gain, smaller than the 55% the SPRT
 asks about.
+
+Tried next and dropped: **capacity techs scored** by the trips they save. A
+gatherer's cycle is its load over its gathering rate `r` and a trip of `w`
+seconds, `c / (c/r + w)`, the trip from the share gathering (`g` of `n`:
+`w = (c/r)(n/g - 1)`); a bigger load makes the same trip less often. The
+fields walk little (92% of the time gathering), so it counts mostly the
+woodcutters. The first capacity tech came at minute 5.5 (10.9), and nothing
+else moved: 53.0% on the tuning pool, at minute 8 +50 ± 103 gathered, at 12
+-155 ± 608, -1.6 ± 1.0 units. Its 400 resources at minute 5 buy about what
+they cost.
