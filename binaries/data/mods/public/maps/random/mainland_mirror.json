@@ -1,0 +1,14 @@
+{
+	"settings" : {
+		"Name" : "Mainland (mirrored)",
+		"Script" : "mainland_mirror.js",
+		"Description" : "Mainland for two players of the same civilisation, with one half of the map turned onto the other: both players start with the same land, the same forests, berries, hunt and mines. Made to measure AIs against each other without the luck of the start.",
+		"Preview" : "mainland.png",
+		"Keywords": [],
+		"SupportedBiomes": "generic/",
+		"CircularMap" : true,
+		"PlayerPlacements": [
+			"circle"
+		]
+	}
+}
