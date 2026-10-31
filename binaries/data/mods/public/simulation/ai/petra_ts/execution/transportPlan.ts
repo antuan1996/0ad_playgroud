@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
-import { transportPlanId, worldPos } from "../adapter/brands.ts";
+import { seaRegion, transportPlanId, worldPos } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
@@ -49,29 +49,66 @@ export interface SerializedTransportPlan {
 export class TransportPlan
 {
 	ID: TransportPlanId;
-	declare boardingPos: Record<string, CommonPosition | undefined>;
+	boardingPos: Record<string, CommonPosition | undefined>;
 	declare boardingRange: number;
 	declare canceled: boolean | undefined;
 	debug: number;
 	endIndex: AccessIndex;
 	endPos: CommonPosition;
-	declare failed: boolean;
 	flotilla: boolean;
-	declare nTry: Record<number, number>;
+	nTry: Record<number, number>;
 	needSplit: CommonEntity[];
-	declare needTransportShips: boolean;
+	needTransportShips: boolean;
 	declare recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
-	declare sea: SeaIndex;
+	sea: SeaIndex;
 	declare ships: CommonEntityCollection;
 	startIndex: AccessIndex;
-	declare state: string;
+	state: string;
 	declare transportShips: CommonEntityCollection;
 	declare units: CommonEntityCollection;
 	declare unloaded: EntityId[];
 
-	constructor(gameState: CommonGameState, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex, endPos: CommonPosition, ship?: CommonEntity)
+	/**
+	 * The sea a transport crosses: a garrisoned ship's own (from the sea,
+	 * index 1), or the sea between the two lands; undefined when there is
+	 * none (land-sea-land only, for the moment).
+	 */
+	static findSea(gameState: CommonGameState, startIndex: AccessIndex, endIndex: AccessIndex, ship?: CommonEntity): SeaIndex | undefined
 	{
-		this.ID = transportPlanId(gameState.ai.uniqueIDs.transports++);
+		if (startIndex === 1)
+			// our ships always have their sea set (see NavalManager init and checkEvents)
+			return ship && requireMetadata(ship, "sea");
+		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, startIndex, endIndex);
+		if (!sea)
+		{
+			debugWarn(gameState.ai.Config, 1, () => "transport plan with bad path: startIndex " + startIndex + " endIndex " +
+				endIndex);
+			return undefined;
+		}
+		return sea;
+	}
+
+	/** A new transport, or undefined when there is no sea to cross (findSea); the plan's ID is used up either way. */
+	static create(gameState: CommonGameState, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
+		endPos: CommonPosition, ship?: CommonEntity): TransportPlan | undefined
+	{
+		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
+		const sea = TransportPlan.findSea(gameState, startIndex, endIndex, ship);
+		return sea === undefined ? undefined : new TransportPlan(gameState, id, units, startIndex, endIndex, endPos, sea, ship);
+	}
+
+	/** A saved transport, before its Deserialize: made as a new one, the save's ID and sea replacing what it found. */
+	static restore(gameState: CommonGameState, startIndex: AccessIndex, endIndex: AccessIndex, endPos: CommonPosition): TransportPlan
+	{
+		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
+		const sea = TransportPlan.findSea(gameState, startIndex, endIndex);
+		return new TransportPlan(gameState, id, [], startIndex, endIndex, endPos, sea ?? seaRegion(0));
+	}
+
+	constructor(gameState: CommonGameState, id: TransportPlanId, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
+		endPos: CommonPosition, sea: SeaIndex, ship?: CommonEntity)
+	{
+		this.ID = id;
 		this.debug = gameState.ai.Config.debug;
 		this.flotilla = false;   // when false, only one ship per transport ... not yet tested when true
 		this.needSplit = [];
@@ -79,34 +116,14 @@ export class TransportPlan
 		this.endPos = endPos;
 		this.endIndex = endIndex;
 		this.startIndex = startIndex;
-		// TODO only cases with land-sea-land are allowed for the moment
-		// we could also have land-sea-land-sea-land
-		if (startIndex === 1)
+		this.sea = sea;
+		// special transport from an already garrisoned ship
+		if (startIndex === 1 && ship)
 		{
-			// special transport from already garrisoned ship
-			if (!ship)
-			{
-				this.failed = true;
-				return;
-			}
-			// our ships always have their sea set (see NavalManager init and checkEvents)
-			this.sea = requireMetadata(ship, "sea");
 			ship.setMetadata(PlayerID, "transporter", this.ID);
 			ship.setStance("none");
 			for (const ent of units)
 				ent.setMetadata(PlayerID, "onBoard", "onBoard");
-		}
-		else
-		{
-			const sea = hqOf(gameState).getSeaBetweenIndices(gameState, startIndex, endIndex);
-			if (!sea)
-			{
-				this.failed = true;
-				debugWarn(this, 1, () => "transport plan with bad path: startIndex " + startIndex + " endIndex " +
-					endIndex);
-				return;
-			}
-			this.sea = sea;
 		}
 
 		for (const ent of units)
@@ -817,6 +834,5 @@ export class TransportPlan
 		this.unloaded = data.unloaded;
 		this.recovered = data.recovered;
 
-		this.failed = false;
 	}
 }

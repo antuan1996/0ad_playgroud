@@ -411,8 +411,8 @@ export class NavalManager
 			return true;
 		}
 
-		const plan = new TransportPlan(gameState, [ent], startIndex, endIndex, endPos);
-		if (plan.failed)
+		const plan = TransportPlan.create(gameState, [ent], startIndex, endIndex, endPos);
+		if (!plan)
 		{
 			debugWarn(this.Config, 1, () => ">>>> transport plan aborted <<<<");
 			return false;
@@ -426,8 +426,8 @@ export class NavalManager
 	splitTransport(gameState: CommonGameState, plan: TransportPlan): boolean
 	{
 		debugWarn(this.Config, 1, () => ">>>> split of transport plan started <<<<");
-		const newplan = new TransportPlan(gameState, [], plan.startIndex, plan.endIndex, plan.endPos);
-		if (newplan.failed)
+		const newplan = TransportPlan.create(gameState, [], plan.startIndex, plan.endIndex, plan.endPos);
+		if (!newplan)
 		{
 			debugWarn(this.Config, 1, () => ">>>> split of transport plan aborted <<<<");
 			return false;
@@ -468,8 +468,8 @@ export class NavalManager
 				continue;
 			const units = ship.garrisoned().map((entId: EntityId): CommonEntity => requireValue(gameState.getEntityById(entId)));
 			// TODO check that the garrisoned units have not another purpose
-			const plan = new TransportPlan(gameState, units, fromAccess, toAccess, toPos, ship);
-			if (plan.failed)
+			const plan = TransportPlan.create(gameState, units, fromAccess, toAccess, toPos, ship);
+			if (!plan)
 				continue;
 			plan.init(gameState);
 			this.transportPlans.push(plan);
@@ -944,7 +944,7 @@ export class NavalManager
 		for (const i in data.transports)
 		{
 			const dataPlan = data.transports[i];
-			const plan = new TransportPlan(gameState, [], dataPlan.startIndex, dataPlan.endIndex, dataPlan.endPos);
+			const plan = TransportPlan.restore(gameState, dataPlan.startIndex, dataPlan.endIndex, dataPlan.endPos);
 			plan.Deserialize(dataPlan);
 			plan.init(gameState);
 			this.transportPlans.push(plan);
