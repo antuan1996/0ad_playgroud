@@ -1257,3 +1257,32 @@ Both dropped. An earlier civic centre is 850 resources and eight minutes
 of building away from paying anything back; the army a fifth barracks can
 train is as much as the town feeds. The stock after minute 15 is the
 surplus of a won economy, not a block.
+
+## 31. Stage 5: the houses, fields and dropsites as decision modules (2026-10-31)
+
+The overhaul's part (PLAN.md §6.1): Petra's economy rules lifted out of the
+managers into pure functions of `decision/` over a census, each held to the
+smoke test (the 24 games identical):
+
+- `world/census.ts` (population, limit, cap, the room the foundations will
+  add) and `decision/housing.ts`: when to plan a house, when a planned one
+  may be paid (the building plan asks `ExecutionHQ.houseNeeded`), the house
+  queue's priority when slots run short.
+- `decision/fields.ts`: the first field, one more, enough, or full (where a
+  base may build a corral), over the base's field census.
+- `decision/dropsites.ts`: from a base's tally of its gatherers of a
+  resource, wait, fine or a dropsite nearer, and how good a place must be.
+
+Measured after the lift (current code, pool 18, 50 pairs with the state
+dump):
+
+- **Housing** blocks little now: the trainers wait for room 1-7% of the time,
+  the town at its limit in 0-5% of the samples.
+- **The wood gatherers** gather 66% of minutes 2-6 and 42% of minutes 15-20;
+  the rest is mostly walking to a tree (24% rising to 38%), little carrying
+  back (10-13%). Petra's dropsite rule counts only the carrying back (15% of
+  the tally), so it seldom asks for a storehouse. Counting the walk to the
+  supply too, with the bar at 30%: 45.0% on the tuning pool, at minute 8
+  -352 ± 178 gathered, at 16 -3171 ± 1714, and the walk unchanged (39% at
+  minutes 15-20): it is the walk from tree to tree, which a storehouse does
+  not shorten, and the storehouses cost. Dropped.

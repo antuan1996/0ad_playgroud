@@ -503,6 +503,10 @@ and nothing noticed (§18), the change worth the most of all.
    (`world/production.ts`): 66.4% (CI 60.9-71.6%), kept.
    Tried and dropped (§30): an earlier civic centre (43.4%), eight barracks
    (49.0%).
+   The house, field and dropsite rules lifted into `decision/housing.ts`,
+   `fields.ts`, `dropsites.ts` over `world/census.ts` (§31, the smoke games
+   identical); measured after: housing blocks 1-7%, and the woodcutters'
+   walk is from tree to tree (a dropsite rule counting it: 45.0%, dropped).
 6. Rush timing, tested directly (done, §27: an earlier rush loses, none
    gains nothing); then the fights, with stage 6's estimator.
 

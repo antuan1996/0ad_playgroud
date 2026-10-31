@@ -255,10 +255,10 @@ decision with the game's reason ("last player alive", "wonder victory",
   unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
   AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
   border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
-  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `baseResources.ts`,
+  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `census.ts`, our population against its room; `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
   read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
-  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
+  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), `housing.ts`, `fields.ts` and `dropsites.ts`, Petra's house, field and dropsite rules as pure functions over a census (§31), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
   the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
   ended with the tag `petra-ts-parity`.
 - `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
