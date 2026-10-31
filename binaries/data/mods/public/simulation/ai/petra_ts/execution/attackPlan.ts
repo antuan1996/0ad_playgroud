@@ -119,31 +119,35 @@ export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackTyp
  * When @c deserialized is true, do not call any random function inside constructor
  * as that would cause oos.
  */
+/** What a new plan is asked for: a target, a unique target, a rush's size. */
+export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number };
+/** Where a plan gathers its army, and the sea to cross to its target (0: none). */
+export type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0 };
+
 export class AttackPlan
 {
 	Config: Config;
-	declare buildOrders: AttackBuildOrder[];
-	declare canBuildUnits: boolean;
-	failed: boolean | undefined;
+	buildOrders: AttackBuildOrder[];
+	canBuildUnits: boolean;
 	forced: boolean;
 	declare gameState: CommonGameState;
-	declare isBlocked: boolean;
-	declare lastPosition: CommonPosition;
-	declare maxCompletingTime: GameSeconds;
+	isBlocked: boolean;
+	lastPosition: CommonPosition;
+	maxCompletingTime: GameSeconds;
 	name: AttackPlanId;
-	declare neededShips: number;
-	declare overseas: SeaIndex | 0;
+	neededShips: number;
+	overseas: SeaIndex | 0;
 	declare path: CommonPosition[];
-	declare paused: boolean;
+	paused: boolean;
 	position: CommonPosition | undefined;
-	declare position5TurnsAgo: CommonPosition;
+	position5TurnsAgo: CommonPosition;
 	declare queue: Queue;
 	declare queueChamp: Queue;
 	declare queueSiege: Queue;
-	declare rallyPoint: CommonPosition;
+	rallyPoint: CommonPosition;
 	declare requested: boolean | undefined;
 	declare sameLand: AccessIndex | false;
-	declare siegeState: number;
+	siegeState: number;
 	declare startingAttack: boolean;
 	/** Changed only by changeState, and restored by Deserialize. */
 	state: AttackPlanState;
@@ -155,31 +159,16 @@ export class AttackPlan
 	declare unit: Record<string, CommonEntityCollection>;
 	declare unitCollUpdateArray: EntityId[] | undefined;
 	declare unitCollection: CommonEntityCollection;
-	declare unitStat: Record<string, AttackUnitStat>;
+	unitStat: Record<string, AttackUnitStat>;
 
-	constructor(gameState: CommonGameState, config: Config, uniqueID: number, type: AttackType = AttackPlan.TYPE_DEFAULT, data: { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number } | undefined, deserialized: boolean)
+	/**
+	 * Where a plan gathers its army (a base's anchor, or any unit of ours) and
+	 * the sea between it and the target when that lies overseas; undefined when
+	 * no plan can be made: nowhere to gather, or a target out of reach.
+	 */
+	static findStart(gameState: CommonGameState, type: AttackType, name: AttackPlanId,
+		target: CommonEntity | undefined): AttackStart | undefined
 	{
-		this.Config = config;
-		this.name = attackPlanId(uniqueID);
-		this.type = type;
-		this.state = AttackPlan.STATE_UNEXECUTED;
-		this.forced = false;  // true when this attacked has been forced to help an ally
-
-		if (data && data.target)
-		{
-			this.target = data.target;
-			this.targetPos = this.target.position();
-			this.targetPlayer = this.target.owner();
-		}
-		else
-		{
-			this.target = undefined;
-			this.targetPos = undefined;
-			this.targetPlayer = undefined;
-		}
-
-		this.uniqueTargetId = data && data.uniqueTargetId || undefined;
-
 		// get a starting rallyPoint ... will be improved later
 		let rallyPoint;
 		let rallyAccess;
@@ -219,17 +208,15 @@ export class AttackPlan
 			}
 			if (!rallyPoint)
 			{
-				this.failed = true;
-				return;
+				return undefined;
 			}
 		}
-		this.rallyPoint = rallyPoint;
-		this.overseas = 0;
+		let start: AttackStart = { rallyPoint, "overseas": 0 };
 		if (hqOf(gameState).geography.navalMap)
 		{
 			for (const structure of gameState.getEnemyStructures().values())
 			{
-				if (this.target && structure.id() !== this.target.id())
+				if (target && structure.id() !== target.id())
 					continue;
 				if (!structure.position())
 					continue;
@@ -238,31 +225,78 @@ export class AttackPlan
 					continue;
 				if (access in allAccesses)
 				{
-					this.overseas = 0;
-					this.rallyPoint = allAccesses[access];
+					start = { "rallyPoint": allAccesses[access], "overseas": 0 };
 					break;
 				}
-				else if (!this.overseas)
+				else if (!start.overseas)
 				{
 					if (rallyAccess === undefined)
 						continue;
 					const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, access);
 					if (!sea)
 					{
-						if (this.target)
+						if (target)
 						{
-							aiWarn("Petra: " + this.type + " " + this.name + " has an inaccessible target " +
-								    this.target.templateName() + " indices " + rallyAccess + " " + access);
-							this.failed = true;
-							return;
+							aiWarn("Petra: " + type + " " + name + " has an inaccessible target " +
+								    target.templateName() + " indices " + rallyAccess + " " + access);
+							return undefined;
 						}
 						continue;
 					}
-					this.overseas = sea;
+					start = { "rallyPoint": start.rallyPoint, "overseas": sea };
 					hqOf(gameState).navalManager.setMinimalTransportShips(gameState, sea, 1);
 				}
 			}
 		}
+		return start;
+	}
+
+	/** A new plan, or undefined when it has nowhere to start (findStart). */
+	static create(gameState: CommonGameState, config: Config, uniqueID: number,
+		type: AttackType = AttackPlan.TYPE_DEFAULT, data?: AttackPlanData): AttackPlan | undefined
+	{
+		const start = AttackPlan.findStart(gameState, type, attackPlanId(uniqueID), data?.target);
+		return start && new AttackPlan(gameState, config, uniqueID, type, data, false, start);
+	}
+
+	/**
+	 * A saved plan, before its Deserialize: the search runs as for a new plan
+	 * (it may ask the naval manager for a transport), and the save's start
+	 * replaces what it found.
+	 */
+	static restore(gameState: CommonGameState, config: Config, uniqueID: number): AttackPlan
+	{
+		const start = AttackPlan.findStart(gameState, AttackPlan.TYPE_DEFAULT, attackPlanId(uniqueID), undefined);
+		return new AttackPlan(gameState, config, uniqueID, AttackPlan.TYPE_DEFAULT, undefined, true,
+			start ?? { "rallyPoint": worldPos(0, 0), "overseas": 0 });
+	}
+
+	constructor(gameState: CommonGameState, config: Config, uniqueID: number, type: AttackType,
+		data: AttackPlanData | undefined, deserialized: boolean, start: AttackStart)
+	{
+		this.Config = config;
+		this.name = attackPlanId(uniqueID);
+		this.type = type;
+		this.state = AttackPlan.STATE_UNEXECUTED;
+		this.forced = false;  // true when this attacked has been forced to help an ally
+
+		if (data && data.target)
+		{
+			this.target = data.target;
+			this.targetPos = this.target.position();
+			this.targetPlayer = this.target.owner();
+		}
+		else
+		{
+			this.target = undefined;
+			this.targetPos = undefined;
+			this.targetPlayer = undefined;
+		}
+
+		this.uniqueTargetId = data && data.uniqueTargetId || undefined;
+
+		this.rallyPoint = start.rallyPoint;
+		this.overseas = start.overseas;
 		this.paused = false;
 		this.maxCompletingTime = seconds(0);
 
@@ -2575,6 +2609,5 @@ export class AttackPlan
 		const targetId = data.properties.target;
 		this.target = typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined;
 
-		this.failed = undefined;
 	}
 }

@@ -377,9 +377,9 @@ export class AttackManager
 			{
 				// we have a barracks and we want to rush, rush.
 				const data = { "targetSize": this.rushSize[this.rushNumber] };
-				const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber,
-					AttackPlan.TYPE_RUSH, data, false);
-				if (!attackPlan.failed)
+				const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber,
+					AttackPlan.TYPE_RUSH, data);
+				if (attackPlan)
 				{
 					debugWarn(this.Config, 1, () => "Military Manager: Rushing plan " + this.totalNumber +
 						" with maxRushes " + this.maxRushes);
@@ -406,11 +406,10 @@ export class AttackManager
 				const type = this.attackNumber < 2 ||
 					this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length > 0 ?
 					AttackPlan.TYPE_DEFAULT : AttackPlan.TYPE_HUGE_ATTACK;
-				const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber, type,
-					undefined, false);
+				const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, type);
 				// the original wrote a write-only "attackPlansEncounteredWater" hack flag
 				// on failure; nothing ever read it, so the port drops the dead write
-				if (!attackPlan.failed)
+				if (attackPlan)
 				{
 					debugWarn(this.Config, 1, () => "Military Manager: Creating the plan " + type + "  " +
 						this.totalNumber);
@@ -701,9 +700,9 @@ export class AttackManager
 	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlan | undefined
 	{
 		const data = { "target": ent };
-		const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber,
-			AttackPlan.TYPE_RAID, data, false);
-		if (attackPlan.failed)
+		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber,
+			AttackPlan.TYPE_RAID, data);
+		if (!attackPlan)
 			return undefined;
 		debugWarn(this.Config, 1, () => "Military Manager: Raiding plan " + this.totalNumber);
 		this.raidNumber++;
@@ -747,9 +746,8 @@ export class AttackManager
 		const attackData = data.uniqueTarget ? { "uniqueTargetId": target.id() } : undefined;
 		const pos = target.position();
 		const attackType = AttackPlan.TYPE_DEFAULT;
-		const attackPlan = new AttackPlan(gameState, this.Config, this.totalNumber, attackType, attackData,
-			false);
-		if (attackPlan.failed)
+		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, attackType, attackData);
+		if (!attackPlan)
 			return false;
 		this.totalNumber++;
 		attackPlan.init(gameState);
@@ -837,8 +835,7 @@ export class AttackManager
 
 		const restore = (dataAttack: SerializedAttackPlan): AttackPlan =>
 		{
-			const attack = new AttackPlan(gameState, this.Config, dataAttack.properties.name,
-				undefined, undefined, true);
+			const attack = AttackPlan.restore(gameState, this.Config, dataAttack.properties.name);
 			attack.Deserialize(gameState, dataAttack);
 			attack.init(gameState);
 			return attack;
