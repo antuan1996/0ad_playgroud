@@ -25,22 +25,17 @@ export type BuildingPosition = {
  * We'll try to fing a good position if non has been provided
  */
 
-export class ConstructionPlan extends QueuePlan<CommonTemplate>
+export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 {
-	declare category: "building";
-	declare goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
-	declare position: CommonPosition | 0;
-	declare queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
+	position: CommonPosition | 0;
 
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		position?: CommonPosition | 0)
 	{
 		const name = gameState.applyCiv(type);
-		super(gameState, name, gameState.getTemplate(name), metadata);
+		super(gameState, name, gameState.getTemplate(name), "building", metadata);
 
 		this.position = position ? position : 0;
-
-		this.category = "building";
 	}
 
 	canStart(gameState: CommonGameState): boolean
@@ -974,7 +969,6 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate>
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<ConstructionPlan["Serialize"]>): void
 	{
-		this.category = data.category;
 		this.type = data.type;
 		this.ID = data.ID;
 		this.metadata = data.metadata;

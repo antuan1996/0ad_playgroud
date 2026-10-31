@@ -4,17 +4,16 @@ import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 import { hqOf } from "./hq.ts";
 
-export class TrainingPlan extends QueuePlan<CommonTemplate>
+export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 {
-	declare category: "unit";
-	declare maxMerge: number;
-	declare trainers: CommonEntity[] | undefined;
+	maxMerge: number;
+	trainers: CommonEntity[] | undefined;
 
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		number: number = 1, maxMerge: number = 5)
 	{
 		const name = gameState.applyCiv(type);
-		super(gameState, name, gameState.getTemplate(name), metadata);
+		super(gameState, name, gameState.getTemplate(name), "unit", metadata);
 
 		// Refine the estimated cost and add pop cost
 		const template = this.template;
@@ -22,7 +21,6 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 		const trainer = trainers ? trainers[0] : undefined;
 		this.cost = new ResourcesManager(template.cost(trainer), Number(template.get("Cost/Population")));
 
-		this.category = "unit";
 		this.number = number;
 		this.maxMerge = maxMerge;
 	}
@@ -185,7 +183,6 @@ export class TrainingPlan extends QueuePlan<CommonTemplate>
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<TrainingPlan["Serialize"]>): void
 	{
-		this.category = data.category;
 		this.type = data.type;
 		this.ID = data.ID;
 		this.metadata = data.metadata;

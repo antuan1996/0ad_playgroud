@@ -44,20 +44,23 @@ export type SerializedQueuePlan<T extends PlanTemplate> = {
  * Common functions and variables to all queue plans.
  */
 
-export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate>
+export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends string = string>
 {
 	ID: number;
-	category: string;
+	/** the kind of plan, given by each kind's constructor */
+	category: C;
 	cost: ResourcesManager;
 	metadata: PlanMetadata | undefined;
 	number: number;
 	template: T;
 	type: PlanName<T>;
-	declare queueToReset?: PetraRuntime.ConfiguredQueueName;
-	declare goRequirement?: TechnologyRequirements | "houseNeeded";
+	/** the queue whose priority a start resets to the configured one */
+	queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
+	/** what must hold before the queue manager pays the plan */
+	goRequirement: TechnologyRequirements | "houseNeeded" | undefined;
 
 	/** `template` is what the game's lookup of `type` returned */
-	constructor(gameState: CommonGameState, type: PlanName<T>, template: T | null, metadata?: PlanMetadata)
+	constructor(gameState: CommonGameState, type: PlanName<T>, template: T | null, category: C, metadata?: PlanMetadata)
 	{
 		this.type = type;
 		this.metadata = metadata;
@@ -68,7 +71,7 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate>
 		this.ID = gameState.ai.uniqueIDs.plans++;
 		this.cost = new ResourcesManager(this.template.cost());
 		this.number = 1;
-		this.category = "";
+		this.category = category;
 	}
 
 	/** what a save keeps of the plan: these fields, and each kind's own */

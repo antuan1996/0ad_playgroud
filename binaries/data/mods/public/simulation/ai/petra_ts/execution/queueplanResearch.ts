@@ -2,23 +2,20 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { hqOf } from "./hq.ts";
 
-export class ResearchPlan extends QueuePlan<CommonTechnology>
+export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 {
-	declare category: "technology";
-	declare queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
-	declare researchers: CommonEntity[] | undefined;
-	declare rush: boolean;
+	researchers: CommonEntity[] | undefined;
+	rush: boolean;
 
 	constructor(gameState: CommonGameState, type: TechName, rush: boolean = false)
 	{
-		super(gameState, type, gameState.getTemplate(type), {});
+		super(gameState, type, gameState.getTemplate(type), "technology", {});
 
 		// Refine the estimated cost
 		const researchers = this.getBestResearchers(gameState, true);
 		if (researchers)
 			this.cost = new ResourcesManager(this.template.cost(researchers[0]));
 
-		this.category = "technology";
 		this.rush = rush;
 	}
 
@@ -113,7 +110,6 @@ export class ResearchPlan extends QueuePlan<CommonTechnology>
 
 	Deserialize(gameState: CommonGameState, data: ReturnType<ResearchPlan["Serialize"]>): void
 	{
-		this.category = data.category;
 		this.type = data.type;
 		this.ID = data.ID;
 		this.metadata = data.metadata;
