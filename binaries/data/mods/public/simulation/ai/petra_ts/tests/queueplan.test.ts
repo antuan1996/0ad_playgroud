@@ -28,7 +28,8 @@ class BarePlan extends QueuePlan<CommonTemplate>
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata)
 	{
 		const name = gameState.applyCiv(type);
-		super(gameState, name, gameState.getTemplate(name), metadata);
+		// the base plan is no kind of plan: an empty category
+		super(gameState, name, gameState.getTemplate(name), "", metadata);
 	}
 
 	Serialize(): SerializedQueuePlan<CommonTemplate>
