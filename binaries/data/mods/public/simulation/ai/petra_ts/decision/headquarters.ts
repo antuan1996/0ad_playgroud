@@ -34,6 +34,7 @@ import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { ProductionLoad } from "../world/production.ts";
 import { censusOf } from "../world/census.ts";
 import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
+import { type TrainableRequirement, batchSize, soldierRequirements, supportAlpha, supportShare, trainingStopped } from "./workforce.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -49,7 +50,7 @@ type HeadquartersTurnCache = {
 	accountedWorkers?: number;
 };
 type HeadquartersQueues = PetraRuntime.QueueCollection;
-type HeadquartersTrainableRequirement = [string, number, ...string[]];
+type HeadquartersTrainableRequirement = TrainableRequirement;
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {
 	/** the fields a save keeps (the regions and naval flag through the geography's accessors) */
@@ -587,7 +588,7 @@ export class Headquarters
 		// and adapt the batch size of the first and second queued workers to the present population
 		// to ease a possible recovery if our population was drastically reduced by an attack
 		// (need to go up to second queued as it is accounted in queueManager)
-		const size = numberOfWorkers < 12 ? 1 : Math.min(5, Math.ceil(numberOfWorkers / 10));
+		const size = batchSize(numberOfWorkers);
 		if (queues.villager.plans[0])
 		{
 			queues.villager.plans[0].number = Math.min(queues.villager.plans[0].number, size);
@@ -603,47 +604,33 @@ export class Headquarters
 
 		const numberOfQueuedSupports = queues.villager.countQueuedUnits();
 		const numberOfQueuedSoldiers = queues.citizenSoldier.countQueuedUnits();
-		const numberQueued = numberOfQueuedSupports + numberOfQueuedSoldiers;
-		const numberTotal = numberOfWorkers + numberQueued;
+		const numberTotal = numberOfWorkers + numberOfQueuedSupports + numberOfQueuedSoldiers;
 
-		if (this.saveResources && numberTotal > this.Config.Economy.popPhase2 + 10)
-			return;
 		// getPhaseName(2) is optional: preserve original semantics (isResearching(undefined) === false)
 		const phaseName2 = gameState.getPhaseName(2);
-		if (numberTotal > this.targetNumWorkers || (numberTotal >= this.Config.Economy.popPhase2 &&
-			this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2))))
-			return;
-		if (numberQueued > 50 || (numberOfQueuedSupports > 20 && numberOfQueuedSoldiers > 20) || numberInTraining > 15)
+		if (trainingStopped({
+			"workers": numberOfWorkers,
+			"queuedSupports": numberOfQueuedSupports,
+			"queuedSoldiers": numberOfQueuedSoldiers,
+			"inTraining": numberInTraining,
+			"target": this.targetNumWorkers,
+			"popPhase2": this.Config.Economy.popPhase2,
+			"waitingForTown": this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)),
+			"saving": !!this.saveResources
+		}))
 			return;
 
-		// Choose whether we want soldiers or support units: when full pop, we aim at targetNumWorkers workers
-		// with supportRatio fraction of support units. But we want to have more support (less cost) at startup.
-		// So we take: supportRatio*targetNumWorkers*(1 - exp(-alfa*currentWorkers/supportRatio/targetNumWorkers))
-		// This gives back supportRatio*targetNumWorkers when currentWorkers >> supportRatio*targetNumWorkers
-		// and gives a ratio alfa at startup.
-
-		let supportRatio = this.supportRatio;
-		let alpha = 0.85;
-		if (!gameState.isTemplateAvailable(gameState.applyCiv("structures/{civ}/field")))
-			supportRatio = Math.min(this.supportRatio, 0.1);
-		if (this.attackManager.rushNumber < this.attackManager.maxRushes ||
-			this.attackManager.upcomingAttacks[AttackPlan.TYPE_RUSH].length)
-		{
-			alpha = 0.7;
-		}
-		if (gameState.isCeasefireActive())
-			alpha += (1 - alpha) * Math.min(Math.max(gameState.ceasefireTimeRemaining - 120, 0), 180) / 180;
-		const supportMax = supportRatio * this.targetNumWorkers;
-		const supportNum = supportMax * (1 - Math.exp(-alpha*numberTotal/supportMax));
+		// soldiers or support units (decision/workforce.ts)
+		const alpha = supportAlpha(this.attackManager.rushNumber < this.attackManager.maxRushes ||
+			this.attackManager.upcomingAttacks[AttackPlan.TYPE_RUSH].length > 0,
+		gameState.isCeasefireActive() ? gameState.ceasefireTimeRemaining : undefined);
+		const supportNum = supportShare(numberTotal, this.supportRatio, this.targetNumWorkers, alpha,
+			!!gameState.isTemplateAvailable(gameState.applyCiv("structures/{civ}/field")));
 
 		let template;
 		if (!templateDef || numberOfSupports + numberOfQueuedSupports > supportNum)
 		{
-			let requirements: HeadquartersTrainableRequirement[];
-			if (numberTotal < 45)
-				requirements = [ ["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"] ];
-			else
-				requirements = [ ["strength", 1] ];
+			const requirements = soldierRequirements(numberTotal);
 
 			const classes = [["CitizenSoldier", "Infantry"]];
 			// We want at least 33% ranged and 33% melee.
