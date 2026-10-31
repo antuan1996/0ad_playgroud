@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (36 tests in all; the
+Each is pinned by a test that only the port passes (37 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -58,6 +58,7 @@ whether a game can reach it.
 | `config.Economy.supportRatio` (stage 5) | 0.3 at the hard difficulties: at most 45 women of a 150-worker target, about 21 at 40 workers, and from minute 6 no woman queued while the civic centre waited on the soldiers' food (§26) | 0.5: at most 75 | headquarters: "a fresh town: sixteen supports stand below the peaceful share" |
 | `researchManager.update` economy techs (stage 5) | queued the economy techs at the research queue's priority (250), below the women's, the soldiers', the houses' and the fields', one at a time: a capacity tech waited unpaid from minute 5 to 15 and the plough came at minute 11.6 with 26-40 women on the fields since minute 4 (§28) | a tech that pays back within 240 s from the income it adds, measured, goes just above the women's queue and takes the place of a plan waiting there (`decision/economyScore.ts`) | researchManager: "twenty-six farmers: the plough goes before the women" |
 | `headquarters.constructTrainingBuildings` (stage 5) | builds the barracks, ranges and stables by population thresholds, about three in all, while from minute 10 the barracks train 90% of the time and 2000-3000 resources lie in stock (§29) | one more barracks (or range) while those it has train 85% of the time, measured (`world/production.ts`), and the unbooked stock covers two of them, up to five | headquarters: "barracks always training and the stock unbooked: one more barracks" |
+| `transportPlan.onBoarding` (stage 5) | the distance from a ship to its boarding point read a point never set (`SquareVectorDistance(undefined, ...)`) and threw, ending the turn's boarding (§32) | a ship without a boarding point is not tested for drifting from it | transportPlan: "a unit heading for a ship without a boarding point keeps heading for it" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1286,3 +1287,37 @@ dump):
   -352 ± 178 gathered, at 16 -3171 ± 1714, and the walk unchanged (39% at
   minutes 15-20): it is the walk from tree to tree, which a storehouse does
   not shorten, and the storehouses cost. Dropped.
+
+## 32. Stage 5: the transports, and the attack and transport plans' factories (2026-10-31)
+
+The overhaul's part (PLAN.md §3.5 item 8, the fields set only on some
+paths): the attack and transport plans' constructors returned early with
+`failed` set (an attack plan with nowhere to gather or its target out of
+reach; a transport with no sea to cross), leaving fields unset, and every
+caller checked `failed`. `AttackPlan.findStart` and `TransportPlan.findSea`
+now search first, `create` returns a plan only with one (the transport's ID
+used up either way, as before), `restore` makes one before its Deserialize;
+`failed` is gone, and 17 fields lost their `declare` (with the
+headquarters' 12 and the queue plans' 12, 41 of the 103 left after stage 4;
+those set by `init(gameState)` stay `declare`: a type admitting their
+absence would put a guard on every read, for collections that exist before
+any read). The 24 smoke games identical, and, as the smoke games are on
+mainland and never use a transport, 12 games on `random/islands` played by
+the port and by `petra_prev` identical game for game.
+
+Those island games showed two faults, the same in both bots (4 of the 12
+games, 1 to 295 script errors a game, each ending the turn's boarding or
+unloading):
+
+- a unit landed without its destination (`endPos`): the original stepped
+  aside where it stood; the port's `requireMetadata`, added in stage 3,
+  threw. A port fault, now handled as the original handled it.
+- a unit bound for a ship whose boarding point was never set: the original
+  threw too (`SquareVectorDistance(undefined, ...)`). A ship without one is
+  not tested for having drifted from it.
+
+The same 12 games with both fixed: none of the port's errors left (those in
+two games are `petra_prev`'s, its red opponent); four games changed. The
+islands are a pool of their own for naval play (`batch.ts --map
+random/islands`): the games run 41-76 minutes, and a game past 15 minutes of
+wall time is killed by the watchdog (one in twelve).

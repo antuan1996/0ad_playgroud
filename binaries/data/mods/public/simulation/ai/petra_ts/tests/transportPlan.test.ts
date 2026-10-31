@@ -362,6 +362,21 @@ describe("a transport plan when boarding goes wrong", () =>
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
 	});
 
+	// only the port passes: the original's distance to an unset boarding point threw, every turn
+	it("a unit heading for a ship without a boarding point keeps heading for it", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		delete p.boardingPos[202];
+
+		p.update(s.world.gameState);
+
+		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), 202, "still bound for its ship");
+		assert.equal(p.state, TransportPlan.BOARDING);
+	});
+
 	it("a ship that makes no headway to the shore is sent again, then to another landing spot", () =>
 	{
 		const s = seat();
@@ -487,6 +502,22 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 
 		assert.deepEqual(a.state.ranges.at(-1), [300, 160, 25, 30]);
+	});
+
+	it("a unit landed without a destination steps aside, and the landing goes on", () =>
+	{
+		// island games logged this 72-295 times a game (FINDINGS §32): the port's
+		// requireMetadata threw where the original stepped aside
+		const s = seat();
+		const { a, carrier, p } = arrived(s);
+		p.update(s.world.gameState);
+		disembark(a, carrier, [250, 160]);
+		a.ent.setMetadata(PlayerID, "endPos", undefined);
+
+		assert.equal(p.update(s.world.gameState), 0, "nobody left to carry");
+
+		assert.deepEqual(a.state.ranges.at(-1), [250, 160, 20, 25], "it makes room where it stands");
+		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
 
 	it("a unit put ashore on the wrong land is taken back aboard, and the ship tries another spot", () =>
