@@ -6,7 +6,7 @@ import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
 import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "../execution/worker.ts";
-import { playerId, worldPos } from "../adapter/brands.ts";
+import { GAIA, playerId, worldPos } from "../adapter/brands.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ordersOf } from "../adapter/orders.ts";
@@ -26,6 +26,42 @@ export type SerializedAttackManager = {
     upcomingAttacks: Record<AttackType, SerializedAttackPlan[]>;
     startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
 };
+
+/** The fewest of a sailing plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
+export const LOCAL_FIGHT_MIN = 4;
+
+/** Where a group stands: the mean of its positions. */
+function centreOf(units: readonly CommonEntity[]): CommonPosition
+{
+	let x = 0;
+	let z = 0;
+	for (const ent of units)
+	{
+		const pos = requireValue(ent.position());
+		x += pos[0];
+		z += pos[1];
+	}
+	return worldPos(x / units.length, z / units.length);
+}
+
+/** The enemy building nearest to a position, else the nearest enemy unit (the list holds one or the other). */
+function nearestLocalTarget(enemies: readonly CommonEntity[], from: CommonPosition): CommonEntity
+{
+	const structures = enemies.filter(enemy => enemy.hasClass("Structure"));
+	const pool = structures.length ? structures : enemies;
+	let best = pool[0];
+	let bestDist = SquareVectorDistance(requireValue(best.position()), from);
+	for (const enemy of pool)
+	{
+		const dist = SquareVectorDistance(requireValue(enemy.position()), from);
+		if (dist < bestDist)
+		{
+			best = enemy;
+			bestDist = dist;
+		}
+	}
+	return best;
+}
 
 export class AttackManager
 {
@@ -726,6 +762,70 @@ export class AttackManager
 				num += attack.unitCollection.length;
 		}
 		return num;
+	}
+
+	/**
+	 * When an attack sails (its target needs a ship), its soldiers standing on a
+	 * land where enemy units or buildings stand stay there as one attack per
+	 * land, started at once against the nearest enemy building there, else the
+	 * nearest unit (FINDINGS §34: on shared islands the army sailed away from
+	 * enemies beside it). A land with fewer than LOCAL_FIGHT_MIN of the
+	 * plan's soldiers keeps them with the sailing army.
+	 */
+	splitLocalFights(gameState: CommonGameState, sailing: AttackPlan): void
+	{
+		const enemiesByLand = new Map<AccessIndex, CommonEntity[]>();
+		for (const enemy of gameState.getEnemyEntities().values())
+		{
+			if (enemy.owner() === GAIA || !enemy.position() || enemy.hasClass("Ship") ||
+			    !enemy.hasClasses(["Unit", "Structure"]))
+				continue;
+			const land = getLandAccess(gameState, enemy);
+			if (land === undefined)
+				continue;
+			const list = enemiesByLand.get(land);
+			if (list)
+				list.push(enemy);
+			else
+				enemiesByLand.set(land, [enemy]);
+		}
+		const soldiersByLand = new Map<AccessIndex, CommonEntity[]>();
+		for (const ent of sailing.unitCollection.values())
+		{
+			const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
+			if (land === undefined || !enemiesByLand.has(land))
+				continue;
+			const list = soldiersByLand.get(land);
+			if (list)
+				list.push(ent);
+			else
+				soldiersByLand.set(land, [ent]);
+		}
+		for (const [land, soldiers] of soldiersByLand)
+		{
+			if (soldiers.length < LOCAL_FIGHT_MIN)
+				continue;
+			const target = nearestLocalTarget(requireValue(enemiesByLand.get(land)), centreOf(soldiers));
+			const local = AttackPlan.create(gameState, this.Config, this.totalNumber, AttackPlan.TYPE_DEFAULT);
+			if (!local)
+				continue;
+			this.totalNumber++;
+			local.init(gameState);
+			this.startedAttacks[AttackPlan.TYPE_DEFAULT].push(local);
+			for (const ent of soldiers)
+			{
+				ent.setMetadata(PlayerID, "plan", local.name);
+				ent.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
+				sailing.unitCollection.updateEnt(ent);
+				local.unitCollection.updateEnt(ent);
+			}
+			local.targetPlayer = target.owner();
+			local.targetPos = target.position();
+			local.target = target;
+			local.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
+			debugWarn(this.Config, 1, () => "Military Manager: local attack " + local.name + " on land " + land +
+				" with " + soldiers.length + " units left by the sailing " + sailing.name);
+		}
 	}
 
 	/**

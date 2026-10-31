@@ -1134,6 +1134,9 @@ export class AttackPlan
 		else if (this.overseas)
 			this.overseas = 0;
 
+		// those of our soldiers who stand beside enemies stay to fight them
+		if (this.overseas)
+			hqOf(gameState).attackManager.splitLocalFights(gameState, this);
 		return true;
 	}
 	/**
