@@ -288,7 +288,8 @@ describe("save and reload", () =>
 					"towerLapseTime": "derived from Config.Military at construction",
 					"fortressLapseTime": "derived from Config.Military at construction",
 					"extraTowers": "derived from Config difficulty and personality at construction",
-					"extraFortresses": "derived from Config difficulty and personality at construction"
+					"extraFortresses": "derived from Config difficulty and personality at construction",
+					"canBarter": "read from the built markets at the start of each update"
 				},
 				// Rebuilding the managers reaches back for the headquarters they
 				// belong to, so the world has to be holding the one being restored.
@@ -318,7 +319,8 @@ describe("save and reload", () =>
 					"towerLapseTime": "derived from Config.Military at construction",
 					"fortressLapseTime": "derived from Config.Military at construction",
 					"extraTowers": "derived from Config difficulty and personality at construction",
-					"extraFortresses": "derived from Config difficulty and personality at construction"
+					"extraFortresses": "derived from Config difficulty and personality at construction",
+					"canBarter": "read from the built markets at the start of each update"
 				},
 				// Regions the map reports as land and sea, a structure that
 				// decayed to gaia, a capture target with garrisoned defenders,
