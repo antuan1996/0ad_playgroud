@@ -15,6 +15,7 @@ import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { gatherRate } from "../adapter/orders.ts";
+import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
 
@@ -451,15 +452,15 @@ export class BaseManager
 					++this.gatherers[type].lost;
 			}
 			// TODO  add also a test on remaining resources.
-			const total = this.gatherers[type].used + this.gatherers[type].lost;
-			if (total > 150 || total > 60 && type !== "wood")
+			const { used, lost } = this.gatherers[type];
+			const verdict = dropsiteVerdict(type, used, lost);
+			if (verdict !== "wait")
 			{
-				const ratio = this.gatherers[type].lost / total;
-				if (ratio > 0.15)
+				if (verdict === "closer")
 				{
 					const newDP = this.findBestDropsiteAndLocation(gameState, type);
 					// templateName is only "" when quality is 0, which the > 50 check rejects.
-					if (newDP.quality > 50 && gameState.ai.HQ.canBuild(gameState, newDP.templateName))
+					if (newDP.quality > GOOD_DROPSITE && gameState.ai.HQ.canBuild(gameState, newDP.templateName))
 					{
 						queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
 							{ "base": this.ID, "type": type }, newDP.pos));
@@ -471,7 +472,7 @@ export class BaseManager
 						// No good dropsite, try to build a new base if no base already planned,
 						// and if not possible, be less strict on dropsite quality.
 						if ((!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
-							newDP.quality > Math.min(25, 50*0.15/ratio) &&
+							newDP.quality > relaxedDropsiteQuality(used, lost) &&
 							gameState.ai.HQ.canBuild(gameState, newDP.templateName))
 						{
 							queues.dropsites.addPlan(new ConstructionPlan(gameState,
@@ -484,7 +485,7 @@ export class BaseManager
 				this.gatherers[type].used = 0;
 				this.gatherers[type].lost = 0;
 			}
-			else if (total === 0)
+			else if (used + lost === 0)
 				this.gatherers[type].nextCheck = gameState.ai.playedTurn + 10;
 		}
 	}
