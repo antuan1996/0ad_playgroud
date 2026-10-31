@@ -24,12 +24,10 @@ import { collectionOf, ENEMY, GAIA, makeWorld, mapOf, PLAYER, type World } from 
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filtersModule from "simulation/ai/common-api/filters.js";
 
-import {
-	entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos
-} from "../adapter/brands.ts";
+import { attackPlanId, entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../decision/difficultyLevel.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
-import { AttackPlan, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
+import { AttackPlan, type AttackPlanData, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
 import type { Queue } from "../execution/queue.ts";
 
 /** the relic raids a victory manager books, its own private record */
@@ -44,13 +42,23 @@ interface PlanOptions
 	name?: number;
 	type?: AttackType;
 	deserialized?: boolean;
-	data?: ConstructorParameters<typeof AttackPlan>[4];
+	data?: AttackPlanData;
 	init?: boolean;
+}
+
+/** A plan as AttackPlan.create makes one, with its start searched; undefined when it has none. */
+function tryPlan(world: World, options: PlanOptions = {}): AttackPlan | undefined
+{
+	const type = options.type ?? "Attack";
+	const start = AttackPlan.findStart(world.gameState, type, attackPlanId(options.name ?? 1), options.data?.target);
+	return start && new AttackPlan(world.gameState, world.ai.Config, options.name ?? 1, type, options.data,
+		options.deserialized ?? true, start);
 }
 
 function makePlan(world: World, options: PlanOptions = {}): AttackPlan
 {
-	const plan = new AttackPlan(world.gameState, world.ai.Config, options.name ?? 1, options.type ?? "Attack", options.data, options.deserialized ?? true);
+	const plan = tryPlan(world, options);
+	assert.ok(plan, "the plan found where to start");
 	// headquarters registers the queues before the plan is initialized.
 	if (options.init)
 	{
@@ -112,7 +120,6 @@ describe("construction", () =>
 		assert.equal(plan.neededShips, 3, "a plain attack needs three ships");
 		assert.equal(plan.siegeState, 0, "siege units are untested");
 		assert.equal(plan.isBlocked, false, "no walls are known");
-		assert.equal(plan.failed, undefined, "the plan has not failed");
 		assert.equal(plan.buildOrders.length, 0, "no build orders yet");
 		assert.equal(plan.canBuildUnits, true, "the HQ says the plan can build units");
 	});
@@ -195,8 +202,7 @@ describe("construction", () =>
 		world.bases[0].anchor = undefined;
 		world.removeEntity(1000);
 
-		const plan = makePlan(world, { name: 1 });
-		assert.equal(plan.failed, true, "the plan declares failure");
+		assert.equal(tryPlan(world, { name: 1 }), undefined, "no plan can be made");
 	});
 
 	it("plans a sea crossing when the enemy is overseas", () =>
@@ -237,12 +243,12 @@ describe("construction", () =>
 		// the base is on land 2; the enemy structure on an island with no sea
 		world.accessAt.set("15,15", 3);
 		resetRecorder();
-		const plan = makePlan(world, {
+		const plan = tryPlan(world, {
 			name: 1, type: "Attack",
 			data: { target: world.addEntity(makeEntity({ id: 3002, owner: ENEMY, position: [15, 15], classes: ["Structure"] })) }
 		});
 
-		assert.equal(plan.failed, true, "the plan gives up");
+		assert.equal(plan, undefined, "the plan gives up");
 		assert.ok(logs.some((entry) => /has an inaccessible target/.test(entry)), "the reason is logged");
 	});
 
@@ -2328,7 +2334,6 @@ describe("wrapping up a plan", () =>
 		assert.equal(revived.name, 1, "the name was restored");
 		assert.equal(revived.target, target, "the live target came back");
 		assert.deepEqual(revived.targetPos, [30, 40], "at its place");
-		assert.deepEqual(revived.failed, undefined, "a fresh failure record");
 		assert.equal(revived.type, "Attack", "the plan type came back too");
 	});
 
@@ -2460,8 +2465,7 @@ describe("difficulties, dumps and init corners", () =>
 
 		const plan = makePlan(world, { name: 1, type: "Attack" });
 
-		assert.equal(plan.failed, undefined, "without a target there is no complaint");
-		assert.equal(plan.overseas, 0, "and no crossing was planned");
+		assert.equal(plan.overseas, 0, "without a target no crossing is planned");
 		assert.deepEqual(world.minimalShipCalls, [], "no ships were asked for");
 	});
 

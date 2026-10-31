@@ -1418,10 +1418,12 @@ describe("attack manager", () =>
 		{
 			const world = makeWorld();
 			const manager = makeManager(world, worldConfig(world));
-			const waiting = new AttackPlan(world.gameState, world.ai.Config, 7, "Rush", { "targetSize": 6 }, false);
+			const waiting = AttackPlan.create(world.gameState, world.ai.Config, 7, "Rush", { "targetSize": 6 });
+			assert.ok(waiting);
 			waiting.init(world.gameState);
 			manager.upcomingAttacks["Rush"].push(waiting);
-			const marching = new AttackPlan(world.gameState, world.ai.Config, 8, "Attack", undefined, false);
+			const marching = AttackPlan.create(world.gameState, world.ai.Config, 8, "Attack");
+			assert.ok(marching);
 			marching.init(world.gameState);
 			manager.startedAttacks["Attack"].push(marching);
 			manager.totalNumber = 5;
