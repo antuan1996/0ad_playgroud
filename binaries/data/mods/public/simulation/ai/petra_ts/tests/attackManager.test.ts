@@ -1463,3 +1463,74 @@ describe("attack manager", () =>
 	});
 	// @@MORE@@
 });
+
+describe("an attack that sails leaves its soldiers beside enemies to fight them", () =>
+{
+	/** a plan of ours bound across the sea, with soldiers on our land (2) and on a quiet island (5) */
+	function sailingTown(onOurLand: number, houses = true)
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		world.accessAt.set("70,70", 5);
+		world.accessAt.set("71,70", 5);
+		const manager = makeManager(world, worldConfig(world));
+		const sailing = AttackPlan.create(world.gameState, world.ai.Config, 7, "Attack");
+		assert.ok(sailing);
+		sailing.init(world.gameState);
+		const soldier = (id: number, position: [number, number]) =>
+			world.addEntity(makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "Melee"] }, {}, { "plan": 7 }));
+		const ashore = Array.from({ length: onOurLand }, (_, i) => soldier(1100 + i, [12 + i, 12]));
+		const away = [soldier(1200, [70, 70]), soldier(1201, [71, 70])];
+		for (const ent of [...ashore, ...away])
+			sailing.unitCollection.updateEnt(ent);
+		// two enemy houses, the farther listed first, and a soldier of theirs on our land
+		if (houses)
+			world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [40, 40], classes: ["Structure", "Village", "House"] }));
+		const house = houses ?
+			world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [20, 20], classes: ["Structure", "Village", "House"] })) : undefined;
+		const raider = world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 14], classes: ["Unit", "Infantry"] }));
+		return { world, manager, sailing, ashore, away, house, raider };
+	}
+
+	// only the port passes: Petra's army sailed away from the enemy beside it
+	it("five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail", () =>
+	{
+		const { world, manager, sailing, ashore, away, house } = sailingTown(5);
+
+		manager.splitLocalFights(world.gameState, sailing);
+
+		const local = manager.startedAttacks["Attack"];
+		assert.equal(local.length, 1, "one attack on our land");
+		const fight = local[0];
+		assert.equal(fight.target, house, "against the nearest enemy building, not its soldier");
+		assert.equal(fight.state, "arrived", "started at once, no rally, no ship");
+		for (const ent of ashore)
+		{
+			assert.equal(ent.getMetadata(PLAYER, "plan"), fight.name);
+			assert.equal(ent.getMetadata(PLAYER, "role"), "attack");
+		}
+		assert.equal(fight.unitCollection.length, 5);
+		for (const ent of away)
+			assert.equal(ent.getMetadata(PLAYER, "plan"), 7, "the quiet island's soldiers sail");
+		assert.equal(sailing.unitCollection.length, 2);
+	});
+
+	it("with no enemy building there, they go for the enemy soldier", () =>
+	{
+		const { world, manager, sailing, raider } = sailingTown(5, false);
+
+		manager.splitLocalFights(world.gameState, sailing);
+
+		assert.equal(manager.startedAttacks["Attack"][0]?.target, raider);
+	});
+
+	it("three soldiers beside the enemy are too few to stay: they sail with the army", () =>
+	{
+		const { world, manager, sailing, ashore } = sailingTown(3);
+
+		manager.splitLocalFights(world.gameState, sailing);
+
+		assert.equal(manager.startedAttacks["Attack"].length, 0);
+		for (const ent of ashore)
+			assert.equal(ent.getMetadata(PLAYER, "plan"), 7);
+	});
+});

@@ -573,6 +573,7 @@ describe("choosing a target", () =>
 		assert.deepEqual(plan.rallyPoint, [10, 10], "the rally point kept");
 		assert.equal(plan.overseas, 4, "the attack is overseas");
 		assert.deepEqual(world.minimalShipCalls, [[4, 3]], "the manager asks three ships");
+		assert.deepEqual(world.sailingPlans, [1], "and the attack manager keeps back those beside enemies");
 	});
 
 	it("gives up when the crossing's sea is unknown", () =>
