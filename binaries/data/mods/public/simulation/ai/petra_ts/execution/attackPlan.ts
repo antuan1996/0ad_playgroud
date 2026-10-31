@@ -2144,13 +2144,23 @@ export class AttackPlan
 			const attacker = gameState.getEntityById(evt.attacker);
 			if (!attacker || !gameState.getEntityById(evt.target))
 				continue;
+			const attackerLand = getLandAccess(gameState, attacker);
 			for (const ent of this.unitCollection.values())
 			{
+				// A unit bound for a ship, still ashore, walks or waits for it and is
+				// never idle: it strikes back at an attacker on its own land, where it
+				// stood still under fire before (FINDINGS §34); the boarding then
+				// walks it back to its ship. One aboard (no position) cannot.
 				if (ent.getMetadata(PlayerID, "transport") !== undefined)
+				{
+					if (!ent.position() || getLandAccess(gameState, ent) !== attackerLand)
+						continue;
+				}
+				else if (!ent.isIdle())
 					continue;
 
 				const shouldCapture = allowCapture(gameState, ent, attacker);
-				if (!ent.isIdle() || !ent.canAttackTarget(attacker, shouldCapture))
+				if (!ent.canAttackTarget(attacker, shouldCapture))
 					continue;
 				ent.attack(attacker.id(), shouldCapture);
 			}
