@@ -249,6 +249,13 @@ identical game for game before and after):
    instead) and the 57 set only in `init()`, `Deserialize` or later (the
    two-step set-up of managers and plans: a constructor that can compute
    them, or a type that admits their absence), as each class is rewritten.
+   **Stage 5, done** (`FINDINGS.md` §32, the smoke games identical each
+   time): the attack and transport plans made by factories that return no
+   plan rather than a failed one (`AttackPlan.create`, `TransportPlan.create`,
+   their `failed` gone); the queue plans' category given to the base
+   constructor; the headquarters' flags with initial values. 41 fewer;
+   the 62 left are set by `init(gameState)` (collections that exist before
+   any read, where a type admitting their absence would guard every read).
 
 A third round (done, the same checks, the 24 games identical again):
 `BaseId`, `ArmyId`, `TransportPlanId` brands (with `NO_BASE`, and `NEW_BASE`
