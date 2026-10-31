@@ -3805,11 +3805,48 @@ describe("second pass: obstructions, starting and shipping", () =>
 		assert.equal(plan.state, "walking");
 	});
 
-	it("while shipping, blows on others' units, from dead attackers, or at units still aboard bring no answer", () =>
+	// only the port passes: Petra's units bound for a ship stood still under fire, never idle and never answering
+	it("while shipping, a unit ashore bound for its ship strikes back at an attacker on its land", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const strikes: number[] = [];
+		// walking to the shore: busy, booked for transport 7
+		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] },
+			{ isIdle: () => false, canAttackTarget: () => true, attack: (aim: number) => strikes.push(aim) }, { "plan": 1, "transport": 7 }));
+		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"] }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "transporting";
+		const events = emptyEvents();
+		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
+
+		plan.update(world.gameState, events);
+
+		assert.deepEqual(strikes, [3000], "the unit waiting for its ship answers");
+	});
+
+	it("while shipping, a unit ashore leaves an attacker on another land alone", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] },
+			{ isIdle: () => false, canAttackTarget: () => true, attack: () => assert.fail("across the water") }, { "plan": 1, "transport": 7 }));
+		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [40, 40], classes: ["Unit", "Ranged"] }));
+		world.accessAt.set("40,40", 3);	// an archer on a boat or the next island
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "transporting";
+		const events = emptyEvents();
+		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
+
+		plan.update(world.gameState, events);	// the unit's attack fails the test if it answers
+	});
+
+	it("while shipping, blows on others' units, from dead attackers, or at units still aboard bring no answer", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		// aboard: no position on the map (stage 5 strikes back with those still ashore, FINDINGS §34)
+		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: undefined, classes: ["Unit", "Melee"] },
 			{ isIdle: () => true, canAttackTarget: () => true, attack: () => assert.fail("still aboard") }, { "plan": 1, "transport": 7 }));
 		world.addEntity(makeEntity({ id: 1011, owner: PLAYER, position: [13, 14], classes: ["Unit", "Melee"] },
 			{ isIdle: () => true, canAttackTarget: () => true, attack: () => assert.fail("no one to answer") }, { "plan": 1 }));
