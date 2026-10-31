@@ -410,8 +410,11 @@ export class TransportPlan
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 					continue;
 				}
-				// set when the first unit was sent to this ship
-				const distShip = SquareVectorDistance(requireValue(this.boardingPos[shipId]), ship.position());
+				// set when the first unit was sent to this ship; a ship without one
+				// (FINDINGS §32: the original threw too, ending the boarding for the
+				// turn) is not tested for having drifted from it
+				const boardingPos = this.boardingPos[shipId];
+				const distShip = boardingPos ? SquareVectorDistance(boardingPos, ship.position()) : 0;
 				if (!shipTested[shipId] && distShip > this.boardingRange)
 				{
 					shipTested[shipId] = true;
@@ -685,10 +688,12 @@ export class TransportPlan
 			else
 			{
 				// And make some room for other units
+				// a unit without a destination (FINDINGS §32: as the original, it steps aside;
+				// the port's requireMetadata threw, ending the unloading for the turn)
 				const pos = ent.position();
-				const goal = requireMetadata(ent, "endPos");
-				const dist = VectorDistance(pos, goal);
-				if (dist > 30)
+				const goal = ent.getMetadata(PlayerID, "endPos");
+				const dist = goal ? VectorDistance(pos, goal) : 0;
+				if (goal && dist > 30)
 					ent.moveToRange(goal[0], goal[1], dist-25, dist-20);
 				else
 					ent.moveToRange(pos[0], pos[1], 20, 25);
