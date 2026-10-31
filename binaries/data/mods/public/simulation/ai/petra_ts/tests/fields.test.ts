@@ -20,7 +20,8 @@ describe("fields", () =>
 		assert.equal(nextField(base({ "fields": 0, "berries": 1200 })), "enough", "plenty of berries");
 		assert.equal(nextField(base({ "fields": 0, "berries": 500 })), "first");
 		assert.equal(nextField(base({ "fields": 0, "berries": 1200, "fieldsFirst": true })), "first", "they bring in less");
-		assert.equal(nextField(base({ "fields": 0, "queued": 1, "berries": 100 })), "enough", "one is queued: it is the first");
+		assert.equal(nextField(base({ "fields": 0, "queued": 1, "berries": 100 })), "more",
+			"one queued is the first; with the berries low, a second, as Petra keeps two in construction");
 	});
 
 	it("keeps two fields in construction, one with berries left, saving or past five fields", () =>
