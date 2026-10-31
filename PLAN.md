@@ -514,6 +514,10 @@ and nothing noticed (§18), the change worth the most of all.
    `fields.ts`, `dropsites.ts` over `world/census.ts` (§31, the smoke games
    identical); measured after: housing blocks 1-7%, and the woodcutters'
    walk is from tree to tree (a dropsite rule counting it: 45.0%, dropped).
+   Islands measured (§33): 90.7% of the decided games against
+   `petra_parity`, but a third drawn at the 90-minute limit: no army crosses
+   the sea (a saving town's first barracks: 47.1%, dropped). Naval
+   attacks join stage 6.
 6. Rush timing, tested directly (done, §27: an earlier rush loses, none
    gains nothing); then the fights, with stage 6's estimator.
 

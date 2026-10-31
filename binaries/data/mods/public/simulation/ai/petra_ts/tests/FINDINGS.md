@@ -1321,3 +1321,37 @@ two games are `petra_prev`'s, its red opponent); four games changed. The
 islands are a pool of their own for naval play (`batch.ts --map
 random/islands`): the games run 41-76 minutes, and a game past 15 minutes of
 wall time is killed by the watchdog (one in twelve).
+
+## 33. Stage 5: islands (2026-10-31)
+
+Naval play measured for the first time: `random/islands`, against
+petra_parity, 60 seed pairs from both slots (pool seed 42), the state dump,
+each game's wall limit at 25 minutes (`--game-timeout 25`: late in an island
+game the engine runs 2-4 turns a second; 7 of 120 games were still slower
+and were killed at game minutes 54-80).
+
+- **Decided games: 90.7%** (68 of 75, CI 82.0-95.4%), 1.9 times the
+  resources gathered, 2.3 times the peak map control. But **38 of the 113
+  games played were draws** at the 90-minute limit, and the bot destroys
+  about one enemy building a game.
+- In the drawn games the bot starts 1.5 attacks a game (7.4 in the decided
+  ones), and in 26 of the 38 had no attack plan at minute 31. In 29 of them
+  it was saving (`saveResources`, set at the start when the starting land
+  holds under 6000 wood: a small island; 8 of the 68 won), stuck in the town
+  phase, every resource of its island running out; in 25 it had no
+  barracks: `constructTrainingBuildings` returned while saving unless it
+  could barter, so the first barracks never came.
+- Allowing the first barracks while saving (tuning, pool 42, 40 pairs,
+  against petra_prev): every side had a barracks, and nothing else improved:
+  47.1% (24 of 51, CI 34.1-60.5%), 29 draws in 80. The saving sides lost 23
+  and won 6: the soldiers cost the wood a small island lacks, and no attack
+  crosses the sea without the transports. Dropped.
+- The transport plans threw in the port's games too (boarding: a unit sent
+  to board with no position recorded, 7-2008 times a game), as in the
+  original (§32's three, and these): fixed, the port's errors gone in a
+  replay; the boarding code is the original's, untested on islands until
+  now.
+
+What decides an island game is getting an army across the sea (docks,
+transport ships, landing), stage 6's: the economy wins the decided games,
+the sea leaves a third of them undecided.
