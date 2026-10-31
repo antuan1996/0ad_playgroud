@@ -15,6 +15,7 @@ import { isInState } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { gatherRate } from "../adapter/orders.ts";
+import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
 
 /**
@@ -391,36 +392,24 @@ export class BaseManager
 					const economy = gameState.ai.HQ.gatherEconomy;
 					const fieldsFirst = fieldsBeatBerries({ "fruit": economy.foodRateOf("fruit"),
 						"grain": economy.foodRateOf("grain"), "fruitGatherers": economy.foodGatherers.fruit });
-					const numFarms = gameState.getOwnStructures().filter(filters.byClass("Field"))
-						.length;  // including foundations
-					const numQueue = queues.field.countQueuedUnits();
-
-					if (numFarms + numQueue === 0)	// starting game, rely on fruits as long as we have enough of them, and they pay
+					const decision = nextField({
+						"berries": count,
+						fieldsFirst,
+						"fields": gameState.getOwnStructures().filter(filters.byClass("Field")).length,
+						"foundations": gameState.getOwnFoundations().filter(filters.byClass("Field")).length,
+						"queued": queues.field.countQueuedUnits(),
+						"maxFields": gameState.ai.HQ.maxFields,
+						"provision": this.Config.Economy.provisionFields,
+						"saving": !!gameState.ai.HQ.saveResources || !!gameState.ai.HQ.saveSpace
+					});
+					if (decision === "first" || decision === "more")
 					{
-						if (count < 600 || fieldsFirst)
-						{
-							queues.field.addPlan(new ConstructionPlan(gameState,
-								"structures/{civ}/field", { "favoredBase": this.ID }));
+						queues.field.addPlan(new ConstructionPlan(gameState,
+							"structures/{civ}/field", { "favoredBase": this.ID }));
+						if (decision === "first")
 							gameState.ai.HQ.needFarm = true;
-						}
 					}
-					else if (!gameState.ai.HQ.maxFields || numFarms + numQueue < gameState.ai.HQ.maxFields)
-					{
-						const numFound = gameState.getOwnFoundations().filter(filters.byClass("Field"))
-							.length;
-						let goal = this.Config.Economy.provisionFields;
-						if (gameState.ai.HQ.saveResources || gameState.ai.HQ.saveSpace || count > 300 || numFarms > 5)
-							goal = Math.max(goal-1, 1);
-						// while the berries bring in less than a field, one more field at a time
-						if (fieldsFirst)
-							++goal;
-						if (numFound + numQueue < goal)
-						{
-							queues.field.addPlan(new ConstructionPlan(gameState,
-								"structures/{civ}/field", { "favoredBase": this.ID }));
-						}
-					}
-					else if (gameState.ai.HQ.needCorral &&
+					else if (decision === "full" && gameState.ai.HQ.needCorral &&
 						!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
 						!queues.corral.hasQueuedUnits() &&
 						gameState.ai.HQ.canBuild(gameState, "structures/{civ}/corral"))
