@@ -518,6 +518,10 @@ and nothing noticed (§18), the change worth the most of all.
    `petra_parity`, but a third drawn at the 90-minute limit: no army crosses
    the sea (a saving town's first barracks: 47.1%, dropped). Naval
    attacks join stage 6.
+   A third checkpoint (pool seed 43, 150 fresh pairs from both slots):
+   **95.0% against `petra_parity`** (285/300, CI 91.9-96.9%; 135 pairs won
+   from both slots, none lost from both; 2.7 times the resources gathered,
+   2 buildings lost against 28; decided at minute 24, median).
 6. Rush timing, tested directly (done, §27: an earlier rush loses, none
    gains nothing); then the fights, with stage 6's estimator.
 
