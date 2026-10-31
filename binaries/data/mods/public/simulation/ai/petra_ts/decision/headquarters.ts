@@ -92,16 +92,20 @@ export class Headquarters
 {
 	Config: Config;
 	attackManager: AttackManager;
-	declare bAdvanced: TemplateName[];
+	/** the advanced buildings this civ has (startingStrategy.structureAnalysis) */
+	bAdvanced: TemplateName[] = [];
 	basesManager: BasesManager;
 	buildManager: BuildManager;
-	declare canBarter: boolean;
-	declare canBuildUnits: boolean;
-	declare canExpand: boolean;
+	/** whether we have a built market; read each turn in update() */
+	canBarter = false;
+	/** whether we can train units at all, and expand: set by the first turn's analysis (startingStrategy) */
+	canBuildUnits = false;
+	canExpand = false;
 	capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId> }>;
 	capturableTargetsTime: GameSeconds;
+	/** set by init() from the game state */
 	declare currentPhase: number;
-	declare decayingStructures: Set<EntityId>;
+	decayingStructures: Set<EntityId> = new Set();
 	defenseManager: DefenseManager;
 	diplomacyManager: DiplomacyManager;
 	emergencyManager: EmergencyManager;
@@ -114,21 +118,23 @@ export class Headquarters
 	garrisonManager: GarrisonManager;
 	/** When a worker last found nothing left to gather, per resource. */
 	lastFailedGather: Record<string, GameSeconds>;
-	declare maxFields: number | false;
+	/** the most fields the map's start allows, false for no limit (startingStrategy) */
+	maxFields: number | false = false;
 	navalManager: NavalManager;
-	declare needCorral: boolean;
-	declare needFarm: boolean;
-	declare needFish: boolean;
+	needCorral = false;
+	needFarm = false;
+	needFish = false;
 	phasing: number;
-	declare requireHouses: boolean | undefined;
+	requireHouses: boolean | undefined;
 	researchManager: ResearchManager;
-	declare saveResources: boolean | undefined;
-	declare saveSpace: boolean | undefined;
+	saveResources: boolean | undefined;
+	saveSpace: boolean | undefined;
 	supportRatio: number;
 	targetNumWorkers: number;
 	towerLapseTime: GameSeconds;
 	towerStartTime: GameSeconds;
 	tradeManager: TradeManager;
+	/** set by init() from the game state */
 	declare treasures: CommonEntityCollection;
 	turnCache: HeadquartersTurnCache;
 	victoryManager: VictoryManager;
