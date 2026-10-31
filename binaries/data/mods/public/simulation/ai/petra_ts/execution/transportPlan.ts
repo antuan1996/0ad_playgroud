@@ -46,6 +46,17 @@ export interface SerializedTransportPlan {
 	recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
 }
 
+/**
+ * Seconds since a unit or ship was last sent to board (its timeGarrison), NaN
+ * when it never was, so that no "more than" test holds (FINDINGS §33: as the
+ * original's arithmetic on undefined; the port's requireMetadata threw).
+ */
+function since(ent: CommonEntity, time: GameSeconds): number
+{
+	const sent = ent.getMetadata(PlayerID, "timeGarrison");
+	return sent === undefined ? NaN : time - sent;
+}
+
 export class TransportPlan
 {
 	ID: TransportPlanId;
@@ -423,11 +434,11 @@ export class TransportPlan
 					if (stateIs(state, "INDIVIDUAL.WALKING") ||
 					    stateIs(state, "INDIVIDUAL.PICKUP.APPROACHING"))
 					{
-						if (time - requireMetadata(ship, "timeGarrison") > 2)
+						if (since(ship, time) > 2)
 						{
-							const oldPos = requireMetadata(ent, "posGarrison");
+							const oldPos = ent.getMetadata(PlayerID, "posGarrison");
 							const newPos = ent.position();
-							if (oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
+							if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 								retry = true;
 							ent.setMetadata(PlayerID, "posGarrison", newPos);
 							ent.setMetadata(PlayerID, "timeGarrison", time);
@@ -435,8 +446,8 @@ export class TransportPlan
 					}
 
 					else if (!stateIs(state, "INDIVIDUAL.PICKUP.LOADING") &&
-						   time - requireMetadata(ship, "timeGarrison") > 5 ||
-						   time - requireMetadata(ship, "timeGarrison") > 8)
+						   since(ship, time) > 5 ||
+						   since(ship, time) > 8)
 					{
 						retry = true;
 						ent.setMetadata(PlayerID, "timeGarrison", time);
@@ -461,11 +472,12 @@ export class TransportPlan
 					}
 				}
 
-				if (time - requireMetadata(ent, "timeGarrison") > 2)
+				if (since(ent, time) > 2)
 				{
-					const oldPos = requireMetadata(ent, "posGarrison");
+					// a unit without a position has just gone in (the original threw too)
+					const oldPos = ent.getMetadata(PlayerID, "posGarrison");
 					const newPos = ent.position();
-					if (oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
+					if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 					{
 						if (distShip < this.boardingRange)	// looks like we are blocked ... try to go out of this trap
 						{
