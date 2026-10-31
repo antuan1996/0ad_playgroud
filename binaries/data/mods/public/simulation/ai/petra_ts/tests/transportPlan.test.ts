@@ -430,6 +430,59 @@ describe("a transport plan when boarding goes wrong", () =>
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
 
+	// only the port passes: the original's comparison with a position never recorded threw, every turn
+	it("a unit sent to board with its time but no position recorded takes the next check from where it stands", () =>
+	{
+		// a retry records only the time (island games: 31-2008 errors a game, FINDINGS §33)
+		const s = seat();
+		const a = soldier(s.world, 100, [150, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		carrier.state.pos = p.boardingPos[202];
+		a.ent.setMetadata(PlayerID, "posGarrison", undefined);
+
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+		p.update(s.world.gameState);
+
+		assert.deepEqual(a.ent.getMetadata(PlayerID, "posGarrison"), [150, 160], "its place recorded for the next check");
+		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), 202, "still bound for its ship");
+	});
+
+	// only the port passes: the original compared a position the unit no longer had, and threw
+	it("a unit that has just gone in, with no position yet aboard, is not taken for stuck", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [150, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		carrier.state.pos = p.boardingPos[202];
+		a.state.pos = undefined;	// inside, the plan not yet told
+
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+		p.update(s.world.gameState);
+
+		assert.equal(a.state.destroyed, false);
+		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), 202);
+	});
+
+	it("a ship never sent to the shore is not timed, and its units go on boarding", () =>
+	{
+		// the original's time minus undefined failed every test; the port's requireMetadata threw
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		carrier.state.aiState = "INDIVIDUAL.WALKING";
+		carrier.ent.setMetadata(PlayerID, "timeGarrison", undefined);
+		const moves = carrier.state.moves.length;
+
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+		p.update(s.world.gameState);
+
+		assert.equal(carrier.state.moves.length, moves, "no retry without a time to measure from");
+		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), 202);
+	});
+
 	it("a unit still walking to the shore is left to walk", () =>
 	{
 		const s = seat();
