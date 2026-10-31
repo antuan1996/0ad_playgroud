@@ -34,12 +34,10 @@ function initNaval(s: ReturnType<typeof seat>): void
 /** a plan, initialised and handed to the naval manager, as requireTransport makes one */
 function plan(s: ReturnType<typeof seat>, units: CommonEntity[], end = worldPos(280, 160), start: AccessIndex = WEST, endIndex: AccessIndex = ISLAND): TransportPlan
 {
-	const p = new TransportPlan(s.world.gameState, units, start, endIndex, end);
-	if (!p.failed)
-	{
-		p.init(s.world.gameState);
-		s.hq.navalManager.transportPlans.push(p);
-	}
+	const p = TransportPlan.create(s.world.gameState, units, start, endIndex, end);
+	assert.ok(p, "a sea to cross");
+	p.init(s.world.gameState);
+	s.hq.navalManager.transportPlans.push(p);
 	return p;
 }
 
@@ -53,7 +51,6 @@ describe("a transport plan made: the sea between the two lands", () =>
 
 		const p = plan(s, [a.ent]);
 
-		assert.equal(p.failed, undefined);
 		assert.equal(p.sea, SEA);
 		assert.equal(p.state, TransportPlan.BOARDING);
 		assert.equal(p.needTransportShips, true, "no ship yet");
@@ -68,9 +65,11 @@ describe("a transport plan made: the sea between the two lands", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		initNaval(s);
 
-		const p = new TransportPlan(s.world.gameState, [a.ent], WEST, landRegion(7), worldPos(280, 160));
+		const ids = s.world.gameState.ai.uniqueIDs.transports;
+		const p = TransportPlan.create(s.world.gameState, [a.ent], WEST, landRegion(7), worldPos(280, 160));
 
-		assert.equal(p.failed, true);
+		assert.equal(p, undefined, "no sea between the lands: no plan");
+		assert.equal(s.world.gameState.ai.uniqueIDs.transports, ids + 1, "its ID is used up all the same, as before");
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
 
@@ -82,9 +81,9 @@ describe("a transport plan made: the sea between the two lands", () =>
 		board(a, carrier);
 		initNaval(s);
 
-		const p = new TransportPlan(s.world.gameState, [a.ent], landRegion(1), ISLAND, worldPos(280, 160), carrier.ent);
+		const p = TransportPlan.create(s.world.gameState, [a.ent], landRegion(1), ISLAND, worldPos(280, 160), carrier.ent);
 
-		assert.equal(p.failed, undefined);
+		assert.ok(p);
 		assert.equal(p.sea, SEA, "the ship's sea, set when the fleet was counted");
 		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), p.ID);
 		assert.equal(carrier.state.stance, "none", "a transport does not stop to fight");
@@ -749,12 +748,11 @@ describe("a transport plan saved and loaded", () =>
 		p.update(s.world.gameState);
 		const saved = JSON.parse(JSON.stringify(p.Serialize()));
 
-		const loaded = new TransportPlan(s.world.gameState, [], saved.startIndex, saved.endIndex, saved.endPos);
+		const loaded = TransportPlan.restore(s.world.gameState, saved.startIndex, saved.endIndex, saved.endPos);
 		loaded.Deserialize(saved);
 		loaded.init(s.world.gameState);
 
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
-		assert.equal(loaded.failed, false);
 		assert.equal(loaded.units.length, 1, "it finds its unit again by its metadata");
 	});
 });
