@@ -1783,3 +1783,9 @@ free island was contested in 4 players.
 The 4-player match: civic centre attempts 8/2/5/6 against 0/1/3/0, built
 2/1/1/0; idle women 31/21/18/31% against 40/45/27/40, citizen soldiers
 38/31/32/25% against 50/43/31/47; no errors. Smoke games identical.
+
+Against petra_prev (e82205ac53, the commit before the base for room), 10
+island pairs from both slots (pool 4242): 7 won, 1 lost, 12 drawn (87.5% of
+the decided games, not yet significant); our side gathered 12% more
+(217700 against 194100) and controlled 63% of the map at its peak against
+41%.
