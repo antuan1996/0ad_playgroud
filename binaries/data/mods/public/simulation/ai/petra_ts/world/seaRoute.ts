@@ -5,7 +5,8 @@
  * centres and archers on the shores they passed. Here a route is searched on
  * the AI's own sea grid (the accessibility's navalPassMap, each cell holding
  * its sea region), over the cells of the ship's sea, a cell within a
- * shooter's range (and a margin) costing DANGER_COST times a free one: the
+ * shooter's range (and a margin; a melee soldier on the shore has range 0)
+ * costing DANGER_COST times a free one: the
  * ship still reaches a landing point under fire, but goes round any shooter
  * it can.
  */
@@ -28,7 +29,11 @@ export interface Shooter
 	range: number;
 }
 
-/** The enemy buildings with defensive fire and the enemy units and ships with a ranged attack. */
+/**
+ * The enemy buildings with defensive fire, and the enemy units and ships with
+ * any attack: those with a ranged one by its range, the others (melee soldiers
+ * waiting on the shore) at reach 0, so that a ship keeps the margin from them.
+ */
 export function shootersOf(gameState: CommonGameState): Shooter[]
 {
 	const shooters: Shooter[] = [];
@@ -37,9 +42,16 @@ export function shootersOf(gameState: CommonGameState): Shooter[]
 		const pos = ent.position();
 		if (!pos || ent.owner() === GAIA)
 			continue;
-		if (ent.hasClass("Structure") ? !ent.hasDefensiveFire() : !ent.attackTypes()?.includes("Ranged"))
+		if (ent.hasClass("Structure"))
+		{
+			if (ent.hasDefensiveFire())
+				shooters.push({ pos, "range": ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE });
 			continue;
-		shooters.push({ pos, "range": ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE });
+		}
+		const attacks = ent.attackTypes();
+		if (!attacks?.length)
+			continue;
+		shooters.push({ pos, "range": attacks.includes("Ranged") ? ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE : 0 });
 	}
 	return shooters;
 }
