@@ -5,6 +5,7 @@ import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetada
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
+import { plansIn } from "../execution/attackPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
@@ -524,7 +525,10 @@ export class NavalManager
 	shipPriority(gameState: CommonGameState): void
 	{
 		const priorities = this.Config.priorities;
-		const waiting = this.transportPlans.some(plan => plan.needTransportShips && plan.units.length > 0);
+		// a transport with units waiting for ships, or an attack preparing for a sea without any
+		const waiting = this.transportPlans.some(plan => plan.needTransportShips && plan.units.length > 0) ||
+			[...plansIn(gameState.ai.HQ.attackManager.upcomingAttacks)].some(plan =>
+				plan.overseas !== 0 && plan.unitCollection.hasEntities() && !this.seaTransportShips[plan.overseas]?.length);
 		const priority = waiting ? Math.max(priorities.villager, priorities.citizenSoldier) + 2 : priorities.ships;
 		if (gameState.ai.queueManager.getPriority("ships") !== priority)
 			gameState.ai.queueManager.changePriority("ships", priority);

@@ -1520,11 +1520,22 @@ export class Headquarters
 	 * fishing boats wanted on each sea beside our bases that still has fish
 	 * (they cost wood, which a dry town still has). In a 4-player Dodecanese
 	 * match a town kept its 2 fields for 50 minutes after its islands ran
-	 * dry, its workers idle, holding 6000 wood (FINDINGS §40).
+	 * dry, its workers idle, holding 6000 wood (FINDINGS §40). And its
+	 * civic centre's queue raised while one is queued.
 	 */
-	provideForDryLand(gameState: CommonGameState): void
+	provideForDryLand(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (!this.landRunDry(gameState))
+		const queueManager = gameState.ai.queueManager;
+		const dry = this.landRunDry(gameState);
+		// a new base is a dry town's way out: its civic centre goes just above
+		// the training queues, where Petra left it at 1, paid only once every
+		// other queue was (FINDINGS §40: one waited from minute 31 to the end)
+		const ccPriority = dry && queues.civilCentre.hasQueuedUnits() ?
+			Math.max(this.Config.priorities.villager, this.Config.priorities.citizenSoldier) + 2 :
+			this.Config.priorities.civilCentre;
+		if (queueManager.getPriority("civilCentre") !== ccPriority)
+			queueManager.changePriority("civilCentre", ccPriority);
+		if (!dry)
 			return;
 		this.maxFields = false;
 		for (const base of this.baseManagers())
@@ -2768,7 +2779,7 @@ export class Headquarters
 		this.geography.territoryMap = createTerritoryMap(gameState);
 		this.followCivCentreOrders(gameState);
 		if (gameState.ai.playedTurn % 10 === 3)
-			this.provideForDryLand(gameState);
+			this.provideForDryLand(gameState, queues);
 		if (this.geography.navalMap)
 		{
 			const map = this.geography.territoryMap;

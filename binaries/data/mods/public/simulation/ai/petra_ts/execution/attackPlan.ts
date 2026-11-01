@@ -692,12 +692,16 @@ export class AttackPlan
 		if (this.Config.debug > 3 && gameState.ai.playedTurn % 50 === 0)
 			this.debugAttack();
 
-		// if we need a transport, wait for some transport ships
-		if (this.overseas && !hqOf(gameState).navalManager.seaTransportShips[this.overseas]?.length)
-			return AttackPlan.PREPARATION_KEEP_GOING;
-
 		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)    // Forced Raids have special purposes (as relic capture)
 			this.assignUnits(gameState);
+
+		// if we need a transport, wait for some transport ships, the units
+		// drafted first: they keep at their work until the plan sets off, and
+		// Petra, waiting before it drafted, left 147 idle citizen soldiers out of
+		// an attack waiting for its ships on a dry island (FINDINGS §40); the
+		// ship queue is raised meanwhile (NavalManager.shipPriority)
+		if (this.overseas && !hqOf(gameState).navalManager.seaTransportShips[this.overseas]?.length)
+			return AttackPlan.PREPARATION_KEEP_GOING;
 		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
 			this.reassignFastUnit(gameState);    // reassign some fast units (if any) to fasten raid preparations
 		// while it prepares, the plan holds no soldier beside enemies away from its rally point
