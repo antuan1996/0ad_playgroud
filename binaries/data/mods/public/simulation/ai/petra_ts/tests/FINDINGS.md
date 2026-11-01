@@ -1484,6 +1484,18 @@ Mainland has no transports: the smoke games identical. One island match
 as petra_prev's (p99.9 21 ms against 24, max 83 against 65). Not measured on
 win-rate.
 
+Then (2026-11-01, from the user's watch of a 4-player Dodecanese game:
+"ship routing gives up on avoiding enemy soldiers and towers too easily;
+they could swim around an island"): the cell path was thinned to 8 evenly
+spaced waypoints, and the engine sails each leg by its own shortest way,
+along any coast, so a long leg could cut back past the shooters the search
+went round; and at 30 a cell in reach could cost less than the way round a
+large island. The route now keeps the path's corners (a waypoint wherever
+the straight leg to the next would leave the sea or pass more danger than
+the path, at most 40), a cell in reach costs 200, and an empty ship sent to
+its boarding point is routed too. A route across a 1 km sea of 12 islands
+takes about 4 ms. Smoke games identical; not yet watched in a game.
+
 ## 37. Stage 5: the island draws (2026-11-01)
 
 A third of the island games against petra_parity were draws at 90 minutes.

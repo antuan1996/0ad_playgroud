@@ -73,6 +73,40 @@ describe("seaRoute", () =>
 		assert.deepEqual(route?.at(-1), [230, 120]);
 	});
 
+	it("on open water sails straight: one leg", () =>
+	{
+		assert.deepEqual(seaRoute(sea(), SEA, worldPos(10, 120), worldPos(230, 120), []), [[230, 120]]);
+	});
+
+	// the user's watch of a 4-player Dodecanese game: transports passed the
+	// towers they could have sailed round an island to avoid
+	it("sails round the far side of an island rather than past the towers on its near shore, every leg at sea", () =>
+	{
+		// an island across the middle, from y = 60 to 180 m; the ship crosses from west to east below it
+		const island = (x: number, y: number): boolean => x >= 20 && x < 40 && y >= 15 && y < 45;
+		const access = sea(island);
+		const from = worldPos(40, 120);
+		const to = worldPos(200, 120);
+		// two towers on the island's west shore and south: the straight way passes within their reach
+		const towers: Shooter[] = [{ "pos": worldPos(100, 80), "range": 40 }, { "pos": worldPos(100, 160), "range": 40 }];
+		const route = seaRoute(access, SEA, from, worldPos(200, 230), towers);
+		assert.ok(route);
+		assert.ok(route.length <= MAX_WAYPOINTS);
+		assert.equal(threatsAlong(from, route, towers), 0, "no leg within a tower's reach");
+		let previous: readonly number[] = from;
+		for (const point of route)
+		{
+			for (let k = 0; k <= 50; ++k)
+			{
+				const x = previous[0] + (point[0] - previous[0]) * k / 50;
+				const y = previous[1] + (point[1] - previous[1]) * k / 50;
+				assert.equal(access.navalPassMap[Math.floor(x / CELL) + Math.floor(y / CELL) * 60], SEA, `(${x}, ${y}) at sea`);
+			}
+			previous = point;
+		}
+		assert.ok(seaRoute(access, SEA, from, to, towers), "and a way exists to the east too");
+	});
+
 	it("finds no route from or to a point off its sea, or across land", () =>
 	{
 		const island = sea((x) => x === 30);	// a wall of land down the middle
