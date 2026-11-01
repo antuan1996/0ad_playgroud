@@ -83,6 +83,8 @@ export type HeadquartersSerializedData = {
  *  -picking new CC locations.
  */
 
+/** Wood left within reach of our bases under which a saving town calls its land dry (buildEarlyMarket). */
+const DRY_WOOD = 500;
 /** The share of the time our infantry trainers train above which another one is built (FINDINGS §29). */
 const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
@@ -1491,6 +1493,31 @@ export class Headquarters
 		queues.economicBuilding.addPlan(plan);
 	}
 
+	/**
+	 * A saving town (little wood on its land from the start, FINDINGS §37)
+	 * whose land has no wood left within reach queues its market at once, in
+	 * the village phase too: queued, the market holds its wood at the top
+	 * priority until the town phase lets it be built, and then barters the
+	 * town's food, stone and metal for wood. Petra queued it only in the town
+	 * phase, when the wood was gone: 24 of 38 drawn island games had it waiting
+	 * for good with 50-277 of its 300 wood.
+	 */
+	buildEarlyMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
+	{
+		if (!this.saveResources || gameState.getOwnEntitiesByClass("Market", true).hasEntities() ||
+		    queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
+			return;
+		const market = gameState.applyCiv("structures/{civ}/market");
+		if (!gameState.isTemplateAvailable(market) || this.buildManager.isUnbuildable(gameState, market))
+			return;
+		if (this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood >= DRY_WOOD)
+			return;
+		gameState.ai.queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
+		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
+		plan.queueToReset = "economicBuilding";
+		queues.economicBuilding.addPlan(plan);
+	}
+
 	/** Build a farmstead */
 	buildFarmstead(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
@@ -2517,6 +2544,8 @@ export class Headquarters
 		    this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1)
 			this.checkBaseExpansion(gameState, queues);
 
+		if (this.currentPhase === 1 && gameState.ai.playedTurn % 3 === 0 && !this.canBarter)
+			this.buildEarlyMarket(gameState, queues);
 		if (this.currentPhase > 1 && gameState.ai.playedTurn % 3 === 0)
 		{
 			if (!this.canBarter)
