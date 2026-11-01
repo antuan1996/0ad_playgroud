@@ -1621,3 +1621,42 @@ one island match, so most of it is the simulation: pathfinding of large
 armies and fleets, likely); whether a longer limit or a faster speed
 setting finishes them; and whether a batch should report them apart from
 the failures of a crashed engine.
+
+## 38. Stage 5: towers where the enemy's ships pass (2026-11-01)
+
+From the user's watch of a 4-player Dodecanese game ("I wish there were
+more towers built on islands"; "some passages are used a lot by ships while
+others are barely used"), and the first 4-player match (`match.sh -N 4`,
+seeds 20261101/4242): each player built 2 sentry towers and 2-6 stone
+towers. Petra puts a tower on the territory's frontier nearest an enemy
+civic centre, which on islands faces a town across the sea, and a saving
+town without a market builds none (on islands every town saves).
+
+- `world/shipTraffic.ts`: a 16 m grid of the enemy's ship-seconds, each
+  ship counted where it sails (fishing boats a quarter, merchants a half),
+  fading by half every 5 minutes; sampled on each HQ update on naval maps,
+  not saved.
+- `HQ.findShoreTowerLocation`: the spot of our territory, on the tile the
+  tower would stand on, with the most traffic within its range (the
+  stretches our towers already watch counting a third), above 30
+  ship-seconds; with findDefensiveLocation's distances and danger checks.
+  `findDefensiveLocation` takes it first for any tower, and when every enemy
+  civic centre stands on another land than our bases'
+  (`towersByTrafficOnly`), only it: a stone tower stands 60 m from any other
+  (its template's BuildRestrictions), and on Dodecanese's small islands the
+  early frontier towers had left no room over the passages (the best spot's
+  traffic was up to 713 ship-seconds, but 400 of its cells had no free
+  tile). `buildDefenses` then queues a tower only when such a spot exists,
+  and so does a saving town without a market.
+- The bot's state dump (`-b`) gives each player's busiest passages, its
+  towers and the best spot with its traffic (`hq.shipTraffic`, `hq.towers`,
+  `hq.shoreTower`, with why the cells were refused).
+
+Mainland has no naval map: the smoke games identical. The 4-player match on
+the same seeds, with the routing of §36 too: ships lost by all players 103
+against 322 (and 354 before that routing), units lost 1661 against 2248; the
+towers stand over the passages. Player 1 built one tower all game: its
+island ran out of wood by minute 40, and from minute 51 it held 14 wood
+against 9000-12800 food and 6000 metal, its tower, civic centre and ships
+waiting for wood for 30 minutes. The dry-island rules (§37: the early
+market, then barter) apply only to a saving town, which it was not: next.

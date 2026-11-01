@@ -24,7 +24,8 @@ import {
 import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import type { Headquarters } from "../decision/headquarters.ts";
+import { type Headquarters, SHORE_TOWER_TRAFFIC } from "../decision/headquarters.ts";
+import { ShipTraffic } from "../world/shipTraffic.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -2127,6 +2128,73 @@ describe("findDefensiveLocation: where the walls face", () =>
 	});
 });
 
+// only the port passes: Petra put its towers on the frontier facing the
+// enemy's town, wherever the enemy's ships sailed (FINDINGS §38)
+describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
+{
+	/** the march of the walls' suite, with a traffic grid over it: `passages` of ship-seconds at points */
+	function seatShores(passages: Array<[[number, number], number]>, townLand?: number)
+	{
+		const seatOut = seat({ "territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER });
+		seatOut.hq.updateTerritories(seatOut.world.gameState);
+		seatOut.world.addEntity(makeHqEntity({
+			"id": 4000, "owner": ENEMY, "position": [204, 220],
+			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
+		}, {}, townLand === undefined ? {} : { "access": townLand }));
+		const map = seatOut.hq.geography.territoryMap;
+		const traffic = new ShipTraffic(map.width * map.cellSize, map.height * map.cellSize);
+		for (const [pos, seconds] of passages)
+			traffic.cells[requireValue(traffic.cellAt(worldPos(pos[0], pos[1])))] = seconds;
+		seatOut.hq.shipTraffic = traffic;
+		return seatOut;
+	}
+	const tower = () => override(towerTemplate(), { "attackRange": () => ({ "min": 0, "max": 60 }) });
+	const near = (spot: readonly number[] | undefined, pos: readonly number[], reach: number) =>
+		!!spot && Math.hypot(spot[0] - pos[0], spot[1] - pos[1]) <= reach;
+
+	it("a tower takes the shore of the busy passage, not the frontier", () =>
+	{
+		const { world, hq } = seatShores([[[72, 40], 100]]);
+		const spot = hq.findDefensiveLocation(world.gameState, tower());
+		assert.ok(near(spot, [72, 40], 60), `within its reach of the passage: ${spot}`);
+		assert.notDeepEqual(spot, [265, 169, 2]);
+	});
+
+	it("with little traffic, the frontier as before", () =>
+	{
+		const { world, hq } = seatShores([[[72, 40], SHORE_TOWER_TRAFFIC - 1]]);
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, tower()), [265, 169, 2]);
+		assert.equal(hq.hasShoreTowerSpot(world.gameState, "structures/{civ}/defense_tower"), false);
+	});
+
+	it("the next tower goes to the passage the first does not watch", () =>
+	{
+		const { world, hq } = seatShores([[[72, 40], 100], [[232, 40], 60]]);
+		world.addEntity(makeHqEntity({
+			"id": 4200, "owner": PLAYER, "position": [72, 80], "classes": ["Structure", "Tower", "Defensive"]
+		}));
+		// the busy passage, a third once watched, counts about 33 against the other's 60
+		assert.ok(near(hq.findDefensiveLocation(world.gameState, tower()), [232, 40], 60));
+	});
+
+	it("with every enemy overseas, a tower goes over a passage or nowhere: no frontier facing a town across the sea", () =>
+	{
+		// the enemy's town stands on another island
+		const { world, hq } = seatShores([[[72, 40], SHORE_TOWER_TRAFFIC - 1]], 9);
+		assert.equal(hq.towersByTrafficOnly(world.gameState), true);
+		assert.equal(hq.findDefensiveLocation(world.gameState, tower()), undefined, "too little traffic: no tower");
+		hq.shipTraffic?.cells.fill(0);
+		requireValue(hq.shipTraffic).cells[requireValue(hq.shipTraffic?.cellAt(worldPos(72, 40)))] = 100;
+		assert.ok(near(hq.findDefensiveLocation(world.gameState, tower()), [72, 40], 60), "over the passage");
+	});
+
+	it("a fortress keeps to the frontier", () =>
+	{
+		const { world, hq } = seatShores([[[72, 40], 100]]);
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()), [265, 169, 2]);
+	});
+});
+
 describe("canBuild: which stones the office will book", () =>
 {
 	// the questions canBuild answers in the order it asks them: the parked
@@ -4038,6 +4106,33 @@ describe("the frontier's defences: buildDefenses", () =>
 		const plans = world.ai.queues.defenseBuilding.plans;
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, TOWER);
+	});
+
+	// only the port passes: an island's saving town built no tower at all,
+	// while the enemy's ships sailed by its shore (FINDINGS §38)
+	it("a town saving its goods still raises a tower over a busy passage, and none without one", () =>
+	{
+		for (const busy of [true, false])
+		{
+			const { world, hq } = seat({ "phase": 2, "population": 70, "territoryOwner": () => PLAYER });
+			hq.updateTerritories(world.gameState);
+			world.templates[TOWER] = override(structureTemplate(TOWER, {
+				"classes": ["Structure", "StoneTower", "Defensive", "Tower"],
+				"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
+				"obstruction": { "min": 6, "max": 9.2 }
+			}), { "attackRange": () => ({ "min": 0, "max": 60 }) });
+			bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
+			hq.saveResources = true;
+			hq.canBarter = false;
+			const map = hq.geography.territoryMap;
+			hq.shipTraffic = new ShipTraffic(map.width * map.cellSize, map.height * map.cellSize);
+			if (busy)
+				hq.shipTraffic.cells[requireValue(hq.shipTraffic.cellAt(worldPos(72, 40)))] = 100;
+
+			hq.buildDefenses(world.gameState, world.ai.queues);
+
+			assert.equal(world.ai.queues.defenseBuilding.plans.length, busy ? 1 : 0, busy ? "a busy passage" : "an empty sea");
+		}
 	});
 
 	it("a town with its tower quota standing plans no more towers", () =>

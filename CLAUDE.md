@@ -261,7 +261,7 @@ decision with the game's reason ("last player alive", "wonder victory",
   unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
   AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
   border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
-  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `census.ts`, our population against its room; `seaRoute.ts`, a ship's route round the enemy's shooters on the sea grid; `baseResources.ts`,
+  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `census.ts`, our population against its room; `seaRoute.ts`, a ship's route round the enemy's shooters on the sea grid; `shipTraffic.ts`, where the enemy's ships sail, fading, owned by the HQ on naval maps and not saved, which places the towers (`FINDINGS.md` §38); `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
   read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
   the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), `housing.ts`, `fields.ts` and `dropsites.ts`, Petra's house, field and dropsite rules as pure functions over a census (§31), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
@@ -321,7 +321,7 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and twenty-four stage 5's (the engine's order shape, the first
+  more pin stage-4 fixes and twenty-six stage 5's (the engine's order shape, the first
   field by what berries bring in, the house before the training queues, the
   best plan paid from the split accounts, the women paid before the
   soldiers, the women's share of 0.5, research by payback, one more barracks while
@@ -329,7 +329,7 @@ untested branches.
   attacker, an army that sails leaving local attacks, attacks on defended
   buildings without siege, sea routes round the enemy's shooters, re-routing at sea,
   landing away from threats, an early market on a dry island, the ship queue while a
-  transport waits, the town phase of a dry island, a saving town's arsenal, soldiers beside enemies neither drafted nor shipped away, nor counted while the plan prepares, units waiting for a ship at the rally point answering, a plan clearing its rally point's island before it sails), 52 in all.
+  transport waits, the town phase of a dry island, a saving town's arsenal, soldiers beside enemies neither drafted nor shipped away, nor counted while the plan prepares, units waiting for a ship at the rally point answering, a plan clearing its rally point's island before it sails, towers over the enemy's sea passages, a saving town's tower over one), 54 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
