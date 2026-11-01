@@ -3,28 +3,28 @@
 # petra_out against petra_parity, random/mainland, athen, difficulty 5 (very hard),
 # conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit 36c818510c93ad30cb961b2815f522e4901e4d80 with uncommitted changes to the game,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261028-163144.
+# Recorded from commit 27bd0ed1f838cf8cd8fdb0b341298e6eef838673 with uncommitted changes to the game,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261101-000406.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint
-1	49765995	128618844	false	blue	last player alive	1212400	a8a97865ef74ba24
+1	49765995	128618844	false	blue	last player alive	1220000	ba5edd51e3e1ffc6
 2	49765995	128618844	true	blue	last player alive	987800	33361e3777fffd1b
 3	464365697	387224098	false	blue	last player alive	1422000	d9dcfd9f3818b3e7
 4	464365697	387224098	true	blue	last player alive	1466800	3501e21746a8476f
 5	432832614	163304524	false	blue	last player alive	1257600	e54270b15ace3d17
 6	432832614	163304524	true	blue	last player alive	1674800	90c9835a85951a13
-7	343709746	131020175	false	blue	last player alive	1351600	28d78d5a9b7bb798
-8	343709746	131020175	true	blue	last player alive	1252000	34f201f57dfef32b
+7	343709746	131020175	false	blue	last player alive	1345000	cbf3c88409556556
+8	343709746	131020175	true	blue	last player alive	1248400	4866e134c4f69e93
 9	462725104	860388854	false	blue	last player alive	1273000	37e8fa2abdcfb197
 10	462725104	860388854	true	blue	last player alive	1866600	3887ea94f7b8dbf4
 11	988024885	401668228	false	red	last player alive	1193200	ea9d603413335614
 12	988024885	401668228	true	blue	last player alive	1286200	b4eaef5cd365f56e
 13	730040291	731036029	false	blue	last player alive	1284200	24bc8b4dc79c2918
-14	730040291	731036029	true	blue	last player alive	1405600	9a4e3b3478d545a6
+14	730040291	731036029	true	blue	last player alive	1299800	dd3432f1421cc53b
 15	779659345	690691362	false	blue	last player alive	1284200	485cdb41eafc2850
-16	779659345	690691362	true	blue	last player alive	1289200	5be966be4b237378
-17	766714254	112125970	false	blue	last player alive	1222600	7791ceac8e706983
+16	779659345	690691362	true	blue	last player alive	1226800	eaaa3f8e6335bfb7
+17	766714254	112125970	false	blue	last player alive	1227000	a008089676e3e26e
 18	766714254	112125970	true	blue	last player alive	1596600	29a0a32b77f43b2f
 19	626711260	545303125	false	blue	last player alive	1416200	23c17cd39a13869f
 20	626711260	545303125	true	blue	last player alive	1738800	626fe097212abaf1

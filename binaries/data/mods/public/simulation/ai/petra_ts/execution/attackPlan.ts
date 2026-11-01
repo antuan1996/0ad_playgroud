@@ -1167,7 +1167,11 @@ export class AttackPlan
 			else if (this.type === AttackPlan.TYPE_RUSH || this.type === AttackPlan.TYPE_DEFAULT)
 			{
 				targets = this.rushTargetFinder(gameState, targetPlayer);
-				if (!targets.hasEntities() && (this.hasSiegeUnits() || this.forced))
+				// with no undefended building, an attack takes on the defended ones; Petra
+				// waited for siege engines, and on islands its armies, finding nothing,
+				// were aborted and remade every few seconds for good (FINDINGS §35)
+				if (!targets.hasEntities() &&
+				    (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
 					targets = this.defaultTargetFinder(gameState, targetPlayer);
 			}
 			else
