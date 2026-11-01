@@ -777,6 +777,53 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 			assert.ok(Math.hypot(point[0] - 225, point[1] - 110) > 20, `waypoint ${point} out of the tower's reach`);
 	});
 
+	// only the port passes: Petra's ship sailed on into archers come to the shore after it set out
+	it("sends the ship again by a new route when archers come within reach of the way ahead", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.sailTo(s.world.gameState, carrier.ent, worldPos(230, 60), []);
+		const moves = carrier.state.moves.length;
+
+		// nothing new: the route stands
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 5);
+		p.checkRoutes(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves, "no new orders");
+
+		// archers come to the shore beside the way ahead
+		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 5);
+		p.checkRoutes(s.world.gameState);
+
+		const sent = carrier.state.moves.slice(moves);
+		assert.ok(sent.length > 0, "the ship is sent again");
+		assert.deepEqual(sent.at(-1), [230, 60], "to the same landing point");
+		for (const point of sent.slice(0, -1))
+			assert.ok(Math.hypot(point[0] - 205, point[1] - 110) > 20, `waypoint ${point} out of the archers' reach`);
+	});
+
+	it("checks the routes once in three seconds, and forgets a released ship's", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.sailTo(s.world.gameState, carrier.ent, worldPos(230, 60), []);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 5);
+		p.checkRoutes(s.world.gameState);
+		const moves = carrier.state.moves.length;
+		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 1);
+		p.checkRoutes(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves, "a second after the last check: not yet");
+
+		p.releaseShip(carrier.ent);
+		assert.equal(p.routes[202], undefined, "a released ship's route is forgotten");
+	});
+
 	it("with no route on its sea, sails straight there", () =>
 	{
 		const s = seat();
@@ -820,6 +867,24 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
 
 		assert.ok(bp[1] >= 200, `north of the enemy's ground, got ${bp}`);
+	});
+
+	// only the port passes: Petra landed beside the enemy's soldiers if that was the nearest spot
+	it("lands away from the enemy's soldiers waiting on the shore", () =>
+	{
+		const s = seat();
+		const carrier = ship(s.world, 202, [200, 100]);
+		const a = soldier(s.world, 100, [140, 100]);
+		initNaval(s);
+		const p = plan(s, [a.ent], worldPos(280, 100));
+		const near = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
+
+		// a band of swordsmen and an archer where the ship would put in
+		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [near[0] + 4, near[1]], "classes": ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 40, "min": 0 }) }));
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
+
+		assert.ok(Math.hypot(bp[0] - near[0] - 4, bp[1] - near[1]) > 40, `out of the archer's reach: ${near} then ${bp}`);
 	});
 
 	it("keeps clear of a dock of ours", () =>

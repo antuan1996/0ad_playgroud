@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (41 tests in all; the
+Each is pinned by a test that only the port passes (43 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -63,6 +63,8 @@ whether a game can reach it.
 | `attackManager` local attacks (stage 5) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay as one local attack per land, started at once | attackManager: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail" |
 | `attackPlan.getNearestTarget` (stage 5) | an Attack-type plan took on defended buildings only with siege engines: with none undefended left it found no target, was aborted with its army and remade every few seconds (§35) | it falls back to the full target list; rushes keep to undefended targets | attackPlan: "an attack without siege takes on a defended centre when nothing is left undefended; a rush does not" |
 | `transportPlan` sailing (stage 5) | sent a transport to its landing point with one move: the engine's shortest path hugs the coasts, under the enemy's towers (§36) | `TransportPlan.sailTo` sends a route round the enemy shooters (`world/seaRoute.ts`) | transportPlan: "sails by waypoints round a tower, ending at the landing point" |
+| `transportPlan.checkRoutes` (stage 5) | planned a ship's way once: threats come to the shore after it set out were sailed into (§36) | every 3 s the way ahead is checked; more threats in reach than when planned, and the ship is sent by a new route | transportPlan: "sends the ship again by a new route when archers come within reach of the way ahead" |
+| `transportPlan.getBoardingPos` (stage 5) | chose a landing point by distance and territory, beside the enemy's soldiers if that was nearest (§36) | each threat in reach of a candidate counts as a kilometre's detour | transportPlan: "lands away from the enemy's soldiers waiting on the shore" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1424,6 +1426,18 @@ move and the rest queued, at the four places a transport sets out for its
 landing point; straight there when no route is found. The landing point
 itself may lie under fire (`getBoardingPos` already prefers one outside
 enemy territory); the way there avoids what it can.
+
+Then (the user's next two points): a route planned once missed threats come
+after the ship set out. `TransportPlan.checkRoutes`, every 3 s while
+sailing: the way ahead (from the ship's nearest waypoint on) against the
+threats now (`threatsAlong`); more of them within reach than when it was
+planned, and the ship is sent again by a new route from where it is; as
+many or fewer, and the route stands, so a landing point under fire does not
+send it again and again. And `getBoardingPos`, landing on the enemy's side,
+counts each threat in reach of a candidate point (`threatsAt`) as a
+kilometre's detour. The routes are not saved: after a load a ship sails on
+unchecked until it is sent again. One island match: no errors, the AI's
+turn time below petra_prev's (p99.9 31 ms against 73, max 89 against 205).
 
 Mainland has no transports: the smoke games identical. One island match
 (60 game minutes, `match.sh -P`): no errors, the AI's script time per turn

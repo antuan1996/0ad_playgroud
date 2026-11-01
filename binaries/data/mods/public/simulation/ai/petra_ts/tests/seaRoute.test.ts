@@ -9,7 +9,7 @@ import { fake, makeEntity } from "./harness/fakes.ts";
 import { seaRegion, worldPos } from "../adapter/brands.ts";
 
 import type { Accessibility } from "simulation/ai/common-api/terrain-analysis.js";
-import { DANGER_MARGIN, MAX_WAYPOINTS, type Shooter, seaRoute, shootersOf } from "../world/seaRoute.ts";
+import { DANGER_MARGIN, MAX_WAYPOINTS, type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
 
 const SEA = seaRegion(3);
 const CELL = 4;
@@ -108,5 +108,27 @@ describe("shootersOf", () =>
 
 		assert.deepEqual(shootersOf(gameState), [{ "pos": [10, 10], "range": 72 }, { "pos": [30, 30], "range": 60 },
 			{ "pos": [40, 40], "range": 0 }, { "pos": [60, 60], "range": 60 }, { "pos": [70, 70], "range": 60 }]);
+	});
+});
+
+describe("threats in reach", () =>
+{
+	const archer: Shooter = { "pos": worldPos(100, 100), "range": 40 };
+	const swordsman: Shooter = { "pos": worldPos(200, 100), "range": 0 };
+
+	it("of a point: within a shooter's range and the margin", () =>
+	{
+		assert.equal(threatsAt(worldPos(100, 100 + 40 + DANGER_MARGIN), [archer, swordsman]), 1, "at the edge of the archer's reach");
+		assert.equal(threatsAt(worldPos(100, 100 + 40 + DANGER_MARGIN + 1), [archer, swordsman]), 0);
+		assert.equal(threatsAt(worldPos(205, 100), [archer, swordsman]), 1, "beside the swordsman");
+	});
+
+	it("of a way: a shooter near any of its stretches counts once", () =>
+	{
+		// from (0, 160) east to (300, 160): 60 m from the archer, out of its 52 m
+		assert.equal(threatsAlong(worldPos(0, 160), [worldPos(300, 160)], [archer, swordsman]), 0);
+		// by (150, 110) then east: past the archer within reach, the swordsman within the margin
+		assert.equal(threatsAlong(worldPos(0, 160), [worldPos(150, 110), worldPos(300, 100)], [archer, swordsman]), 2);
+		assert.equal(threatsAlong(worldPos(100, 100), [worldPos(100, 100)], [archer]), 1, "a way of no length, on the archer");
 	});
 });
