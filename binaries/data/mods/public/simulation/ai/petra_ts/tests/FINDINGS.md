@@ -1415,8 +1415,10 @@ coast; its stance is "none", so it does not shoot back.
 `world/seaRoute.ts`: an A* search on the AI's sea grid (the accessibility's
 `navalPassMap`, each cell holding its sea region), over the cells of the
 transport's sea; a cell within an enemy shooter's reach and a 12 m margin
-costs 30 free ones (`shootersOf`: buildings with defensive fire, ranged
-units and ships; a tower's 60 m where a template names no ranged attack).
+costs 30 free ones (`shootersOf`: buildings with defensive fire, units and
+ships with any attack, a ranged one by its range and melee soldiers waiting
+on the shore at reach 0, the margin alone; a tower's 60 m where a template
+names no range).
 `TransportPlan.sailTo` sends the route thinned to at most 8 waypoints, one
 move and the rest queued, at the four places a transport sets out for its
 landing point; straight there when no route is found. The landing point

@@ -55,6 +55,16 @@ describe("seaRoute", () =>
 		assert.ok(route.some(point => Math.abs(point[1] - 110) > tower.range + DANGER_MARGIN), "it swings wide of the tower, on one side or the other");
 	});
 
+	it("keeps its margin from a swordsman waiting on the shore", () =>
+	{
+		const swordsman: Shooter = { "pos": worldPos(120, 128), "range": 0 };
+		const route = seaRoute(sea(), SEA, worldPos(10, 120), worldPos(230, 120), [swordsman]);
+
+		assert.ok(route);
+		for (const point of route.slice(0, -1))
+			assert.ok(dist(point, swordsman.pos) > DANGER_MARGIN - CELL, `waypoint ${point} keeps clear`);
+	});
+
 	it("still reaches a landing point under fire", () =>
 	{
 		const fort: Shooter = { "pos": worldPos(225, 120), "range": 60 };
@@ -74,7 +84,7 @@ describe("seaRoute", () =>
 
 describe("shootersOf", () =>
 {
-	it("counts the enemy buildings with defensive fire and the enemy archers, not the swordsmen or gaia", () =>
+	it("counts the enemy buildings with defensive fire, the archers by their range and the swordsmen at 0, not houses, traders or gaia", () =>
 	{
 		const tower = makeEntity({ id: 1, owner: 2, position: [10, 10], classes: ["Structure", "Tower"] },
 			{ "hasDefensiveFire": () => true, "attackRange": () => ({ "max": 72, "min": 0 }) });
@@ -85,14 +95,18 @@ describe("shootersOf", () =>
 		const swordsman = makeEntity({ id: 4, owner: 2, position: [40, 40], classes: ["Unit", "Melee"] },
 			{ "attackTypes": () => ["Melee"] });
 		const wolf = makeEntity({ id: 5, owner: 0, position: [50, 50], classes: ["Unit", "Animal"] });
-		// a sentry post whose template names no ranged attack: a tower's reach
+		const trader = makeEntity({ id: 8, owner: 2, position: [80, 80], classes: ["Unit", "Trader"] },
+			{ "attackTypes": () => undefined });
+		// a slinger and a sentry post whose templates name no range: a tower's reach
+		const slinger = makeEntity({ id: 7, owner: 2, position: [70, 70], classes: ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => undefined });
 		const sentry = makeEntity({ id: 6, owner: 2, position: [60, 60], classes: ["Structure", "Tower"] },
 			{ "hasDefensiveFire": () => true, "attackRange": () => undefined });
 		const gameState = fake<CommonGameState>({
-			"getEnemyEntities": () => ({ "values": () => [tower, house, archer, swordsman, wolf, sentry].values() })
+			"getEnemyEntities": () => ({ "values": () => [tower, house, archer, swordsman, wolf, sentry, slinger, trader].values() })
 		});
 
 		assert.deepEqual(shootersOf(gameState), [{ "pos": [10, 10], "range": 72 }, { "pos": [30, 30], "range": 60 },
-			{ "pos": [60, 60], "range": 60 }]);
+			{ "pos": [40, 40], "range": 0 }, { "pos": [60, 60], "range": 60 }, { "pos": [70, 70], "range": 60 }]);
 	});
 });
