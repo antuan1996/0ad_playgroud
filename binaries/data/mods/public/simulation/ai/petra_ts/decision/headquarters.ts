@@ -1521,12 +1521,23 @@ export class Headquarters
 		const market = gameState.applyCiv("structures/{civ}/market");
 		if (!gameState.isTemplateAvailable(market) || this.buildManager.isUnbuildable(gameState, market))
 			return;
-		if (this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood >= DRY_WOOD)
+		if (!this.landRunDry(gameState))
 			return;
 		queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
 		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
 		plan.queueToReset = "economicBuilding";
 		queues.economicBuilding.addPlan(plan);
+	}
+
+	/**
+	 * A saving town (little wood on its land from the start) with under
+	 * DRY_WOOD left within reach of its bases: what wood it has in stock is
+	 * all it will have until a market barters for more (FINDINGS §37).
+	 */
+	landRunDry(gameState: CommonGameState): boolean
+	{
+		return !!this.saveResources &&
+			this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood < DRY_WOOD;
 	}
 
 	/** Build a farmstead */
@@ -1881,6 +1892,17 @@ export class Headquarters
 	{
 		if (this.saveResources && !this.canBarter || queues.militaryBuilding.hasQueuedUnits())
 			return;
+
+		// A saving town builds no more military buildings, and so on islands, where
+		// every town saves, no arsenal and no siege engine came, and the attacks
+		// met defended towns without siege (FINDINGS §37). With a market it can
+		// barter for one: its arsenal.
+		if (this.saveResources && this.canBarter && this.currentPhase >= 3 &&
+		    this.canBuild(gameState, "structures/{civ}/arsenal") && !gameState.getOwnEntitiesByClass("Arsenal", true).hasEntities())
+		{
+			queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/arsenal", { "militaryBase": true }));
+			return;
+		}
 
 		const numBarracks = gameState.getOwnEntitiesByClass("Barracks", true).length;
 		if (this.saveResources && numBarracks !== 0)

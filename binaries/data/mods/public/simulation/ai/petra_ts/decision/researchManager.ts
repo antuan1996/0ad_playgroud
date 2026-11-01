@@ -32,8 +32,13 @@ export class ResearchManager
 		if (!nextPhaseName)
 			return;
 
+		// a town whose land has run dry of wood asks for the town phase at once,
+		// while its stock still pays the phase and the market after it: waiting
+		// for its population, it spent the wood on houses and stayed in the
+		// village phase (FINDINGS §37)
 		const petraRequirements =
-			currentPhaseIndex === 1 && gameState.ai.HQ.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
+			currentPhaseIndex === 1 && (gameState.ai.HQ.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
+				gameState.ai.HQ.landRunDry(gameState)) ||
 			currentPhaseIndex === 2 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase3 ||
 			currentPhaseIndex >= 3 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase4;
 		if (petraRequirements && gameState.hasResearchers(nextPhaseName, true))
