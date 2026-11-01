@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (43 tests in all; the
+Each is pinned by a test that only the port passes (45 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -65,6 +65,8 @@ whether a game can reach it.
 | `transportPlan` sailing (stage 5) | sent a transport to its landing point with one move: the engine's shortest path hugs the coasts, under the enemy's towers (§36) | `TransportPlan.sailTo` sends a route round the enemy shooters (`world/seaRoute.ts`) | transportPlan: "sails by waypoints round a tower, ending at the landing point" |
 | `transportPlan.checkRoutes` (stage 5) | planned a ship's way once: threats come to the shore after it set out were sailed into (§36) | every 3 s the way ahead is checked; more threats in reach than when planned, and the ship is sent by a new route | transportPlan: "sends the ship again by a new route when archers come within reach of the way ahead" |
 | `transportPlan.getBoardingPos` (stage 5) | chose a landing point by distance and territory, beside the enemy's soldiers if that was nearest (§36) | each threat in reach of a candidate counts as a kilometre's detour | transportPlan: "lands away from the enemy's soldiers waiting on the shore" |
+| `headquarters.buildEarlyMarket` (stage 5) | a saving town (a small island) queued its market only in the town phase, when its wood was gone: the market never paid, and the town sat on its food, stone and metal (§37) | with no wood left within reach, the market is queued in the village phase, holding its wood, below the town phase while that is queued | headquarters: "a saving town whose land has no wood left queues its market in the village phase" |
+| `navalManager.shipPriority` (stage 5) | the ship queue's priority was 1: no transport was paid for with wood scarce, and the army waited at the shore (§37) | while a transport with units waits for ships, the queue goes just above the training queues | transportPlan: "goes just above the training queues while units wait for a ship, back to its own after" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1443,3 +1445,48 @@ Mainland has no transports: the smoke games identical. One island match
 (60 game minutes, `match.sh -P`): no errors, the AI's script time per turn
 as petra_prev's (p99.9 21 ms against 24, max 83 against 65). Not measured on
 win-rate.
+
+## 37. Stage 5: the island draws (2026-11-01)
+
+A third of the island games against petra_parity were draws at 90 minutes.
+Measured on the first island batch's 38 draws: every drawn side was a saving
+town (`saveResources`, under 6000 wood on its starting land); its wood
+within reach was gone by minute 5-6 (3060 in stock at minute 6, 1860 at 9,
+130-400 by minute 12-15, spent elsewhere), the town phase came at minute
+9-15, and at minute 40 it held 10500 food, 4600 stone and 5200 metal, with
+nothing at all left within its bases' reach and a population of 118. The
+one way to turn that stock into wood is bartering at a market, which Petra
+queued only in the town phase: in 24 of the 38 draws it waited there for
+good with 50-277 of its 300 wood.
+
+- **The early market** (`HQ.buildEarlyMarket`): a saving town with under
+  500 wood left within reach queues its market in the village phase too, at
+  the top priority, so it holds its wood until the town phase lets it be
+  built; then Petra's barter turns food, stone and metal into wood. On 30
+  island pairs (pool 47) against petra_prev: 54.1%, 23 draws in 60; the
+  saving towns' population at minute 30 219.
+- **The ship queue** (`navalManager.shipPriority`): the drawn sides' attacks
+  now waited at the shore (10 of 23 draws had a huge attack "transporting" at
+  minute 61): the ship queue's priority was always 1. While a transport with
+  units waits for ships, it now goes just above the training queues, as a
+  needed house. The same pairs: 60.0% (24 to 16), 20 draws, 10 former draws
+  decided (8 won).
+- **The phase first**: against petra_parity on the baseline's 30 pairs
+  (pool 42) both together left 16 of its draws drawn, and in them our side
+  was still in the village phase at minute 60: the market held its 300 wood
+  at the top and the town phase waited with 12-327 of its 500. While the
+  phase is queued, the market's queue now sits just below it.
+
+Against petra_parity on the 30 island pairs of pool 42:
+
+| | won | lost | draws | of decided |
+|---|---|---|---|---|
+| before today's island changes (§34-36 and these) | 30 | 4 | 22 of 56 | 88.2% |
+| the early market and the ship queue | 36 | 3 | 20 of 59 | 92.3% |
+| the market yielding to the town phase | 41 | 2 | 12 of 55 | 95.3% |
+
+Against the first row, 9 draws became wins, none the other way. Of the 12
+left, 6 are still in the village phase at minute 60: the town phase also
+asks for five village buildings and 500 food and wood, which a town with no
+wood barely reaches. Five of the 60 games ran past 25 minutes of wall time
+(late island games simulate slowly) and were stopped by the watchdog.

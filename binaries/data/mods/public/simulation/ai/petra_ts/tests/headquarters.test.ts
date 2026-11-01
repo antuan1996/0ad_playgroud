@@ -4397,6 +4397,26 @@ describe("the temple, the market and the farmstead", () =>
 		assert.equal(town(true, 3000).world.ai.queues.economicBuilding.plans.length, 0, "wood still within reach: no hurry");
 	});
 
+	it("the early market yields to the town phase: just below it while the phase is queued, back on top after", () =>
+	{
+		const { world, hq } = seat({ "stock": { "food": 600, "wood": 600 } });
+		world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		hq.saveResources = true;
+		hq.getTotalResourceLevel = () => ({ "wood": 0 });
+		const queueManager = world.ai.queueManager;
+		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+
+		// the town phase queued: 500 wood the market must not hold back
+		world.ai.queues.majorTech.hasQueuedUnits = () => true;
+		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		assert.equal(queueManager.getPriority("economicBuilding"), queueManager.getPriority("majorTech") - 1);
+
+		world.ai.queues.majorTech.hasQueuedUnits = () => false;
+		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		assert.equal(queueManager.getPriority("economicBuilding"), 3 * hq.Config.priorities.economicBuilding);
+		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "the same market all along");
+	});
+
 	it("a saving town with a market standing or queued queues none early", () =>
 	{
 		const { world, hq } = seat();

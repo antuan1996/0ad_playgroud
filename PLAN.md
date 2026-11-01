@@ -518,6 +518,11 @@ and nothing noticed (§18), the change worth the most of all.
    `petra_parity`, but a third drawn at the 90-minute limit: no army crosses
    the sea (a saving town's first barracks: 47.1%, dropped). Naval
    attacks join stage 6.
+   Island draws (`FINDINGS.md` §34-37, 2026-11-01): local attacks for an army
+   that sails, attacks on defended buildings without siege, sea routes round
+   the enemy's shooters, an early market on a dry island and the ship queue
+   while a transport waits: against `petra_parity` on 30 island pairs 95.3%
+   of the decided games, draws 22 of 56 to 12 of 55.
    A third checkpoint (pool seed 43, 150 fresh pairs from both slots):
    **95.0% against `petra_parity`** (285/300, CI 91.9-96.9%; 135 pairs won
    from both slots, none lost from both; 2.7 times the resources gathered,

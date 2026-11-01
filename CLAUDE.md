@@ -315,14 +315,15 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and fifteen stage 5's (the engine's order shape, the first
+  more pin stage-4 fixes and seventeen stage 5's (the engine's order shape, the first
   field by what berries bring in, the house before the training queues, the
   best plan paid from the split accounts, the women paid before the
   soldiers, the women's share of 0.5, research by payback, one more barracks while
   the barracks are busy, a ship without a boarding point, units ashore answering an
   attacker, an army that sails leaving local attacks, attacks on defended
   buildings without siege, sea routes round the enemy's shooters, re-routing at sea,
-  landing away from threats), 43 in all.
+  landing away from threats, an early market on a dry island, the ship queue while a
+  transport waits), 45 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
