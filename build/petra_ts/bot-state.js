@@ -161,7 +161,69 @@ export class PetraBotState extends PetraBot
 			"popPhase2": this.Config.Economy.popPhase2,
 			// seconds since a worker last found nothing to gather, per resource
 			"lastFailedGather": Object.fromEntries(Object.entries(HQ.lastFailedGather ?? {})
-				.map(([type, time]) => [type, Math.round(this.gameState.ai.elapsedTime - time)]))
+				.map(([type, time]) => [type, Math.round(this.gameState.ai.elapsedTime - time)])),
+			// on naval maps, the enemy's busiest passages: [x, z, ship-seconds, fading] (world/shipTraffic.ts)
+			"shipTraffic": HQ.shipTraffic ? HQ.shipTraffic.busiest(5) : undefined,
+			// the best shore spot for a stone tower now and the traffic in its reach (findShoreTowerLocation)
+			"shoreTower": this.shoreTowerState(),
+			"towers": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Tower")).toEntityArray()
+				.map(ent => ent.position()).filter(pos => pos).map(pos => [Math.round(pos[0]), Math.round(pos[1])])
+		};
+	}
+
+	shoreTowerState()
+	{
+		const HQ = this.HQ;
+		if (!HQ.shipTraffic)
+			return undefined;
+		const template = this.gameState.getTemplate(this.gameState.applyCiv("structures/{civ}/defense_tower"));
+		if (!template)
+			return undefined;
+		const range = template.attackRange("Ranged")?.max ?? 60;
+		const spot = HQ.findShoreTowerLocation(this.gameState, template);
+		// the most traffic within reach of any cell of our territory, the stretches watched counted a third
+		const map = HQ.geography.territoryMap;
+		const towers = this.gameState.getOwnStructures().filter(ent => ent.hasClass("Tower") || ent.hasClass("Fortress"))
+			.toEntityArray().map(ent => ent.position()).filter(pos => pos);
+		let reachable = 0;
+		// why the cells with enough traffic in reach were refused (the checks of findShoreTowerLocation)
+		const refused = {};
+		const enemyDefenses = this.gameState.getEnemyStructures().filter(ent => ent.owner() !== 0 &&
+			(ent.hasClass("CivCentre") || ent.hasClass("Fortress") || ent.hasClass("Tower"))).toEntityArray()
+			.map(ent => ent.position()).filter(pos => pos);
+		const near = (list, pos, d2) => list.some(other => (other[0] - pos[0]) ** 2 + (other[1] - pos[1]) ** 2 < d2);
+		for (let j = 0; j < map.length; ++j)
+		{
+			if (map.getOwnerIndex(j) !== PlayerID)
+				continue;
+			const pos = [map.cellSize * (j % map.width + 0.5), map.cellSize * (Math.floor(j / map.width) + 0.5)];
+			const score = HQ.shipTraffic.within(pos, range, towers);
+			reachable = Math.max(reachable, score);
+			if (score < 30)
+				continue;
+			let reason = "ok";
+			if (map.isBlinking(pos))
+				reason = "blinking";
+			else if (near(towers, pos, 900))
+				reason = "ourDefense30m";	// the tower itself must stand 60 m from another (its template), counted as noTile in the port
+			else if (near(enemyDefenses, pos, 6400))
+				reason = "enemyDefense80m";
+			else if (HQ.baseAtIndex(j) === 0)
+				reason = "noBase";
+			else
+			{
+				if (HQ.isNearInvadingArmy(pos))
+					reason = "invadingArmy";
+				else if (HQ.isUnderEnemyFire(this.gameState, pos, 7))
+					reason = "enemyFire";
+			}
+			refused[reason] = (refused[reason] ?? 0) + 1;
+		}
+		return {
+			"spot": spot ? [Math.round(spot[0]), Math.round(spot[1])] : undefined,
+			"score": spot ? Math.round(HQ.shipTraffic.within(spot, range, towers)) : undefined,
+			"bestInTerritory": Math.round(reachable),
+			"cells": refused
 		};
 	}
 
