@@ -182,7 +182,11 @@ describe("save and reload", () =>
 			{
 				label: "AttackManager",
 				original: () => new AttackManager(makeConfig()),
-				restored: () => new AttackManager(makeConfig())
+				restored: () => new AttackManager(makeConfig()),
+				notSaved: {
+					"enemyLandsTurn": "a cache of enemiesByLand, counted again on the turn it is asked",
+					"enemyLands": "a cache of enemiesByLand, counted again on the turn it is asked"
+				}
 			},
 			makeFakeGameState().gameState
 		);

@@ -123,8 +123,10 @@ export interface World
 	transportCalls: Array<[CommonEntity, number, number, [number, number] | undefined]>;
 	/** setMinimalTransportShips calls, as [sea, needed] */
 	minimalShipCalls: Array<[number, number]>;
-	/** the plans the attack manager was told sail (splitLocalFights), by name */
-	sailingPlans: number[];
+	/** the plans the attack manager was told set off (splitLocalFights), as [name, the target's land] */
+	leavingPlans: Array<[number, number | undefined]>;
+	/** the lands the attack manager says have enemies on them (enemiesByLand) */
+	enemyLands: Set<number>;
 	/** resetCaptureGaiaRelic calls the victoryManager saw */
 	relicResets: unknown[];
 	/** the collections the plan asked the sharedScript to keep updated */
@@ -176,7 +178,8 @@ export function makeWorld(options: WorldOptions = {}): World
 
 	const transportCalls: World["transportCalls"] = [];
 	const minimalShipCalls: World["minimalShipCalls"] = [];
-	const sailingPlans: World["sailingPlans"] = [];
+	const leavingPlans: World["leavingPlans"] = [];
+	const enemyLands: World["enemyLands"] = new Set();
 	const relicResets: unknown[] = [];
 	const targetedGaiaRelics = new Map<number, number[]>();
 	const garrisonCalls: World["garrisonCalls"] = [];
@@ -253,7 +256,8 @@ export function makeWorld(options: WorldOptions = {}): World
 		blinking,
 		transportCalls,
 		minimalShipCalls,
-		sailingPlans,
+		leavingPlans,
+		enemyLands,
 		relicResets,
 		garrisonCalls,
 		garrisonCounts,
@@ -314,7 +318,9 @@ export function makeWorld(options: WorldOptions = {}): World
 				switchCalls.push([target, data]);
 				return true;
 			},
-			splitLocalFights: (_gs: CommonGameState, plan: { name: number }) => sailingPlans.push(plan.name)
+			splitLocalFights: (_gs: CommonGameState, plan: { name: number }, targetLand: number | undefined) =>
+				leavingPlans.push([plan.name, targetLand]),
+			enemiesByLand: () => new Map([...enemyLands].map(land => [land, []]))
 		},
 		defenseManager: {
 			targetList: [],

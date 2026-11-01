@@ -573,7 +573,6 @@ describe("choosing a target", () =>
 		assert.deepEqual(plan.rallyPoint, [10, 10], "the rally point kept");
 		assert.equal(plan.overseas, 4, "the attack is overseas");
 		assert.deepEqual(world.minimalShipCalls, [[4, 3]], "the manager asks three ships");
-		assert.deepEqual(world.sailingPlans, [1], "and the attack manager keeps back those beside enemies");
 	});
 
 	it("gives up when the crossing's sea is unknown", () =>
@@ -934,6 +933,31 @@ describe("assigning units", () =>
 		assert.equal(attacker.getMetadata(PLAYER, "plan"), 1, "the role-free attacker joined");
 		assert.equal(plan.unitCollection.hasEntId(entityId(1013)), true, "the exile rejoined");
 		assert.equal(plan.unitCollection.hasEntId(entityId(1012)), false, "the role-carrying unit did not");
+	});
+
+	// only the port passes: Petra drafted them to be shipped to its rally point (FINDINGS §34)
+	it("drafts no soldier on another land than the rally point's while enemies stand there", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const plan = makePlan(world, { name: 1, init: true });
+		world.accessAt.set("40,45", 3);
+		world.accessAt.set("60,65", 4);
+		const soldier = (id: number, position: [number, number]) => world.addEntity(makeEntity({
+			id, owner: PLAYER, position, classes: ["Unit", "Melee", "CitizenSoldier"]
+		}, { attackTypes: () => ["Melee"] }));
+		const home = soldier(1010, [11, 12]);
+		const beside = soldier(1011, [40, 45]);
+		const quiet = soldier(1012, [60, 65]);
+		world.enemyLands.add(2).add(3);
+
+		assert.equal(plan.assignUnits(world.gameState), true);
+		assert.equal(home.getMetadata(PLAYER, "plan"), 1, "the rally point's land: drafted, enemies or not");
+		assert.equal(beside.getMetadata(PLAYER, "plan"), undefined, "an island with enemies: left there");
+		assert.equal(quiet.getMetadata(PLAYER, "plan"), 1, "a quiet island: drafted");
+
+		world.enemyLands.delete(3);
+		plan.assignUnits(world.gameState);
+		assert.equal(beside.getMetadata(PLAYER, "plan"), 1, "drafted once its island is clear");
 	});
 
 	it("leaves enough defenders home and takes idle workers beyond them", () =>
@@ -2562,6 +2586,38 @@ describe("difficulties, dumps and init corners", () =>
 		assert.deepEqual(world.transportCalls, [[islander, 3, 2, plan.rallyPoint]],
 			"the islander was handed to the navy");
 		assert.equal(marches.length, 3, "the three mainlanders marched");
+		assert.deepEqual(world.leavingPlans, [[1, 2]], "the attack manager kept back those beside enemies off the target's land");
+	});
+
+	// only the port passes: Petra shipped its soldiers to the rally point away
+	// from the enemies beside them (FINDINGS §34)
+	it("does not ship to the rally point an islander with enemies beside it: it leaves the plan", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const target = makeTarget(world);
+		target.foundationProgress = () => 60;
+		for (let i = 0; i < 3; ++i)
+			world.addEntity(makeEntity({
+				id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
+			}, { moveToRange: () => undefined }, { "plan": 1 }));
+		world.accessAt.set("40,45", 3);
+		world.accessAt.set("60,65", 4);
+		const islander = world.addEntity(makeEntity({
+			id: 1013, owner: PLAYER, position: [40, 45], classes: ["Unit", "FastMoving", "CitizenSoldier"]
+		}, {}, { "plan": 1, "role": "attack" }));
+		const quiet = world.addEntity(makeEntity({
+			id: 1014, owner: PLAYER, position: [60, 65], classes: ["Unit", "FastMoving", "CitizenSoldier"]
+		}, {}, { "plan": 1 }));
+		world.enemyLands.add(3);
+		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+
+		withPath([{ "x": 30, "y": 40 }], () =>
+		{
+			assert.equal(plan.updatePreparation(world.gameState), 1, "the raid starts completing");
+		});
+		assert.deepEqual(world.transportCalls, [[quiet, 4, 2, plan.rallyPoint]], "only the quiet island's soldier is shipped");
+		assert.equal(islander.getMetadata(PLAYER, "plan"), -1, "the islander beside enemies left the plan");
+		assert.equal(plan.unitCollection.hasEntId(entityId(1013)), false);
 	});
 });
 

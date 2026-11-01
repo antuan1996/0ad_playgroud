@@ -15,7 +15,7 @@ import { logs, resetRecorder, sent } from "./harness/engine.ts";
 import { emptyEvents, fake, makeEntity, orders, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from "./harness/world.ts";
 
-import { armyId, attackPlanId, entityId, playerId, worldPos } from "../adapter/brands.ts";
+import { armyId, attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
 import { AttackManager } from "../decision/attackManager.ts";
 import { Config } from "../decision/config.ts";
 import { MEDIUM, SANDBOX } from "../decision/difficultyLevel.ts";
@@ -1464,8 +1464,11 @@ describe("attack manager", () =>
 	// @@MORE@@
 });
 
-describe("an attack that sails leaves its soldiers beside enemies to fight them", () =>
+describe("an attack that sets off leaves its soldiers beside enemies to fight them", () =>
 {
+	/** the land of the target across the sea */
+	const TARGET_LAND = landRegion(9);
+
 	/** a plan of ours bound across the sea, with soldiers on our land (2) and on a quiet island (5) */
 	function sailingTown(onOurLand: number, houses = true)
 	{
@@ -1487,7 +1490,7 @@ describe("an attack that sails leaves its soldiers beside enemies to fight them"
 			world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [40, 40], classes: ["Structure", "Village", "House"] }));
 		const house = houses ?
 			world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [20, 20], classes: ["Structure", "Village", "House"] })) : undefined;
-		const raider = world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 14], classes: ["Unit", "Infantry"] }));
+		const raider = world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 14], classes: ["Unit", "Soldier", "Infantry"] }));
 		return { world, manager, sailing, ashore, away, house, raider };
 	}
 
@@ -1496,7 +1499,7 @@ describe("an attack that sails leaves its soldiers beside enemies to fight them"
 	{
 		const { world, manager, sailing, ashore, away, house } = sailingTown(5);
 
-		manager.splitLocalFights(world.gameState, sailing);
+		manager.splitLocalFights(world.gameState, sailing, TARGET_LAND);
 
 		const local = manager.startedAttacks["Attack"];
 		assert.equal(local.length, 1, "one attack on our land");
@@ -1518,16 +1521,44 @@ describe("an attack that sails leaves its soldiers beside enemies to fight them"
 	{
 		const { world, manager, sailing, raider } = sailingTown(5, false);
 
-		manager.splitLocalFights(world.gameState, sailing);
+		manager.splitLocalFights(world.gameState, sailing, TARGET_LAND);
 
 		assert.equal(manager.startedAttacks["Attack"][0]?.target, raider);
+	});
+
+	it("soldiers on the target's own land go with the plan", () =>
+	{
+		const { world, manager, sailing, ashore } = sailingTown(5);
+
+		manager.splitLocalFights(world.gameState, sailing, landRegion(2));
+
+		assert.equal(manager.startedAttacks["Attack"].length, 0);
+		for (const ent of ashore)
+			assert.equal(ent.getMetadata(PLAYER, "plan"), 7);
+	});
+
+	it("an enemy woman or trader alone keeps no one back; a soldier, a hero, a siege engine or a building does", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const manager = makeManager(world, worldConfig(world));
+		for (const [id, land, classes] of [[3000, 5, ["Unit", "Support", "FemaleCitizen"]], [3001, 6, ["Unit", "Trader"]],
+			[3002, 7, ["Unit", "Soldier"]], [3003, 8, ["Unit", "Hero"]], [3004, 10, ["Unit", "Siege"]],
+			[3005, 11, ["Structure", "House"]], [3006, 12, ["Unit", "Ship", "Soldier"]]] as const)
+		{
+			world.accessAt.set(`${id},0`, land);
+			world.addEntity(makeEntity({ id, owner: ENEMY, position: [id, 0], classes: [...classes] }));
+		}
+		world.accessAt.set("4000,0", 13);
+		world.addEntity(makeEntity({ id: 4000, owner: 0, position: [4000, 0], classes: ["Unit", "Soldier"] }));
+
+		assert.deepEqual([...manager.enemiesByLand(world.gameState).keys()].sort((a, b) => a - b), [7, 8, 10, 11]);
 	});
 
 	it("three soldiers beside the enemy are too few to stay: they sail with the army", () =>
 	{
 		const { world, manager, sailing, ashore } = sailingTown(3);
 
-		manager.splitLocalFights(world.gameState, sailing);
+		manager.splitLocalFights(world.gameState, sailing, TARGET_LAND);
 
 		assert.equal(manager.startedAttacks["Attack"].length, 0);
 		for (const ent of ashore)

@@ -61,6 +61,7 @@ whether a game can reach it.
 | `transportPlan.onBoarding` (stage 5) | the distance from a ship to its boarding point read a point never set (`SquareVectorDistance(undefined, ...)`) and threw, ending the turn's boarding (§32) | a ship without a boarding point is not tested for drifting from it | transportPlan: "a unit heading for a ship without a boarding point keeps heading for it" |
 | `attackPlan.UpdateTransporting` (stage 5) | skipped every unit booked for a transport when the army was hit while waiting: a unit walking to its ship or waiting for it is never idle, so the army stood under fire at the shore (§34) | a unit still ashore and bound for a ship answers an attacker on its own land | attackPlan: "while shipping, a unit ashore bound for its ship strikes back at an attacker on its land" |
 | `attackManager` local attacks (stage 5) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay as one local attack per land, started at once | attackManager: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail" |
+| `attackPlan.assignUnits`, rally shipping (stage 5) | drafted soldiers on any island and shipped them to the rally point, away from enemy soldiers and buildings beside them; the split above ran only for a target overseas (§34) | a soldier on another land than the rally point's, with enemy soldiers, heroes, siege or buildings on it, is not drafted while they stand there; one already in the plan is kept back there at set-off (a local attack from four, else out of the plan), for any target | attackPlan: "drafts no soldier on another land than the rally point's while enemies stand there", "does not ship to the rally point an islander with enemies beside it: it leaves the plan" |
 | `attackPlan.getNearestTarget` (stage 5) | an Attack-type plan took on defended buildings only with siege engines: with none undefended left it found no target, was aborted with its army and remade every few seconds (§35) | it falls back to the full target list; rushes keep to undefended targets | attackPlan: "an attack without siege takes on a defended centre when nothing is left undefended; a rush does not" |
 | `transportPlan` sailing (stage 5) | sent a transport to its landing point with one move: the engine's shortest path hugs the coasts, under the enemy's towers (§36) | `TransportPlan.sailTo` sends a route round the enemy shooters (`world/seaRoute.ts`) | transportPlan: "sails by waypoints round a tower, ending at the landing point" |
 | `transportPlan.checkRoutes` (stage 5) | planned a ship's way once: threats come to the shore after it set out were sailed into (§36) | every 3 s the way ahead is checked; more threats in reach than when planned, and the ship is sent by a new route | transportPlan: "sends the ship again by a new route when archers come within reach of the way ahead" |
@@ -1387,6 +1388,19 @@ attack sailed for a target across the sea past enemies beside it.
   sailing army. Mainland never sails: its smoke games identical. A first
   version released the soldiers one by one (the next plan took them back
   and sailed) and preferred a target on the rally land: replaced.
+- Soldiers on another island than the rally point's were still drafted and
+  shipped to it (the user's question: "will they ignore the enemy army and
+  buildings on the same island?"): the split ran only when the target needed
+  a ship, not when the rally point did, and a plan in "completing" answers no
+  attack (the defense manager leaves units of a started plan to it, and the
+  plan's own answer runs only while transporting). Now (2026-11-01) a
+  soldier on another land than the rally point's, where enemy soldiers,
+  heroes, siege engines or buildings stand (`AttackManager.enemiesByLand`,
+  counted once a turn; women, traders, ships and gaia do not count), is not
+  drafted (`assignUnits`) until they are gone; at set-off the split runs for
+  every plan, on every land but the target's, and those of the plan left on
+  such a land, under four, leave the plan rather than board. Smoke games
+  identical; not measured, as above (it needs three players or more).
 - On 2-player Dodecanese (each side on its own island) neither measured a
   change (48.0% and 50.0%, 25 and 22 decided games of 80; 69-73% draws):
   the shared islands the user saw take more than two players, which the
