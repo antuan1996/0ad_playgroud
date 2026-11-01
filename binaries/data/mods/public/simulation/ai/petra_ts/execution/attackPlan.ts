@@ -764,6 +764,7 @@ export class AttackPlan
 		// Raids have their predefined target
 		if (!this.target && !this.chooseTarget(gameState))
 			return AttackPlan.PREPARATION_FAILED;
+		this.keepLocalFights(gameState);
 		if (!this.overseas)
 			this.getPathToTarget(gameState);
 
@@ -812,6 +813,12 @@ export class AttackPlan
 			const index = getLandAccess(gameState, ent);
 			if (index === undefined)
 				continue;
+			// too few to fight on their own (splitLocalFights): out of the plan, not shipped away
+			if (this.besideEnemies(gameState, ent, rallyIndex))
+			{
+				this.removeUnit(ent, true);
+				continue;
+			}
 			if (index === rallyIndex)
 				ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15, queued);
 			else
@@ -926,12 +933,15 @@ export class AttackPlan
 	{
 		const plan = this.name;
 		let added = false;
+		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
+		const available = (ent: CommonEntity): boolean =>
+			this.isAvailableUnit(gameState, ent) && !this.besideEnemies(gameState, ent, rallyLand);
 		// If we can not build units, assign all available except those affected to allied defense to the current attack.
 		if (!this.canBuildUnits)
 		{
 			for (const ent of gameState.getOwnUnits().values())
 			{
-				if (ent.getMetadata(PlayerID, "allied") || !this.isAvailableUnit(gameState, ent))
+				if (ent.getMetadata(PlayerID, "allied") || !available(ent))
 					continue;
 				ent.setMetadata(PlayerID, "plan", plan);
 				this.unitCollection.updateEnt(ent);
@@ -946,7 +956,7 @@ export class AttackPlan
 			let num = 0;
 			for (const ent of gameState.getOwnUnits().values())
 			{
-				if (!ent.hasClass("FastMoving") || !this.isAvailableUnit(gameState, ent))
+				if (!ent.hasClass("FastMoving") || !available(ent))
 					continue;
 				if (num++ < 2)
 					continue;
@@ -961,7 +971,7 @@ export class AttackPlan
 		for (const ent of gameState.getOwnEntitiesByRole(undefined, true).values())
 		{
 			if (ent.hasClasses(["!Unit", "Ship", "Support"]) ||
-				!this.isAvailableUnit(gameState, ent) ||
+				!available(ent) ||
 				ent.attackTypes() === undefined)
 				continue;
 			ent.setMetadata(PlayerID, "plan", plan);
@@ -971,7 +981,7 @@ export class AttackPlan
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
 		for (const ent of hqOf(gameState).attackManager.outOfPlan.values())
 		{
-			if (!this.isAvailableUnit(gameState, ent))
+			if (!available(ent))
 				continue;
 			ent.setMetadata(PlayerID, "plan", plan);
 			this.unitCollection.updateEnt(ent);
@@ -991,7 +1001,7 @@ export class AttackPlan
 		keep = Math.round(this.Config.popScaling * keep);
 		for (const ent of gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).values())
 		{
-			if (!ent.hasClass("CitizenSoldier") || !this.isAvailableUnit(gameState, ent))
+			if (!ent.hasClass("CitizenSoldier") || !available(ent))
 				continue;
 			const baseID = ent.getMetadata(PlayerID, "base");
 			if (baseID)
@@ -1133,11 +1143,28 @@ export class AttackPlan
 		}
 		else if (this.overseas)
 			this.overseas = 0;
-
-		// those of our soldiers who stand beside enemies stay to fight them
-		if (this.overseas)
-			hqOf(gameState).attackManager.splitLocalFights(gameState, this);
 		return true;
+	}
+
+	/**
+	 * Those of our soldiers who stand beside enemies, on another land than the
+	 * target's, stay to fight them (AttackManager.splitLocalFights).
+	 */
+	keepLocalFights(gameState: CommonGameState): void
+	{
+		const target = this.target;
+		hqOf(gameState).attackManager.splitLocalFights(gameState, this, target && getLandAccess(gameState, target));
+	}
+
+	/**
+	 * Whether a unit stands on another land than the rally point's with enemies
+	 * on it: it is not drafted, nor shipped to the rally point, while they are
+	 * there (FINDINGS §34).
+	 */
+	besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
+	{
+		const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
+		return land !== undefined && land !== rallyLand && hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
 	}
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
@@ -1531,6 +1558,7 @@ export class AttackPlan
 		if ((this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
 		    !this.chooseTarget(gameState))
 			return false;
+		this.keepLocalFights(gameState);
 
 		// erase our queue. This will stop any leftover unit from being trained.
 		this.removeQueues(gameState);

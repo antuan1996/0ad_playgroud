@@ -27,7 +27,7 @@ export type SerializedAttackManager = {
     startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
 };
 
-/** The fewest of a sailing plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
+/** The fewest of a leaving plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
 export const LOCAL_FIGHT_MIN = 4;
 
 /** Where a group stands: the mean of its positions. */
@@ -80,6 +80,9 @@ export class AttackManager
 	rushSize: number[] = [];
 	currentEnemyPlayer: PlayerId | undefined = undefined; // enemy player we are currently targeting
 	defeated: Record<number, boolean> = {};
+	/** enemiesByLand's answer and the turn it was counted on (not saved). */
+	enemyLands = new Map<AccessIndex, CommonEntity[]>();
+	enemyLandsTurn = -1;
 
 	constructor(config: Config)
 	{
@@ -765,35 +768,50 @@ export class AttackManager
 	}
 
 	/**
-	 * When an attack sails (its target needs a ship), its soldiers standing on a
-	 * land where enemy units or buildings stand stay there as one attack per
-	 * land, started at once against the nearest enemy building there, else the
-	 * nearest unit (FINDINGS §34: on shared islands the army sailed away from
-	 * enemies beside it). A land with fewer than LOCAL_FIGHT_MIN of the
-	 * plan's soldiers keeps them with the sailing army.
+	 * Each land's enemy soldiers, heroes, siege engines and buildings (not
+	 * gaia's, no ships), counted once a turn: where our soldiers have enemies
+	 * beside them (FINDINGS §34).
 	 */
-	splitLocalFights(gameState: CommonGameState, sailing: AttackPlan): void
+	enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonEntity[]>
 	{
-		const enemiesByLand = new Map<AccessIndex, CommonEntity[]>();
+		if (this.enemyLandsTurn === gameState.ai.playedTurn)
+			return this.enemyLands;
+		this.enemyLandsTurn = gameState.ai.playedTurn;
+		this.enemyLands = new Map();
 		for (const enemy of gameState.getEnemyEntities().values())
 		{
 			if (enemy.owner() === GAIA || !enemy.position() || enemy.hasClass("Ship") ||
-			    !enemy.hasClasses(["Unit", "Structure"]))
+			    !enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"]))
 				continue;
 			const land = getLandAccess(gameState, enemy);
 			if (land === undefined)
 				continue;
-			const list = enemiesByLand.get(land);
+			const list = this.enemyLands.get(land);
 			if (list)
 				list.push(enemy);
 			else
-				enemiesByLand.set(land, [enemy]);
+				this.enemyLands.set(land, [enemy]);
 		}
+		return this.enemyLands;
+	}
+
+	/**
+	 * When an attack sets off, its soldiers standing on a land where enemies
+	 * stand (enemiesByLand), other than the target's, stay there as one attack
+	 * per land, started at once against the nearest enemy building there, else
+	 * the nearest unit (FINDINGS §34: on shared islands the army sailed away
+	 * from enemies beside it). A land with fewer than LOCAL_FIGHT_MIN of the
+	 * plan's soldiers keeps them in the plan, which ships none of them to its
+	 * rally point (AttackPlan.updatePreparation).
+	 */
+	splitLocalFights(gameState: CommonGameState, leaving: AttackPlan, targetLand: AccessIndex | undefined): void
+	{
+		const enemiesByLand = this.enemiesByLand(gameState);
 		const soldiersByLand = new Map<AccessIndex, CommonEntity[]>();
-		for (const ent of sailing.unitCollection.values())
+		for (const ent of leaving.unitCollection.values())
 		{
 			const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
-			if (land === undefined || !enemiesByLand.has(land))
+			if (land === undefined || land === targetLand || !enemiesByLand.has(land))
 				continue;
 			const list = soldiersByLand.get(land);
 			if (list)
@@ -816,7 +834,7 @@ export class AttackManager
 			{
 				ent.setMetadata(PlayerID, "plan", local.name);
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
-				sailing.unitCollection.updateEnt(ent);
+				leaving.unitCollection.updateEnt(ent);
 				local.unitCollection.updateEnt(ent);
 			}
 			local.targetPlayer = target.owner();
@@ -824,7 +842,7 @@ export class AttackManager
 			local.target = target;
 			local.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
 			debugWarn(this.Config, 1, () => "Military Manager: local attack " + local.name + " on land " + land +
-				" with " + soldiers.length + " units left by the sailing " + sailing.name);
+				" with " + soldiers.length + " units left by " + leaving.name);
 		}
 	}
 
