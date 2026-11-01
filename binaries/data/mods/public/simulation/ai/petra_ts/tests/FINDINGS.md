@@ -1513,6 +1513,19 @@ Then the two left (2026-11-01, not yet measured on islands):
   which can barter for it, now builds its arsenal; the attack plans then add
   siege as on mainland (`addSiegeUnits` needs a trainer).
 
+The 12 drawn games of pool 42 replayed with both (their 9 seed pairs from
+both slots, against petra_parity): 7 of the 12 now won (at minutes 26-45),
+5 still drawn, none of them in the village phase any more (phase 2-3 at
+minute 60); of the 6 other games of those pairs, 3 won as before, one won
+became a draw, and two the watchdog had stopped before were played out (one
+won, one lost). The errors in five games are all petra_parity's (its
+boarding faults, §33). Siege engines: still none trained, in all 18 games.
+The towns of the 5 draws are no longer saving by minute 71 (Petra clears the
+flag later), so they take the ordinary path, which builds an arsenal in the
+city phase (one already queues a theatre, which comes after it): the
+missing siege is elsewhere (the siege units' cost, wood above all, or the
+plans starting before their siege is trained), to look at.
+
 **For future research: the watchdog's slow games.** Late in an island game
 the engine simulates 2-4 turns a second against dozens early on: 5 of the 60
 games of pool 42 ran past 25 minutes of wall time and were stopped by the
