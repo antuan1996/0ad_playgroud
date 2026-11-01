@@ -92,6 +92,31 @@ describe("a transport plan made: the sea between the two lands", () =>
 	});
 });
 
+describe("the ship queue while a transport waits for ships", () =>
+{
+	// only the port passes: Petra's ship queue stayed at 1, and a saving island town paid for no transport
+	it("goes just above the training queues while units wait for a ship, back to its own after", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		initNaval(s);
+		const priorities = s.hq.Config.priorities;
+		const queueManager = s.world.ai.queueManager;
+
+		s.hq.navalManager.shipPriority(s.world.gameState);
+		assert.equal(queueManager.getPriority("ships"), priorities.ships, "no transport waiting");
+
+		const p = plan(s, [a.ent]);
+		s.hq.navalManager.shipPriority(s.world.gameState);
+		assert.equal(p.needTransportShips, true, "no ship yet");
+		assert.equal(queueManager.getPriority("ships"), Math.max(priorities.villager, priorities.citizenSoldier) + 2);
+
+		p.removeUnit(s.world.gameState, a.ent);
+		s.hq.navalManager.shipPriority(s.world.gameState);
+		assert.equal(queueManager.getPriority("ships"), priorities.ships, "nobody waits any more");
+	});
+});
+
 describe("a transport plan finding its ship: assignShip", () =>
 {
 	it("takes the free ship nearest its waiting units, on its own sea", () =>

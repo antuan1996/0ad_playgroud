@@ -4377,6 +4377,46 @@ describe("the temple, the market and the farmstead", () =>
 			3 * hq.Config.priorities.economicBuilding);
 	});
 
+	// only the port passes: Petra's small-island town queued its market in the town phase, its wood long gone
+	it("a saving town whose land has no wood left queues its market in the village phase", () =>
+	{
+		const town = (saving: boolean, woodLeft: number) =>
+		{
+			const { world, hq } = seat({ "stock": { "food": 100, "wood": 1800, "stone": 3000, "metal": 3000 } });
+			world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+			hq.saveResources = saving ? true : undefined;
+			hq.getTotalResourceLevel = () => ({ "wood": woodLeft });
+			hq.buildEarlyMarket(world.gameState, world.ai.queues);
+			return { world, hq };
+		};
+		const dry = town(true, 120);
+		assert.equal(dry.world.ai.queues.economicBuilding.plans[0]?.type, MARKET, "queued before the town phase allows it");
+		assert.equal(dry.world.ai.queueManager.getPriority("economicBuilding"), 3 * dry.hq.Config.priorities.economicBuilding,
+			"at the top, so it holds its wood");
+		assert.equal(town(false, 120).world.ai.queues.economicBuilding.plans.length, 0, "a town that does not save waits for the town phase");
+		assert.equal(town(true, 3000).world.ai.queues.economicBuilding.plans.length, 0, "wood still within reach: no hurry");
+	});
+
+	it("a saving town with a market standing or queued queues none early", () =>
+	{
+		const { world, hq } = seat();
+		world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		hq.saveResources = true;
+		hq.getTotalResourceLevel = () => ({ "wood": 0 });
+		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "queued once");
+
+		const standing = seat();
+		standing.world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
+		standing.hq.saveResources = true;
+		standing.hq.getTotalResourceLevel = () => ({ "wood": 0 });
+		standing.world.addEntity(makeHqEntity({ "id": 2900, "owner": PLAYER, "position": [40, 40], "classes": ["Structure", "Market"],
+			"templateName": MARKET }));
+		standing.hq.buildEarlyMarket(standing.world.gameState, standing.world.ai.queues);
+		assert.equal(standing.world.ai.queues.economicBuilding.plans.length, 0);
+	});
+
 	it("a market already queued is not queued a second time", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
