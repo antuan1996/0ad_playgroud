@@ -575,6 +575,30 @@ describe("choosing a target", () =>
 		assert.deepEqual(world.minimalShipCalls, [[4, 3]], "the manager asks three ships");
 	});
 
+	// only the port passes: Petra sailed past the enemy buildings on its own island (FINDINGS §34)
+	it("with enemy buildings on the rally point's island, takes the nearest of them instead of sailing", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY, sea: 4 });
+		world.accessAt.set("55,55", 3);
+		world.addEntity(makeEntity({
+			id: 2100, owner: ENEMY, position: [55, 55], classes: ["Structure", "CivCentre"]
+		}));
+		const outpost = world.addEntity(makeEntity({
+			id: 2101, owner: 3, position: [30, 30], classes: ["Structure", "Outpost"]
+		}));
+		world.enemyLands.add(2);	// a third player's outpost on our island
+
+		const plan = makePlan(world, { name: 1, init: true });
+		withPath([{ "x": 30, "y": 30 }], () =>
+		{
+			assert.equal(plan.chooseTarget(world.gameState), true, "the target was chosen");
+		});
+		assert.equal(plan.target, outpost, "the outpost on our island, not the civic centre across the sea");
+		assert.equal(plan.targetPlayer, 3, "against its owner, not the enemy chosen first");
+		assert.equal(plan.overseas, 0, "no ship");
+		assert.deepEqual(world.minimalShipCalls, [], "none asked");
+	});
+
 	it("gives up when the crossing's sea is unknown", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY, sea: undefined });
@@ -936,6 +960,31 @@ describe("assigning units", () =>
 	});
 
 	// only the port passes: Petra drafted them to be shipped to its rally point (FINDINGS §34)
+	// only the port passes: Petra kept them in the plan, counted them, and shipped them away (FINDINGS §34)
+	it("while it prepares, lets go a soldier enemies came beside on another island, and trains another in its place", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		registerSpearman(world);
+		world.knobs.bestTrainable = "units/athen_spearman";
+		world.accessAt.set("40,45", 3);
+		const islander = world.addEntity(makeEntity({
+			id: 1011, owner: PLAYER, position: [40, 45], classes: ["Unit", "Infantry", "Melee", "CitizenSoldier"]
+		}, { attackTypes: () => ["Melee"] }, { "plan": 1, "role": "attack" }));
+		const plan = makePlan(world, { name: 1, init: true });
+		plan.unitCollection.updateEnt(islander);
+		assert.equal(plan.unitCollection.length, 1);
+
+		world.enemyLands.add(3);
+		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING);
+
+		assert.equal(islander.getMetadata(PLAYER, "plan"), -1, "it left the plan");
+		assert.equal(plan.unitCollection.length, 0, "and is no longer counted");
+		assert.deepEqual(world.leavingPlans, [[1, 2]], "those enough to fight were offered a local attack first");
+		const queued = plan.queue.plans[0];
+		assert.ok(queued, "the plan trains on");
+		assert.equal(queued.metadata?.index, 2, "on the rally point's land where it can");
+	});
+
 	it("drafts no soldier on another land than the rally point's while enemies stand there", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
@@ -948,12 +997,16 @@ describe("assigning units", () =>
 		const home = soldier(1010, [11, 12]);
 		const beside = soldier(1011, [40, 45]);
 		const quiet = soldier(1012, [60, 65]);
-		world.enemyLands.add(2).add(3);
+		// a hunter at a cliff's edge: an impassable cell (1), no island of its own, with an enemy on another such cell
+		world.accessAt.set("70,75", 1);
+		const hunter = soldier(1013, [70, 75]);
+		world.enemyLands.add(2).add(3).add(1);
 
 		assert.equal(plan.assignUnits(world.gameState), true);
 		assert.equal(home.getMetadata(PLAYER, "plan"), 1, "the rally point's land: drafted, enemies or not");
 		assert.equal(beside.getMetadata(PLAYER, "plan"), undefined, "an island with enemies: left there");
 		assert.equal(quiet.getMetadata(PLAYER, "plan"), 1, "a quiet island: drafted");
+		assert.equal(hunter.getMetadata(PLAYER, "plan"), 1, "an impassable cell: no island, drafted");
 
 		world.enemyLands.delete(3);
 		plan.assignUnits(world.gameState);
@@ -2586,7 +2639,8 @@ describe("difficulties, dumps and init corners", () =>
 		assert.deepEqual(world.transportCalls, [[islander, 3, 2, plan.rallyPoint]],
 			"the islander was handed to the navy");
 		assert.equal(marches.length, 3, "the three mainlanders marched");
-		assert.deepEqual(world.leavingPlans, [[1, 2]], "the attack manager kept back those beside enemies off the target's land");
+		assert.deepEqual(world.leavingPlans, [[1, 2], [1, 2]],
+			"the attack manager kept back those beside enemies off the rally point's land as it prepared, then off the target's");
 	});
 
 	// only the port passes: Petra shipped its soldiers to the rally point away
@@ -3903,6 +3957,33 @@ describe("second pass: obstructions, starting and shipping", () =>
 		plan.update(world.gameState, events);
 
 		assert.deepEqual(strikes, [3000], "the unit waiting for its ship answers");
+	});
+
+	// only the port passes: Petra's plan answered nothing while it gathered,
+	// and the defense manager leaves a plan past preparation to it (FINDINGS §34)
+	it("while gathering at its rally point, the units waiting for a ship near the one hit answer; those walking, far away or across the water do not", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		const strikes: number[] = [];
+		const unit = (id: number, position: [number, number], data: Record<string, unknown> = {}) =>
+			world.addEntity(makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Melee"] },
+				{ isIdle: () => false, canAttackTarget: () => true, attack: () => strikes.push(id) }, { "plan": 1, ...data }));
+		unit(1010, [11, 12], { "transport": 7 });	// hit, waiting for its ship
+		unit(1011, [40, 50], { "transport": 7 });	// on its way to the ship, 47 m off
+		unit(1012, [12, 12]);	// walking to the rally point beside it: keeps walking
+		unit(1013, [90, 90], { "transport": 7 });	// 110 m off
+		world.accessAt.set("12,10", 3);
+		unit(1014, [12, 10], { "transport": 7 });	// on another island
+		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Ranged"] }));
+		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		plan.state = "completing";
+		const events = emptyEvents();
+		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
+
+		plan.answerAttacks(world.gameState, events);
+
+		assert.deepEqual(strikes, [1010, 1011]);
 	});
 
 	it("while shipping, a unit ashore leaves an attacker on another land alone", () =>

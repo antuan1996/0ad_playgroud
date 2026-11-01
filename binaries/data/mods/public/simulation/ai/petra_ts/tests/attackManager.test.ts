@@ -94,10 +94,12 @@ function planStub(overrides: {
 		forceStartCalls: 0,
 		abortCalls: 0,
 		checkEventsCalls: 0,
+		answerAttacksCalls: 0,
 		updatePreparationCalls: 0,
 		pauses: [] as boolean[],
 		forceStart: () => { ++stub.forceStartCalls; },
 		checkEvents: () => { ++stub.checkEventsCalls; },
+		answerAttacks: () => { ++stub.answerAttacksCalls; },
 		isStarted: () => overrides.alreadyStarted ?? false,
 		isPaused: () => stub.paused,
 		updatePreparation: () =>
@@ -1537,13 +1539,14 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 			assert.equal(ent.getMetadata(PLAYER, "plan"), 7);
 	});
 
-	it("an enemy woman or trader alone keeps no one back; a soldier, a hero, a siege engine or a building does", () =>
+	it("an enemy woman or trader alone keeps no one back; a soldier, a hero, a siege engine or a building on a land does", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const manager = makeManager(world, worldConfig(world));
 		for (const [id, land, classes] of [[3000, 5, ["Unit", "Support", "FemaleCitizen"]], [3001, 6, ["Unit", "Trader"]],
 			[3002, 7, ["Unit", "Soldier"]], [3003, 8, ["Unit", "Hero"]], [3004, 10, ["Unit", "Siege"]],
-			[3005, 11, ["Structure", "House"]], [3006, 12, ["Unit", "Ship", "Soldier"]]] as const)
+			[3005, 11, ["Structure", "House"]], [3006, 12, ["Unit", "Ship", "Soldier"]],
+			[3007, 1, ["Unit", "Soldier"]]] as const)	// on an impassable cell, a cliff's edge: no land
 		{
 			world.accessAt.set(`${id},0`, land);
 			world.addEntity(makeEntity({ id, owner: ENEMY, position: [id, 0], classes: [...classes] }));

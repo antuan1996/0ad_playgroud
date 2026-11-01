@@ -125,7 +125,7 @@ export interface World
 	minimalShipCalls: Array<[number, number]>;
 	/** the plans the attack manager was told set off (splitLocalFights), as [name, the target's land] */
 	leavingPlans: Array<[number, number | undefined]>;
-	/** the lands the attack manager says have enemies on them (enemiesByLand) */
+	/** the lands the attack manager says have enemies on them (enemiesByLand), with the world's enemies there */
 	enemyLands: Set<number>;
 	/** resetCaptureGaiaRelic calls the victoryManager saw */
 	relicResets: unknown[];
@@ -320,7 +320,12 @@ export function makeWorld(options: WorldOptions = {}): World
 			},
 			splitLocalFights: (_gs: CommonGameState, plan: { name: number }, targetLand: number | undefined) =>
 				leavingPlans.push([plan.name, targetLand]),
-			enemiesByLand: () => new Map([...enemyLands].map(land => [land, []]))
+			// the lands named in enemyLands, each with the world's enemies standing on it
+			enemiesByLand: () => new Map([...enemyLands].map(land => [land, [...ents.values()].filter(ent =>
+			{
+				const pos = ent.position();
+				return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
+			})]))
 		},
 		defenseManager: {
 			targetList: [],

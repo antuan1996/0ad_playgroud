@@ -1401,6 +1401,28 @@ attack sailed for a target across the sea past enemies beside it.
   every plan, on every land but the target's, and those of the plan left on
   such a land, under four, leave the plan rather than board. Smoke games
   identical; not measured, as above (it needs three players or more).
+- Then (2026-11-01, the user's questions on the plan's steps): the drop came
+  only at set-off, when the plan had judged its size enough, so it left
+  smaller, and nothing could send it back to prepare (its queues are removed
+  at set-off). The split and the drop now run every turn of the preparation
+  too (`leaveDisputedLands`, keeping the rally point's land), so the plan
+  counts and trains without those soldiers, and a plan's units are trained
+  on the rally point's land where they can (`index`, which queueplanTraining
+  read but nothing set). A plan whose target turns out overseas while enemy
+  buildings stand on its rally point's land takes the nearest of them
+  instead (`targetOnLand`, its own target search kept to that land, the
+  owner of the building nearest the rally point first): the whole plan
+  clears its island before it sails. While the plan gathers ("completing"),
+  its units bound for a ship, ashore on the attacker's land within 60 m of
+  the unit hit, answer (`answerAttacks`, shared with "transporting"): the
+  defense manager leaves a plan past preparation to it. A first version let
+  every unit of the plan answer: they chased their attackers away from the
+  army, and on mainland it lost 5 to 15 against petra_prev (17 of the 24
+  smoke games moved; switched off, all 24 identical again). Land 1, an
+  impassable cell, is no island (`enemiesByLand`, `besideEnemies`; it changed
+  none of the 40 games). Smoke games identical; on islands against
+  petra_prev, 10 pairs from both slots (pool 4242): 6 won, 5 lost, 9 drawn,
+  no change to see on two-player islands.
 - On 2-player Dodecanese (each side on its own island) neither measured a
   change (48.0% and 50.0%, 25 and 22 decided games of 80; 69-73% draws):
   the shared islands the user saw take more than two players, which the
