@@ -1897,6 +1897,42 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			[233, 121], "the sheet moved, the village moved");
 	});
 
+	// only the port passes: a base for room took no free island with little
+	// left on it, and full island towns never expanded (FINDINGS §40)
+	it("a base sought for its room takes free land the resources alone would not", () =>
+	{
+		const gaia = new Set([29 + 29 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		for (const sheet of Object.values(world.map.ccResourceMaps))
+			sheet.map.fill(0);
+
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true), false,
+			"nothing to gather there: below the cut");
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true),
+			[233, 233], "for its room, the free lot");
+	});
+
+	it("for its room, a base takes a contested lot when no other is left; for its resources, it does not", () =>
+	{
+		const gaia = new Set([29 + 29 * 40]);
+		const { world, hq } = seat({
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+		});
+		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
+		override(hq.attackManager, { "enemiesByLand": () => new Map([[2, [makeHqEntity({
+			"id": 6100, "owner": ENEMY, "position": [240, 240], "classes": ["Unit", "Soldier"] })]]]) });
+
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true), false,
+			"an enemy soldier beside it: contested");
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true),
+			[233, 233], "for its room, the contested lot all the same");
+		hq.ccSpotsAvoided.push({ "pos": worldPos(233, 233), "until": 1e9 });
+		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true), false,
+			"but not one that failed");
+	});
+
 	it("a raiding army pushes the new town across the map", () =>
 	{
 		// two unclaimed lots, one of which the raiding party camps on: the
@@ -2345,6 +2381,20 @@ describe("a town whose land ran dry", () =>
 		override(hq, { "getTotalResourceLevel": () => ({ "wood": DRY_WOOD + 1 }) });
 		hq.provideForDryLand(world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "wood again");
+	});
+
+	it("raises its civic centre's queue for a town out of room on a naval map, with wood left or not", () =>
+	{
+		const { world, hq } = dryTown(false, 0, 0);
+		override(world.ai.queues.civilCentre, { "hasQueuedUnits": () => true });
+		const missing = { "n": 2 };
+		override(hq.buildManager, { "numberMissingRoom": () => missing.n });
+		const raised = Math.max(hq.Config.priorities.villager, hq.Config.priorities.citizenSoldier) + 2;
+		hq.provideForDryLand(world.gameState, world.ai.queues);
+		assert.equal(world.ai.queueManager.getPriority("civilCentre"), raised, "two buildings without room");
+		missing.n = 1;
+		hq.provideForDryLand(world.gameState, world.ai.queues);
+		assert.equal(world.ai.queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "one: as before");
 	});
 });
 

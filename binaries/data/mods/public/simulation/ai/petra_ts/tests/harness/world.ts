@@ -57,6 +57,8 @@ export interface WorldOptions
 	/** gameState.getPopulation/getPopulationMax. */
 	population?: number;
 	populationMax?: number;
+	/** gameState.getPopulationLimit: the room the houses give (default: the max) */
+	populationLimit?: number;
 	/** gameState.currentPhase's answer. */
 	phase?: number;
 	/** gameState.getPhaseName(2)'s answer; undefined means no phase-two tech. */
@@ -304,6 +306,8 @@ export function makeWorld(options: WorldOptions = {}): World
 				transportCalls.push([ent, from, to, toPos]),
 			getPlan: () => undefined
 		},
+		// the houses have room (AttackPlan.cannotGrow reads it)
+		buildManager: { isUnbuildable: () => false },
 		attackManager: {
 			upcomingAttacks: { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] },
 			startedAttacks: { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] },
@@ -394,6 +398,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		sharedScript: sharedAI,
 		playerData,
 		applyCiv: (name: string) => name.replace("{civ}", "athen"),
+		isTemplateAvailable: (name: string) => templates[name] !== undefined,
 		getTemplate: (name: string) => templates[name] ?? null,
 		isTemplateDisabled: () => false,
 		getPlayerCiv: () => "athen",
@@ -401,6 +406,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		getVictoryConditions: () => new Set(victoryConditions),
 		getPopulation: () => options.population ?? 0,
 		getPopulationMax: () => options.populationMax ?? 400,
+		getPopulationLimit: () => options.populationLimit ?? options.populationMax ?? 400,
 		// the facilities able to train a given template, as the real
 		// GameState.findTrainers does: it runs over the training-facilities
 		// collection (see below), so membership is a truthy trainingQueue

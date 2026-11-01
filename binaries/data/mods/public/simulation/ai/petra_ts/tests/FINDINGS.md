@@ -1758,3 +1758,28 @@ small islands. Another player held 33000 wood and 9000 food at its
 population limit of 212, its houses queued and never placed, its huge
 attack of 136 units waiting for reinforcements that could not be trained,
 75 citizen soldiers idle (next).
+
+No room (the same day). The dump (`hq.room`: our territory's cells, those a
+base claims, those where the house plan's own test finds a free tile):
+player 1 had 17 such cells of 367 at minute 15 and none of 386 from minute
+35 on; player 4 none from minute 35 until its new base gave 32 at minute 65.
+The islands were full, not the search too strict. The way out is a new
+base, and none came: the civic centre spot search (`findEconomicCCLocation`,
+through `findStrategicCCLocation` with one civic centre) found nothing above
+its resource cut on the free islands, and with the room mode below, every
+free island was contested in 4 players.
+
+- A base sought because buildings miss room (`checkBaseExpansion`,
+  `numberMissingRoom > 1`), on a naval map, is sought for its room: any free
+  land we can reach scores ROOM_VALUE (10) plus its resources, against a cut
+  of 1 (`forRoom`, the plan's `room` metadata); uncontested spots first, and
+  when none is left a contested one (never one remembered as failed).
+- Its queue is raised as a dry town's (`provideForDryLand`, on a naval map
+  with buildings missing room).
+- An attack at our population limit with no room for a house (the house
+  template unbuildable, `AttackPlan.cannotGrow`) sets off with what it has,
+  as at the population cap: a huge attack of 136 waited for good.
+
+The 4-player match: civic centre attempts 8/2/5/6 against 0/1/3/0, built
+2/1/1/0; idle women 31/21/18/31% against 40/45/27/40, citizen soldiers
+38/31/32/25% against 50/43/31/47; no errors. Smoke games identical.

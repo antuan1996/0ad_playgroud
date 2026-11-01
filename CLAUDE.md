@@ -321,7 +321,7 @@ untested branches.
   original is no target since stage 3. A test with `// only the port passes:
   ...` pins one of the original's bugs; the original failed exactly the first 20
   when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and thirty-two stage 5's (the engine's order shape, the first
+  more pin stage-4 fixes and thirty-four stage 5's (the engine's order shape, the first
   field by what berries bring in, the house before the training queues, the
   best plan paid from the split accounts, the women paid before the
   soldiers, the women's share of 0.5, research by payback, one more barracks while
@@ -329,7 +329,7 @@ untested branches.
   attacker, an army that sails leaving local attacks, attacks on defended
   buildings without siege, sea routes round the enemy's shooters, re-routing at sea,
   landing away from threats, an early market on a dry island, the ship queue while a
-  transport waits, the town phase of a dry island, a saving town's arsenal, soldiers beside enemies neither drafted nor shipped away, nor counted while the plan prepares, units waiting for a ship at the rally point answering, a plan clearing its rally point's island before it sails, towers over the enemy's sea passages, a saving town's tower over one, civic centre spots followed and contested ones skipped, a dry town on a naval map, a dry town's fields, fishing and idle workers, an attack drafting while it waits for ships and the ship queue raised for it), 60 in all.
+  transport waits, the town phase of a dry island, a saving town's arsenal, soldiers beside enemies neither drafted nor shipped away, nor counted while the plan prepares, units waiting for a ship at the rally point answering, a plan clearing its rally point's island before it sails, towers over the enemy's sea passages, a saving town's tower over one, civic centre spots followed and contested ones skipped, a dry town on a naval map, a dry town's fields, fishing and idle workers, an attack drafting while it waits for ships and the ship queue raised for it, a base for room, an attack that cannot grow), 62 in all.
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

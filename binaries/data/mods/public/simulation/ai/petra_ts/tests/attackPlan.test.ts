@@ -1322,6 +1322,30 @@ describe("updatePreparation: unexecuted plans", () =>
 		assert.equal(plan.unitCollection.length, 3, "and keeps its units");
 	});
 
+	// only the port passes: a huge attack of 136 waited for good at its
+	// population limit on a full island (FINDINGS §40)
+	it("at its population limit with no room for a house, a big crowd sets off; with room, it waits", () =>
+	{
+		for (const noRoom of [true, false])
+		{
+			const world = makeWorld({ population: 210, populationLimit: 212, populationMax: 300 });
+			const target = makeTarget(world);
+			for (let i = 0; i < 20; ++i)
+				world.addEntity(makeEntity({
+					id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
+				}, { moveToRange: () => undefined }, { "plan": 1 }));
+			world.templates["structures/athen/house"] = makeTemplate("structures/athen/house", { classes: ["Structure", "House"] });
+			override(world.ai.HQ.buildManager, { "isUnbuildable": () => noRoom });
+			const plan = makePlan(world, { name: 1, init: true, data: { target } });
+			assert.equal(plan.cannotGrow(world.gameState), noRoom);
+			withPath([{ "x": 30, "y": 40 }], () =>
+			{
+				plan.updatePreparation(world.gameState);
+			});
+			assert.equal(plan.state, noRoom ? "completing" : "unexecuted", noRoom ? "no room: it goes" : "room: it waits");
+		}
+	});
+
 	it("pushes on when the population is full but the crowd is big enough", () =>
 	{
 		const world = makeWorld({ population: 396, populationMax: 400 });
