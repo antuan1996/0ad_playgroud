@@ -4253,6 +4253,26 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, ELEPHANT);
 	});
 
+	// only the port passes: a saving town built no arsenal, and on islands no attack ever had siege
+	it("a saving town of the third phase with a market builds its arsenal; without one it does not", () =>
+	{
+		for (const canBarter of [true, false])
+		{
+			const { world, hq } = seat({ "phase": 3, "population": 120 });
+			card(world, ARSENAL, ["Structure", "Arsenal"]);
+			card(world, BARRACKS, ["Structure", "Barracks"]);
+			bookBuilder(world, hq, ["structures/{civ}/arsenal", "structures/{civ}/barracks"]);
+			armed(world, 1, 0, 0);
+			hq.saveResources = true;
+			hq.canBarter = canBarter;
+
+			hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+
+			assert.deepEqual(world.ai.queues.militaryBuilding.plans.map(plan => plan.type), canBarter ? [ARSENAL] : [],
+				`market ${canBarter}`);
+		}
+	});
+
 	it("without the elephant stable, the third phase's arsenal goes up", () =>
 	{
 		const { world, hq } = seat({ "phase": 3, "population": 120 });

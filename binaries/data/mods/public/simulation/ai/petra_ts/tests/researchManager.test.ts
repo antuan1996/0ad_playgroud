@@ -97,6 +97,21 @@ describe("the next phase: checkPhase", () =>
 		assert.deepEqual(queued(noResearcher.queues.majorTech), []);
 	});
 
+	// only the port passes: Petra waited for its population, spent the wood on houses, and stayed in the village phase
+	it("a saving town whose land has run dry of wood asks for the town phase without waiting for its population", () =>
+	{
+		for (const [woodLeft, expected] of [[100, ["phase_town_generic"]], [3000, []]] as const)
+		{
+			const { world, hq, manager, queues } = seat({ "population": 60, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
+			hq.saveResources = true;
+			hq.getTotalResourceLevel = () => ({ "wood": woodLeft });
+
+			manager.checkPhase(world.gameState, queues);
+
+			assert.deepEqual(queued(queues.majorTech), [...expected], `${woodLeft} wood left within reach`);
+		}
+	});
+
 	it("waits while a phase, a civic centre or a wonder is already in the queues, or when no phase is left", () =>
 	{
 		const busy: PetraRuntime.ConfiguredQueueName[] = ["majorTech", "civilCentre", "wonder"];

@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (45 tests in all; the
+Each is pinned by a test that only the port passes (47 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -67,6 +67,8 @@ whether a game can reach it.
 | `transportPlan.getBoardingPos` (stage 5) | chose a landing point by distance and territory, beside the enemy's soldiers if that was nearest (§36) | each threat in reach of a candidate counts as a kilometre's detour | transportPlan: "lands away from the enemy's soldiers waiting on the shore" |
 | `headquarters.buildEarlyMarket` (stage 5) | a saving town (a small island) queued its market only in the town phase, when its wood was gone: the market never paid, and the town sat on its food, stone and metal (§37) | with no wood left within reach, the market is queued in the village phase, holding its wood, below the town phase while that is queued | headquarters: "a saving town whose land has no wood left queues its market in the village phase" |
 | `navalManager.shipPriority` (stage 5) | the ship queue's priority was 1: no transport was paid for with wood scarce, and the army waited at the shore (§37) | while a transport with units waits for ships, the queue goes just above the training queues | transportPlan: "goes just above the training queues while units wait for a ship, back to its own after" |
+| `researchManager.checkPhase` (stage 5) | asked for the town phase at 112 population, also in a saving town whose land had run dry of wood: the wood went into houses until less than the phase's 500 was left (§37) | a dry saving town asks for it at once | researchManager: "a saving town whose land has run dry of wood asks for the town phase without waiting for its population" |
+| `headquarters.constructTrainingBuildings` arsenal (stage 5) | a saving town returned before its arsenal: on islands no siege engine was ever trained (§37) | a saving town of the city phase with a market builds its arsenal | headquarters: "a saving town of the third phase with a market builds its arsenal; without one it does not" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1490,3 +1492,37 @@ left, 6 are still in the village phase at minute 60: the town phase also
 asks for five village buildings and 500 food and wood, which a town with no
 wood barely reaches. Five of the 60 games ran past 25 minutes of wall time
 (late island games simulate slowly) and were stopped by the watchdog.
+
+Then the two left (2026-11-01, not yet measured on islands):
+
+- **The village-phase draws.** Of the 12 draws left, 6 were still in the
+  village phase at minute 60. Four never queued the town phase: Petra asks
+  for it at 112 population (`popPhase2`), and these towns stalled at
+  100-106, the houses that would lift them waiting for wood the market
+  held. Two queued it with 308-324 wood in all, under the phase's 500. In
+  both, the wood the phase needs was spent before the phase was asked for
+  (these towns held about 3000 when their land ran dry). A saving town whose
+  land has run dry (`HQ.landRunDry`, shared with the early market) now asks
+  for the town phase at once, so the phase's 500 and the market's 300 are
+  claimed while the wood is there.
+- **No siege on islands.** Not one siege engine was trained in the 55 sides
+  of that batch (0 of 409 attack plans had a siege category); on mainland
+  138 of 300 sides train them (923 in all). The arsenal, the siege trainer,
+  comes after `constructTrainingBuildings`' return for a saving town, and on
+  islands every town saves. A saving town of the city phase with a market,
+  which can barter for it, now builds its arsenal; the attack plans then add
+  siege as on mainland (`addSiegeUnits` needs a trainer).
+
+**For future research: the watchdog's slow games.** Late in an island game
+the engine simulates 2-4 turns a second against dozens early on: 5 of the 60
+games of pool 42 ran past 25 minutes of wall time and were stopped by the
+watchdog (`--game-timeout 25`), at game minutes 54-80, still running, not
+hung. They are counted as failed, outside the win-rate, so a batch on
+islands loses up to a tenth of its games, likely the longest and most even
+ones, and the draws are counted short. To look at: where the time goes in
+those games (the engine's profiler, or `match.sh -P` for the AI's share:
+the AIs took about 2 ms a turn of the turn's 3-4 at the 99th percentile in
+one island match, so most of it is the simulation: pathfinding of large
+armies and fleets, likely); whether a longer limit or a faster speed
+setting finishes them; and whether a batch should report them apart from
+the failures of a crashed engine.
