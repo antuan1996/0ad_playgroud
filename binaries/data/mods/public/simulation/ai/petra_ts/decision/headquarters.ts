@@ -91,6 +91,8 @@ const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
 
+/** What any free land is worth to a base sought for its room (findEconomicCCLocation's forRoom). */
+export const ROOM_VALUE = 10;
 /** Idle workers from which a dry town stops training more (workforceStalled). */
 export const STALLED_IDLE = 10;
 /** Fishing boats a dry town wants on each sea beside its bases that has fish (provideForDryLand). */
@@ -859,7 +861,21 @@ export class Headquarters
 	 * Whose primary function would be to reach new resources of type "resource".
 	 */
 	findEconomicCCLocation(gameState: CommonGameState, template: CommonTemplate, resource: string,
-		proximity?: CommonPosition, fromStrategic?: boolean): false | CommonPosition
+		proximity?: CommonPosition, fromStrategic?: boolean, forRoom = false): false | CommonPosition
+	{
+		const spot = this.searchEconomicCCLocation(gameState, template, resource, proximity, fromStrategic, forRoom, false);
+		// a base for room takes a contested spot when no other is left: in a
+		// 4-player Dodecanese match every free island had an enemy's soldiers or
+		// buildings, and full towns never expanded (FINDINGS §40)
+		if (spot !== false || !forRoom)
+			return spot;
+		return this.searchEconomicCCLocation(gameState, template, resource, proximity, fromStrategic, forRoom, true);
+	}
+
+	/** findEconomicCCLocation's search, contested spots allowed or not (spots remembered as failed never). */
+	searchEconomicCCLocation(gameState: CommonGameState, template: CommonTemplate, resource: string,
+		proximity: CommonPosition | undefined, fromStrategic: boolean | undefined, forRoom: boolean,
+		allowContested: boolean): false | CommonPosition
 	{
 		// This builds a map. The procedure is fairly simple. It adds the resource maps
 		//	(which are dynamically updated and are made so that they will facilitate DP placement)
@@ -923,6 +939,10 @@ export class Headquarters
 		let cut = 60;
 		if (fromStrategic || proximity)  // be less restrictive
 			cut = 30;
+		// a base for room (FINDINGS §40): any free land we can reach is worth it,
+		// its resources a bonus; Dodecanese's free islands scored under the cut
+		if (forRoom)
+			cut = 1;
 
 		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
 		{
@@ -1017,7 +1037,7 @@ export class Headquarters
 			if (this.geography.borderMap.map[j] & mapMask.fullBorder)	// disfavor the borders of the map
 				norm *= 0.5;
 
-			let val = 2 * gameState.sharedScript.ccResourceMaps[resource].map[j];
+			let val = (forRoom ? ROOM_VALUE : 0) + 2 * gameState.sharedScript.ccResourceMaps[resource].map[j];
 			for (const res in gameState.sharedScript.resourceMaps)
 				if (res !== "food")
 					val += gameState.sharedScript.ccResourceMaps[res].map[j];
@@ -1029,7 +1049,8 @@ export class Headquarters
 
 			if (val < bestVal)
 				continue;
-			if (this.isContestedCCSpot(gameState, pos, index) || this.isDangerousLocation(gameState, pos, halfSize))
+			if ((allowContested ? this.isAvoidedCCSpot(pos) : this.isContestedCCSpot(gameState, pos, index)) ||
+			    this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
 			bestVal = val;
 			bestIdx = i;
@@ -1527,10 +1548,11 @@ export class Headquarters
 	{
 		const queueManager = gameState.ai.queueManager;
 		const dry = this.landRunDry(gameState);
-		// a new base is a dry town's way out: its civic centre goes just above
-		// the training queues, where Petra left it at 1, paid only once every
-		// other queue was (FINDINGS §40: one waited from minute 31 to the end)
-		const ccPriority = dry && queues.civilCentre.hasQueuedUnits() ?
+		// a new base is a dry or full town's way out: its civic centre goes just
+		// above the training queues, where Petra left it at 1, paid only once
+		// every other queue was (FINDINGS §40: one waited from minute 31 to the end)
+		const wanted = dry || this.geography.navalMap && this.buildManager.numberMissingRoom(gameState) > 1;
+		const ccPriority = wanted && queues.civilCentre.hasQueuedUnits() ?
 			Math.max(this.Config.priorities.villager, this.Config.priorities.citizenSoldier) + 2 :
 			this.Config.priorities.civilCentre;
 		if (queueManager.getPriority("civilCentre") !== ccPriority)
@@ -1598,9 +1620,15 @@ export class Headquarters
 	 * enemy soldiers within CC_ENEMY_AVOID metres. Petra sent its builders to
 	 * islands the enemy held, and their foundations were lost unbuilt.
 	 */
+	/** Whether a civic centre spot is remembered as failed (followCivCentreOrders). */
+	isAvoidedCCSpot(pos: CommonPosition): boolean
+	{
+		return this.ccSpotsAvoided.some(spot => SquareVectorDistance(spot.pos, pos) < CC_SPOT_AVOID * CC_SPOT_AVOID);
+	}
+
 	isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean
 	{
-		if (this.ccSpotsAvoided.some(spot => SquareVectorDistance(spot.pos, pos) < CC_SPOT_AVOID * CC_SPOT_AVOID))
+		if (this.isAvoidedCCSpot(pos))
 			return true;
 		const enemies = this.attackManager.enemiesByLand(gameState).get(land);
 		if (!enemies)
@@ -2005,7 +2033,8 @@ export class Headquarters
 		if (this.buildManager.numberMissingRoom(gameState) > 1)
 		{
 			debugWarn(this.Config, 2, () => "try to build a new base because not enough room to build ");
-			this.buildNewBase(gameState, queues);
+			// on a naval map, for its room: any free land will do (FINDINGS §40)
+			this.buildNewBase(gameState, queues, undefined, this.geography.navalMap);
 			return;
 		}
 		// If we've already planned to phase up, wait a bit before trying to expand
@@ -2023,7 +2052,7 @@ export class Headquarters
 		}
 	}
 
-	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string): boolean
+	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string, forRoom = false): boolean
 	{
 		const phaseName2 = gameState.getPhaseName(2);
 		if (this.hasPotentialBase() && this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)))
@@ -2052,7 +2081,8 @@ export class Headquarters
 
 		// base "-1" means new base.
 		debugWarn(this.Config, 1, () => "new base " + gameState.applyCiv(template) + " planned with resource " + resource);
-		queues.civilCentre.addPlan(new ConstructionPlan(gameState, template, { "base": NEW_BASE, "resource": resource }));
+		queues.civilCentre.addPlan(new ConstructionPlan(gameState, template,
+			forRoom ? { "base": NEW_BASE, "room": true } : { "base": NEW_BASE, "resource": resource }));
 		return true;
 	}
 

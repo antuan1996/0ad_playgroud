@@ -157,7 +157,9 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			if (template.hasClass("CivCentre"))
 			{
 				let pos;
-				if (this.metadata && this.metadata.resource)
+				if (this.metadata && this.metadata.room)
+					pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
+				else if (this.metadata && this.metadata.resource)
 				{
 					const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
 					pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);

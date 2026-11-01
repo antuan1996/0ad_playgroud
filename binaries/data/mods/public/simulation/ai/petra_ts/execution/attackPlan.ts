@@ -664,6 +664,19 @@ export class AttackPlan
 		return true;
 	}
 
+	/** At our population limit, with no room left for a house (the house template marked unbuildable). */
+	cannotGrow(gameState: CommonGameState): boolean
+	{
+		if (gameState.getPopulationLimit() - gameState.getPopulation() >= 5)
+			return false;
+		const buildManager = hqOf(gameState).buildManager;
+		return ["structures/{civ}/house", "structures/{civ}/apartment"].some(house =>
+		{
+			const name = gameState.applyCiv(house);
+			return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
+		});
+	}
+
 	/** Three returns possible: 1 is "keep going", 0 is "failed plan", 2 is "start". */
 	updatePreparation(gameState: CommonGameState): number
 	{
@@ -724,8 +737,10 @@ export class AttackPlan
 				this.forceStart();
 		}
 
-		// special case: if we've reached max pop, and we can start the plan, start it.
-		if (gameState.getPopulationMax() - gameState.getPopulation() < 5)
+		// special case: if we've reached max pop, and we can start the plan, start it;
+		// so too at our population limit with no room for a house: it cannot grow
+		// (FINDINGS §40: a huge attack of 136 waited for good on a full island)
+		if (gameState.getPopulationMax() - gameState.getPopulation() < 5 || this.cannotGrow(gameState))
 		{
 			let lengthMin = 16;
 			if (gameState.getPopulationMax() < 300)

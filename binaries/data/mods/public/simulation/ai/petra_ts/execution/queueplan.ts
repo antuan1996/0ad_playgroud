@@ -18,6 +18,8 @@ export interface PlanMetadata extends Partial<PetraEntityMetadata> {
 	oversea?: boolean;
 	phaseUp?: boolean;
 	proximity?: CommonPosition;
+	/** a civic centre sought for its room, any free land (HQ.buildNewBase) */
+	room?: boolean;
 	resource?: string;
 	support?: boolean;
 	trainer?: EntityId;
