@@ -7,6 +7,7 @@ import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { type Shooter, seaRoute, shootersOf } from "../world/seaRoute.ts";
 
 /**
  * Describes a transport plan
@@ -521,13 +522,14 @@ export class TransportPlan
 		if (!ready)
 			return;
 
+		const shooters = shootersOf(gameState);
 		for (const ship of this.ships.values())
 		{
 			this.boardingPos[ship.id()] = undefined;
 			// with the plan's end position as destination, a boarding position is always found
 			const bp = requireValue(this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true));
 			this.boardingPos[ship.id()] = bp;
-			ship.move(bp[0], bp[1]);
+			this.sailTo(gameState, ship, bp, shooters);
 		}
 		this.state = TransportPlan.SAILING;
 		this.nTry = {};
@@ -718,7 +720,7 @@ export class TransportPlan
 		{
 			const boardingPos = requireValue(this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true));
 			this.boardingPos[shipId] = boardingPos;
-			shipsToMove[shipId].move(boardingPos[0], boardingPos[1]);
+			this.sailTo(gameState, shipsToMove[shipId], boardingPos);
 		}
 		this.unloaded = [];
 
@@ -729,7 +731,7 @@ export class TransportPlan
 				this.boardingPos[ship.id()] = undefined;
 				const boardingPos = requireValue(this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true));
 				this.boardingPos[ship.id()] = boardingPos;
-				ship.move(boardingPos[0], boardingPos[1]);
+				this.sailTo(gameState, ship, boardingPos);
 			}
 			this.canceled = undefined;
 		}
@@ -782,9 +784,29 @@ export class TransportPlan
 				}
 				// a new search falls back to the previous boarding position
 				const newBp = requireValue(this.boardingPos[shipId]);
-				ship.move(newBp[0], newBp[1]);
+				this.sailTo(gameState, ship, newBp);
 			}
 		}
+	}
+
+	/**
+	 * Sends a ship to its landing point by a route round the enemy shooters it
+	 * can avoid (world/seaRoute.ts), one move and the rest queued; straight
+	 * there when no route is found.
+	 */
+	sailTo(gameState: CommonGameState, ship: CommonEntity, destination: CommonPosition,
+		shooters: readonly Shooter[] = shootersOf(gameState)): void
+	{
+		const from = ship.position();
+		const route = from && seaRoute(gameState.ai.accessibility, this.sea, from, destination, shooters);
+		if (!route)
+		{
+			ship.move(destination[0], destination[1]);
+			return;
+		}
+		ship.move(route[0][0], route[0][1]);
+		for (const waypoint of route.slice(1))
+			ship.move(waypoint[0], waypoint[1], true);
 	}
 
 	/** the ship a unit of this plan was sent to (its onBoard metadata holds the ship id until on board) */
