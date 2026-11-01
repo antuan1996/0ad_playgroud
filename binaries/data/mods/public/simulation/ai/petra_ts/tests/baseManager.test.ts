@@ -895,30 +895,6 @@ describe("the workers' trade: what they bring in and where they go", () =>
 		assert.deepEqual([...lent.values()].map((e) => e.id()).sort(), [2925, 2928]);
 	});
 
-	// only the port passes: Petra sent whoever was idle, women first, to a
-	// foundation on an island the enemy reached (FINDINGS §39)
-	it("for a foundation on another island, soldiers go first, to guard it as they build", () =>
-	{
-		const { world, base } = seat();
-		const worker = (id: number, classes: string[], subrole: string) =>
-			hand(world, base, id, classes, { "role": Worker.ROLE_WORKER, subrole, "gather-type": "wood" }, { "isBuilder": () => true });
-		worker(2931, CIVILIAN, Worker.SUBROLE_IDLE);
-		worker(2932, CIVILIAN, Worker.SUBROLE_IDLE);
-		worker(2933, SOLDIER, Worker.SUBROLE_GATHERER);
-		worker(2934, SOLDIER, Worker.SUBROLE_GATHERER);
-		worker(2935, CIVILIAN, Worker.SUBROLE_GATHERER);
-		worker(2936, CIVILIAN, Worker.SUBROLE_GATHERER);
-		const lent = new EntityCollection(world.gameState.sharedScript);
-		base.pickBuilders(world.gameState, lent, 2, true);
-		assert.deepEqual([...lent.values()].map((e) => e.id()).sort(), [2933, 2934], "the soldiers, though the women are idle");
-
-		const nearby = new EntityCollection(world.gameState.sharedScript);
-		for (const ent of lent.values())
-			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_GATHERER);
-		base.pickBuilders(world.gameState, nearby, 2);
-		assert.deepEqual([...nearby.values()].map((e) => e.id()).sort(), [2931, 2932], "at home, the idle hands as before");
-	});
-
 	it("a town of three builders lends none", () =>
 	{
 		const { world, base } = seat();

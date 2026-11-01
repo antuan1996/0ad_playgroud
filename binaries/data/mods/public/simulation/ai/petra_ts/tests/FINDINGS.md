@@ -1679,9 +1679,9 @@ two minutes later, unbuilt, on an island where the others' armies were.
   (`noteCivCentreOrdered`, a report of ExecutionHQ); a foundation that did
   not appear within 20 s, or that was lost before it was built, has its spot
   avoided for 10 minutes. Not saved.
-- The builders sent to a civic centre's foundation on an island where no
-  base of ours stands are citizen soldiers first (`pickBuilders`'
-  `soldiersFirst`), to guard it as they build.
+- (Reverted, below:) the builders sent to a civic centre's foundation on an
+  island where no base of ours stands were citizen soldiers first, to guard
+  it as they built.
 - A town on a naval map whose land runs dry (`landRunDry`, under 500 wood
   in reach) queues its market early and asks for the town phase at once, as
   a saving town did (§37): in the match of §38 a town that started with
@@ -1694,3 +1694,16 @@ against 1, 1, 6 and 6), five civic centres built against three; no errors.
 The idle time stays high (women 34-45%, citizen soldiers 40-56%, most of
 them after minute 60, the islands empty): next. Mainland: 3 of the 24 smoke
 games moved (still 23 to 1), the reference recorded with this change.
+
+Against petra_prev (the routing and towers of §36 and §38), 10 pairs from
+both slots (pool 4242): mainland 10 to 10, the statistics alike; islands 2
+won, 8 lost, 10 drawn, our side gathering 9% less, controlling 44% of the
+map at its peak against 59%, and losing 19 buildings against 7. Two
+ablations on the same island pairs: without the soldiers first, 3 won, 4
+lost, 13 drawn, the statistics even; with them but without the contested
+spots and followed orders, 2 won, 7 lost, 11 drawn, the same losses at home
+(19 buildings against 6, 15% less gathered). Ten citizen soldiers taken from
+their gathering and their island's defence for each expansion cost more
+than the guard was worth: reverted. The rest is kept; the smoke games
+identical to the reference recorded above (soldiers first never came into
+play on mainland).
