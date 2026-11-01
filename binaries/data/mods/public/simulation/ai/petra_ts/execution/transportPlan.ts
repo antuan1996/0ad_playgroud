@@ -7,7 +7,7 @@ import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import { type Shooter, seaRoute, shootersOf } from "../world/seaRoute.ts";
+import { type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
 
 /**
  * Describes a transport plan
@@ -58,6 +58,11 @@ function since(ent: CommonEntity, time: GameSeconds): number
 	return sent === undefined ? NaN : time - sent;
 }
 
+/** Seconds between two checks of the sailing ships' routes against the threats (checkRoutes). */
+const ROUTE_CHECK = 3;
+/** What a threat in reach of a landing point adds to its distance: a kilometre's detour. */
+const LANDING_THREAT_COST = 1000;
+
 export class TransportPlan
 {
 	ID: TransportPlanId;
@@ -72,6 +77,14 @@ export class TransportPlan
 	needSplit: CommonEntity[];
 	needTransportShips: boolean;
 	declare recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
+	/**
+	 * Each sailing ship's route to its landing point and how many threats
+	 * reached it when planned (FINDINGS §36). Not saved: after a load a ship
+	 * sails on unchecked until it is sent again.
+	 */
+	routes: Record<number, { waypoints: CommonPosition[]; threats: number }> = {};
+	/** Game seconds of the last check of the routes. */
+	lastRouteCheck = 0;
 	sea: SeaIndex;
 	declare ships: CommonEntityCollection;
 	startIndex: AccessIndex;
@@ -314,6 +327,7 @@ export class TransportPlan
 			ship.setStance(defaultStance);
 
 		ship.setMetadata(PlayerID, "transporter", undefined);
+		delete this.routes[ship.id()];
 		if (ship.getMetadata(PlayerID, "role") === Worker.ROLE_SWITCH_TO_TRADER)
 			ship.setMetadata(PlayerID, "role", Worker.ROLE_TRADER);
 	}
@@ -571,6 +585,7 @@ export class TransportPlan
 		const cell = gameState.getPassabilityMap().cellSize;
 		const alliedDocks = gameState.getAllyStructures().filter(filters.and(filters.byClass("Dock"),
 			filters.byMetadata(PlayerID, "sea", seaIndex))).toEntityArray();
+		const shooters = avoidEnnemy ? shootersOf(gameState) : [];
 		for (const i of hqOf(gameState).navalManager.landingZones[landIndex][seaIndex])
 		{
 			let pos: CommonPosition = worldPos(i%width+0.5, Math.floor(i/width)+0.5);
@@ -583,6 +598,8 @@ export class TransportPlan
 				const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
 				if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 					dist += 100000000;
+				// and away from the enemy's soldiers and towers there (FINDINGS §36)
+				dist += LANDING_THREAT_COST * threatsAt(pos, shooters);
 			}
 			// require a small distance between all ships of the transport plan to avoid path finder problems
 			// this is also used when the ship is blocked and we want to find a new boarding point
@@ -620,6 +637,8 @@ export class TransportPlan
 
 	onSailing(gameState: CommonGameState): void
 	{
+		this.checkRoutes(gameState);
+
 		// Check that the units recovered on the previous turn have been reloaded
 		for (const recov of this.recovered)
 		{
@@ -799,14 +818,51 @@ export class TransportPlan
 	{
 		const from = ship.position();
 		const route = from && seaRoute(gameState.ai.accessibility, this.sea, from, destination, shooters);
-		if (!route)
+		if (!from || !route)
 		{
+			delete this.routes[ship.id()];
 			ship.move(destination[0], destination[1]);
 			return;
 		}
+		this.routes[ship.id()] = { "waypoints": route, "threats": threatsAlong(from, route, shooters) };
 		ship.move(route[0][0], route[0][1]);
 		for (const waypoint of route.slice(1))
 			ship.move(waypoint[0], waypoint[1], true);
+	}
+
+	/**
+	 * Every ROUTE_CHECK seconds, each sailing ship's way ahead (from its
+	 * nearest waypoint on) against the threats now: more of them within reach
+	 * than when it was planned (archers or soldiers come to the shore, a
+	 * warship), and the ship is sent again by a new route from where it is.
+	 * As many or fewer, and the route stands: a landing point under fire
+	 * cannot be avoided, and sending again for it would only repeat orders.
+	 */
+	checkRoutes(gameState: CommonGameState): void
+	{
+		const now = gameState.ai.elapsedTime;
+		if (now - this.lastRouteCheck < ROUTE_CHECK)
+			return;
+		this.lastRouteCheck = now;
+		let shooters: Shooter[] | undefined;
+		for (const ship of this.transportShips.values())
+		{
+			const route = this.routes[ship.id()];
+			const pos = ship.position();
+			if (!route || !pos)
+				continue;
+			let nearest = 0;
+			for (let i = 1; i < route.waypoints.length; ++i)
+				if (SquareVectorDistance(pos, route.waypoints[i]) < SquareVectorDistance(pos, route.waypoints[nearest]))
+					nearest = i;
+			const ahead = route.waypoints.slice(nearest);
+			shooters ??= shootersOf(gameState);
+			const threats = threatsAlong(pos, ahead, shooters);
+			if (threats > route.threats)
+				this.sailTo(gameState, ship, requireValue(ahead.at(-1)), shooters);
+			else
+				route.threats = threats;
+		}
 	}
 
 	/** the ship a unit of this plan was sent to (its onBoard metadata holds the ship id until on board) */

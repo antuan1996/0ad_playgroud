@@ -56,6 +56,51 @@ export function shootersOf(gameState: CommonGameState): Shooter[]
 	return shooters;
 }
 
+/** How many shooters reach a point: within their range and the margin. */
+export function threatsAt(pos: CommonPosition, shooters: readonly Shooter[]): number
+{
+	let threats = 0;
+	for (const shooter of shooters)
+	{
+		const reach = shooter.range + DANGER_MARGIN;
+		const dx = pos[0] - shooter.pos[0];
+		const dz = pos[1] - shooter.pos[1];
+		if (dx * dx + dz * dz <= reach * reach)
+			++threats;
+	}
+	return threats;
+}
+
+/** The distance from a point to the segment a-b. */
+function segmentDistance(p: CommonPosition, a: CommonPosition, b: CommonPosition): number
+{
+	const abx = b[0] - a[0];
+	const abz = b[1] - a[1];
+	const length2 = abx * abx + abz * abz;
+	const t = length2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * abx + (p[1] - a[1]) * abz) / length2)) : 0;
+	return Math.hypot(p[0] - a[0] - t * abx, p[1] - a[1] - t * abz);
+}
+
+/** How many shooters reach the way from `from` through the waypoints, its end included. */
+export function threatsAlong(from: CommonPosition, waypoints: readonly CommonPosition[], shooters: readonly Shooter[]): number
+{
+	let threats = 0;
+	for (const shooter of shooters)
+	{
+		let previous = from;
+		for (const point of waypoints)
+		{
+			if (segmentDistance(shooter.pos, previous, point) <= shooter.range + DANGER_MARGIN)
+			{
+				++threats;
+				break;
+			}
+			previous = point;
+		}
+	}
+	return threats;
+}
+
 /** A minimal binary heap of cell indices by priority. */
 class CellHeap
 {
