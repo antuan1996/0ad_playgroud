@@ -438,6 +438,8 @@ export class AttackPlan
 	 * Siege added in build orders
 	 */
 	static SIEGE_ADDED = 2;
+	/** How far from a unit hit the plan's units bound for a ship answer, while it gathers at its rally point (answerAttacks). */
+	static ANSWER_RANGE = 60;
 
 	static readonly STATE_UNEXECUTED = "unexecuted";
 	static readonly STATE_COMPLETING = "completing";
@@ -698,6 +700,8 @@ export class AttackPlan
 			this.assignUnits(gameState);
 		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
 			this.reassignFastUnit(gameState);    // reassign some fast units (if any) to fasten raid preparations
+		// while it prepares, the plan holds no soldier beside enemies away from its rally point
+		this.leaveDisputedLands(gameState, gameState.ai.accessibility.getAccessValue(this.rallyPoint));
 
 		// Fasten the end game.
 		if (gameState.ai.playedTurn % 5 === 0 && this.hasSiegeUnits())
@@ -764,7 +768,7 @@ export class AttackPlan
 		// Raids have their predefined target
 		if (!this.target && !this.chooseTarget(gameState))
 			return AttackPlan.PREPARATION_FAILED;
-		this.keepLocalFights(gameState);
+		this.leaveDisputedLands(gameState, this.targetLand(gameState));
 		if (!this.overseas)
 			this.getPathToTarget(gameState);
 
@@ -813,12 +817,6 @@ export class AttackPlan
 			const index = getLandAccess(gameState, ent);
 			if (index === undefined)
 				continue;
-			// too few to fight on their own (splitLocalFights): out of the plan, not shipped away
-			if (this.besideEnemies(gameState, ent, rallyIndex))
-			{
-				this.removeUnit(ent, true);
-				continue;
-			}
 			if (index === rallyIndex)
 				ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15, queued);
 			else
@@ -912,7 +910,9 @@ export class AttackPlan
 					debugWarn(this.Config, 2, () => "attack template " + template + " added for plan " + this.name);
 					const max = firstOrder[3].batchSize;
 					const specialData = "Plan_" + this.name + "_" + firstOrder[4];
-					const data: PlanMetadata = { "plan": this.name, "special": specialData, "base": NO_BASE };
+					// trained on the rally point's land where it can be (queueplanTraining's trainer choice)
+				const data: PlanMetadata = { "plan": this.name, "special": specialData, "base": NO_BASE,
+					"index": gameState.ai.accessibility.getAccessValue(this.rallyPoint) };
 					// findBestTrainableUnit names only templates that exist
 					const templateObj = requireTemplate(gameState, template);
 					// a mercenary is a citizen soldier that cannot gather: an attacker only
@@ -1127,6 +1127,18 @@ export class AttackPlan
 			{
 				rallyIndex = gameState.ai.accessibility.getAccessValue(rallyDiff);
 				this.rallyPoint = rallyDiff;
+				// enemy buildings on the rally point's own land go first: the whole
+				// plan clears it before it sails (FINDINGS §34)
+				const local = this.targetOnLand(gameState, rallyIndex);
+				const localPos = local?.position();
+				if (local && localPos)
+				{
+					this.target = local;
+					this.targetPos = localPos;
+					this.targetPlayer = local.owner();
+					this.overseas = 0;
+					return true;
+				}
 				const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
 				if (sea)
 				{
@@ -1147,13 +1159,56 @@ export class AttackPlan
 	}
 
 	/**
-	 * Those of our soldiers who stand beside enemies, on another land than the
-	 * target's, stay to fight them (AttackManager.splitLocalFights).
+	 * The plan's nearest target on a land, among the enemies with buildings
+	 * there (by the plan's own target search, kept to that land), the owner of
+	 * the building nearest to the rally point first; undefined for a plan with
+	 * a unique target, or when none is found (the target player then unchanged).
 	 */
-	keepLocalFights(gameState: CommonGameState): void
+	targetOnLand(gameState: CommonGameState, land: AccessIndex): CommonEntity | undefined
+	{
+		if (this.uniqueTargetId)
+			return undefined;
+		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? [])
+			.filter(enemy => enemy.hasClass("Structure"));
+		if (!buildings.length)
+			return undefined;
+		const distance = (enemy: CommonEntity): number => SquareVectorDistance(requireValue(enemy.position()), this.rallyPoint);
+		const owners = new Set([...buildings].sort((a, b) => distance(a) - distance(b)).map(enemy => enemy.owner()));
+		const targetPlayer = this.targetPlayer;
+		for (const owner of owners)
+		{
+			this.targetPlayer = owner;
+			const target = this.getNearestTarget(gameState, this.rallyPoint, land);
+			if (target)
+				return target;
+		}
+		this.targetPlayer = targetPlayer;
+		return undefined;
+	}
+
+	/** The land of the plan's target, if it has one. */
+	targetLand(gameState: CommonGameState): AccessIndex | undefined
 	{
 		const target = this.target;
-		hqOf(gameState).attackManager.splitLocalFights(gameState, this, target && getLandAccess(gameState, target));
+		return target && getLandAccess(gameState, target);
+	}
+
+	/**
+	 * Those of the plan's soldiers who stand beside enemies, on another land
+	 * than `keptLand` (the rally point's while the plan prepares, the target's
+	 * once it sets off), stay there to fight them, from LOCAL_FIGHT_MIN on a
+	 * land (AttackManager.splitLocalFights); the fewer, on another land than
+	 * the rally point's, leave the plan rather than be shipped to it, and go
+	 * back to work (FINDINGS §34). Run while it prepares, so that the plan
+	 * counts and trains without them.
+	 */
+	leaveDisputedLands(gameState: CommonGameState, keptLand: AccessIndex | undefined): void
+	{
+		hqOf(gameState).attackManager.splitLocalFights(gameState, this, keptLand);
+		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
+		for (const ent of this.unitCollection.values())
+			if (this.besideEnemies(gameState, ent, rallyLand))
+				this.removeUnit(ent, true);
 	}
 
 	/**
@@ -1164,7 +1219,8 @@ export class AttackPlan
 	besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
 	{
 		const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
-		return land !== undefined && land !== rallyLand && hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
+		// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
+		return land !== undefined && land > 1 && land !== rallyLand && hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
 	}
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
@@ -1558,7 +1614,7 @@ export class AttackPlan
 		if ((this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
 		    !this.chooseTarget(gameState))
 			return false;
-		this.keepLocalFights(gameState);
+		this.leaveDisputedLands(gameState, this.targetLand(gameState));
 
 		// erase our queue. This will stop any leftover unit from being trained.
 		this.removeQueues(gameState);
@@ -2172,23 +2228,49 @@ export class AttackPlan
 		}
 
 		// if we are attacked while waiting the rest of the army, retaliate
+		this.answerAttacks(gameState, events);
+	}
+
+	/**
+	 * Answers the first attack of the turn on one of the plan's units, while
+	 * the plan waits for its ships. A unit bound for a ship, still ashore, walks
+	 * or waits for it and is never idle; it strikes back at an attacker on its
+	 * own land, where it stood still under fire before (FINDINGS §34); the
+	 * boarding then walks it back to its ship. One aboard (no position) cannot.
+	 * While the plan sails to its target ("transporting") the idle ones answer
+	 * too. While it gathers at its rally point ("completing"), only those bound
+	 * for a ship to it, within ANSWER_RANGE of the unit hit: the defense
+	 * manager leaves the units of a plan past preparation to it, and they stood
+	 * under fire at the shore. The others, walking to the rally point, keep
+	 * walking: answering every blow, they chased their attackers away from the
+	 * army, and on mainland the attacks bled (FINDINGS §34).
+	 */
+	answerAttacks(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		const completing = this.state === AttackPlan.STATE_COMPLETING;
 		for (const evt of events.Attacked)
 		{
 			if (!this.unitCollection.hasEntId(evt.target))
 				continue;
 			const attacker = gameState.getEntityById(evt.attacker);
-			if (!attacker || !gameState.getEntityById(evt.target))
+			const victim = gameState.getEntityById(evt.target);
+			if (!attacker || !victim)
 				continue;
 			const attackerLand = getLandAccess(gameState, attacker);
+			const near = victim.position() ?? attacker.position();
 			for (const ent of this.unitCollection.values())
 			{
-				// A unit bound for a ship, still ashore, walks or waits for it and is
-				// never idle: it strikes back at an attacker on its own land, where it
-				// stood still under fire before (FINDINGS §34); the boarding then
-				// walks it back to its ship. One aboard (no position) cannot.
-				if (ent.getMetadata(PlayerID, "transport") !== undefined)
+				const pos = ent.position();
+				if (completing)
 				{
-					if (!ent.position() || getLandAccess(gameState, ent) !== attackerLand)
+					if (ent.getMetadata(PlayerID, "transport") === undefined || !pos || !near ||
+					    getLandAccess(gameState, ent) !== attackerLand ||
+					    SquareVectorDistance(pos, near) > AttackPlan.ANSWER_RANGE * AttackPlan.ANSWER_RANGE)
+						continue;
+				}
+				else if (ent.getMetadata(PlayerID, "transport") !== undefined)
+				{
+					if (!pos || getLandAccess(gameState, ent) !== attackerLand)
 						continue;
 				}
 				else if (!ent.isIdle())

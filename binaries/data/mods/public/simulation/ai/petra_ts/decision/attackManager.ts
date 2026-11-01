@@ -348,6 +348,8 @@ export class AttackManager
 			{
 				const attack = this.upcomingAttacks[attackType][i];
 				attack.checkEvents(gameState, events);
+				if (attack.state === AttackPlan.STATE_COMPLETING)
+					attack.answerAttacks(gameState, events);
 
 				if (attack.isStarted())
 				{
@@ -783,8 +785,9 @@ export class AttackManager
 			if (enemy.owner() === GAIA || !enemy.position() || enemy.hasClass("Ship") ||
 			    !enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"]))
 				continue;
+			// 1 marks an impassable cell (a cliff's edge, the map's), no land
 			const land = getLandAccess(gameState, enemy);
-			if (land === undefined)
+			if (land === undefined || land <= 1)
 				continue;
 			const list = this.enemyLands.get(land);
 			if (list)
