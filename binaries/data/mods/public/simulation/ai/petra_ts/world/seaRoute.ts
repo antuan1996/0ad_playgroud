@@ -8,17 +8,22 @@
  * shooter's range (and a margin; a melee soldier on the shore has range 0)
  * costing DANGER_COST times a free one: the
  * ship still reaches a landing point under fire, but goes round any shooter
- * it can.
+ * it can, however long the way round (the user's watch of a 4-player
+ * Dodecanese game: transports passed towers they could have sailed round an
+ * island to avoid). The path is then cut to its corners: a waypoint is kept
+ * wherever the straight way to the next would leave the sea or pass more
+ * danger than the path does, since the engine sails each leg by its own
+ * shortest way, along any coast.
  */
 import type { Accessibility } from "simulation/ai/common-api/terrain-analysis.js";
 import { GAIA, worldPos } from "../adapter/brands.ts";
 
-/** What a cell within a shooter's reach costs, against 1 for a free one. */
-export const DANGER_COST = 30;
+/** What a cell within a shooter's reach costs, against 1 for a free one: any way round that exists is taken. */
+export const DANGER_COST = 200;
 /** Metres kept beyond a shooter's range. */
 export const DANGER_MARGIN = 12;
-/** The most waypoints a route is thinned to (the destination included). */
-export const MAX_WAYPOINTS = 8;
+/** The most waypoints a route keeps (the destination included); a longer list of corners is thinned evenly. */
+export const MAX_WAYPOINTS = 40;
 /** A shooter's reach when its template gives none (a tower's). */
 const DEFAULT_RANGE = 60;
 
@@ -227,17 +232,57 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	if (cameFrom[goal] === -1 && goal !== start)
 		return undefined;
 
-	const cells: number[] = [];
+	const cells: number[] = [start];
 	for (let cell = goal; cell !== start; cell = cameFrom[cell])
-		cells.push(cell);
-	cells.reverse();
-	const every = Math.max(1, Math.ceil(cells.length / MAX_WAYPOINTS));
-	const route: CommonPosition[] = [];
-	for (let i = every - 1; i < cells.length - 1; i += every)
+		cells.splice(1, 0, cell);
+	// danger cells along the path up to each cell
+	const dangerBefore = new Int32Array(cells.length);
+	for (let i = 1; i < cells.length; ++i)
+		dangerBefore[i] = dangerBefore[i - 1] + danger[cells[i]];
+	/** The cells a straight leg from cell a to cell b crosses: all at sea, and how many in danger (undefined: not at sea). */
+	const legDanger = (a: number, b: number): number | undefined =>
 	{
-		const cell = cells[i];
-		route.push(worldPosOf(cell % width, Math.floor(cell / width), cellSize));
+		const ax = a % width + 0.5;
+		const ay = Math.floor(a / width) + 0.5;
+		const dx = b % width + 0.5 - ax;
+		const dy = Math.floor(b / width) + 0.5 - ay;
+		const steps = Math.max(1, Math.ceil(2 * Math.max(Math.abs(dx), Math.abs(dy))));
+		let count = 0;
+		let previous = -1;
+		for (let k = 1; k <= steps; ++k)
+		{
+			const cell = Math.floor(ax + dx * k / steps) + Math.floor(ay + dy * k / steps) * width;
+			if (cell === previous)
+				continue;
+			previous = cell;
+			if (!onSea(cell))
+				return undefined;
+			count += danger[cell];
+		}
+		return count;
+	};
+	// the corners: from each kept cell, the leg goes on along the path while the straight way
+	// stays at sea with no more danger than the path's own; the cell before the first that
+	// fails is the next corner (a scan forward: its cost grows with the legs, not the path)
+	const corners: number[] = [];
+	for (let anchor = 0; anchor < cells.length - 1;)
+	{
+		let next = anchor + 1;
+		for (let j = anchor + 2; j < cells.length; ++j)
+		{
+			const leg = legDanger(cells[anchor], cells[j]);
+			if (leg === undefined || leg > dangerBefore[j] - dangerBefore[anchor])
+				break;
+			next = j;
+		}
+		if (next < cells.length - 1)
+			corners.push(cells[next]);
+		anchor = next;
 	}
+	const every = Math.max(1, Math.ceil((corners.length + 1) / MAX_WAYPOINTS));
+	const route: CommonPosition[] = [];
+	for (let i = every - 1; i < corners.length; i += every)
+		route.push(worldPosOf(corners[i] % width, Math.floor(corners[i] / width), cellSize));
 	route.push(to);
 	return route;
 }

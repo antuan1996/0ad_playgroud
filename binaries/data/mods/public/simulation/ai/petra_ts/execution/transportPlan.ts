@@ -418,7 +418,7 @@ export class TransportPlan
 						// with the unit's position as destination, a boarding position is always found
 						const bp = requireValue(this.getBoardingPos(gameState, ship, this.startIndex, this.sea, ent.position(), false));
 						this.boardingPos[shipId] = bp;
-						ship.move(bp[0], bp[1]);
+						this.sailTo(gameState, ship, bp);
 						ship.setMetadata(PlayerID, "timeGarrison", time);
 					}
 					ent.garrison(ship);
@@ -482,7 +482,7 @@ export class TransportPlan
 						}
 						// a new search falls back to the previous boarding position
 						const bp = requireValue(this.boardingPos[shipId]);
-						ship.move(bp[0], bp[1]);
+						this.sailTo(gameState, ship, bp);
 						ship.setMetadata(PlayerID, "timeGarrison", time);
 					}
 				}
