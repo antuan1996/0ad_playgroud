@@ -1526,6 +1526,40 @@ city phase (one already queues a theatre, which comes after it): the
 missing siege is elsewhere (the siege units' cost, wood above all, or the
 plans starting before their siege is trained), to look at.
 
+**The missing siege, looked at and left (2026-11-01, reverted).** One of the
+draws (seeds 16505353/948251142, against petra_parity, `-b -l`) showed two
+blocks, each tried and measured:
+
+- *No arsenal.* The town reached the city phase at about minute 57, but a
+  stable and a theatre waited in the military-building queue for wood it
+  did not have, and `constructTrainingBuildings` returns while that queue
+  holds anything: the arsenal was never queued. Tried: in the city phase,
+  with no arsenal, the arsenal goes to the front of that queue. The arsenal
+  was then built at minute 61 and researched its siege techs.
+- *No siege at the cap.* From minute 60 the population stood at 299-300, and
+  an attack plan at the cap (`updatePreparation`'s "max pop" branch) starts
+  with what it has and never calls `addSiegeUnits`: from then on no attack
+  has siege, on mainland as well. Tried: a plan at the cap without siege
+  (not a rush, raid or forced plan) asks for it, trains only that and waits
+  up to 90 game seconds (more while a siege unit is in training) before it
+  starts. In the game, every huge attack from minute 64 queued 2 siege units
+  and waited; none was trained: the population stayed at 295-300 and the
+  wood under 700, so each wait ran out and the attack left without. The game
+  was won at minute 74 rather than on the 90-minute limit.
+
+Both together against petra_prev (`petra-ts-prev` at d65eadcc3f, which has
+the town phase and saving-town arsenal fixes above), 10 pairs from both
+slots each (pool 4242): mainland 10 to 10 (50.0%; siege trained, 100 units
+in 12 of 20 games against petra_prev's 96 in 12, the mean statistics within
+a few units), islands 4 won, 6 lost, 10 drawn (siege: 6 units in one game
+against 2 in one). No effect to see, and siege on islands stays all but
+absent. Both changes were reverted. What blocks it is the dry island's
+wood at the cap, not the arsenal or the plans: siege on islands needs wood
+first, from other islands' forests (expansion overseas) or more barter
+from the stock of food, stone and metal (§37 above), which would also lift
+the drawn towns. The patch is kept out of the tree; the two blocks above
+are where to start if siege on islands comes back.
+
 **For future research: the watchdog's slow games.** Late in an island game
 the engine simulates 2-4 turns a second against dozens early on: 5 of the 60
 games of pool 42 ran past 25 minutes of wall time and were stopped by the
