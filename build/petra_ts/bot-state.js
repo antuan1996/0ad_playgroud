@@ -168,6 +168,12 @@ export class PetraBotState extends PetraBot
 				.map(([type, time]) => [type, Math.round(this.gameState.ai.elapsedTime - time)])),
 			// on naval maps, the enemy's busiest passages: [x, z, ship-seconds, fading] (world/shipTraffic.ts)
 			"shipTraffic": HQ.shipTraffic ? HQ.shipTraffic.busiest(5) : undefined,
+			// per sea: transports wanted, transports we have, and the ship queue's priority
+			"naval": Object.fromEntries(HQ.navalManager.wantedTransportShips.map((wanted, sea) => [sea, wanted])
+				.filter(([, wanted]) => wanted > 0)
+				.map(([sea, wanted]) => [sea, [wanted, HQ.navalManager.seaTransportShips[sea]?.length ?? -1]])),
+			"shipsPriority": this.gameState.ai.queueManager.getPriority("ships"),
+			"docksBuilt": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Dock") && ent.foundationProgress() === undefined).length,
 			// the best shore spot for a stone tower now and the traffic in its reach (findShoreTowerLocation)
 			"shoreTower": this.shoreTowerState(),
 			"towers": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Tower")).toEntityArray()
