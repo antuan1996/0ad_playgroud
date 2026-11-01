@@ -1500,19 +1500,30 @@ export class Headquarters
 	 * priority until the town phase lets it be built, and then barters the
 	 * town's food, stone and metal for wood. Petra queued it only in the town
 	 * phase, when the wood was gone: 24 of 38 drawn island games had it waiting
-	 * for good with 50-277 of its 300 wood.
+	 * for good with 50-277 of its 300 wood. The town phase it waits for goes
+	 * first: while the phase is queued, the market's queue sits just below it
+	 * (holding the wood at the top, it starved the phase on islands with
+	 * under 800 wood left, and the town stayed in the village phase).
 	 */
 	buildEarlyMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (!this.saveResources || gameState.getOwnEntitiesByClass("Market", true).hasEntities() ||
-		    queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
+		if (!this.saveResources || gameState.getOwnEntitiesByClass("Market", true).hasEntities())
 			return;
+		const queueManager = gameState.ai.queueManager;
+		if (queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
+		{
+			const priority = queues.majorTech.hasQueuedUnits() ?
+				Math.max(1, queueManager.getPriority("majorTech") - 1) : 3 * this.Config.priorities.economicBuilding;
+			if (queueManager.getPriority("economicBuilding") !== priority)
+				queueManager.changePriority("economicBuilding", priority);
+			return;
+		}
 		const market = gameState.applyCiv("structures/{civ}/market");
 		if (!gameState.isTemplateAvailable(market) || this.buildManager.isUnbuildable(gameState, market))
 			return;
 		if (this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood >= DRY_WOOD)
 			return;
-		gameState.ai.queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
+		queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
 		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
 		plan.queueToReset = "economicBuilding";
 		queues.economicBuilding.addPlan(plan);
