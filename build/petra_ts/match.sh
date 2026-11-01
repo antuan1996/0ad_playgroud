@@ -28,6 +28,9 @@
 #                      line per player: estimated and wanted gather rates,
 #                      gatherers and what they do, trip distances (bot-state.js,
 #                      read by economy-log.ts)
+#   idle.txt           with -i: every game minute, each player's idle time so
+#                      far per kind of unit, its idle spells by length and its
+#                      longest one (MatchIdle.js, read by idle-log.ts)
 #   defense.txt        with -b: the defense armies' lives, one JSON line per event
 #                      (created, progress, ended with its dead and killed)
 #   aitimes.txt        with -P: each AI's script time per turn, measured by the
@@ -67,6 +70,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
   -p BOT     the red bot, the same choice (default petra_out), or a
              petra_hybrid* bot of baselines.ts hybrid (never built here)
   -x         swap slots: the red bot plays player 1, the blue one player 2
+  -N PLAYERS number of players, 2 to 8 (default 2), all against all; players
+             3 and up play the -q bot (the map must take that many)
+  -q BOT     the bot of players 3 and up, the same choice as -p (default
+             petra_out)
   -v SPEED   game speed (default 1; up to 20 while observing)
   -n         non-visual: no graphics, as fast as possible
   -t         timeline: each player's state every two game minutes (timeline.txt)
@@ -76,6 +83,10 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              roles, base resource lists, queues, plans) and logs its attack plans'
              lives (attacks.txt) and its economy every 30 s (economy.txt), for
              debugging; the game is the same
+  -i         idle time: every game minute, each player's idle time per kind of
+             unit (women, citizen soldiers, other soldiers, siege, ships), its
+             idle spells by length and its longest one (idle.txt; idle-log.ts
+             summarises it)
   -P         time each AI's turn in the engine (aitimes.txt; ai-times.ts
              summarises it): two clock reads per AI and turn, kept in memory
              and written when the game ends, so the times are the bot's own
@@ -96,7 +107,8 @@ usage: $0 [options] [-- extra pyrogenesis arguments]
              killed game reports "watchdog: ..." in match.txt
   -h         this help
 Blue is the -o bot, red the -p one, whichever slot they play; a bot against
-itself is named with its color, like "Petra TS (blue)" and "Petra TS (red)".
+itself is named with its color, like "Petra TS (blue)" and "Petra TS (red)";
+players 3 and up are named with their slot, like "Petra TS (player 3)".
 EOF
 }
 
@@ -120,10 +132,13 @@ timeLimit=false
 limitMinutes=""
 botState=false
 aiTimes=false
+idleStats=false
+players=2
+extraBot=petra_out
 record=""
 wallLimit=""
 stallLimit=60
-while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:BK:S:h" option; do
+while getopts "m:s:a:d:c:w:W:o:p:xN:q:v:ntlbiPTL:r:k:BK:S:h" option; do
 	case "$option" in
 		m) map="$OPTARG" ;;
 		s) seed="$OPTARG" ;;
@@ -136,6 +151,9 @@ while getopts "m:s:a:d:c:w:W:o:p:xv:ntlbPTL:r:k:BK:S:h" option; do
 		p) redBot="$OPTARG" ;;
 		B) build=false ;;
 		x) swap=true ;;
+		N) players="$OPTARG" ;;
+		q) extraBot="$OPTARG" ;;
+		i) idleStats=true ;;
 		v) speed="$OPTARG" ;;
 		n) nonvisual=true ;;
 		t) timeline=true ;;
@@ -179,11 +197,17 @@ botName()
 }
 blueName="$(botName "$opponent" o)" || exit 2
 redName="$(botName "$redBot" p)" || exit 2
+if ! [[ "$players" =~ ^[2-8]$ ]]; then
+	echo "-N takes a number of players from 2 to 8, not '$players'" >&2
+	exit 2
+fi
+extraName="$(botName "$extraBot" q)" || exit 2
 if [ "$opponent" = "$redBot" ]; then
 	blueName="$blueName (blue)"
 	redName="$redName (red)"
 fi
-if [ "$botState" = true ] && [ "$opponent" != petra_out ] && [ "$redBot" != petra_out ]; then
+if [ "$botState" = true ] && [ "$opponent" != petra_out ] && [ "$redBot" != petra_out ] &&
+	{ [ "$players" -lt 3 ] || [ "$extraBot" != petra_out ]; }; then
 	echo "-b: only petra_out dumps its state, and neither bot is petra_out" >&2
 	exit 2
 fi
@@ -227,6 +251,9 @@ aiseed="${aiseed:-$((RANDOM * 32768 + RANDOM))}"
 
 bots=("$opponent")
 [ "$redBot" != "$opponent" ] && bots+=("$redBot")
+if [ "$players" -gt 2 ] && [[ " ${bots[*]} " != *" $extraBot "* ]]; then
+	bots+=("$extraBot")
+fi
 if [ "$build" = true ]; then
 	(cd "$repo" && npm run --silent build:petra:out)
 	baselines=()
@@ -264,7 +291,7 @@ args=(
 	-autostart="$map"
 	-autostart-seed="$seed"
 	-autostart-aiseed="$aiseed"
-	-autostart-players=2
+	-autostart-players="$players"
 	-autostart-player=-1
 	-autostart-stop-on-end
 	-autostart-speed="$speed"
@@ -281,6 +308,20 @@ args=(
 	-autostart-color="$blue:10,10,190"
 	-autostart-color="$red:230,10,10"
 )
+# Players 3 and up: the -q bot, each in its own color, all against all.
+extraColors=("" "" "" "20,150,20" "220,200,20" "130,20,170" "20,180,200" "230,120,20" "120,120,120")
+for ((player = 3; player <= players; ++player)); do
+	args+=(
+		-autostart-ai="$player:$extraBot"
+		-autostart-aidiff="$player:$difficulty"
+		-autostart-civ="$player:$civ"
+		-autostart-name="$player:$extraName (player $player)"
+		-autostart-color="$player:${extraColors[$player]}"
+	)
+done
+if [ "$idleStats" = true ]; then
+	args+=(-autostart-script=scripts/MatchIdle.js)
+fi
 if [ "$nonvisual" = true ]; then
 	args+=(-autostart-nonvisual)
 fi
@@ -304,6 +345,8 @@ args+=("$@")
 
 rerun=(build/petra_ts/match.sh -m "$map" -s "$seed" -a "$aiseed" -d "$difficulty" -c "$civ" -w "$victory" -W "$holdMinutes" -o "$opponent" -p "$redBot" -v "$speed")
 [ "$swap" = true ] && rerun+=(-x)
+[ "$players" -gt 2 ] && rerun+=(-N "$players" -q "$extraBot")
+[ "$idleStats" = true ] && rerun+=(-i)
 [ "$nonvisual" = true ] && rerun+=(-n)
 [ "$timeline" = true ] && rerun+=(-t)
 [ "$commands" = true ] && rerun+=(-l)
@@ -349,6 +392,9 @@ fi
 {
 	echo "player $blue: $blueName (simulation/ai/$opponent), blue"
 	echo "player $red: $redName (simulation/ai/$redBot), red"
+	for ((player = 3; player <= players; ++player)); do
+		echo "player $player: $extraName (player $player) (simulation/ai/$extraBot)"
+	done
 	echo "map $map, seed $seed, AI seed $aiseed, difficulty $difficulty, civ $civ, speed $speed"
 	hold=""
 	if [[ ",$victory," =~ ,(wonder|capture_the_relic), ]]; then
@@ -458,6 +504,9 @@ if [ "$commands" = true ]; then
 	grep -oE 'COMMAND [0-9]+ [0-9]+ \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/commands.txt" || true
 	grep -oE 'NOTICE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/notices.txt" || true
 fi
+if [ "$idleStats" = true ]; then
+	grep -oE 'IDLE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/idle.txt" || true
+fi
 if [ "$botState" = true ]; then
 	grep -oE 'BOTSTATE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/botstate.txt" || true
 	grep -oE 'ATTACKLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/attacks.txt" || true
@@ -478,7 +527,14 @@ wall=$(($(date +%s) - $(date -r "$out/match.txt" +%s)))
 	if [ -n "$watchdog" ]; then
 		echo "watchdog: $watchdog, killed"
 	fi
-	node "$repo/build/petra_ts/match-report.ts" "$out" "$blue" "$blueName" "$red" "$redName"
+	named=("$blue" "$blueName" "$red" "$redName")
+	for ((player = 3; player <= players; ++player)); do
+		named+=("$player" "$extraName (player $player)")
+	done
+	node "$repo/build/petra_ts/match-report.ts" "$out" "${named[@]}"
+	if [ "$idleStats" = true ] && [ -s "$out/idle.txt" ]; then
+		node "$repo/build/petra_ts/idle-log.ts" "$out"
+	fi
 } | tee -a "$out/match.txt"
 
 replay="$(sed -n "s/^Replay written to '\(.*\)'$/\1/p" "$out/game.log")"

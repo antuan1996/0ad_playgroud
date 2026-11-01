@@ -80,7 +80,13 @@ the bot's own state (both for debugging), `-P` each AI's script time per turn
 `CCmpAIManager.cpp`, two clock reads per AI and turn kept in memory and written
 at the end; `build/petra_ts/ai-times.ts <dir>...` summarises, `--compare
 <batch>` sets two bots' times side by side, the turn budget's check),
-`-k` how many match folders to keep, default 5; `-K MIN` and `-S SEC` the
+`-N` the number of players, 2 to 8, all against all, players 3 and up
+playing the `-q` bot (default `petra_out`), `-i` idle time (`idle.txt`, from
+`maps/scripts/MatchIdle.js`: every unit of every player sampled each 5 game
+seconds, garrisoned ones left out; per minute each player's idle time so far
+by kind of unit, its idle spells by length and its longest; `node
+build/petra_ts/idle-log.ts <match dir>` summarises it by 10-minute band, and
+`match.txt` shows the summary), `-k` how many match folders to keep, default 5; `-K MIN` and `-S SEC` the
 watchdog's limits, below) builds the bots and starts an
 observed match of Petra TS (`petra_out`) against itself, or with
 `-o`/`-p` against the original, Petra JS (`petra`), or a baseline; it needs the

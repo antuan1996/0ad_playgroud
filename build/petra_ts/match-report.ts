@@ -1,7 +1,7 @@
 /**
  * Summarises a match recorded by match.sh, from its game.log and the replay.
  *
- *   node build/petra_ts/match-report.ts <match dir> <player id> <name> <player id> <name>
+ *   node build/petra_ts/match-report.ts <match dir> <player id> <name> <player id> <name> [<player id> <name>]...
  *
  * Prints the end of match.txt (settings the game setup picked, game time,
  * result, a table of each bot's statistics, errors and warnings, the replay and
@@ -49,12 +49,14 @@ export interface MatchResult
 }
 
 const [dir, ...nameArgs] = process.argv.slice(2);
-if (!dir || nameArgs.length != 4)
+if (!dir || nameArgs.length < 4 || nameArgs.length % 2)
 {
-	console.error("usage: node match-report.ts <match dir> <player id> <name> <player id> <name>");
+	console.error("usage: node match-report.ts <match dir> <player id> <name> <player id> <name> [<player id> <name>]...");
 	process.exit(2);
 }
-const names = new Map([[Number(nameArgs[0]), nameArgs[1]], [Number(nameArgs[2]), nameArgs[3]]]);
+const names = new Map<number, string>();
+for (let i = 0; i < nameArgs.length; i += 2)
+	names.set(Number(nameArgs[i]), nameArgs[i + 1]);
 const log = readFileSync(join(dir, "game.log"), "utf8");
 const lines = log.split("\n");
 
@@ -160,7 +162,7 @@ if (players.length)
 			column ? cell.padStart(widths[column] + 2) : cell.padEnd(widths[column])).join("").trimEnd());
 }
 else
-	console.log("result: undecided (the game was closed before one bot defeated the other)");
+	console.log("result: undecided (the game was closed before one bot defeated the others)");
 
 // Errors and warnings, each distinct line once, most frequent first.
 const levelCounts = new Map<string, number>();
