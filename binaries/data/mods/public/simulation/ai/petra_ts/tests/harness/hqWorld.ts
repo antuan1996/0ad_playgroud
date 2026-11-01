@@ -677,7 +677,9 @@ const doorFields: Record<string, Record<string, unknown>> = {
 	// a fresh NavalManager has no transports (find*Location counts them)
 	"navalManager": { "transportShips": [] },
 	// a fresh TradeManager books its minimal gain from navalMap
-	"tradeManager": { "minimalGain": 5 }
+	"tradeManager": { "minimalGain": 5 },
+	// a fresh AttackManager prepares no attack (NavalManager.shipPriority reads them)
+	"attackManager": { "upcomingAttacks": { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] } }
 };
 
 /**

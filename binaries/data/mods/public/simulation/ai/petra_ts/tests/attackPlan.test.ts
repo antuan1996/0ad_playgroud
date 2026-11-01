@@ -1267,7 +1267,9 @@ describe("updatePreparation: the completing step", () =>
 
 describe("updatePreparation: unexecuted plans", () =>
 {
-	it("waits for transport ships before assigning any unit", () =>
+	// only the port passes: Petra waited for the ships before it drafted, and
+	// left 147 idle citizen soldiers out of an attack on a dry island (FINDINGS §40)
+	it("waiting for transport ships, drafts its units all the same", () =>
 	{
 		const world = makeWorld();
 		registerSpearman(world);
@@ -1283,8 +1285,8 @@ describe("updatePreparation: unexecuted plans", () =>
 			}));
 
 		assert.equal(plan.updatePreparation(world.gameState), 1, "no ships, keep going");
-		for (const soldier of world.units)
-			assert.equal(soldier.getMetadata(PLAYER, "plan"), undefined, "nothing was assigned yet");
+		assert.equal(world.units.filter((soldier) => soldier.getMetadata(PLAYER, "plan") != undefined).length, 1,
+			"the third fast soldier drafted while the plan waits");
 
 		world.ai.HQ.navalManager.seaTransportShips[4] = collectionOf(world, [world.addEntity(makeEntity({
 			id: 5000, owner: PLAYER, position: [5, 5], classes: ["Unit", "Ship"]

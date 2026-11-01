@@ -1735,3 +1735,26 @@ against 41/45/34/42, citizen soldiers 33/30/27/53% against 40/56/54/56; no
 errors. Smoke games identical. Left: idle stretches of 60-94% at minutes
 40-60 while the islands run dry, and an attack waiting for its ships drafts
 no one (next).
+
+Then (the same day): against petra_prev (the commit before this section's
+change), 10 island pairs from both slots: 7 won, 5 lost, 8 drawn, 10
+buildings lost against 16. Two more:
+
+- An attack bound overseas waited for its transport ships before it drafted
+  anyone (`updatePreparation`), and the ship queue stayed at 1: it now
+  drafts first (its citizen soldiers keep at their work until it sets off)
+  and, while it has units and its sea no transport,
+  `NavalManager.shipPriority` raises the ship queue as for a waiting
+  transport.
+- The civic centre queue's priority is 1 (as in Petra): paid once every
+  other queue is. On a dry island no other queue ever is, and one waited
+  from minute 31 to the end of the game. While the land is dry and a civic
+  centre is queued, its queue goes just above the training queues
+  (`provideForDryLand`).
+
+The 4-player match: that player built 2 civic centres, its women idle
+16-35% after minute 30 against 87%. Smoke games identical. Left: no room on
+small islands. Another player held 33000 wood and 9000 food at its
+population limit of 212, its houses queued and never placed, its huge
+attack of 136 units waiting for reinforcements that could not be trained,
+75 citizen soldiers idle (next).

@@ -2321,14 +2321,30 @@ describe("a town whose land ran dry", () =>
 		links[2] = [seaRegion(5), seaRegion(6)];
 		world.gameState.ai.accessibility.regionLinks = links;
 		hq.geography.navalRegions = { 5: true };
-		hq.provideForDryLand(world.gameState);
+		hq.provideForDryLand(world.gameState, world.ai.queues);
 		assert.equal(hq.maxFields, false);
 		assert.deepEqual(asked, [[5, DRY_FISHERS]], "the sea we use, not the other");
 
 		const wet = dryTown(false, 0, 0);
 		wet.hq.maxFields = 2;
-		wet.hq.provideForDryLand(wet.world.gameState);
+		wet.hq.provideForDryLand(wet.world.gameState, wet.world.ai.queues);
 		assert.equal(wet.hq.maxFields, 2, "wood left: the limit stands");
+	});
+
+	it("raises its civic centre's queue while one is queued, and lowers it once the land has wood again or none is queued", () =>
+	{
+		const { world, hq } = dryTown(true, 0, 0);
+		override(hq.navalManager, { "updateFishingBoats": () => undefined });
+		const queueManager = world.ai.queueManager;
+		const raised = Math.max(hq.Config.priorities.villager, hq.Config.priorities.citizenSoldier) + 2;
+		hq.provideForDryLand(world.gameState, world.ai.queues);
+		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "none queued");
+		override(world.ai.queues.civilCentre, { "hasQueuedUnits": () => true });
+		hq.provideForDryLand(world.gameState, world.ai.queues);
+		assert.equal(queueManager.getPriority("civilCentre"), raised, "queued on dry land");
+		override(hq, { "getTotalResourceLevel": () => ({ "wood": DRY_WOOD + 1 }) });
+		hq.provideForDryLand(world.gameState, world.ai.queues);
+		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "wood again");
 	});
 });
 

@@ -9,12 +9,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { override } from "./harness/fakes.ts";
+import { fake, override } from "./harness/fakes.ts";
 import { ENEMY, makeHqEntity, PLAYER } from "./harness/hqWorld.ts";
 import { board, disembark, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
 
 import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
+import type { AttackPlan } from "../execution/attackPlan.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
@@ -114,6 +115,29 @@ describe("the ship queue while a transport waits for ships", () =>
 		p.removeUnit(s.world.gameState, a.ent);
 		s.hq.navalManager.shipPriority(s.world.gameState);
 		assert.equal(queueManager.getPriority("ships"), priorities.ships, "nobody waits any more");
+	});
+});
+
+describe("the ship queue while an attack waits for ships", () =>
+{
+	// only the port passes: Petra's ship queue stayed at 1 while an attack bound
+	// overseas waited for its ships on a dry island (FINDINGS §40)
+	it("goes just above the training queues while an attack with units prepares for a sea without ships", () =>
+	{
+		const s = seat();
+		initNaval(s);
+		const priorities = s.hq.Config.priorities;
+		const queueManager = s.world.ai.queueManager;
+		const units = { "has": true };
+		const attack = fake<AttackPlan>({ "overseas": SEA, "unitCollection": { "hasEntities": () => units.has } });
+		s.hq.attackManager.upcomingAttacks["Attack"].push(attack);
+
+		s.hq.navalManager.shipPriority(s.world.gameState);
+		assert.equal(queueManager.getPriority("ships"), Math.max(priorities.villager, priorities.citizenSoldier) + 2);
+
+		units.has = false;
+		s.hq.navalManager.shipPriority(s.world.gameState);
+		assert.equal(queueManager.getPriority("ships"), priorities.ships, "no units drafted yet: its own priority");
 	});
 });
 
