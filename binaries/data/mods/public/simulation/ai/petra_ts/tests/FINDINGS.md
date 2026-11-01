@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (37 tests in all; the
+Each is pinned by a test that only the port passes (40 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -59,6 +59,9 @@ whether a game can reach it.
 | `researchManager.update` economy techs (stage 5) | queued the economy techs at the research queue's priority (250), below the women's, the soldiers', the houses' and the fields', one at a time: a capacity tech waited unpaid from minute 5 to 15 and the plough came at minute 11.6 with 26-40 women on the fields since minute 4 (§28) | a tech that pays back within 240 s from the income it adds, measured, goes just above the women's queue and takes the place of a plan waiting there (`decision/economyScore.ts`) | researchManager: "twenty-six farmers: the plough goes before the women" |
 | `headquarters.constructTrainingBuildings` (stage 5) | builds the barracks, ranges and stables by population thresholds, about three in all, while from minute 10 the barracks train 90% of the time and 2000-3000 resources lie in stock (§29) | one more barracks (or range) while those it has train 85% of the time, measured (`world/production.ts`), and the unbooked stock covers two of them, up to five | headquarters: "barracks always training and the stock unbooked: one more barracks" |
 | `transportPlan.onBoarding` (stage 5) | the distance from a ship to its boarding point read a point never set (`SquareVectorDistance(undefined, ...)`) and threw, ending the turn's boarding (§32) | a ship without a boarding point is not tested for drifting from it | transportPlan: "a unit heading for a ship without a boarding point keeps heading for it" |
+| `attackPlan.UpdateTransporting` (stage 5) | skipped every unit booked for a transport when the army was hit while waiting: a unit walking to its ship or waiting for it is never idle, so the army stood under fire at the shore (§34) | a unit still ashore and bound for a ship answers an attacker on its own land | attackPlan: "while shipping, a unit ashore bound for its ship strikes back at an attacker on its land" |
+| `attackManager` local attacks (stage 5) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay as one local attack per land, started at once | attackManager: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail" |
+| `attackPlan.getNearestTarget` (stage 5) | an Attack-type plan took on defended buildings only with siege engines: with none undefended left it found no target, was aborted with its army and remade every few seconds (§35) | it falls back to the full target list; rushes keep to undefended targets | attackPlan: "an attack without siege takes on a defended centre when nothing is left undefended; a rush does not" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1355,3 +1358,48 @@ and were killed at game minutes 54-80).
 What decides an island game is getting an army across the sea (docks,
 transport ships, landing), stage 6's: the economy wins the decided games,
 the sea leaves a third of them undecided.
+
+## 34. Stage 5: armies on shared islands (2026-11-01)
+
+From a 4-player Dodecanese game the user played: soldiers on an island with
+enemy units and buildings stood at the shore waiting for their ship, and an
+attack sailed for a target across the sea past enemies beside it.
+
+- While an attack plan waits for its transports (`UpdateTransporting`), it
+  answered a hit only with its idle units and skipped every unit booked for
+  a transport: a unit walking to its ship or waiting for it is never idle,
+  so the army stood under fire. A unit still ashore and bound for a ship now
+  answers an attacker on its own land (the boarding then walks it back).
+- The attack's target is chosen only when it starts, so while it gathers its
+  units it does not know whether it will sail; `getEnemyPlayer` prefers an
+  enemy on our land only by its civic centre. Now when the target turns out
+  to need a ship, `AttackManager.splitLocalFights` keeps the plan's soldiers
+  standing on a land with enemy units or buildings there, as one attack per
+  land started at once (no rally, no ship) against the nearest enemy
+  building, else unit; a land with fewer than four keeps them with the
+  sailing army. Mainland never sails: its smoke games identical. A first
+  version released the soldiers one by one (the next plan took them back
+  and sailed) and preferred a target on the rally land: replaced.
+- On 2-player Dodecanese (each side on its own island) neither measured a
+  change (48.0% and 50.0%, 25 and 22 decided games of 80; 69-73% draws):
+  the shared islands the user saw take more than two players, which the
+  batch tools do not play yet.
+
+## 35. Stage 5: attacks that never found a target (2026-11-01)
+
+A long Dodecanese match logged 1556 attack plans created and aborted within
+2 seconds; the island batches before had the same (up to 1606 in one game,
+95 in 80 Dodecanese games). A plan that must start switches to
+"completing", then chooses its target; an Attack-type plan searched only for
+isolated undefended buildings (`rushTargetFinder`), and for the defended
+ones only with siege engines. Late in an island game every enemy building
+is defended: no target, the plan aborted with its whole army, and the next
+plan took the army and failed the same way, every few seconds for good. It
+now falls back to the full target list (the civic centre first); rushes keep
+to undefended targets.
+
+10 pairs from both slots against petra_prev: mainland 50.0% (10 of 20,
+decided at minute 25), islands 3 to 5 with 12 draws of 20; 0 such aborts
+(hundreds before), 6.0 attacks started a game. The draws remain: the attacks
+now leave, but against defended towns without siege engines they destroy
+about two enemy buildings a game.

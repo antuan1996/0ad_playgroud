@@ -714,6 +714,28 @@ describe("choosing a target", () =>
 		assert.ok(far, "the far centre was there");
 	});
 
+	// only the port passes: Petra's attack without siege found no target among defended buildings, aborted and was remade for good
+	it("an attack without siege takes on a defended centre when nothing is left undefended; a rush does not", () =>
+	{
+		for (const [type, expected] of [["Attack", true], ["Rush", false]] as const)
+		{
+			const world = makeWorld({ enemyPlayer: ENEMY });
+			const centre = world.addEntity(makeEntity({
+				id: 2500, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre", "ConquestCritical"]
+			}, { hasDefensiveFire: () => true }));
+			world.addEntity(makeEntity({
+				id: 2501, owner: ENEMY, position: [34, 40], classes: ["Structure", "Tower"]
+			}, { hasDefensiveFire: () => true }));
+
+			const plan = makePlan(world, { name: 1, type, init: true });
+			plan.targetPlayer = ENEMY;
+			withPath([{ "x": 30, "y": 40 }], () =>
+			{
+				assert.equal(plan.getNearestTarget(world.gameState, plan.rallyPoint), expected ? centre : undefined, type);
+			});
+		}
+	});
+
 	it("ignores decaying structures nobody mans", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
@@ -3695,7 +3717,8 @@ describe("second pass: preparing and choosing", () =>
 		assert.equal(plan.overseas, 0);
 	});
 
-	it("an attack facing only guarded buildings takes on the town itself, but only with siege engines", () =>
+	// Petra took on the town only with siege engines; stage 5 with or without (FINDINGS §35)
+	it("an attack facing only guarded buildings takes on the town itself, with siege engines or without", () =>
 	{
 		for (const withSiege of [false, true])
 		{
@@ -3709,7 +3732,7 @@ describe("second pass: preparing and choosing", () =>
 			plan.targetPlayer = ENEMY;
 			let target: CommonEntity | undefined;
 			withPath([{ "x": 30, "y": 40 }], () => { target = plan.getNearestTarget(world.gameState, worldPos(10, 10)); });
-			assert.equal(target?.id(), withSiege ? 2000 : undefined, `siege ${withSiege}`);
+			assert.equal(target?.id(), 2000, `siege ${withSiege}`);
 		}
 	});
 
