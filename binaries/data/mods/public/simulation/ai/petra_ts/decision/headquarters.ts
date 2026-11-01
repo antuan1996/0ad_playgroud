@@ -32,6 +32,7 @@ import { hasActivity } from "../adapter/unitState.ts";
 import { Geography } from "../world/geography.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { ProductionLoad } from "../world/production.ts";
+import { ShipTraffic } from "../world/shipTraffic.ts";
 import { censusOf } from "../world/census.ts";
 import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
 import { type TrainableRequirement, batchSize, soldierRequirements, supportAlpha, supportShare, trainingStopped } from "./workforce.ts";
@@ -90,6 +91,11 @@ const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
 
+/** The ship-seconds of enemy traffic, fading, a shore tower must reach (findShoreTowerLocation). */
+export const SHORE_TOWER_TRAFFIC = 30;
+/** A tower's reach when its template names none. */
+const DEFAULT_TOWER_RANGE = 60;
+
 export class Headquarters
 {
 	Config: Config;
@@ -143,6 +149,8 @@ export class Headquarters
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
 	geography: Geography;
+	/** Where the enemy's ships go, on naval maps (world/shipTraffic.ts); not saved, it fills again. */
+	shipTraffic: ShipTraffic | undefined = undefined;
 	/** How fast each resource comes in per gatherer, measured (world/gatherEconomy.ts). */
 	gatherEconomy: GatherEconomy = new GatherEconomy();
 	/** How busy our military trainers are, measured (world/production.ts); not saved. */
@@ -1300,6 +1308,14 @@ export class Headquarters
 	findDefensiveLocation(gameState: CommonGameState, template: CommonTemplate):
 		[number, number, BaseId] | undefined
 	{
+		// a tower goes first where the enemy's ships pass, on naval maps, and
+		// only there when every enemy is overseas (FINDINGS §38)
+		if (template.hasClass("Tower"))
+		{
+			const shore = this.findShoreTowerLocation(gameState, template);
+			if (shore || this.towersByTrafficOnly(gameState))
+				return shore;
+		}
 		// We take the point in our territory which is the nearest to any enemy cc
 		// but requiring a minimal distance with our other defensive structures
 		// and not in range of any enemy defensive structure to avoid building under fire.
@@ -1437,6 +1453,91 @@ export class Headquarters
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
 		return [x, z, this.baseAtIndex(bestJdx)];
+	}
+
+	/**
+	 * Whether our towers go only where the enemy's ships pass: on a naval map,
+	 * no enemy civic centre on a land of one of our bases. A tower stands 60 m
+	 * from any other (its template's BuildRestrictions), and on small islands
+	 * the early ones, put up facing an enemy town across the sea before any
+	 * ship had sailed, left no room for one over the passages (FINDINGS §38).
+	 */
+	towersByTrafficOnly(gameState: CommonGameState): boolean
+	{
+		if (!this.shipTraffic)
+			return false;
+		const ourLands = new Set(this.baseManagers().map(base => base.accessIndex));
+		for (const centre of gameState.getEnemyStructures().filter(filters.byClass("CivCentre")).values())
+			if (centre.owner() !== GAIA && ourLands.has(getLandAccess(gameState, centre)))
+				return false;
+		return true;
+	}
+
+	/** Whether a tower of this template has a spot on a shore the enemy's ships pass (findShoreTowerLocation). */
+	hasShoreTowerSpot(gameState: CommonGameState, templateName: string): boolean
+	{
+		const template = gameState.getTemplate(gameState.applyCiv(templateName));
+		return !!template && this.findShoreTowerLocation(gameState, template) !== undefined;
+	}
+
+	/**
+	 * The spot of our territory where a tower would reach the most of the
+	 * enemy's ship traffic (world/shipTraffic.ts), the stretches our towers
+	 * already watch counting a third: on naval maps, some passages are used a
+	 * lot by ships and others barely (FINDINGS §38). Undefined below
+	 * SHORE_TOWER_TRAFFIC ship-seconds in reach, or off naval maps; a spot
+	 * keeps the distances of findDefensiveLocation (30 m from our towers and
+	 * fortresses, 80 m from the enemy's defenses) and is not dangerous.
+	 */
+	findShoreTowerLocation(gameState: CommonGameState, template: CommonTemplate): [number, number, BaseId] | undefined
+	{
+		const traffic = this.shipTraffic;
+		if (!traffic)
+			return undefined;
+		const range = template.attackRange("Ranged")?.max ?? DEFAULT_TOWER_RANGE;
+		const ownDefenses = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"])).toEntityArray()
+			.map(ent => ent.position()).filter(pos => pos !== undefined);
+		const enemyDefenses = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(GAIA)))
+			.filter(filters.byClasses(["CivCentre", "Fortress", "Tower"])).toEntityArray()
+			.map(ent => ent.position()).filter(pos => pos !== undefined);
+		const map = this.geography.territoryMap;
+		const width = map.width;
+		const cellSize = map.cellSize;
+		let obstructions: ReturnType<typeof createObstructionMap> | undefined;
+		let best = SHORE_TOWER_TRAFFIC;
+		let found: [number, number, BaseId] | undefined;
+		for (let jIndex = 0; jIndex < map.length; ++jIndex)
+		{
+			const j = cellIndex(map, jIndex);
+			if (map.getOwnerIndex(j) !== PlayerID)
+				continue;
+			const pos: CommonPosition = worldPos(cellSize * (j % width + 0.5), cellSize * (Math.floor(j / width) + 0.5));
+			if (map.isBlinking(pos))
+				continue;
+			const score = traffic.within(pos, range, ownDefenses);
+			if (score <= best)
+				continue;
+			if (ownDefenses.some(other => SquareVectorDistance(other, pos) < 900) ||
+			    enemyDefenses.some(other => SquareVectorDistance(other, pos) < 6400))
+				continue;
+			const base = this.baseAtIndex(j);
+			if (base === NO_BASE)
+				continue;
+			obstructions ??= createObstructionMap(gameState, NO_LAND, template);
+			const radius = Math.ceil(requireValue(template.obstructionRadius()).max / obstructions.cellSize);
+			const i = map.getNonObstructedTile(j, radius, obstructions);
+			if (i < 0)
+				continue;
+			// the free tile found may lie off the cell's centre: the traffic counted from where the tower stands
+			const spot = worldPos((i % obstructions.width + 0.5) * obstructions.cellSize,
+				(Math.floor(i / obstructions.width) + 0.5) * obstructions.cellSize);
+			const spotScore = traffic.within(spot, range, ownDefenses);
+			if (spotScore <= best || this.isDangerousLocation(gameState, spot, footprintHalves(template).halfSize))
+				continue;
+			best = spotScore;
+			found = [spot[0], spot[1], base];
+		}
+		return found;
 	}
 
 	buildTemple(gameState: CommonGameState, queues: HeadquartersQueues): void
@@ -1813,8 +1914,15 @@ export class Headquarters
 	/** Deals with building fortresses and towers along our border with enemies. */
 	buildDefenses(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (this.saveResources && !this.canBarter || queues.defenseBuilding.hasQueuedUnits())
+		if (queues.defenseBuilding.hasQueuedUnits())
 			return;
+		// A saving town builds no defense, but for a tower on a shore the enemy's
+		// ships pass (FINDINGS §38): an island's town saves its wood, and sat on
+		// thousands of stone while their transports and warships sailed by.
+		const saving = this.saveResources && !this.canBarter;
+		if (saving && !this.shipTraffic)
+			return;
+		const shoreOnly = saving || this.towersByTrafficOnly(gameState);
 
 		const phaseName3 = gameState.getPhaseName(3);
 		if (!this.saveResources && (this.currentPhase > 2 || (phaseName3 !== undefined && gameState.isResearching(phaseName3))))
@@ -1846,6 +1954,8 @@ export class Headquarters
 			const towerLapseTime = this.saveResources ? (1 + 0.5 * numTowers) * this.towerLapseTime : this.towerLapseTime;
 			if (numTowers < this.Config.Military.numSentryTowers && gameState.ai.elapsedTime > towerLapseTime + this.fortStartTime)
 			{
+				if (shoreOnly && !this.hasShoreTowerSpot(gameState, "structures/{civ}/sentry_tower"))
+					return;
 				this.fortStartTime = gameState.ai.elapsedTime;
 				queues.defenseBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/sentry_tower"));
 			}
@@ -1862,6 +1972,8 @@ export class Headquarters
 			numTowers < Math.floor(gameState.getPopulation() / 8) &&
 			gameState.getOwnFoundationsByClass("Tower").length < 3)
 		{
+			if (shoreOnly && !this.hasShoreTowerSpot(gameState, "structures/{civ}/defense_tower"))
+				return;
 			this.towerStartTime = gameState.ai.elapsedTime;
 			if (numTowers > 2 * this.numActiveBases() + 3)
 				gameState.ai.queueManager.changePriority("defenseBuilding", Math.round(0.7 * this.Config.priorities.defenseBuilding));
@@ -2520,6 +2632,12 @@ export class Headquarters
 		this.gatherEconomy.update(gameState);
 		this.productionLoad.update(gameState);
 		this.geography.territoryMap = createTerritoryMap(gameState);
+		if (this.geography.navalMap)
+		{
+			const map = this.geography.territoryMap;
+			this.shipTraffic ??= new ShipTraffic(map.width * map.cellSize, map.height * map.cellSize);
+			this.shipTraffic.sample(gameState);
+		}
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt())
 			.hasEntities();
 		// TODO find a better way to update
