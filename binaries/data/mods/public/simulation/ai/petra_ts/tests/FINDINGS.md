@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (40 tests in all; the
+Each is pinned by a test that only the port passes (41 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -62,6 +62,7 @@ whether a game can reach it.
 | `attackPlan.UpdateTransporting` (stage 5) | skipped every unit booked for a transport when the army was hit while waiting: a unit walking to its ship or waiting for it is never idle, so the army stood under fire at the shore (§34) | a unit still ashore and bound for a ship answers an attacker on its own land | attackPlan: "while shipping, a unit ashore bound for its ship strikes back at an attacker on its land" |
 | `attackManager` local attacks (stage 5) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay as one local attack per land, started at once | attackManager: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail" |
 | `attackPlan.getNearestTarget` (stage 5) | an Attack-type plan took on defended buildings only with siege engines: with none undefended left it found no target, was aborted with its army and remade every few seconds (§35) | it falls back to the full target list; rushes keep to undefended targets | attackPlan: "an attack without siege takes on a defended centre when nothing is left undefended; a rush does not" |
+| `transportPlan` sailing (stage 5) | sent a transport to its landing point with one move: the engine's shortest path hugs the coasts, under the enemy's towers (§36) | `TransportPlan.sailTo` sends a route round the enemy shooters (`world/seaRoute.ts`) | transportPlan: "sails by waypoints round a tower, ending at the landing point" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -1403,3 +1404,26 @@ decided at minute 25), islands 3 to 5 with 12 draws of 20; 0 such aborts
 (hundreds before), 6.0 attacks started a game. The draws remain: the attacks
 now leave, but against defended towns without siege engines they destroy
 about two enemy buildings a game.
+
+## 36. Stage 5: sea routes round the enemy's shooters (2026-11-01)
+
+From the same 4-player Dodecanese game: transports were sunk sailing along
+enemy shores. A transport was sent to its landing point with one move
+(`ship.move`), which the engine paths along the shortest way, close to any
+coast; its stance is "none", so it does not shoot back.
+
+`world/seaRoute.ts`: an A* search on the AI's sea grid (the accessibility's
+`navalPassMap`, each cell holding its sea region), over the cells of the
+transport's sea; a cell within an enemy shooter's reach and a 12 m margin
+costs 30 free ones (`shootersOf`: buildings with defensive fire, ranged
+units and ships; a tower's 60 m where a template names no ranged attack).
+`TransportPlan.sailTo` sends the route thinned to at most 8 waypoints, one
+move and the rest queued, at the four places a transport sets out for its
+landing point; straight there when no route is found. The landing point
+itself may lie under fire (`getBoardingPos` already prefers one outside
+enemy territory); the way there avoids what it can.
+
+Mainland has no transports: the smoke games identical. One island match
+(60 game minutes, `match.sh -P`): no errors, the AI's script time per turn
+as petra_prev's (p99.9 21 ms against 24, max 83 against 65). Not measured on
+win-rate.

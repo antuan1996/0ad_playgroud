@@ -755,6 +755,42 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 	});
 });
 
+describe("a transport sailing round the enemy's shooters: sailTo", () =>
+{
+	// only the port passes: Petra sent its ships straight, along the enemy's shore and under its towers
+	it("sails by waypoints round a tower, ending at the landing point", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		const moves = carrier.state.moves.length;
+
+		// the channel runs from x 152 to 247; a tower on the east bank at (225, 110)
+		// covers the straight way from the ship (200, 160) to (230, 60), and leaves the west side free
+		const tower = { "pos": worldPos(225, 110), "range": 20 };
+		p.sailTo(s.world.gameState, carrier.ent, worldPos(230, 60), [tower]);
+
+		const sent = carrier.state.moves.slice(moves);
+		assert.ok(sent.length > 1, "a route of waypoints, the first sent and the rest queued");
+		assert.deepEqual(sent.at(-1), [230, 60], "ending at the landing point");
+		for (const point of sent.slice(0, -1))
+			assert.ok(Math.hypot(point[0] - 225, point[1] - 110) > 20, `waypoint ${point} out of the tower's reach`);
+	});
+
+	it("with no route on its sea, sails straight there", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		const moves = carrier.state.moves.length;
+		p.sea = seaRegion(99);	// a sea the ship is not on
+
+		p.sailTo(s.world.gameState, carrier.ent, worldPos(280, 160), []);
+
+		assert.deepEqual(carrier.state.moves.slice(moves), [[280, 160]]);
+	});
+});
+
 describe("where a ship puts in: getBoardingPos", () =>
 {
 	it("with no landing spot known on that land, keeps to the given destination", () =>
