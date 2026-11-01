@@ -515,8 +515,24 @@ export class NavalManager
 				++this.wantedTransportShips[sea];
 	}
 
+	/**
+	 * While a transport with units waits for ships, the ship queue goes just
+	 * above the training queues, as a needed house does: at its configured 1,
+	 * a saving island town paid for no transport and its army waited at the
+	 * shore for good (FINDINGS §37: 10 of 23 drawn island games at minute 61).
+	 */
+	shipPriority(gameState: CommonGameState): void
+	{
+		const priorities = this.Config.priorities;
+		const waiting = this.transportPlans.some(plan => plan.needTransportShips && plan.units.length > 0);
+		const priority = waiting ? Math.max(priorities.villager, priorities.citizenSoldier) + 2 : priorities.ships;
+		if (gameState.ai.queueManager.getPriority("ships") !== priority)
+			gameState.ai.queueManager.changePriority("ships", priority);
+	}
+
 	maintainFleet(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
+		this.shipPriority(gameState);
 		if (queues.ships.hasQueuedUnits())
 			return;
 		if (!this.docks.filter(filters.isBuilt()).hasEntities())
