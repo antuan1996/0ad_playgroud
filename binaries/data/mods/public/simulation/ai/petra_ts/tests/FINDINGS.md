@@ -1707,3 +1707,31 @@ their gathering and their island's defence for each expansion cost more
 than the guard was worth: reverted. The rest is kept; the smoke games
 identical to the reference recorded above (soldiers first never came into
 play on mainland).
+
+## 40. Stage 5: towns whose land ran dry (2026-11-01)
+
+The 4-player Dodecanese match of §39 (`-b -i`): from minute 61 player 1's
+four bases had nothing left to gather, it wanted food (147-517 in stock)
+and held 6000-9000 wood and 7000 stone, and by minute 85 200 of its workers
+stood idle against 10 gathering, while it went on training (163 to 264
+population). The dump's field inputs (`hq.maxFields`, `canBuildField`):
+`maxFields` was 2, set at the start for a small starting island and lifted
+only by a market or a new base, which came at minute 50; from minute 55 the
+field template stood unbuildable, each placement finding no room renewing
+the mark for every base (why there is no room is not known yet).
+
+- `HQ.provideForDryLand` (every tenth turn): a town whose land has run dry
+  (`landRunDry`: naval maps or a saving town, under 500 wood in reach) lifts
+  the field limit, and wants 6 fishing boats (`DRY_FISHERS`) on each sea
+  beside its bases that still has fish.
+- `HQ.workforceStalled`, read by `trainingStopped` (`stalled`): with the
+  land run dry and more than a fifth of the workers idle, at least 10, no
+  worker is queued and those queued are let go, their food freed for ships
+  and the market.
+
+The same match: player 1 placed 11 fields against 2 and trained 26 fishing
+boats (9-17 the others), gathered 92000 food; idle women 32/26/20/38%
+against 41/45/34/42, citizen soldiers 33/30/27/53% against 40/56/54/56; no
+errors. Smoke games identical. Left: idle stretches of 60-94% at minutes
+40-60 while the islands run dry, and an attack waiting for its ships drafts
+no one (next).

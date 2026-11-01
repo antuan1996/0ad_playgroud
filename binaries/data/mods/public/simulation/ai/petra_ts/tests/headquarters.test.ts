@@ -21,10 +21,10 @@ import {
 	structureTemplate
 } from "./harness/hqWorld.ts";
 
-import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
+import { baseId, cellIndex, entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC } from "../decision/headquarters.ts";
+import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_FISHERS, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC, STALLED_IDLE } from "../decision/headquarters.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
@@ -2279,6 +2279,56 @@ describe("a dry town on a naval map", () =>
 			hq.buildEarlyMarket(world.gameState, world.ai.queues);
 			assert.equal(world.ai.queues.economicBuilding.plans.length, naval ? 1 : 0, naval ? "naval" : "mainland");
 		}
+	});
+});
+
+// only the port passes: a town whose islands ran dry kept its two fields
+// and went on training workers while 200 stood idle (FINDINGS §40)
+describe("a town whose land ran dry", () =>
+{
+	/** a town on a naval map, its land dry or not, with `idle` of its `workers` idle */
+	function dryTown(dry: boolean, workers: number, idle: number)
+	{
+		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+		hq.geography.navalMap = true;
+		override(hq, { "getTotalResourceLevel": () => ({ "wood": dry ? DRY_WOOD - 1 : DRY_WOOD + 1 }) });
+		for (let i = 0; i < workers; ++i)
+			world.addEntity(makeHqEntity({ "id": 7000 + i, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Support", "Worker"] },
+				{}, { "role": Worker.ROLE_WORKER, "subrole": i < idle ? Worker.SUBROLE_IDLE : Worker.SUBROLE_GATHERER }));
+		return { world, hq };
+	}
+
+	it("stops training with more than a fifth of its workers idle, at least ten; not while its land has wood", () =>
+	{
+		const stalled = (dry: boolean, workers: number, idle: number) =>
+		{
+			const { world, hq } = dryTown(dry, workers, idle);
+			return hq.workforceStalled(world.gameState);
+		};
+		assert.equal(stalled(true, 60, 13), true, "13 of 60");
+		assert.equal(stalled(true, 60, 12), false, "12 of 60: a fifth");
+		assert.equal(stalled(true, 20, STALLED_IDLE - 1), false, "fewer than ten");
+		assert.equal(stalled(false, 60, 30), false, "wood left");
+	});
+
+	it("lifts the field limit and wants more fishing boats on the seas beside its bases", () =>
+	{
+		const { world, hq } = dryTown(true, 0, 0);
+		hq.maxFields = 2;
+		const asked: Array<[number, number]> = [];
+		override(hq.navalManager, { "updateFishingBoats": (sea: number, num: number) => { asked.push([sea, num]); } });
+		const links: RegionIndex[][] = [];
+		links[2] = [seaRegion(5), seaRegion(6)];
+		world.gameState.ai.accessibility.regionLinks = links;
+		hq.geography.navalRegions = { 5: true };
+		hq.provideForDryLand(world.gameState);
+		assert.equal(hq.maxFields, false);
+		assert.deepEqual(asked, [[5, DRY_FISHERS]], "the sea we use, not the other");
+
+		const wet = dryTown(false, 0, 0);
+		wet.hq.maxFields = 2;
+		wet.hq.provideForDryLand(wet.world.gameState);
+		assert.equal(wet.hq.maxFields, 2, "wood left: the limit stands");
 	});
 });
 
