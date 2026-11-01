@@ -159,6 +159,10 @@ export class PetraBotState extends PetraBot
 			"canBuildUnits": HQ.canBuildUnits,
 			"targetNumWorkers": HQ.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
+			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
+			"maxFields": HQ.maxFields,
+			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),
+			"fieldUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/field")),
 			// seconds since a worker last found nothing to gather, per resource
 			"lastFailedGather": Object.fromEntries(Object.entries(HQ.lastFailedGather ?? {})
 				.map(([type, time]) => [type, Math.round(this.gameState.ai.elapsedTime - time)])),
@@ -948,6 +952,10 @@ export class PetraBotState extends PetraBot
 			"queued": { "villager": villager.countQueuedUnits(), "citizenSoldier": soldier.countQueuedUnits() },
 			"targetNumWorkers": HQ.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
+			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
+			"maxFields": HQ.maxFields,
+			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),
+			"fieldUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/field")),
 			"phase": HQ.currentPhase,
 			"saveResources": !!HQ.saveResources,
 			"popLimit": this.gameState.getPopulationLimit(),
