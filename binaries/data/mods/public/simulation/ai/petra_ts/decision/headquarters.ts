@@ -91,6 +91,11 @@ const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
 
+/** Idle workers from which a dry town stops training more (workforceStalled). */
+export const STALLED_IDLE = 10;
+/** Fishing boats a dry town wants on each sea beside its bases that has fish (provideForDryLand). */
+export const DRY_FISHERS = 6;
+
 /** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
 export const CC_ORDER_WAIT = 20;
 /** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
@@ -634,6 +639,13 @@ export class Headquarters
 		const numberOfQueuedSoldiers = queues.citizenSoldier.countQueuedUnits();
 		const numberTotal = numberOfWorkers + numberOfQueuedSupports + numberOfQueuedSoldiers;
 
+		// with the land run dry and many hands idle, no more of them, and those queued let go (FINDINGS §40)
+		const stalled = this.workforceStalled(gameState);
+		if (stalled)
+		{
+			queues.villager.empty();
+			queues.citizenSoldier.empty();
+		}
 		// getPhaseName(2) is optional: preserve original semantics (isResearching(undefined) === false)
 		const phaseName2 = gameState.getPhaseName(2);
 		if (trainingStopped({
@@ -644,7 +656,8 @@ export class Headquarters
 			"target": this.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
 			"waitingForTown": this.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)),
-			"saving": !!this.saveResources
+			"saving": !!this.saveResources,
+			stalled
 		}))
 			return;
 
@@ -1483,6 +1496,46 @@ export class Headquarters
 			if (centre.owner() !== GAIA && ourLands.has(getLandAccess(gameState, centre)))
 				return false;
 		return true;
+	}
+
+	/**
+	 * Whether the land has run dry (landRunDry) with more than a fifth of the
+	 * workers, and at least STALLED_IDLE, standing idle: in a 4-player
+	 * Dodecanese match a town went on training soldiers and women from 163 to
+	 * 264 population while 200 stood idle, nothing left to gather on its
+	 * islands, and the food they took was what its ships and attacks lacked
+	 * (FINDINGS §40).
+	 */
+	workforceStalled(gameState: CommonGameState): boolean
+	{
+		const workers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true);
+		const idle = workers.filter(filters.byMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE)).length;
+		return idle >= STALLED_IDLE && idle > workers.length / 5 && this.landRunDry(gameState);
+	}
+
+	/**
+	 * When the land has run dry (landRunDry): the field limit of a small
+	 * starting island lifted, as a market or a new base lifts it (with nothing
+	 * left to gather, every field's room is worth taking), and DRY_FISHERS
+	 * fishing boats wanted on each sea beside our bases that still has fish
+	 * (they cost wood, which a dry town still has). In a 4-player Dodecanese
+	 * match a town kept its 2 fields for 50 minutes after its islands ran
+	 * dry, its workers idle, holding 6000 wood (FINDINGS §40).
+	 */
+	provideForDryLand(gameState: CommonGameState): void
+	{
+		if (!this.landRunDry(gameState))
+			return;
+		this.maxFields = false;
+		for (const base of this.baseManagers())
+		{
+			const land = base.accessIndex;
+			if (land === undefined)
+				continue;
+			for (const sea of gameState.ai.accessibility.regionLinks[land] ?? [])
+				if (this.geography.navalRegions[sea])
+					this.navalManager.updateFishingBoats(seaRegion(sea), DRY_FISHERS);
+		}
 	}
 
 	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
@@ -2714,6 +2767,8 @@ export class Headquarters
 		this.productionLoad.update(gameState);
 		this.geography.territoryMap = createTerritoryMap(gameState);
 		this.followCivCentreOrders(gameState);
+		if (gameState.ai.playedTurn % 10 === 3)
+			this.provideForDryLand(gameState);
 		if (this.geography.navalMap)
 		{
 			const map = this.geography.territoryMap;

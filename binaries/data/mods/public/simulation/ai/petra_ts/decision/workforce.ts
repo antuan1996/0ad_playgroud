@@ -26,6 +26,8 @@ export interface WorkforceCensus
 	waitingForTown: boolean;
 	/** whether the HQ saves resources */
 	saving: boolean;
+	/** whether the land has run dry with many workers idle (HQ.workforceStalled): more would only stand idle */
+	stalled: boolean;
 }
 
 /** One worker at a time below 12, then a tenth of the workers, at most five. */
@@ -37,6 +39,8 @@ export function batchSize(workers: number): number
 /** Whether no worker is to be queued: enough of them, the town phase awaited, or the queues full. */
 export function trainingStopped(census: Readonly<WorkforceCensus>): boolean
 {
+	if (census.stalled)
+		return true;
 	const queued = census.queuedSupports + census.queuedSoldiers;
 	const total = census.workers + queued;
 	if (census.saving && total > census.popPhase2 + 10)
