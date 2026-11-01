@@ -710,7 +710,7 @@ export class BaseManager
 	 * returns an entity collection of workers.
 	 * They are idled immediatly and their subrole set to idle.
 	 */
-	pickBuilders(gameState: CommonGameState, workers: CommonEntityCollection, number: number): void
+	pickBuilders(gameState: CommonGameState, workers: CommonEntityCollection, number: number, soldiersFirst = false): void
 	{
 		const availableWorkers = this.workers.filter((ent) =>
 		{
@@ -724,6 +724,8 @@ export class BaseManager
 		}).toEntityArray();
 		// idle hands first, then the town's own, then a plan's; builders last
 		const lendScore = (ent: CommonEntity): number =>
+			(soldiersFirst && ent.hasClass("CitizenSoldier") ? -1000 : 0) + workScore(ent);
+		const workScore = (ent: CommonEntity): number =>
 		{
 			const subrole = ent.getMetadata(PlayerID, "subrole");
 			if (subrole === Worker.SUBROLE_BUILDER)

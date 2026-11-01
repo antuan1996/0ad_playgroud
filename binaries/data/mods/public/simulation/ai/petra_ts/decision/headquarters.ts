@@ -85,11 +85,19 @@ export type HeadquartersSerializedData = {
  */
 
 /** Wood left within reach of our bases under which a saving town calls its land dry (buildEarlyMarket). */
-const DRY_WOOD = 500;
+export const DRY_WOOD = 500;
 /** The share of the time our infantry trainers train above which another one is built (FINDINGS §29). */
 const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
+
+/** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
+export const CC_ORDER_WAIT = 20;
+/** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
+export const CC_SPOT_MEMORY = 600;
+/** Metres around such a spot avoided, and around enemy soldiers. */
+export const CC_SPOT_AVOID = 80;
+export const CC_ENEMY_AVOID = 150;
 
 /** The ship-seconds of enemy traffic, fading, a shore tower must reach (findShoreTowerLocation). */
 export const SHORE_TOWER_TRAFFIC = 30;
@@ -149,6 +157,10 @@ export class Headquarters
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
 	geography: Geography;
+	/** The civic centres ordered, followed until they stand (followCivCentreOrders); not saved. */
+	ccOrders: Array<{ pos: CommonPosition; time: number; seen: boolean }> = [];
+	/** Civic centre spots that failed or lost their foundation, avoided until then (game seconds); not saved. */
+	ccSpotsAvoided: Array<{ pos: CommonPosition; until: number }> = [];
 	/** Where the enemy's ships go, on naval maps (world/shipTraffic.ts); not saved, it fills again. */
 	shipTraffic: ShipTraffic | undefined = undefined;
 	/** How fast each resource comes in per gatherer, measured (world/gatherEconomy.ts). */
@@ -1004,7 +1016,7 @@ export class Headquarters
 
 			if (val < bestVal)
 				continue;
-			if (this.isDangerousLocation(gameState, pos, halfSize))
+			if (this.isContestedCCSpot(gameState, pos, index) || this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
 			bestVal = val;
 			bestIdx = i;
@@ -1146,7 +1158,7 @@ export class Headquarters
 
 			if (currentVal > bestVal)
 				continue;
-			if (this.isDangerousLocation(gameState, pos, halfSize))
+			if (this.isContestedCCSpot(gameState, pos, index) || this.isDangerousLocation(gameState, pos, halfSize))
 				continue;
 			bestVal = currentVal;
 			bestIdx = i;
@@ -1473,6 +1485,72 @@ export class Headquarters
 		return true;
 	}
 
+	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
+	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void
+	{
+		this.ccOrders.push({ pos, "time": gameState.ai.elapsedTime, "seen": false });
+	}
+
+	/**
+	 * Follows the civic centres ordered: one whose foundation did not appear
+	 * within CC_ORDER_WAIT seconds (the spot taken, by another player's
+	 * foundation most often), or whose foundation was lost before it was
+	 * built, has its spot avoided for CC_SPOT_MEMORY seconds. Petra ordered
+	 * the same spot again and again: in a 4-player Dodecanese match three
+	 * players went for the same spot of the same neutral island, one ordering
+	 * it 6 times in a minute (FINDINGS §39).
+	 */
+	followCivCentreOrders(gameState: CommonGameState): void
+	{
+		const now = gameState.ai.elapsedTime;
+		this.ccSpotsAvoided = this.ccSpotsAvoided.filter(spot => spot.until > now);
+		if (!this.ccOrders.length)
+			return;
+		const centres = gameState.getOwnStructures().filter(filters.byClass("CivCentre")).toEntityArray();
+		this.ccOrders = this.ccOrders.filter(order =>
+		{
+			const centre = centres.find(ent =>
+			{
+				const pos = ent.position();
+				return !!pos && SquareVectorDistance(pos, order.pos) < 40 * 40;
+			});
+			if (centre)
+			{
+				if (centre.foundationProgress() === undefined)
+					return false;
+				order.seen = true;
+				return true;
+			}
+			if (!order.seen && now - order.time < CC_ORDER_WAIT)
+				return true;
+			this.ccSpotsAvoided.push({ "pos": order.pos, "until": now + CC_SPOT_MEMORY });
+			return false;
+		});
+	}
+
+	/**
+	 * Whether a civic centre spot is contested (FINDINGS §39): remembered as
+	 * failed, on a land with enemy buildings where we have no base, or with
+	 * enemy soldiers within CC_ENEMY_AVOID metres. Petra sent its builders to
+	 * islands the enemy held, and their foundations were lost unbuilt.
+	 */
+	isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean
+	{
+		if (this.ccSpotsAvoided.some(spot => SquareVectorDistance(spot.pos, pos) < CC_SPOT_AVOID * CC_SPOT_AVOID))
+			return true;
+		const enemies = this.attackManager.enemiesByLand(gameState).get(land);
+		if (!enemies)
+			return false;
+		if (enemies.some(enemy => enemy.hasClass("Structure")) &&
+		    !this.baseManagers().some(base => base.accessIndex === land && base.anchor))
+			return true;
+		return enemies.some(enemy =>
+		{
+			const at = enemy.position();
+			return !enemy.hasClass("Structure") && !!at && SquareVectorDistance(at, pos) < CC_ENEMY_AVOID * CC_ENEMY_AVOID;
+		});
+	}
+
 	/** Whether a tower of this template has a spot on a shore the enemy's ships pass (findShoreTowerLocation). */
 	hasShoreTowerSpot(gameState: CommonGameState, templateName: string): boolean
 	{
@@ -1608,7 +1686,7 @@ export class Headquarters
 	 */
 	buildEarlyMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (!this.saveResources || gameState.getOwnEntitiesByClass("Market", true).hasEntities())
+		if (!this.saveResources && !this.geography.navalMap || gameState.getOwnEntitiesByClass("Market", true).hasEntities())
 			return;
 		const queueManager = gameState.ai.queueManager;
 		if (queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
@@ -1631,13 +1709,16 @@ export class Headquarters
 	}
 
 	/**
-	 * A saving town (little wood on its land from the start) with under
-	 * DRY_WOOD left within reach of its bases: what wood it has in stock is
-	 * all it will have until a market barters for more (FINDINGS §37).
+	 * A saving town (little wood on its land from the start), or any town on
+	 * a naval map, with under DRY_WOOD left within reach of its bases: what
+	 * wood it has in stock is all it will have until a market barters for more
+	 * (FINDINGS §37; §39: on Dodecanese a town that started with plenty ran
+	 * dry by minute 40 and held 14 wood against 12000 food and 6000 metal for
+	 * the rest of the game). On mainland a dry town expands by land.
 	 */
 	landRunDry(gameState: CommonGameState): boolean
 	{
-		return !!this.saveResources &&
+		return (!!this.saveResources || this.geography.navalMap) &&
 			this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood < DRY_WOOD;
 	}
 
@@ -2632,6 +2713,7 @@ export class Headquarters
 		this.gatherEconomy.update(gameState);
 		this.productionLoad.update(gameState);
 		this.geography.territoryMap = createTerritoryMap(gameState);
+		this.followCivCentreOrders(gameState);
 		if (this.geography.navalMap)
 		{
 			const map = this.geography.territoryMap;

@@ -31,7 +31,7 @@ export type ExecutionHQ = {
 	| "GetCurrentGatherRates" | "getSeaBetweenIndices" | "GetWantedGatherRates"
 	| "hasPotentialBase" | "houseNeeded" | "isDangerousLocation" | "isNearInvadingArmy" | "pickMostNeededResources"
 	// what they report
-	| "allowsDistantFood" | "markBuildingStarted" | "noteNothingToGather" | "phaseResearched"
+	| "allowsDistantFood" | "markBuildingStarted" | "noteCivCentreOrdered" | "noteNothingToGather" | "phaseResearched"
 >>;
 
 /** The headquarters, through the execution layer's view of it. */

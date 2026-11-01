@@ -207,8 +207,12 @@ export class BasesManager
 			{
 				// Okay so let's try to create a new base around this.
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
-				// Let's get a few units from other bases there to build this.
-				const builders = this.bulkPickWorkers(gameState, newbase, 10);
+				// Let's get a few units from other bases there to build this: soldiers
+				// first on an island where no base of ours stands, to guard it as they
+				// build (FINDINGS §39: foundations there were lost unbuilt)
+				const overseas = !this.baseManagers.some(base => base !== newbase && base.accessIndex === newbase.accessIndex &&
+					base.anchor !== undefined && base.anchor.foundationProgress() === undefined);
+				const builders = this.bulkPickWorkers(gameState, newbase, 10, overseas);
 				if (builders !== false)
 				{
 					builders.forEach((worker) =>
@@ -379,7 +383,7 @@ export class BasesManager
 	 * returns an entity collection of workers through BaseManager.pickBuilders
 	 * TODO: when same accessIndex, sort by distance
 	 */
-	bulkPickWorkers(gameState: CommonGameState, baseRef: BaseManager, number: number): CommonEntityCollection | false
+	bulkPickWorkers(gameState: CommonGameState, baseRef: BaseManager, number: number, soldiersFirst = false): CommonEntityCollection | false
 	{
 		const accessIndex = baseRef.accessIndex;
 		if (!accessIndex)
@@ -402,7 +406,7 @@ export class BasesManager
 		{
 			if (base.ID === baseRef.ID)
 				continue;
-			base.pickBuilders(gameState, workers, needed);
+			base.pickBuilders(gameState, workers, needed, soldiersFirst);
 			if (workers.length >= number)
 				break;
 			needed = number - workers.length;

@@ -112,7 +112,12 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			}
 		}
 		else if (pos.xx === undefined || pos.x === pos.xx && pos.z === pos.zz)
+		{
 			builder.construct(this.type, pos.x, pos.z, pos.angle, this.metadata);
+			// followed until it stands: a spot that fails is avoided (FINDINGS §39)
+			if (this.template.hasClass("CivCentre"))
+				hqOf(gameState).noteCivCentreOrdered(gameState, worldPos(pos.x, pos.z));
+		}
 		else // try with the lowest, move towards us unless we're same
 		{
 			for (let step = 0; step <= 1; step += 0.2)
