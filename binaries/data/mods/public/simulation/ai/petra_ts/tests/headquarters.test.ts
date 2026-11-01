@@ -24,7 +24,7 @@ import {
 import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import { type Headquarters, SHORE_TOWER_TRAFFIC } from "../decision/headquarters.ts";
+import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC } from "../decision/headquarters.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
@@ -2192,6 +2192,93 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 	{
 		const { world, hq } = seatShores([[[72, 40], 100]]);
 		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()), [265, 169, 2]);
+	});
+});
+
+// only the port passes: Petra ordered the same civic centre spot again and
+// again, and sent its builders to islands the enemy held (FINDINGS §39)
+describe("civic centres overseas: followed orders and contested spots", () =>
+{
+	const centre = (world: HqWorld, id: number, pos: [number, number], progress: number | undefined, owner = PLAYER) =>
+		world.addEntity(makeHqEntity({ id, owner, "position": pos, "classes": ["Structure", "CivCentre"],
+			"templateName": "structures/athen/civil_centre" }, { "foundationProgress": () => progress }));
+
+	it("a spot whose foundation never appeared is avoided for a while, one that stands is forgotten", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		world.ai.elapsedTime = seconds(1000);
+		hq.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
+		hq.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
+		centre(world, 5001, [62, 198], 0);
+
+		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT - 1);
+		hq.followCivCentreOrders(world.gameState);
+		assert.equal(hq.ccSpotsAvoided.length, 0, "still waiting");
+		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT);
+		hq.followCivCentreOrders(world.gameState);
+		assert.deepEqual(hq.ccSpotsAvoided.map(spot => spot.pos), [[200, 200]], "the spot that never took");
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(240, 220), landRegion(2)), true, "avoided around it");
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(300, 300), landRegion(2)), false);
+		assert.equal(hq.ccOrders.length, 1, "the foundation that stands is followed on");
+
+		world.ai.elapsedTime = seconds(1000 + CC_SPOT_MEMORY + CC_ORDER_WAIT);
+		hq.followCivCentreOrders(world.gameState);
+		assert.equal(hq.ccSpotsAvoided.length, 0, "and forgotten after a while");
+	});
+
+	it("a foundation lost before it was built has its spot avoided; a built one is done", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		world.ai.elapsedTime = seconds(1000);
+		hq.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
+		hq.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
+		const lost = centre(world, 5001, [200, 200], 30);
+		centre(world, 5002, [60, 200], 50);
+		hq.followCivCentreOrders(world.gameState);
+		override(lost, { "position": () => undefined });	// destroyed
+		override(requireValue(world.gameState.getEntityById(entityId(5002))), { "foundationProgress": () => undefined });
+		world.ai.elapsedTime = seconds(1002);
+		hq.followCivCentreOrders(world.gameState);
+		assert.deepEqual(hq.ccSpotsAvoided.map(spot => spot.pos), [[200, 200]]);
+		assert.equal(hq.ccOrders.length, 0);
+	});
+
+	it("an island with enemy buildings and none of our bases, or enemy soldiers near the spot, is contested", () =>
+	{
+		const { world, hq } = seat({ "territoryOwner": () => 0 });
+		const enemyLands = new Map<number, CommonEntity[]>();
+		override(hq.attackManager, { "enemiesByLand": () => enemyLands });
+		const tower = makeHqEntity({ "id": 6001, "owner": ENEMY, "position": [300, 300], "classes": ["Structure", "Tower"] });
+		const soldier = makeHqEntity({ "id": 6002, "owner": ENEMY, "position": [100, 100], "classes": ["Unit", "Soldier"] });
+		enemyLands.set(7, [tower]);
+		enemyLands.set(2, [soldier]);
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(250, 250), landRegion(7)), true, "their island");
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID - 1, 100), landRegion(2)), true, "beside their soldier");
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID + 1, 100), landRegion(2)), false);
+		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(250, 250), landRegion(9)), false, "an empty island");
+	});
+});
+
+// only the port passes: only a town saving from the start called its land
+// dry; one that started with plenty sat out the game without wood (FINDINGS §39)
+describe("a dry town on a naval map", () =>
+{
+	it("calls its land dry like a saving town, and queues its market early; on mainland it does not", () =>
+	{
+		for (const naval of [true, false])
+		{
+			const { world, hq } = seat({ "territoryOwner": () => PLAYER });
+			hq.saveResources = false;
+			hq.geography.navalMap = naval;
+			override(hq, { "getTotalResourceLevel": () => ({ "wood": DRY_WOOD - 1 }) });
+			world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
+				"classes": ["Structure", "Trade", "Town", "Market"]
+			});
+			bookBuilder(world, hq, ["structures/{civ}/market"]);
+			assert.equal(hq.landRunDry(world.gameState), naval);
+			hq.buildEarlyMarket(world.gameState, world.ai.queues);
+			assert.equal(world.ai.queues.economicBuilding.plans.length, naval ? 1 : 0, naval ? "naval" : "mainland");
+		}
 	});
 });
 

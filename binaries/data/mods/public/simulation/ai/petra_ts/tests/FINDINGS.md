@@ -1660,3 +1660,37 @@ island ran out of wood by minute 40, and from minute 51 it held 14 wood
 against 9000-12800 food and 6000 metal, its tower, civic centre and ships
 waiting for wood for 30 minutes. The dry-island rules (§37: the early
 market, then barter) apply only to a saving town, which it was not: next.
+
+## 39. Stage 5: civic centres overseas (2026-11-01)
+
+From the 4-player Dodecanese matches (§38): players 1 and 2 never got a
+second civic centre, 3 and 4 one or two. Three players went for the same
+spot of the same neutral island within five minutes, each spot search
+coming to the same answer; a construction plan sends its command and is
+done, so a spot that failed (taken, most often by another player's
+foundation) was ordered again and again (one player 6 times in a minute, 43
+times at 10 spots in the first match); one foundation appeared and was gone
+two minutes later, unbuilt, on an island where the others' armies were.
+
+- `HQ.isContestedCCSpot`, in both spot searches: a spot on a land with enemy
+  buildings and none of our bases, with enemy soldiers within 150 m, or
+  remembered as failed, is skipped.
+- `HQ.followCivCentreOrders`: the plan reports each civic centre it orders
+  (`noteCivCentreOrdered`, a report of ExecutionHQ); a foundation that did
+  not appear within 20 s, or that was lost before it was built, has its spot
+  avoided for 10 minutes. Not saved.
+- The builders sent to a civic centre's foundation on an island where no
+  base of ours stands are citizen soldiers first (`pickBuilders`'
+  `soldiersFirst`), to guard it as they build.
+- A town on a naval map whose land runs dry (`landRunDry`, under 500 wood
+  in reach) queues its market early and asks for the town phase at once, as
+  a saving town did (§37): in the match of §38 a town that started with
+  plenty held 14 wood against 12000 food and 6000 metal for 40 minutes, its
+  tower, civic centre and ships waiting for wood. On mainland a dry town
+  expands by land: unchanged.
+
+The same match: each attempt stood, one per spot (1, 1, 2 and 1 attempts
+against 1, 1, 6 and 6), five civic centres built against three; no errors.
+The idle time stays high (women 34-45%, citizen soldiers 40-56%, most of
+them after minute 60, the islands empty): next. Mainland: 3 of the 24 smoke
+games moved (still 23 to 1), the reference recorded with this change.
