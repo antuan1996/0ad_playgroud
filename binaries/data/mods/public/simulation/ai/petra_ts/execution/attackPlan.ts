@@ -85,6 +85,8 @@ type AttackTransitions = {
 export type AttackPlanState = keyof AttackTransitions;
 /** How near its rally point a withdrawing army stops, past the anchor's footprint when it is a base. */
 const WITHDRAW_RANGE = 15;
+/** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
+export const ECONOMIC_TARGET_WEIGHT = 0.25;
 
 const ATTACK_PLAN_STATES: readonly AttackPlanState[] = ["unexecuted", "completing", "walking", "transporting", "arrived", ""];
 
@@ -1300,6 +1302,13 @@ export class AttackPlan
 			// In normal attacks, disfavor fields
 			if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_RAID && ent.hasClass("Field"))
 				dist += 100000;
+			// On a naval map, a dock (the enemy's fishing and transport) or a base
+			// still being built counts as nearer: on islands what the enemy lives on
+			// is worth more than the hall of its home island, and Petra's attacks
+			// landed under the towers of civic centres for little (FINDINGS §42)
+			if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).geography.navalMap &&
+			    (ent.hasClass("Dock") || ent.foundationProgress() !== undefined))
+				dist *= ECONOMIC_TARGET_WEIGHT;
 			if (dist < minDist)
 			{
 				minDist = dist;
@@ -1358,7 +1367,9 @@ export class AttackPlan
 			return targets;
 
 		const validTargets = gameState.getEnemyStructures(playerEnemy).filter(this.isValidTarget, this);
-		targets = validTargets.filter(filters.byClass("CivCentre"));
+		// on a naval map the docks too, which the nearest pick favours (FINDINGS §42)
+		targets = validTargets.filter(filters.byClasses(
+			hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]));
 		if (!targets.hasEntities())
 			targets = validTargets.filter(filters.byClass("ConquestCritical"));
 		// If there's nothing, attack anything else that's less critical
