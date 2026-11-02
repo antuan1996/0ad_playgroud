@@ -376,6 +376,14 @@ export class BaseManager
 		return this.resources.getResourceLevel(gameState, type, distances);
 	}
 
+	/** Whether one of our fields, built, a foundation or queued, belongs to this base. */
+	hasOwnField(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): boolean
+	{
+		return gameState.getOwnStructures().filter(filters.byClass("Field")).toEntityArray()
+			.some(field => field.getMetadata(PlayerID, "base") === this.ID) ||
+			queues.field.plans.some(plan => plan.metadata?.base === this.ID);
+	}
+
 	/** check our resource levels and react accordingly */
 	checkResourceLevels(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
@@ -403,7 +411,14 @@ export class BaseManager
 						"provision": this.Config.Economy.provisionFields,
 						"saving": !!gameState.ai.HQ.saveResources || !!gameState.ai.HQ.saveSpace
 					});
-					if (decision === "first" || decision === "more")
+					// on a naval map, each island with a civic centre of ours has a field
+					// of its own: Petra placed them by the town's count, near any food
+					// dropsite, and the home island filled while the new ones had none
+					// (FINDINGS §41)
+					if (gameState.ai.HQ.navalMap && this.anchor && this.anchor.foundationProgress() === undefined &&
+					    !this.hasOwnField(gameState, queues))
+						queues.field.addPlan(new ConstructionPlan(gameState, "structures/{civ}/field", { "base": this.ID }));
+					else if (decision === "first" || decision === "more")
 					{
 						queues.field.addPlan(new ConstructionPlan(gameState,
 							"structures/{civ}/field", { "favoredBase": this.ID }));

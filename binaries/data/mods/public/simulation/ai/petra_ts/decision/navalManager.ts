@@ -6,9 +6,21 @@ import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { plansIn } from "../execution/attackPlan.ts";
+import { threatsAt } from "../world/seaRoute.ts";
+
+/** Warships wanted on a sea where the enemy fishes or trades (huntWithFleet). */
+export const HUNTERS_PER_SEA = 2;
+/** How far from a hunting warship its prey may be. */
+export const HUNT_RANGE = 400;
+/** A defensive building's reach when its template names none. */
+const DEFAULT_TOWER_REACH = 60;
+
+/** Food of fish per fishing boat wanted on a sea (fishByWhatIsLeft), and the most boats a sea gets. */
+export const FISH_PER_BOAT = 1500;
+export const FISH_MAX_BOATS = 8;
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
-import { NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
+import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugWarn } from "../adapter/debug.ts";
 
@@ -181,6 +193,29 @@ export class NavalManager
 			setSeaAccess(gameState, ship);
 		for (const dock of this.docks.values())
 			setSeaAccess(gameState, dock);
+	}
+
+	/**
+	 * On a naval map, the fishing boats wanted on each sea that still has fish
+	 * follow the fish left in it: one per FISH_PER_BOAT, 1 to FISH_MAX_BOATS.
+	 * Petra wanted 1 (2 from a small starting island) whatever the sea held,
+	 * and island towns starved with fish beside them (FINDINGS §41). A sea
+	 * whose fish ran out (its count set to 0 by the workers) stays at 0.
+	 */
+	fishByWhatIsLeft(gameState: CommonGameState): void
+	{
+		if (!gameState.ai.HQ.navalMap)
+			return;
+		const fishLeft: Record<number, number> = {};
+		for (const fish of gameState.getFishableSupplies().values())
+		{
+			const sea = this.getFishSea(gameState, fish);
+			if (sea)
+				fishLeft[sea] = (fishLeft[sea] ?? 0) + (fish.resourceSupplyAmount() ?? 0);
+		}
+		for (let sea = 0; sea < this.wantedFishShips.length; ++sea)
+			if (this.wantedFishShips[sea])
+				this.wantedFishShips[sea] = Math.min(FISH_MAX_BOATS, Math.max(1, Math.ceil((fishLeft[sea] ?? 0) / FISH_PER_BOAT)));
 	}
 
 	updateFishingBoats(sea: SeaIndex, num: number): void
@@ -574,6 +609,78 @@ export class NavalManager
 					continue;
 				}
 			}
+
+			const warShips = this.seaWarShips[sea];
+			if (warShips && warShips.length < this.wantedWarShips[sea])
+			{
+				const template = this.getBestShip(gameState, sea, "attack");
+				if (template)
+				{
+					queues.ships.addPlan(new TrainingPlan(gameState, template, { "sea": sea }, 1, 1));
+					continue;
+				}
+			}
+		}
+	}
+
+	/**
+	 * The enemy's fishing boats and merchant ships are what an island lives
+	 * on, and nothing hunted them: Petra never wanted a warship of its own
+	 * (FINDINGS §42). On a naval map, a sea with one of our docks and enemy
+	 * fishing boats or merchant ships wants HUNTERS_PER_SEA warships; each of
+	 * our warships idle and not carrying for a transport attacks the nearest
+	 * such ship of its sea within HUNT_RANGE, out of reach of the enemy's
+	 * towers and fortresses.
+	 */
+	huntWithFleet(gameState: CommonGameState): void
+	{
+		if (!gameState.ai.HQ.navalMap)
+			return;
+		const access = gameState.ai.accessibility;
+		const prey = new Map<number, CommonEntity[]>();
+		for (const ship of gameState.getEnemyUnits().values())
+		{
+			const pos = ship.position();
+			if (!pos || ship.owner() === GAIA || !ship.hasClasses(["FishingBoat", "Trader+Ship"]))
+				continue;
+			const sea = access.getAccessValue(pos, true);
+			const list = prey.get(sea);
+			if (list)
+				list.push(ship);
+			else
+				prey.set(sea, [ship]);
+		}
+		for (const dock of this.docks.filter(filters.isBuilt()).values())
+		{
+			const sea = getSeaAccess(gameState, dock);
+			if (sea !== undefined && prey.has(sea) && this.wantedWarShips[sea] < HUNTERS_PER_SEA)
+				this.wantedWarShips[sea] = HUNTERS_PER_SEA;
+		}
+		// the enemy's towers, fortresses and civic centres: prey in their reach is let be
+		const towers = gameState.getEnemyStructures().toEntityArray()
+			.filter(ent => ent.owner() !== GAIA && ent.hasDefensiveFire() && ent.position() !== undefined)
+			.map(ent => ({ "pos": requireValue(ent.position()), "range": ent.attackRange("Ranged")?.max ?? DEFAULT_TOWER_REACH }));
+		for (const ship of this.warShips.values())
+		{
+			const pos = ship.position();
+			if (!pos || !ship.isIdle() || ship.getMetadata(PlayerID, "transporter") !== undefined)
+				continue;
+			const list = prey.get(access.getAccessValue(pos, true));
+			if (!list)
+				continue;
+			let best: CommonEntity | undefined;
+			let bestDist = HUNT_RANGE * HUNT_RANGE;
+			for (const target of list)
+			{
+				const at = requireValue(target.position());
+				const dist = SquareVectorDistance(at, pos);
+				if (dist >= bestDist || threatsAt(at, towers) > 0)
+					continue;
+				best = target;
+				bestDist = dist;
+			}
+			if (best)
+				ship.attack(best.id(), false);
 		}
 	}
 
@@ -910,6 +1017,10 @@ export class NavalManager
 		// assign free ships to plans which need them
 		this.assignShipsToPlans(gameState);
 
+		if (gameState.ai.playedTurn % 20 === 11)
+			this.fishByWhatIsLeft(gameState);
+		if (gameState.ai.playedTurn % 5 === 2)
+			this.huntWithFleet(gameState);
 		// and require for more ships/structures if needed
 		if (gameState.ai.playedTurn % 3 === 0)
 		{

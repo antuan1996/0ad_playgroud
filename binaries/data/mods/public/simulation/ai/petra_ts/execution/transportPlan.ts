@@ -3,7 +3,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
 import { seaRegion, transportPlanId, worldPos } from "../adapter/brands.ts";
-import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
+import { stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -60,6 +60,8 @@ function since(ent: CommonEntity, time: GameSeconds): number
 
 /** Seconds between two checks of the sailing ships' routes against the threats (checkRoutes). */
 const ROUTE_CHECK = 3;
+/** The fewest seconds between two re-routings of a ship (checkRoutes). */
+export const ROUTE_RESEND_MIN = 15;
 /** What a threat in reach of a landing point adds to its distance: a kilometre's detour. */
 const LANDING_THREAT_COST = 1000;
 
@@ -82,7 +84,7 @@ export class TransportPlan
 	 * reached it when planned (FINDINGS §36). Not saved: after a load a ship
 	 * sails on unchecked until it is sent again.
 	 */
-	routes: Record<number, { waypoints: CommonPosition[]; threats: number }> = {};
+	routes: Record<number, { waypoints: CommonPosition[]; threats: number; sent: number }> = {};
 	/** Game seconds of the last check of the routes. */
 	lastRouteCheck = 0;
 	sea: SeaIndex;
@@ -420,6 +422,7 @@ export class TransportPlan
 						this.boardingPos[shipId] = bp;
 						this.sailTo(gameState, ship, bp);
 						ship.setMetadata(PlayerID, "timeGarrison", time);
+						ship.setMetadata(PlayerID, "posGarrison", ship.position());
 					}
 					ent.garrison(ship);
 					ent.setMetadata(PlayerID, "timeGarrison", time);
@@ -449,14 +452,18 @@ export class TransportPlan
 					if (stateIs(state, "INDIVIDUAL.WALKING") ||
 					    stateIs(state, "INDIVIDUAL.PICKUP.APPROACHING"))
 					{
+						// stuck if the ship itself made no headway in 2 s: Petra looked at
+						// the unit, which waits on the shore for its ship, and sent a ship
+						// sailing round the enemy's shooters again every 2 s, to a new
+						// boarding point every second time (FINDINGS §41)
 						if (since(ship, time) > 2)
 						{
-							const oldPos = ent.getMetadata(PlayerID, "posGarrison");
-							const newPos = ent.position();
+							const oldPos = ship.getMetadata(PlayerID, "posGarrison");
+							const newPos = ship.position();
 							if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 								retry = true;
-							ent.setMetadata(PlayerID, "posGarrison", newPos);
-							ent.setMetadata(PlayerID, "timeGarrison", time);
+							ship.setMetadata(PlayerID, "posGarrison", newPos);
+							ship.setMetadata(PlayerID, "timeGarrison", time);
 						}
 					}
 
@@ -757,7 +764,10 @@ export class TransportPlan
 
 		for (const ship of this.transportShips.values())
 		{
-			if (isInState(ship, "INDIVIDUAL.WALKING"))
+			// only a ship that has stopped: Petra took any ship not WALKING, one
+			// between two of its route's waypoints too, and sent it again by a new
+			// route every turn, a new landing point every third (FINDINGS §41)
+			if (!ship.isIdle())
 				continue;
 			const shipId = ship.id();
 			// set for every ship of the plan when it set sail
@@ -814,17 +824,18 @@ export class TransportPlan
 	 * there when no route is found.
 	 */
 	sailTo(gameState: CommonGameState, ship: CommonEntity, destination: CommonPosition,
-		shooters: readonly Shooter[] = shootersOf(gameState)): void
+		shooters: readonly Shooter[] = shootersOf(gameState), planned?: CommonPosition[]): void
 	{
 		const from = ship.position();
-		const route = from && seaRoute(gameState.ai.accessibility, this.sea, from, destination, shooters);
+		const route = planned ?? (from && seaRoute(gameState.ai.accessibility, this.sea, from, destination, shooters));
 		if (!from || !route)
 		{
 			delete this.routes[ship.id()];
 			ship.move(destination[0], destination[1]);
 			return;
 		}
-		this.routes[ship.id()] = { "waypoints": route, "threats": threatsAlong(from, route, shooters) };
+		this.routes[ship.id()] = { "waypoints": route, "threats": threatsAlong(from, route, shooters),
+			"sent": gameState.ai.elapsedTime };
 		ship.move(route[0][0], route[0][1]);
 		for (const waypoint of route.slice(1))
 			ship.move(waypoint[0], waypoint[1], true);
@@ -858,10 +869,22 @@ export class TransportPlan
 			const ahead = route.waypoints.slice(nearest);
 			shooters ??= shootersOf(gameState);
 			const threats = threatsAlong(pos, ahead, shooters);
-			if (threats > route.threats)
-				this.sailTo(gameState, ship, requireValue(ahead.at(-1)), shooters);
-			else
-				route.threats = threats;
+			// sent again only by a route with fewer threats than the way ahead, and
+			// not twice within ROUTE_RESEND_MIN: re-sent at every check as enemies
+			// moved, by routes no safer that began from where the ship stood, ships
+			// turned back and forth (a 4-player match: a median 3.2 s between two
+			// sends of a ship, one sent 543 times; FINDINGS §41)
+			if (threats > route.threats && now - route.sent >= ROUTE_RESEND_MIN)
+			{
+				const destination = requireValue(ahead.at(-1));
+				const better = seaRoute(gameState.ai.accessibility, this.sea, pos, destination, shooters);
+				if (better && threatsAlong(pos, better, shooters) < threats)
+				{
+					this.sailTo(gameState, ship, destination, shooters, better);
+					continue;
+				}
+			}
+			route.threats = threats;
 		}
 	}
 

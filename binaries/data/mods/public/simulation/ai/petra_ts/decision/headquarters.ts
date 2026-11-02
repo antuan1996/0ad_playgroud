@@ -95,8 +95,6 @@ const MAX_MILITARY_TRAINERS = 5;
 export const ROOM_VALUE = 10;
 /** Idle workers from which a dry town stops training more (workforceStalled). */
 export const STALLED_IDLE = 10;
-/** Fishing boats a dry town wants on each sea beside its bases that has fish (provideForDryLand). */
-export const DRY_FISHERS = 6;
 
 /** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
 export const CC_ORDER_WAIT = 20;
@@ -1537,9 +1535,8 @@ export class Headquarters
 	/**
 	 * When the land has run dry (landRunDry): the field limit of a small
 	 * starting island lifted, as a market or a new base lifts it (with nothing
-	 * left to gather, every field's room is worth taking), and DRY_FISHERS
-	 * fishing boats wanted on each sea beside our bases that still has fish
-	 * (they cost wood, which a dry town still has). In a 4-player Dodecanese
+	 * left to gather, every field's room is worth taking; the fishing boats
+	 * follow the fish left, NavalManager.fishByWhatIsLeft). In a 4-player Dodecanese
 	 * match a town kept its 2 fields for 50 minutes after its islands ran
 	 * dry, its workers idle, holding 6000 wood (FINDINGS §40). And its
 	 * civic centre's queue raised while one is queued.
@@ -1557,18 +1554,8 @@ export class Headquarters
 			this.Config.priorities.civilCentre;
 		if (queueManager.getPriority("civilCentre") !== ccPriority)
 			queueManager.changePriority("civilCentre", ccPriority);
-		if (!dry)
-			return;
-		this.maxFields = false;
-		for (const base of this.baseManagers())
-		{
-			const land = base.accessIndex;
-			if (land === undefined)
-				continue;
-			for (const sea of gameState.ai.accessibility.regionLinks[land] ?? [])
-				if (this.geography.navalRegions[sea])
-					this.navalManager.updateFishingBoats(seaRegion(sea), DRY_FISHERS);
-		}
+		if (dry)
+			this.maxFields = false;
 	}
 
 	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
