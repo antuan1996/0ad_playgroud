@@ -1916,3 +1916,26 @@ Unreliable therefore: the island batches of §40 (the base for room, 7 to 1),
 games, the batches without the dump (§43's 50 mainland pairs) and those
 before af637600fc stand. The committed changes of §40-42 are measured again
 without the dump, below.
+
+Measured again without the dump, 20 island pairs from both slots each (pool
+4242):
+
+- The committed island changes of §40-42 together (53186dd1dd's code against
+  e82205ac53, the commit before them): 11 won, 7 lost, 22 drawn (61.1% of
+  the decided games, CI 38.6-79.7%); our side gathered 15% more (196400
+  against 171400), 44% more wood (25500 against 17800), trained 14% more
+  units, held 58% of the map at its peak against 45%, lost 10 buildings
+  against 14. They stand.
+- The wood fixes, against 53186dd1dd: no wonder queued while the land is
+  dry, a queued one dropped (`provideForDryLand`), and food sold at a rate
+  down to 2 past 10000 in stock (`performBarter`). 9 won, 9 lost, 22 drawn;
+  3% more gathered; our side sold 10% more food (63400 against 57900) but
+  bought no more wood (7975 against 7857): the market's prices, worn by
+  each deal and restored by 0.5 points every 5 s, cap what barter brings in,
+  whatever the floor. No siege on either side. Reverted.
+
+More than half the island games still end at the time limit with our side
+15% ahead in gathering: neither more wood nor siege is the lever; the
+attacks do not finish an opponent (4-5 buildings destroyed a game, against
+home islands held by towers and civic centres), when and where to attack
+being stage 6's fight estimator.
