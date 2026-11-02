@@ -1896,3 +1896,23 @@ barter worsens the market's rate, and Petra stops below a minimum (5-10%
 for food); and a wonder, queued near the population cap from minute 45,
 held 1500 stone and up to 1000 metal, which Petra never sells while a queue
 needs them. Not built: the next is wood (§44).
+
+## 44. Stage 5: the state dump changed the game (2026-11-03)
+
+Three island batches in a row (§43's two arsenal tries and the wonder fix
+below) had our side gathering 15-19% less, whatever the change. All three,
+like every island batch since af637600fc, ran our side with `--bot-state`,
+and the dump had come to call the bot's own searches: `expansionState`
+called `findEconomicCCLocation`, which books transport ships when it finds
+a spot, and the placement check called the queued plans'
+`findGoodPosition`, which writes a market plan's expected gain. The same
+island game (778406632/31020257) played with and without `-b` gave
+different fingerprints and different winners. The dump now only reads (the
+room per base from the obstruction map, the shore tower spot, the counts):
+the same game gives the same fingerprint, eb1a9e14cbed72ef, either way.
+
+Unreliable therefore: the island batches of §40 (the base for room, 7 to 1),
+§41, §42, §43's arsenal tries, and the wonder fix's first batch. The smoke
+games, the batches without the dump (§43's 50 mainland pairs) and those
+before af637600fc stand. The committed changes of §40-42 are measured again
+without the dump, below.

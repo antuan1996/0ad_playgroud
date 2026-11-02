@@ -181,17 +181,15 @@ export class PetraBotState extends PetraBot
 			"docksBuilt": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Dock") && ent.foundationProgress() === undefined).length,
 			// our territory's cells, those a base claims, and those with room for a house (the plan's own test)
 			"room": this.roomState(),
-			// expansion: buildings missing room, the civic centre queue, orders followed, spots avoided, a spot found now
+			// expansion: buildings missing room, the civic centre queue, orders followed, spots avoided (no spot search:
+			// findEconomicCCLocation books transport ships when it finds one, and the dump must not change the game)
 			"expansion": this.expansionState(),
-			// whether the first queued house, field and economic building find a position now, and the unbuildable marks
+			// the unbuildable marks of the first queued house, field and economic building (no position search:
+			// a market plan's writes its expected gain, and the dump must not change the game)
 			"placement": Object.fromEntries(["house", "field", "economicBuilding"].map(name =>
 			{
 				const plan = this.gameState.ai.queues[name]?.plans[0];
-				if (!plan || !plan.findGoodPosition)
-					return [name, undefined];
-				const pos = plan.findGoodPosition(this.gameState);
-				return [name, { "type": plan.type, "found": !!pos,
-					"unbuildable": HQ.buildManager.isUnbuildable(this.gameState, plan.type) }];
+				return [name, plan && { "type": plan.type, "unbuildable": HQ.buildManager.isUnbuildable(this.gameState, plan.type) }];
 			}).filter(([, v]) => v !== undefined)),
 			// the best shore spot for a stone tower now and the traffic in its reach (findShoreTowerLocation)
 			"shoreTower": this.shoreTowerState(),
@@ -203,49 +201,12 @@ export class PetraBotState extends PetraBot
 	expansionState()
 	{
 		const HQ = this.HQ;
-		const queue = this.gameState.ai.queues.civilCentre;
-		const template = this.gameState.getTemplate(this.gameState.applyCiv("structures/{civ}/civil_centre"));
-		let spot;
-		try
-		{
-			spot = template ? HQ.findEconomicCCLocation(this.gameState, template, "wood", undefined, false) : undefined;
-		}
-		catch (e)
-		{
-			spot = "threw " + e;
-		}
-		// the same search with the contested spots allowed (diagnosis; it may book a transport ship)
-		let uncontested;
-		if (template)
-		{
-			const contested = HQ.isContestedCCSpot;
-			HQ.isContestedCCSpot = () => false;
-			try
-			{
-				uncontested = HQ.findEconomicCCLocation(this.gameState, template, "wood", undefined, true, true);
-			}
-			finally
-			{
-				HQ.isContestedCCSpot = contested;
-			}
-		}
 		return {
-			// with the room mode (any free land) and the contested spots allowed
-			"roomSpotUncontested": Array.isArray(uncontested) ? uncontested.map(Math.round) : uncontested,
-			"roomSpot": (() =>
-			{
-				const found = template && HQ.findEconomicCCLocation(this.gameState, template, "wood", undefined, true, true);
-				return Array.isArray(found) ? found.map(Math.round) : found;
-			})(),
-			"canBuildCC": HQ.canBuild(this.gameState, "structures/{civ}/civil_centre"),
-			"ccUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/civil_centre")),
-			"landRegions": Object.keys(HQ.geography.landRegions).length,
 			"missingRoom": HQ.buildManager.numberMissingRoom(this.gameState),
-			"queued": queue.plans.length,
+			"queued": this.gameState.ai.queues.civilCentre.plans.length,
 			"priority": this.gameState.ai.queueManager.getPriority("civilCentre"),
 			"orders": HQ.ccOrders?.length,
-			"avoided": HQ.ccSpotsAvoided?.length,
-			"spot": Array.isArray(spot) ? spot.map(Math.round) : spot
+			"avoided": HQ.ccSpotsAvoided?.length
 		};
 	}
 
