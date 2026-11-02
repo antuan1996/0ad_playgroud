@@ -21,10 +21,10 @@ import {
 	structureTemplate
 } from "./harness/hqWorld.ts";
 
-import { baseId, cellIndex, entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos } from "../adapter/brands.ts";
+import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_FISHERS, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC, STALLED_IDLE } from "../decision/headquarters.ts";
+import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC, STALLED_IDLE } from "../decision/headquarters.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
@@ -2347,19 +2347,12 @@ describe("a town whose land ran dry", () =>
 		assert.equal(stalled(false, 60, 30), false, "wood left");
 	});
 
-	it("lifts the field limit and wants more fishing boats on the seas beside its bases", () =>
+	it("lifts the field limit; with wood left the limit stands", () =>
 	{
 		const { world, hq } = dryTown(true, 0, 0);
 		hq.maxFields = 2;
-		const asked: Array<[number, number]> = [];
-		override(hq.navalManager, { "updateFishingBoats": (sea: number, num: number) => { asked.push([sea, num]); } });
-		const links: RegionIndex[][] = [];
-		links[2] = [seaRegion(5), seaRegion(6)];
-		world.gameState.ai.accessibility.regionLinks = links;
-		hq.geography.navalRegions = { 5: true };
 		hq.provideForDryLand(world.gameState, world.ai.queues);
 		assert.equal(hq.maxFields, false);
-		assert.deepEqual(asked, [[5, DRY_FISHERS]], "the sea we use, not the other");
 
 		const wet = dryTown(false, 0, 0);
 		wet.hq.maxFields = 2;
@@ -2370,7 +2363,6 @@ describe("a town whose land ran dry", () =>
 	it("raises its civic centre's queue while one is queued, and lowers it once the land has wood again or none is queued", () =>
 	{
 		const { world, hq } = dryTown(true, 0, 0);
-		override(hq.navalManager, { "updateFishingBoats": () => undefined });
 		const queueManager = world.ai.queueManager;
 		const raised = Math.max(hq.Config.priorities.villager, hq.Config.priorities.citizenSoldier) + 2;
 		hq.provideForDryLand(world.gameState, world.ai.queues);

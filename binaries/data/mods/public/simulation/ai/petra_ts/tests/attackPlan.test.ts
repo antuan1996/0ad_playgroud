@@ -25,6 +25,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filtersModule from "simulation/ai/common-api/filters.js";
 
 import { attackPlanId, entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../decision/difficultyLevel.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
 import { AttackPlan, type AttackPlanData, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
@@ -597,6 +598,28 @@ describe("choosing a target", () =>
 		assert.equal(plan.targetPlayer, 3, "against its owner, not the enemy chosen first");
 		assert.equal(plan.overseas, 0, "no ship");
 		assert.deepEqual(world.minimalShipCalls, [], "none asked");
+	});
+
+	// only the port passes: on islands Petra's attacks went for the hall of
+	// the enemy's home island, past the docks it fished and sailed from (FINDINGS §42)
+	it("on a naval map favours a dock a little farther than the civic centre; on mainland, the civic centre", () =>
+	{
+		for (const naval of [true, false])
+		{
+			const world = makeWorld({ enemyPlayer: ENEMY, navalMap: naval });
+			const centre = world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [60, 60],
+				classes: ["Structure", "CivCentre"] }));
+			const dock = world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [80, 80],
+				classes: ["Structure", "Dock"] }));
+			const plan = makePlan(world, { name: 1, type: "HugeAttack", init: true });
+			plan.targetPlayer = playerId(ENEMY);
+			const expected = naval ? dock : centre;
+			const at = requireValue(expected.position());
+			withPath([{ "x": at[0], "y": at[1] }], () =>
+			{
+				assert.equal(plan.getNearestTarget(world.gameState, plan.rallyPoint), expected, naval ? "naval" : "mainland");
+			});
+		}
 	});
 
 	it("gives up when the crossing's sea is unknown", () =>

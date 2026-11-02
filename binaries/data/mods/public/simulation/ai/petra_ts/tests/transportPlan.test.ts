@@ -16,7 +16,7 @@ import { board, disembark, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "
 import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
-import { TransportPlan } from "../execution/transportPlan.ts";
+import { ROUTE_RESEND_MIN, TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
 
@@ -445,6 +445,26 @@ describe("a transport plan when boarding goes wrong", () =>
 		assert.notDeepEqual(carrier.state.moves.at(-1), first, "second retry: another spot");
 	});
 
+	// only the port passes: Petra judged the ship by the unit waiting on the
+	// shore, and sent a ship under way again every 2 s (FINDINGS §41)
+	it("a ship making headway to the shore is left to sail while its unit waits", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		const moves = carrier.state.moves.length;
+		carrier.state.aiState = "INDIVIDUAL.WALKING";
+
+		for (let step = 1; step <= 3; ++step)
+		{
+			carrier.state.pos = [200 - 10 * step, 160];	// coming in
+			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+			p.update(s.world.gameState);
+		}
+		assert.equal(carrier.state.moves.length, moves, "never sent again");
+	});
+
 	it("a ship stopped short of the shore for a while is sent again", () =>
 	{
 		const s = seat();
@@ -744,6 +764,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const s = seat();
 		const { carrier, p } = arrived(s);
 		carrier.state.aiState = "INDIVIDUAL.WALKING";
+		carrier.state.idle = false;	// as the engine has a walking ship
 
 		p.update(s.world.gameState);
 
@@ -802,6 +823,30 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 
 		assert.notDeepEqual(p.boardingPos[202], target);
 	});
+
+	// only the port passes: Petra sent a ship again by a new route each turn it
+	// was not WALKING, between two waypoints too (FINDINGS §41)
+	it("a ship still busy on its way is not sent again, however far from the shore; once stopped, it is", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		board(a, carrier);
+		p.update(s.world.gameState);
+		carrier.state.pos = [200, 160];	// mid-sea
+		carrier.state.aiState = "INDIVIDUAL.COMBAT.APPROACHING";	// not WALKING, yet under way
+		carrier.state.idle = false;
+		const moves = carrier.state.moves.length;
+
+		p.update(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves, "left to sail");
+
+		carrier.state.aiState = "INDIVIDUAL.IDLE";
+		carrier.state.idle = true;
+		p.update(s.world.gameState);
+		assert.ok(carrier.state.moves.length > moves, "stopped short: sent again");
+	});
 });
 
 describe("a transport sailing round the enemy's shooters: sailTo", () =>
@@ -843,7 +888,7 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		// archers come to the shore beside the way ahead
 		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
 			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
-		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 5);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + ROUTE_RESEND_MIN);
 		p.checkRoutes(s.world.gameState);
 
 		const sent = carrier.state.moves.slice(moves);
@@ -851,6 +896,37 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		assert.deepEqual(sent.at(-1), [230, 60], "to the same landing point");
 		for (const point of sent.slice(0, -1))
 			assert.ok(Math.hypot(point[0] - 205, point[1] - 110) > 20, `waypoint ${point} out of the archers' reach`);
+	});
+
+	// only the port passes: re-sent at every check, by routes no safer, ships
+	// turned back and forth (FINDINGS §41)
+	it("sails on within ROUTE_RESEND_MIN of its last route, and when no new route is safer", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		const start = s.world.ai.elapsedTime;
+		p.sailTo(s.world.gameState, carrier.ent, worldPos(230, 60), []);
+		const moves = carrier.state.moves.length;
+		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		s.world.ai.elapsedTime = seconds(start + ROUTE_RESEND_MIN - 1);
+		p.checkRoutes(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves, "too soon after its last route");
+
+		// archers at the landing point itself: no route avoids them
+		const other = seat();
+		const b = soldier(other.world, 100, [140, 160]);
+		const sailing = shipped(other, [b]);
+		const begin = other.world.ai.elapsedTime;
+		sailing.p.sailTo(other.world.gameState, sailing.carrier.ent, worldPos(230, 60), []);
+		const before = sailing.carrier.state.moves.length;
+		other.world.addEntity(makeHqEntity({ "id": 3101, "owner": ENEMY, "position": [230, 62], "classes": ["Unit", "Ranged"] },
+			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		other.world.ai.elapsedTime = seconds(begin + ROUTE_RESEND_MIN + 1);
+		sailing.p.checkRoutes(other.world.gameState);
+		assert.equal(sailing.carrier.state.moves.length, before, "no safer route: it sails on");
+		assert.equal(sailing.p.routes[sailing.carrier.ent.id()]?.threats, 1, "the threat counted, not sent again for it");
 	});
 
 	it("checks the routes once in three seconds, and forgets a released ship's", () =>

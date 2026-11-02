@@ -1789,3 +1789,65 @@ island pairs from both slots (pool 4242): 7 won, 1 lost, 12 drawn (87.5% of
 the decided games, not yet significant); our side gathered 12% more
 (217700 against 194100) and controlled 63% of the map at its peak against
 41%.
+
+## 41. Stage 5: fields on every island, fishing, ships that keep their course (2026-11-03)
+
+From the user's watch of an island match ("ship movement and pathfinding
+looks random and chaotic"; "resource starvation in late game is still
+relevant"; "can civs rely more on fishing? at least 1 field on every
+island?").
+
+- A field per island: on a naval map, each base with its civic centre built
+  plants a field of its own, in its own territory (`BaseManager.hasOwnField`):
+  Petra placed fields by the town's count near any food dropsite, and the
+  home island filled while the new bases had none.
+- Fishing by the fish left (`NavalManager.fishByWhatIsLeft`, every 20
+  turns): each sea that still has fish wants one boat per 1500 food of fish
+  (`FISH_PER_BOAT`), 1 to 8, against Petra's 1 (2 from a small starting
+  island); it replaces §40's 6 boats on dry land. Fish do not regrow: a sea
+  emptied stays at 0.
+- Ships that keep their course, found in the 4-player match's command log
+  (route sends: a ship's non-queued walk followed by its queued waypoints):
+  6061 sends, a median 3.2 s between two of a ship, one ship 857 times.
+  Counted by caller, 2896 of 3264 came from the boarding phase: a ship under
+  way to its boarding point was judged by the unit waiting on the shore
+  (which does not move) and sent again every 2 s, to a new boarding point
+  every second time; it is now judged by its own headway. At sea, a ship is
+  sent again only once it has stopped (`isIdle`, not every state but
+  WALKING, which took ships between two waypoints), and the route check
+  (`checkRoutes`) sends it again only by a route with fewer threats than
+  the way ahead, at most every 15 s (`ROUTE_RESEND_MIN`). The same match:
+  1709 sends, a median 22 s, at most 66 for a ship.
+
+Against petra_prev (d0c8075f5c), 10 island pairs from both slots (pool
+4242): 3 won, 5 lost, 12 drawn; our side gathered 20% more (230600 against
+192100) and lost 10 buildings against 16. Smoke games identical.
+
+## 42. Stage 5: a hunting fleet, and what attacks go for on islands (2026-11-03)
+
+The user: "if resources are limited, then taking them away from enemies is
+more valuable than on mainland". The island batches' attack logs: the
+winning sides started about 12 attacks a game, but attacks destroyed 3-4
+buildings a game, half the games ending at the time limit; and Petra never
+wanted a warship (`wantedWarShips` stayed 0), so the enemy's fishing boats
+and merchants sailed unopposed.
+
+- `NavalManager.huntWithFleet` (every 5 turns, naval maps): a sea with one
+  of our docks and enemy fishing boats or merchant ships wants 2 warships
+  (`HUNTERS_PER_SEA`), queued by `maintainFleet`; each warship of ours idle
+  and not carrying for a transport attacks the nearest such ship of its sea
+  within 400 m, out of the reach of the enemy's towers, fortresses and civic
+  centres.
+- What attacks go for (`defaultTargetFinder`, `getNearestTarget`): on a
+  naval map the enemy's docks are targets too, and a dock or a foundation
+  counts as four times nearer (`ECONOMIC_TARGET_WEIGHT`): what an island
+  lives on, and the bases it is building, before the hall of its home island.
+
+The 4-player match: each player sank 57-179 enemy ships; food fell for those
+whose fishing boats were hunted. Against petra_prev (d0c8075f5c), the same
+10 island pairs, both sections together: 5 won, 5 lost, 10 drawn; our side
+gathered 25% more (218600 against 174100: petra_prev gathered 9% less than
+against §41 alone, hunted), held 61% of the map at its peak against 50%,
+destroyed 6 buildings against 4. Neither batch decides the win rate; the
+draws remain the problem: a 20-25% economic lead does not turn into a win
+against home islands held by towers and civic centres, without siege.

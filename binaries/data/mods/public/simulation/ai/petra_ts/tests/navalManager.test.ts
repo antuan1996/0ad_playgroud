@@ -15,7 +15,7 @@ import { board, type HqWorld, ISLAND, navalWorld, SEA, ship, soldier, WEST } fro
 
 import { entityId, landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
 import * as baseModule from "../decision/baseManager.ts";
-import { NavalManager } from "../decision/navalManager.ts";
+import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 
@@ -85,6 +85,66 @@ describe("the fleet counted at the start: init", () =>
 		fish(poor.world, 400, [200, 100], 600);
 		init(poor);
 		assert.equal(poor.naval.wantedFishShips[SEA], 0);
+	});
+
+	// only the port passes: Petra wanted one fishing boat whatever a sea held,
+	// and island towns starved with fish beside them (FINDINGS §41)
+	it("on a naval map, wants fishing boats by the fish left: one per FISH_PER_BOAT, up to FISH_MAX_BOATS", () =>
+	{
+		const s = seat();
+		for (let i = 0; i < 6; ++i)
+			fish(s.world, 400 + i, [200, 100 + 20 * i], 1000);
+		init(s);
+		s.hq.navalMap = true;
+		s.naval.fishByWhatIsLeft(s.world.gameState);
+		assert.equal(s.naval.wantedFishShips[SEA], Math.ceil(6000 / FISH_PER_BOAT));
+
+		for (let i = 6; i < 20; ++i)
+			fish(s.world, 400 + i, [200, 100 + 20 * i], 1000);
+		s.naval.fishByWhatIsLeft(s.world.gameState);
+		assert.equal(s.naval.wantedFishShips[SEA], FISH_MAX_BOATS, "at most");
+
+		s.naval.resetFishingBoats(s.world.gameState, SEA);
+		s.naval.fishByWhatIsLeft(s.world.gameState);
+		assert.equal(s.naval.wantedFishShips[SEA], 0, "a sea the workers found empty stays so");
+	});
+
+	// only the port passes: Petra never wanted a warship, and the enemy's
+	// fishing boats and merchants sailed unopposed (FINDINGS §42)
+	it("on a naval map, wants warships on a sea where the enemy fishes, and sends an idle one after the nearest boat out of the towers' reach", () =>
+	{
+		const s = seat();
+		const ours = dock(s.world, 900, [150, 160]);
+		ours.setMetadata(PLAYER, "sea", SEA);
+		const attacks: number[] = [];
+		ship(s.world, 210, [200, 100], { "methods": { "attack": (id: number) => attacks.push(id) } });
+		const busy = ship(s.world, 211, [200, 110], { "methods": { "attack": () => assert.fail("a busy warship") } });
+		busy.state.idle = false;
+		const boat = (id: number, pos: [number, number], classes = ["Unit", "Ship", "FishingBoat"]) =>
+			ship(s.world, id, pos, { "owner": ENEMY, classes });
+		boat(300, [200, 60]);	// 40 m, under the tower below
+		boat(301, [210, 160]);	// 61 m, free
+		boat(302, [200, 450]);	// out of range
+		s.world.addEntity(makeHqEntity({ "id": 400, "owner": ENEMY, "position": [240, 40], "classes": ["Structure", "Tower"] },
+			{ "hasDefensiveFire": () => true, "attackRange": () => ({ "max": 60, "min": 0 }) }));
+		init(s);
+		s.hq.navalMap = true;
+
+		s.naval.huntWithFleet(s.world.gameState);
+
+		assert.equal(s.naval.wantedWarShips[SEA], HUNTERS_PER_SEA);
+		assert.deepEqual(attacks, [301], "the free boat, not the one under the tower");
+	});
+
+	it("wants no warship where the enemy neither fishes nor trades", () =>
+	{
+		const s = seat();
+		dock(s.world, 900, [150, 160]).setMetadata(PLAYER, "sea", SEA);
+		ship(s.world, 300, [210, 160], { "owner": ENEMY, "classes": ["Unit", "Ship", "Warship"] });
+		init(s);
+		s.hq.navalMap = true;
+		s.naval.huntWithFleet(s.world.gameState);
+		assert.equal(s.naval.wantedWarShips[SEA], 0);
 	});
 
 	it("sorts our ships by kind and by sea, leaving the merchant ships to the trade office", () =>

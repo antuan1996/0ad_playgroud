@@ -18,6 +18,7 @@ import {
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 
 import { GAIA, entityId, templateName, worldPos } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import { BaseManager } from "../decision/baseManager.ts";
 import { EASY, HARD, MEDIUM } from "../decision/difficultyLevel.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
@@ -386,6 +387,25 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			}));
 		base.assignResourceToDropsite(world.gameState, centre, false);
 	}
+
+	// only the port passes: on islands the home island filled with fields and
+	// the new bases had none (FINDINGS §41)
+	it("on a naval map, a base with its civic centre built plants a field of its own, berries or not, once", () =>
+	{
+		const { world, hq, base } = seat();
+		farmCards(world, hq);
+		berries(world, base, 700);
+		hq.navalMap = true;
+		override(requireValue(base.anchor), { "foundationProgress": () => undefined });
+
+		base.checkResourceLevels(world.gameState, world.ai.queues);
+		const plans = world.ai.queues.field.plans;
+		assert.equal(plans.length, 1);
+		assert.equal(plans[0]?.metadata?.base, base.ID, "placed in its own territory");
+
+		base.checkResourceLevels(world.gameState, world.ai.queues);
+		assert.equal(world.ai.queues.field.plans.length, 1, "queued: not twice");
+	});
 
 	it("a town with enough fruit in reach plants no field yet", () =>
 	{
