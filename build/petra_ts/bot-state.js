@@ -160,6 +160,10 @@ export class PetraBotState extends PetraBot
 			"canBuildUnits": HQ.canBuildUnits,
 			"targetNumWorkers": HQ.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
+			// the market: whether one stands (canBarter), and the economic queue's first plan
+			"canBarter": !!HQ.canBarter,
+			"markets": this.gameState.getOwnEntitiesByClass("Market", true).length,
+			"marketUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/market")),
 			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
 			"maxFields": HQ.maxFields,
 			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),
@@ -1052,6 +1056,10 @@ export class PetraBotState extends PetraBot
 			"queued": { "villager": villager.countQueuedUnits(), "citizenSoldier": soldier.countQueuedUnits() },
 			"targetNumWorkers": HQ.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
+			// the market: whether one stands (canBarter), and the economic queue's first plan
+			"canBarter": !!HQ.canBarter,
+			"markets": this.gameState.getOwnEntitiesByClass("Market", true).length,
+			"marketUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/market")),
 			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
 			"maxFields": HQ.maxFields,
 			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),

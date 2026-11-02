@@ -1851,3 +1851,48 @@ against §41 alone, hunted), held 61% of the map at its peak against 50%,
 destroyed 6 buildings against 4. Neither batch decides the win rate; the
 draws remain the problem: a 20-25% economic lead does not turn into a win
 against home islands held by towers and civic centres, without siege.
+
+## 43. Stage 5: siege on islands, tried twice more (2026-11-03)
+
+With §40-42 the island towns reached the city phase in 18 of 20 games
+(median about minute 27) and the population cap, yet no siege engine was
+trained in any of the 20 games of §42's batch. The bot state showed the
+arsenal queued in about half the games, never built: the military buildings'
+queue builds one plan at a time, in order, and the arsenal waited behind a
+stable, a prytaneion, a gymnasium or a theatre.
+
+- First try: in the city phase with no arsenal, the arsenal first in that
+  queue (moved or queued there), with §37's siege wait for a plan that
+  cannot grow. Against petra_prev (c9be89de27), 10 pairs from both slots:
+  islands 2 won, 4 lost, 14 drawn, our side gathering 15% less, siege in 1
+  game of 20 (4 units); mainland 11 to 8, siege 96 units in 11 games
+  against 82 in 10. On full islands the arsenal found no room: first in the
+  queue it failed to place, was marked unbuildable, and was queued first
+  again.
+- Second try: on naval maps only, and first only when its own position
+  search found a spot (checked every 15 turns), sent to the back of the
+  queue when it had none. Islands 3 won, 2 lost, 15 drawn, our side
+  gathering 18% less, no siege; mainland 11 to 9. The queue held 80
+  resources on average after minute 30 (33 before): not the gathering's
+  cause, which was not found.
+- The siege wait alone, on mainland where it acts, decided on a fresh pool
+  (5150) of 50 pairs from both slots: 50 to 50 over 100 games, every pair
+  split, siege 561 units in 56 games against 540 in 55, every statistic
+  within 1%. No effect.
+
+All reverted. On islands siege is blocked by room for the arsenal (a big
+building, the home island full by the city phase), not by the queue's
+order. To try next, if at all: an arsenal at a new base as soon as one with
+room stands, before it fills.
+
+The arsenal at a new base, looked at before building it: the second try's
+position search already took any base's cells, and found a spot: in 99
+snapshots the arsenal stood first in the queue with one. It waited for its
+300 wood: those towns held 3-230 wood against 5000-30000 food. In one of
+those games replayed (seeds 778406632/31020257, `-b -l`) our side had a
+market from minute 25 and bartered (543 sales of food, 314 of them for
+wood), yet held 15000-23000 food against 100-270 wood from minute 55: each
+barter worsens the market's rate, and Petra stops below a minimum (5-10%
+for food); and a wonder, queued near the population cap from minute 45,
+held 1500 stone and up to 1000 metal, which Petra never sells while a queue
+needs them. Not built: the next is wood (§44).
