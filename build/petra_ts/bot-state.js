@@ -179,6 +179,11 @@ export class PetraBotState extends PetraBot
 				.map(([sea, wanted]) => [sea, [wanted, HQ.navalManager.seaTransportShips[sea]?.length ?? -1]])),
 			"shipsPriority": this.gameState.ai.queueManager.getPriority("ships"),
 			"docksBuilt": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Dock") && ent.foundationProgress() === undefined).length,
+			// our ships' ids by kind, to read their orders in commands.txt
+			"shipIds": Object.fromEntries(["FishingBoat", "Warship", "Trader"].map(cls => [cls, this.gameState.getOwnUnits()
+				.filter(ent => ent.hasClass("Ship") && ent.hasClass(cls)).toEntityArray().map(ent => ent.id())])
+				.concat([["other", this.gameState.getOwnUnits().filter(ent => ent.hasClass("Ship") &&
+					!ent.hasClass("FishingBoat") && !ent.hasClass("Warship") && !ent.hasClass("Trader")).toEntityArray().map(ent => ent.id())]])),
 			// our territory's cells, those a base claims, and those with room for a house (the plan's own test)
 			"room": this.roomState(),
 			// expansion: buildings missing room, the civic centre queue, orders followed, spots avoided (no spot search:
