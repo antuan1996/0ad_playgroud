@@ -133,7 +133,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 
 	findGoodPosition(gameState: CommonGameState): BuildingPosition
 	{
-		let template = this.template;
+		const template = this.template;
 
 		if (template.buildPlacementType() === "shore")
 			return this.findDockPosition(gameState);
@@ -154,66 +154,129 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 
 		if (!this.position)
 		{
-			if (template.hasClass("CivCentre"))
-			{
-				let pos;
-				if (this.metadata && this.metadata.room)
-					pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
-				else if (this.metadata && this.metadata.resource)
-				{
-					const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
-					pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);
-				}
-				else
-					pos = HQ.findStrategicCCLocation(gameState, template);
-
-				if (pos)
-					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": NO_BASE };
-				// No possible location, try to build instead a dock in a not-enemy island
-				const templateName = gameState.applyCiv("structures/{civ}/dock");
-				if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
-				{
-					// canBuild() above already verified that the template exists.
-					const dockTemplate = requireTemplate(gameState, templateName);
-					if (gameState.getResources().canAfford(
-						new ResourcesManager(dockTemplate.cost())))
-					{
-						this.buildOverseaDock(gameState, dockTemplate);
-					}
-				}
-				return false;
-			}
-			else if (template.hasClasses(["Tower", "Fortress", "ArmyCamp"]))
-			{
-				const pos = HQ.findDefensiveLocation(gameState, template);
-				if (pos)
-					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": pos[2] };
-				// if this fortress is our first one, just try the standard placement
-				if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities() || false)
-					return false;
-			}
-			else if (template.hasClass("Market")) // Docks are done before.
-			{
-				const pos = HQ.findMarketLocation(gameState, template);
-				const base = pos ? pos[2] : -1;
-				// a base of its own (not -1, nor a cell no base claims): there
-				if (pos && base !== -1 && base !== NO_BASE)
-				{
-					if (!this.metadata)
-						this.metadata = {};
-					this.metadata.expectedGain = pos[3];
-					return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": base };
-				}
-				else if (!pos)
-					return false;
-			}
+			const special = this.specialPosition(gameState, template);
+			if (special !== undefined)
+				return special;
 		}
 
-		// Compute each tile's closeness to friendly structures:
-
+		// Compute each tile's closeness to friendly structures, in our territory:
 		const placement = new InfoMap(gameState.sharedScript, "territory");
-		const cellSize = placement.cellSize; // size of each tile
+		const alreadyHasHouses = this.placeInfluence(gameState, template, placement);
+		this.restrictPlacement(gameState, template, placement);
 
+		// Find the best non-obstructed:
+		// Find target building's approximate obstruction radius, and expand by a bit to make sure we're not too close,
+		// this allows room for units to walk between buildings.
+		// note: not for houses and dropsites who ought to be closer to either each other or a resource.
+		// also not for fields who can be stacked quite a bit
+
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
+		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
+
+		const obstructionRadius = requireValue(template.obstructionRadius());
+		let radius;
+		if (template.hasClasses(["Fortress", "Arsenal"]) ||
+			this.type === gameState.applyCiv("structures/{civ}/elephant_stable"))
+			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
+		else if (template.resourceDropsiteTypes() === undefined && !template.hasClasses(["House", "Field", "Market"]))
+			radius = Math.ceil((obstructionRadius.max + 4) / obstructions.cellSize);
+		else
+			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
+
+		let bestTile;
+		if (template.hasClass("House") && !alreadyHasHouses)
+		{
+			// try to get some space to place several houses first
+			bestTile = placement.findBestTile(3*radius, obstructions);
+			if (!bestTile.val)
+				bestTile = undefined;
+		}
+
+		if (!bestTile)
+			bestTile = placement.findBestTile(radius, obstructions);
+
+		if (!bestTile.val)
+			return false;
+
+		const bestIdx = requireValue(bestTile.idx);
+
+		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
+		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
+
+		const territorypos = placement.gamePosToMapPos(worldPos(x, z));
+		const territoryIndex = cellIndex(placement, territorypos[0] + territorypos[1]*placement.width);
+		// default angle = 3*Math.PI/4;
+		return { "x": x, "z": z, "angle": 3*Math.PI/4, "base": HQ.baseAtIndex(territoryIndex) };
+	}
+
+	/**
+	 * The placement of a building with a rule of its own (a civic centre, a tower or
+	 * fortress, a market): a position, false for none, or undefined to search as for any.
+	 */
+	specialPosition(gameState: CommonGameState, template: CommonTemplate): BuildingPosition | undefined
+	{
+		const HQ = hqOf(gameState);
+		if (template.hasClass("CivCentre"))
+		{
+			let pos;
+			if (this.metadata && this.metadata.room)
+				pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
+			else if (this.metadata && this.metadata.resource)
+			{
+				const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
+				pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);
+			}
+			else
+				pos = HQ.findStrategicCCLocation(gameState, template);
+
+			if (pos)
+				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": NO_BASE };
+			// No possible location, try to build instead a dock in a not-enemy island
+			const templateName = gameState.applyCiv("structures/{civ}/dock");
+			if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
+			{
+				// canBuild() above already verified that the template exists.
+				const dockTemplate = requireTemplate(gameState, templateName);
+				if (gameState.getResources().canAfford(
+					new ResourcesManager(dockTemplate.cost())))
+				{
+					this.buildOverseaDock(gameState, dockTemplate);
+				}
+			}
+			return false;
+		}
+		else if (template.hasClasses(["Tower", "Fortress", "ArmyCamp"]))
+		{
+			const pos = HQ.findDefensiveLocation(gameState, template);
+			if (pos)
+				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": pos[2] };
+			// if this fortress is our first one, just try the standard placement
+			if (!template.hasClass("Fortress") || gameState.getOwnEntitiesByClass("Fortress", true).hasEntities() || false)
+				return false;
+		}
+		else if (template.hasClass("Market")) // Docks are done before.
+		{
+			const pos = HQ.findMarketLocation(gameState, template);
+			const base = pos ? pos[2] : -1;
+			// a base of its own (not -1, nor a cell no base claims): there
+			if (pos && base !== -1 && base !== NO_BASE)
+			{
+				if (!this.metadata)
+					this.metadata = {};
+				this.metadata.expectedGain = pos[3];
+				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": base };
+			}
+			else if (!pos)
+				return false;
+		}
+		return undefined;
+	}
+
+	/** The placement map's values: near the position asked for, else by what the building wants near it. Whether houses already stand. */
+	placeInfluence(gameState: CommonGameState, template: CommonTemplate, placement: InfoMap<"territory">): boolean
+	{
+		const HQ = hqOf(gameState);
+		const cellSize = placement.cellSize;
 		let alreadyHasHouses = false;
 
 		if (this.position)	// If a position was specified then place the building as close to it as possible
@@ -297,6 +360,14 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			}
 		}
 
+		return alreadyHasHouses;
+	}
+
+	/** The placement map kept to our territory, our base's when the plan names one, and away from invading armies. */
+	restrictPlacement(gameState: CommonGameState, template: CommonTemplate, placement: InfoMap<"territory">): void
+	{
+		const HQ = hqOf(gameState);
+		const cellSize = placement.cellSize;
 		// Requires to be inside our territory, and inside our base territory if required
 		// and if our first market, put it on border if possible to maximize distance with next Market.
 		const favorBorder = template.hasClass("Market");
@@ -349,50 +420,8 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			}
 		}
 
-		// Find the best non-obstructed:
-		// Find target building's approximate obstruction radius, and expand by a bit to make sure we're not too close,
-		// this allows room for units to walk between buildings.
-		// note: not for houses and dropsites who ought to be closer to either each other or a resource.
-		// also not for fields who can be stacked quite a bit
-
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
-
-		const obstructionRadius = requireValue(template.obstructionRadius());
-		let radius;
-		if (template.hasClasses(["Fortress", "Arsenal"]) ||
-			this.type === gameState.applyCiv("structures/{civ}/elephant_stable"))
-			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
-		else if (template.resourceDropsiteTypes() === undefined && !template.hasClasses(["House", "Field", "Market"]))
-			radius = Math.ceil((obstructionRadius.max + 4) / obstructions.cellSize);
-		else
-			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
-
-		let bestTile;
-		if (template.hasClass("House") && !alreadyHasHouses)
-		{
-			// try to get some space to place several houses first
-			bestTile = placement.findBestTile(3*radius, obstructions);
-			if (!bestTile.val)
-				bestTile = undefined;
-		}
-
-		if (!bestTile)
-			bestTile = placement.findBestTile(radius, obstructions);
-
-		if (!bestTile.val)
-			return false;
-
-		const bestIdx = requireValue(bestTile.idx);
-
-		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
-		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
-
-		const territorypos = placement.gamePosToMapPos(worldPos(x, z));
-		const territoryIndex = cellIndex(placement, territorypos[0] + territorypos[1]*placement.width);
-		// default angle = 3*Math.PI/4;
-		return { "x": x, "z": z, "angle": 3*Math.PI/4, "base": HQ.baseAtIndex(territoryIndex) };
 	}
+
 
 	/**
 	 * Placement of buildings with Dock build category
@@ -482,42 +511,10 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 
 			if (oversea)
 			{
-				// Not much farther to one of our cc than to enemy ones
-				let enemyDist;
-				let ownDist;
-				if (ccEnts)
-					for (const cc of ccEnts.values())
-				{
-					const owner = cc.owner();
-					if (owner !== PlayerID && !gameState.isPlayerEnemy(owner))
-						continue;
-					const dist = SquareVectorDistance(pos, cc.position());
-					if (owner === PlayerID && (!ownDist || dist < ownDist))
-						ownDist = dist;
-					if (gameState.isPlayerEnemy(owner) && (!enemyDist || dist < enemyDist))
-						enemyDist = dist;
-				}
-				if (ownDist && enemyDist && enemyDist < 0.5 * ownDist)
+				const overseaScore = this.overseaDockScore(gameState, pos, navalPassMap[i], ccEnts, docks, width, cellSize, factor);
+				if (overseaScore === undefined)
 					continue;
-
-				// And maximize distance for trade.
-				let dockDist = 0;
-				if (docks)
-					for (const dock of docks.values())
-				{
-					if (getSeaAccess(gameState, dock) !== navalPassMap[i])
-						continue;
-					const dist = SquareVectorDistance(pos, dock.position());
-					if (dist > dockDist)
-						dockDist = dist;
-				}
-				if (dockDist > 0)
-				{
-					dockDist = Math.sqrt(dockDist);
-					if (dockDist > width * cellSize) // Could happen only on square maps, but anyway we don't want to be too far away
-						continue;
-					score += factor * (width * cellSize - dockDist);
-				}
+				score += overseaScore;
 			}
 
 			// Add a penalty if on the map border as ship movement will be difficult
@@ -571,6 +568,52 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			baseIndex = NEW_ANCHORLESS_BASE;	// We'll do an anchorless base around it
 
 		return { "x": x, "z": z, "angle": bestAngle, "base": baseIndex, "access": bestLand };
+	}
+
+	/**
+	 * An oversea dock's spot: not much farther from our civic centres than from the enemy's (else undefined),
+	 * and far from our docks on its sea, for trade: its added score
+	 */
+	overseaDockScore(gameState: CommonGameState, pos: CommonPosition, sea: number, ccEnts: CommonEntityCollection | null,
+		docks: CommonEntityCollection | null, width: number, cellSize: number, factor: number): number | undefined
+	{
+		// Not much farther to one of our cc than to enemy ones
+		let enemyDist;
+		let ownDist;
+		if (ccEnts)
+			for (const cc of ccEnts.values())
+		{
+			const owner = cc.owner();
+			if (owner !== PlayerID && !gameState.isPlayerEnemy(owner))
+				continue;
+			const dist = SquareVectorDistance(pos, cc.position());
+			if (owner === PlayerID && (!ownDist || dist < ownDist))
+				ownDist = dist;
+			if (gameState.isPlayerEnemy(owner) && (!enemyDist || dist < enemyDist))
+				enemyDist = dist;
+		}
+		if (ownDist && enemyDist && enemyDist < 0.5 * ownDist)
+			return undefined;
+
+		// And maximize distance for trade.
+		let dockDist = 0;
+		if (docks)
+			for (const dock of docks.values())
+		{
+			if (getSeaAccess(gameState, dock) !== sea)
+				continue;
+			const dist = SquareVectorDistance(pos, dock.position());
+			if (dist > dockDist)
+				dockDist = dist;
+		}
+		if (dockDist > 0)
+		{
+			dockDist = Math.sqrt(dockDist);
+			if (dockDist > width * cellSize) // Could happen only on square maps, but anyway we don't want to be too far away
+				return undefined;
+			return factor * (width * cellSize - dockDist);
+		}
+		return 0;
 	}
 
 	/**

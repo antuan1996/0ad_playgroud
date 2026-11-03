@@ -574,34 +574,9 @@ export class DefenseManager
 		}
 	}
 
-	/**
-	 * If our defense structures are attacked, garrison soldiers inside when possible
-	 * and if a support unit is attacked and has less than 55% health, garrison it inside the nearest healing structure
-	 * and if a ranged siege unit (not used for defense) is attacked, garrison it in the nearest fortress.
-	 * If our hero is attacked with regicide victory condition, the victoryManager will handle it.
-	 */
-	checkEvents(gameState: CommonGameState, events: DefenseManagerEvents): void
+	/** checkEvents: our units and buildings attacked. */
+	onAttacked(gameState: CommonGameState, events: DefenseManagerEvents, allAttacked: Record<number, number>): void
 	{
-		// Must be called every turn for all armies.
-		for (const army of this.armies)
-			army.checkEvents(gameState, events);
-
-		// Capture events.
-		for (const evt of events.OwnershipChanged)
-		{
-			if (gameState.isPlayerMutualAlly(evt.from) && evt.to > 0)
-			{
-				const ent = gameState.getEntityById(evt.entity);
-				// One of our cc has been captured.
-				if (ent && ent.hasClass("CivCentre"))
-					gameState.ai.HQ.attackManager.switchDefenseToAttack(gameState, ent, { "range": 150 });
-			}
-		}
-
-		const allAttacked: Record<number, number> = {};
-		for (const evt of events.Attacked)
-			allAttacked[evt.target] = evt.attacker;
-
 		for (const evt of events.Attacked)
 		{
 			const target = gameState.getEntityById(evt.target);
@@ -683,39 +658,10 @@ export class DefenseManager
 					this.makeIntoArmy(gameState, attacker.id());
 			}
 
-				const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
-				if (partOfArmy !== undefined)
+			const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
+			if (partOfArmy !== undefined)
 			{
-					const army = this.getArmy(partOfArmy);
-					if (!army)
-						continue;
-				if (army.getType() === "capturing")
-				{
-					let abort = false;
-					// If one of the units trying to capture a structure is attacked,
-					// abort the army so that the unit can defend itself
-					if (army.ownEntities.indexOf(target.id()) !== -1)
-						abort = true;
-					else if (army.foeEntities[0] === target.id() && target.owner() === PlayerID)
-					{
-						// else we may be trying to regain some capture point from one of our structure.
-						abort = true;
-						const capture = target.capturePoints();
-						if (capture)
-						{
-							for (let jIndex = 0; jIndex < capture.length; ++jIndex)
-							{
-								const j = playerId(jIndex);
-								if (!gameState.isPlayerEnemy(playerId(j)) || capture[j] === 0)
-									continue;
-								abort = false;
-								break;
-							}
-						}
-					}
-					if (abort)
-						this.abortArmy(gameState, army);
-				}
+				this.onArmyUnitAttacked(gameState, target, partOfArmy);
 				continue;
 			}
 
@@ -742,65 +688,135 @@ export class DefenseManager
 				this.garrisonUnitsInside(gameState, target, { "attacker": attacker });
 
 			if (target.hasClass("Unit") && attacker.hasClass("Unit"))
+				this.retaliate(gameState, target, attacker, allAttacked);
+		}
+	}
+
+	/** One of our units in a defense army was attacked: a capturing army may give up its capture */
+	onArmyUnitAttacked(gameState: CommonGameState, target: CommonEntity, partOfArmy: ArmyId): void
+	{
+		const army = this.getArmy(partOfArmy);
+		if (!army)
+			return;
+		if (army.getType() === "capturing")
+		{
+			let abort = false;
+			// If one of the units trying to capture a structure is attacked,
+			// abort the army so that the unit can defend itself
+			if (army.ownEntities.indexOf(target.id()) !== -1)
+				abort = true;
+			else if (army.foeEntities[0] === target.id() && target.owner() === PlayerID)
 			{
-				// Consider whether we should retaliate or continue our task.
-				if (target.hasClass("Support") || target.attackTypes() === undefined)
-					continue;
-				const orderData = ordersOf(target);
-				const orderId = orderData.length ? orderData[0].target : undefined;
-				const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
-				if (currentTarget)
+				// else we may be trying to regain some capture point from one of our structure.
+				abort = true;
+				const capture = target.capturePoints();
+				if (capture)
 				{
-					const unitAIStateOrder = activityOf(unitState(target));
-					if (unitAIStateOrder === "COMBAT" && (currentTarget.id() === attacker.id() ||
-						!currentTarget.hasClasses(["Structure", "Support"])))
-						continue;
-					if (unitAIStateOrder === "REPAIR" && currentTarget.hasDefensiveFire())
-						continue;
-					const capturableTarget = orderId === undefined ? undefined :
-						gameState.ai.HQ.capturableTargets.get(orderId);
-					if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
+					for (let jIndex = 0; jIndex < capture.length; ++jIndex)
 					{
-						// Take the nearest unit also attacking this structure to help us.
-						capturableTarget.ents.delete(target.id());
-						let minDist = Infinity;
-						let minEnt;
-						const pos = attacker.position();
-						for (const entId of capturableTarget.ents)
-						{
-							if (allAttacked[entId])
-								continue;
-							const ent = gameState.getEntityById(entId);
-							if (!ent || !ent.position() || !ent.canAttackTarget(attacker,
-								allowCapture(gameState, ent, attacker)))
-							{
-								continue;
-							}
-							// Check that the unit is still attacking the structure (since the last played turn).
-							if (!hasActivity(ent, "COMBAT"))
-								continue;
-							const entOrderData = ordersOf(ent);
-							if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||
-							     entOrderData[0].target !== orderId)
-								continue;
-							const dist = SquareVectorDistance(pos, ent.position());
-							if (minEnt && dist > minDist)
-								continue;
-							minDist = dist;
-							minEnt = ent;
-						}
-						if (minEnt)
-						{
-							capturableTarget.ents.delete(minEnt.id());
-							minEnt.attack(attacker.id(), allowCapture(gameState, minEnt, attacker));
-						}
+						const j = playerId(jIndex);
+						if (!gameState.isPlayerEnemy(playerId(j)) || capture[j] === 0)
+							continue;
+						abort = false;
+						break;
 					}
 				}
-				const shouldCapture = allowCapture(gameState, target, attacker);
-				if (target.canAttackTarget(attacker, shouldCapture))
-					target.attack(attacker.id(), shouldCapture);
+			}
+			if (abort)
+				this.abortArmy(gameState, army);
+		}
+	}
+
+	/** One of our soldiers was attacked by a unit: retaliate, or keep on with its task, calling a capturer to help */
+	retaliate(gameState: CommonGameState, target: CommonEntity, attacker: CommonEntity, allAttacked: Record<number, number>): void
+	{
+		// Consider whether we should retaliate or continue our task.
+		if (target.hasClass("Support") || target.attackTypes() === undefined)
+			return;
+		const orderData = ordersOf(target);
+		const orderId = orderData.length ? orderData[0].target : undefined;
+		const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
+		if (currentTarget)
+		{
+			const unitAIStateOrder = activityOf(unitState(target));
+			if (unitAIStateOrder === "COMBAT" && (currentTarget.id() === attacker.id() ||
+				!currentTarget.hasClasses(["Structure", "Support"])))
+				return;
+			if (unitAIStateOrder === "REPAIR" && currentTarget.hasDefensiveFire())
+				return;
+			const capturableTarget = orderId === undefined ? undefined :
+				gameState.ai.HQ.capturableTargets.get(orderId);
+			if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
+			{
+				// Take the nearest unit also attacking this structure to help us.
+				capturableTarget.ents.delete(target.id());
+				let minDist = Infinity;
+				let minEnt;
+				const pos = attacker.position();
+				for (const entId of capturableTarget.ents)
+				{
+					if (allAttacked[entId])
+						continue;
+					const ent = gameState.getEntityById(entId);
+					if (!ent || !ent.position() || !ent.canAttackTarget(attacker,
+						allowCapture(gameState, ent, attacker)))
+					{
+						continue;
+					}
+					// Check that the unit is still attacking the structure (since the last played turn).
+					if (!hasActivity(ent, "COMBAT"))
+						continue;
+					const entOrderData = ordersOf(ent);
+					if (!entOrderData || !entOrderData.length || !entOrderData[0].target ||
+					     entOrderData[0].target !== orderId)
+						continue;
+					const dist = SquareVectorDistance(pos, ent.position());
+					if (minEnt && dist > minDist)
+						continue;
+					minDist = dist;
+					minEnt = ent;
+				}
+				if (minEnt)
+				{
+					capturableTarget.ents.delete(minEnt.id());
+					minEnt.attack(attacker.id(), allowCapture(gameState, minEnt, attacker));
+				}
 			}
 		}
+		const shouldCapture = allowCapture(gameState, target, attacker);
+		if (target.canAttackTarget(attacker, shouldCapture))
+			target.attack(attacker.id(), shouldCapture);
+	}
+
+	/**
+	 * If our defense structures are attacked, garrison soldiers inside when possible
+	 * and if a support unit is attacked and has less than 55% health, garrison it inside the nearest healing structure
+	 * and if a ranged siege unit (not used for defense) is attacked, garrison it in the nearest fortress.
+	 * If our hero is attacked with regicide victory condition, the victoryManager will handle it.
+	 */
+	checkEvents(gameState: CommonGameState, events: DefenseManagerEvents): void
+	{
+		// Must be called every turn for all armies.
+		for (const army of this.armies)
+			army.checkEvents(gameState, events);
+
+		// Capture events.
+		for (const evt of events.OwnershipChanged)
+		{
+			if (gameState.isPlayerMutualAlly(evt.from) && evt.to > 0)
+			{
+				const ent = gameState.getEntityById(evt.entity);
+				// One of our cc has been captured.
+				if (ent && ent.hasClass("CivCentre"))
+					gameState.ai.HQ.attackManager.switchDefenseToAttack(gameState, ent, { "range": 150 });
+			}
+		}
+
+		const allAttacked: Record<number, number> = {};
+		for (const evt of events.Attacked)
+			allAttacked[evt.target] = evt.attacker;
+
+		this.onAttacked(gameState, events, allAttacked);
 	}
 
 	garrisonUnitsInside(gameState: CommonGameState, target: CommonEntity,

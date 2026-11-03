@@ -766,35 +766,7 @@ export class NavalManager
 				blockedIds.push(ship.id());
 			}
 			else if (ship.isIdle())
-			{
-				const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-				if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
-					                       previousIdlePosition[1] !== shipPosition[1])
-				{
-					ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
-					ship.setMetadata(PlayerID, "stationnary", undefined);
-					continue;
-				}
-				if (ship.getMetadata(PlayerID, "stationnary"))
-					continue;
-				ship.setMetadata(PlayerID, "stationnary", true);
-				// Check if there are some treasure around
-				if (gatherTreasure(gameState, ship, true))
-					continue;
-				// Do not stay idle near a dock to not disturb other ships
-				// our transport ships always have their sea set (see init and checkEvents)
-				const sea = requireMetadata(ship, "sea");
-				for (const dock of
-					gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
-				{
-					if (getSeaAccess(gameState, dock) !== sea)
-						continue;
-					if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
-						continue;
-					ship.moveToRange(dock.position()[0], dock.position()[1], 70, 75);
-				}
-
-			}
+				this.moveIdleShipApart(gameState, ship, shipPosition);
 		}
 
 		for (const ship of gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).values())
@@ -815,33 +787,7 @@ export class NavalManager
 				blockedIds.push(ship.id());
 			}
 			else if (ship.isIdle())
-			{
-				const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-				if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
-					                       previousIdlePosition[1] !== shipPosition[1])
-				{
-					ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
-					ship.setMetadata(PlayerID, "stationnary", undefined);
-					continue;
-				}
-				if (ship.getMetadata(PlayerID, "stationnary"))
-					continue;
-				ship.setMetadata(PlayerID, "stationnary", true);
-				// Check if there are some treasure around
-				if (gatherTreasure(gameState, ship, true))
-					continue;
-				// Do not stay idle near a dock to not disturb other ships
-				// our trader ships always have their sea set (see init and checkEvents)
-				const sea = requireMetadata(ship, "sea");
-				for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
-				{
-					if (getSeaAccess(gameState, dock) !== sea)
-						continue;
-					if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
-						continue;
-					ship.moveToRange(dock.position()[0], dock.position()[1], 70, 75);
-				}
-			}
+				this.moveIdleShipApart(gameState, ship, shipPosition);
 		}
 
 		for (const ship of blockedShips)
@@ -885,6 +831,36 @@ export class NavalManager
 				else if (distSquare < 900)
 					blockingShip.moveToRange(shipPosition[0], shipPosition[1], 30, 35);
 			}
+		}
+	}
+
+	/** A ship idle where it was last turn: it gathers treasure nearby, or leaves the docks' waters to other ships */
+	moveIdleShipApart(gameState: CommonGameState, ship: CommonEntity, shipPosition: CommonPosition): void
+	{
+		const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
+		if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
+			                       previousIdlePosition[1] !== shipPosition[1])
+		{
+			ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
+			ship.setMetadata(PlayerID, "stationnary", undefined);
+			return;
+		}
+		if (ship.getMetadata(PlayerID, "stationnary"))
+			return;
+		ship.setMetadata(PlayerID, "stationnary", true);
+		// Check if there are some treasure around
+		if (gatherTreasure(gameState, ship, true))
+			return;
+		// Do not stay idle near a dock to not disturb other ships
+		// our transport and trader ships always have their sea set (see init and checkEvents)
+		const sea = requireMetadata(ship, "sea");
+		for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
+		{
+			if (getSeaAccess(gameState, dock) !== sea)
+				continue;
+			if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
+				continue;
+			ship.moveToRange(dock.position()[0], dock.position()[1], 70, 75);
 		}
 	}
 

@@ -230,8 +230,24 @@ identical game for game before and after):
 4. **Done.** Queue names: `ConfiguredQueueName`, the attack plans'
    `` `plan_${number}` `` (with `_champ`, `_siege`), the collection typed
    by them; the queue manager walks its queues lazily in their own order.
-5. Long functions (19 over 150 lines): split with the behaviour work of
-   stages 4-5, not on their own.
+5. **Done** (stage 5, 2026-11-04; the 1703 tests on both targets, the 24
+   smoke games and the island game's fingerprint identical): no method over
+   150 lines (19 were). Split by what each part does, the parts named:
+   the attack plan's update (`updateAttacking`, each attacker's order),
+   preparation (`fastenEndGame`, `gatherAtRallyPoint`) and constructor (the
+   army each attack type aims at, `attackComposition`, a function: stage 6's
+   composition work starts there); the worker's update and `startGathering`
+   (own base, reachable bases, a new dropsite, oversea, far away); the
+   managers' `checkEvents` by event (`on<Event>`); the transport plan's
+   boarding and sailing (`sendToShip`, `checkBoardingShip`,
+   `checkBoardingUnit`, `checkRecovered`, `checkUnloaded`, `landShip`);
+   building placement (`specialPosition`, `placeInfluence`,
+   `restrictPlacement`, `overseaDockScore`); a civic centre's spot
+   (`ccSpotNeighbours`, `ccSpotSpread`); builders (`assignToFoundation`,
+   `assignToRepair`, sharing a `BuilderCrew`); defense (`onArmyUnitAttacked`,
+   `retaliate`); garrisons (`onEntityRenamed`, `updateGarrisonList`,
+   `threatsAround`); the attack manager's update (upcoming, started, new
+   plans); `moveApart`'s two copies of the idle ship's move one method.
 6. **Done.** `===` throughout (531 by the checker's types, where the two
    operators cannot differ; the rest read one by one), the aliases for the
    inline `import()` types, no `for...in` over arrays, the attack records
@@ -256,6 +272,19 @@ identical game for game before and after):
    constructor; the headquarters' flags with initial values. 41 fewer;
    the 62 left are set by `init(gameState)` (collections that exist before
    any read, where a type admitting their absence would guard every read).
+   Of the 44 left when the long functions were split, 9 plain values were
+   given initial values (2026-11-04: the transport plan's boarding range,
+   `canceled`, `recovered`, `unloaded`; the attack plan's `requested`,
+   `startingAttack`, `unitCollUpdateArray`; the base's `gatherers` and
+   `workerObject`). The 35 left are by design: 22 entity collections and
+   maps made by `init(gameState)` (the managers are made before
+   `gameAnalysis` reads the map, and a restored plan learns its id from
+   `Deserialize`, so neither can be made by the constructor), 8 more set by
+   `init` from the game state (the attack plan's queues, `gameState`,
+   `sameLand`, the trade manager's `minimalGain`, the headquarters' phase,
+   the build manager's time), the worker's three per-unit fields set at the
+   start of each update, the attack plan's `path` (set when it sets off,
+   read only after) and the bot's `player` (set by `BaseAI`).
 
 A third round (done, the same checks, the 24 games identical again):
 `BaseId`, `ArmyId`, `TransportPlanId` brands (with `NO_BASE`, and `NEW_BASE`

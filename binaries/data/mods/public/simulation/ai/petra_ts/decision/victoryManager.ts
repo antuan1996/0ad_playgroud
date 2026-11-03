@@ -94,179 +94,9 @@ export class VictoryManager
 		}
 	}
 
-	/**
-	 * In regicide victory condition, if the hero has less than 70% health, try to garrison it in a healing structure
-	 * If it is less than 40%, try to garrison in the closest possible structure
-	 * If the hero cannot garrison, retreat it to the closest base
-	 */
-	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	/** checkEvents: entities destroyed. */
+	onDestroy(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		if (gameState.getVictoryConditions().has("wonder"))
-		{
-			for (const evt of events.Create)
-			{
-				const ent = gameState.getEntityById(evt.entity);
-				if (!ent || !ent.isOwn(PlayerID) || ent.foundationProgress() === undefined ||
-					!ent.hasClass("Wonder"))
-					continue;
-
-				// Let's get a few units from other bases to build the wonder.
-				const baseID = ent.getMetadata(PlayerID, "base");
-				const base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
-				if (!base)
-					continue;
-				const builders = gameState.ai.HQ.bulkPickWorkers(gameState, base, 10);
-				if (builders)
-					for (const worker of builders.values())
-					{
-						worker.setMetadata(PlayerID, "base", base.ID);
-						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
-						worker.setMetadata(PlayerID, "target-foundation", ent.id());
-					}
-			}
-
-			for (const evt of events.ConstructionFinished)
-			{
-				if (!evt || !evt.newentity)
-					continue;
-
-				const ent = gameState.getEntityById(evt.newentity);
-				if (ent && ent.isOwn(PlayerID) && ent.hasClass("Wonder"))
-					this.criticalEnts.set(ent.id(), { "guardsAssigned": new Set(), "guards": new Map() });
-			}
-		}
-
-		if (gameState.getVictoryConditions().has("regicide"))
-		{
-			for (const evt of events.Attacked)
-			{
-				if (!this.criticalEnts.has(evt.target))
-					continue;
-
-				const target = gameState.getEntityById(evt.target);
-				if (!target || !target.position() || target.healthLevel() > this.Config.garrisonHealthLevel.high)
-					continue;
-
-				const plan = target.getMetadata(PlayerID, "plan");
-				const hero = this.criticalEnts.get(evt.target);
-				if (!isLent(plan))
-				{
-					target.stopMoving();
-
-					if (plan !== undefined && plan >= 0)
-					{
-						const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
-						if (attackPlan)
-							attackPlan.removeUnit(target, true);
-					}
-
-					const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
-					if (partOfArmy)
-					{
-						const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
-						if (army)
-							army.removeOwn(gameState, target.id());
-					}
-
-					if (hero)
-					{
-						hero.garrisonEmergency = target.healthLevel() < this.Config.garrisonHealthLevel.low;
-						this.pickCriticalEntRetreatLocation(gameState, target, hero.garrisonEmergency);
-					}
-				}
-				else if (hero && target.healthLevel() < this.Config.garrisonHealthLevel.low && !hero.garrisonEmergency)
-				{
-					// the hero is severely wounded, try to retreat/garrison quicker
-					gameState.ai.HQ.garrisonManager.cancelGarrison(target);
-					this.pickCriticalEntRetreatLocation(gameState, target, true);
-					hero.garrisonEmergency = true;
-				}
-			}
-
-			for (const evt of events.TrainingFinished)
-				for (const entId of evt.entities)
-				{
-					const ent = gameState.getEntityById(entId);
-					if (ent && ent.isOwn(PlayerID) && ent.getMetadata(PlayerID, "role") === Worker.ROLE_CRITICAL_ENT_HEALER)
-						this.assignGuardToCriticalEnt(gameState, ent);
-				}
-
-			for (const evt of events.Garrison)
-			{
-				if (!this.criticalEnts.has(evt.entity))
-					continue;
-
-				const hero = this.criticalEnts.get(evt.entity);
-				if (!hero)
-					continue;
-				if (hero.garrisonEmergency)
-					hero.garrisonEmergency = false;
-
-				const holderEnt = gameState.getEntityById(evt.holder);
-				if (!holderEnt)
-					continue;
-
-				if (holderEnt.hasClass("Ship"))
-				{
-					// If the hero is garrisoned on a ship, remove its guards
-					for (const guardId of hero.guards.keys())
-					{
-						const guardEnt = gameState.getEntityById(guardId);
-						if (!guardEnt)
-							continue;
-
-						guardEnt.removeGuard();
-						this.guardEnts.set(guardId, false);
-					}
-					hero.guards.clear();
-					continue;
-				}
-
-				// Move the current guards to the garrison location.
-				// TODO: try to garrison them with the critical ent.
-				for (const guardId of hero.guards.keys())
-				{
-					const guardEnt = gameState.getEntityById(guardId);
-					if (!guardEnt)
-						continue;
-
-					const plan = guardEnt.getMetadata(PlayerID, "plan");
-
-					// Current military guards (with Soldier class) will have been assigned plan metadata, but healer guards
-					// are not assigned a plan, and so they could be already moving to garrison somewhere due to low health.
-					if (!guardEnt.hasClass("Soldier") && isLent(plan))
-						continue;
-
-					const pos = holderEnt.position();
-					// garrison holders always have an obstruction
-					const obstructionRadius = requireValue(holderEnt.obstructionRadius());
-					if (pos)
-						guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
-				}
-			}
-		}
-
-		for (const evt of events.EntityRenamed)
-		{
-			if (!this.guardEnts.has(evt.entity))
-				continue;
-			for (const data of this.criticalEnts.values())
-			{
-				if (!data.guards.has(evt.entity))
-					continue;
-				const guardRole = data.guards.get(evt.entity);
-				if (guardRole !== undefined)
-					data.guards.set(evt.newentity, guardRole);
-				data.guards.delete(evt.entity);
-				break;
-			}
-			const guarding = this.guardEnts.get(evt.entity);
-			if (guarding !== undefined)
-				this.guardEnts.set(evt.newentity, guarding);
-			this.guardEnts.delete(evt.entity);
-		}
-
-		// Check if new healers/guards need to be assigned to an ent
 		for (const evt of events.Destroy)
 		{
 			if (this.criticalEnts.has(evt.entity))
@@ -287,7 +117,11 @@ export class VictoryManager
 				}
 			}
 		}
+	}
 
+	/** checkEvents: units leaving a holder. */
+	onUnGarrison(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.UnGarrison)
 		{
 			if (!this.guardEnts.has(evt.entity) && !this.criticalEnts.has(evt.entity))
@@ -325,7 +159,11 @@ export class VictoryManager
 				}
 			}
 		}
+	}
 
+	/** checkEvents: entities changing hands (captured, converted). */
+	onOwnershipChanged(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.OwnershipChanged)
 		{
 			if (evt.from === PlayerID && this.criticalEnts.has(evt.entity))
@@ -348,6 +186,208 @@ export class VictoryManager
 				if (ent.hasClass("Relic"))
 					this.pickCriticalEntRetreatLocation(gameState, ent, false);
 			}
+		}
+	}
+
+	/**
+	 * In regicide victory condition, if the hero has less than 70% health, try to garrison it in a healing structure
+	 * If it is less than 40%, try to garrison in the closest possible structure
+	 * If the hero cannot garrison, retreat it to the closest base
+	 */
+	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		if (gameState.getVictoryConditions().has("wonder"))
+			this.onWonderEvents(gameState, events);
+
+		if (gameState.getVictoryConditions().has("regicide"))
+		{
+			this.onCriticalEntAttacked(gameState, events);
+
+			for (const evt of events.TrainingFinished)
+				for (const entId of evt.entities)
+				{
+					const ent = gameState.getEntityById(entId);
+					if (ent && ent.isOwn(PlayerID) && ent.getMetadata(PlayerID, "role") === Worker.ROLE_CRITICAL_ENT_HEALER)
+						this.assignGuardToCriticalEnt(gameState, ent);
+				}
+
+			this.onCriticalEntGarrisoned(gameState, events);
+		}
+
+		this.onEntityRenamed(gameState, events);
+
+		// Check if new healers/guards need to be assigned to an ent
+		this.onDestroy(gameState, events);
+
+		this.onUnGarrison(gameState, events);
+
+		this.onOwnershipChanged(gameState, events);
+	}
+
+	/** A wonder founded: builders from other bases; a wonder finished: guarded */
+	onWonderEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		for (const evt of events.Create)
+		{
+			const ent = gameState.getEntityById(evt.entity);
+			if (!ent || !ent.isOwn(PlayerID) || ent.foundationProgress() === undefined ||
+				!ent.hasClass("Wonder"))
+				continue;
+
+			// Let's get a few units from other bases to build the wonder.
+			const baseID = ent.getMetadata(PlayerID, "base");
+			const base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
+			if (!base)
+				continue;
+			const builders = gameState.ai.HQ.bulkPickWorkers(gameState, base, 10);
+			if (builders)
+				for (const worker of builders.values())
+				{
+					worker.setMetadata(PlayerID, "base", base.ID);
+					worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
+					worker.setMetadata(PlayerID, "target-foundation", ent.id());
+				}
+		}
+
+		for (const evt of events.ConstructionFinished)
+		{
+			if (!evt || !evt.newentity)
+				continue;
+
+			const ent = gameState.getEntityById(evt.newentity);
+			if (ent && ent.isOwn(PlayerID) && ent.hasClass("Wonder"))
+				this.criticalEnts.set(ent.id(), { "guardsAssigned": new Set(), "guards": new Map() });
+		}
+	}
+
+	/** A critical entity wounded: out of its plan or army, it retreats or garrisons */
+	onCriticalEntAttacked(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		for (const evt of events.Attacked)
+		{
+			if (!this.criticalEnts.has(evt.target))
+				continue;
+
+			const target = gameState.getEntityById(evt.target);
+			if (!target || !target.position() || target.healthLevel() > this.Config.garrisonHealthLevel.high)
+				continue;
+
+			const plan = target.getMetadata(PlayerID, "plan");
+			const hero = this.criticalEnts.get(evt.target);
+			if (!isLent(plan))
+			{
+				target.stopMoving();
+
+				if (plan !== undefined && plan >= 0)
+				{
+					const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
+					if (attackPlan)
+						attackPlan.removeUnit(target, true);
+				}
+
+				const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
+				if (partOfArmy)
+				{
+					const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
+					if (army)
+						army.removeOwn(gameState, target.id());
+				}
+
+				if (hero)
+				{
+					hero.garrisonEmergency = target.healthLevel() < this.Config.garrisonHealthLevel.low;
+					this.pickCriticalEntRetreatLocation(gameState, target, hero.garrisonEmergency);
+				}
+			}
+			else if (hero && target.healthLevel() < this.Config.garrisonHealthLevel.low && !hero.garrisonEmergency)
+			{
+				// the hero is severely wounded, try to retreat/garrison quicker
+				gameState.ai.HQ.garrisonManager.cancelGarrison(target);
+				this.pickCriticalEntRetreatLocation(gameState, target, true);
+				hero.garrisonEmergency = true;
+			}
+		}
+	}
+
+	/** A critical entity garrisoned: its guards follow it, or leave it on a ship */
+	onCriticalEntGarrisoned(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		for (const evt of events.Garrison)
+		{
+			if (!this.criticalEnts.has(evt.entity))
+				continue;
+
+			const hero = this.criticalEnts.get(evt.entity);
+			if (!hero)
+				continue;
+			if (hero.garrisonEmergency)
+				hero.garrisonEmergency = false;
+
+			const holderEnt = gameState.getEntityById(evt.holder);
+			if (!holderEnt)
+				continue;
+
+			if (holderEnt.hasClass("Ship"))
+			{
+				// If the hero is garrisoned on a ship, remove its guards
+				for (const guardId of hero.guards.keys())
+				{
+					const guardEnt = gameState.getEntityById(guardId);
+					if (!guardEnt)
+						continue;
+
+					guardEnt.removeGuard();
+					this.guardEnts.set(guardId, false);
+				}
+				hero.guards.clear();
+				continue;
+			}
+
+			// Move the current guards to the garrison location.
+			// TODO: try to garrison them with the critical ent.
+			for (const guardId of hero.guards.keys())
+			{
+				const guardEnt = gameState.getEntityById(guardId);
+				if (!guardEnt)
+					continue;
+
+				const plan = guardEnt.getMetadata(PlayerID, "plan");
+
+				// Current military guards (with Soldier class) will have been assigned plan metadata, but healer guards
+				// are not assigned a plan, and so they could be already moving to garrison somewhere due to low health.
+				if (!guardEnt.hasClass("Soldier") && isLent(plan))
+					continue;
+
+				const pos = holderEnt.position();
+				// garrison holders always have an obstruction
+				const obstructionRadius = requireValue(holderEnt.obstructionRadius());
+				if (pos)
+					guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
+			}
+		}
+	}
+
+	/** A guard renamed (promoted or upgraded) keeps its role */
+	onEntityRenamed(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		for (const evt of events.EntityRenamed)
+		{
+			if (!this.guardEnts.has(evt.entity))
+				continue;
+			for (const data of this.criticalEnts.values())
+			{
+				if (!data.guards.has(evt.entity))
+					continue;
+				const guardRole = data.guards.get(evt.entity);
+				if (guardRole !== undefined)
+					data.guards.set(evt.newentity, guardRole);
+				data.guards.delete(evt.entity);
+				break;
+			}
+			const guarding = this.guardEnts.get(evt.entity);
+			if (guarding !== undefined)
+				this.guardEnts.set(evt.newentity, guarding);
+			this.guardEnts.delete(evt.entity);
 		}
 	}
 

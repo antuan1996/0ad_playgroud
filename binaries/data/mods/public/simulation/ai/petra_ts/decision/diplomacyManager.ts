@@ -161,10 +161,9 @@ export class DiplomacyManager
 		}
 	}
 
-	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	/** checkEvents: tributes sent and received. */
+	onTributeExchanged(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		// Increase slowly the cooperative personality trait either when we receive tribute from our allies
-		// or if our allies attack enemies inside our territory
 		for (const evt of events.TributeExchanged)
 		{
 			if (evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from))
@@ -205,29 +204,11 @@ export class DiplomacyManager
 			}
 			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.0001 * tributes);
 		}
+	}
 
-		for (const evt of events.Attacked)
-		{
-			const target = gameState.getEntityById(evt.target);
-			if (!target || !target.position() ||
-				gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
-				!gameState.isPlayerEnemy(target.owner()))
-				continue;
-			const attacker = gameState.getEntityById(evt.attacker);
-			if (!attacker || attacker.owner() === PlayerID || !gameState.isPlayerAlly(attacker.owner()))
-				continue;
-			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.003);
-		}
-
-		if (events.DiplomacyChanged.length || events.PlayerDefeated.length || events.CeasefireEnded.length)
-			this.lastManStandingCheck(gameState);
-
-		for (const evt of events.PlayerDefeated)
-		{
-			this.receivedDiplomacyRequests.delete(evt.playerId);
-			this.sentDiplomacyRequests.delete(evt.playerId);
-		}
-
+	/** checkEvents: diplomacy changed. */
+	onDiplomacyChanged(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.DiplomacyChanged)
 		{
 			if (evt.otherPlayer !== PlayerID)
@@ -270,8 +251,11 @@ export class DiplomacyManager
 			else if (gameState.sharedScript.playersData[evt.player].isNeutral[PlayerID] && gameState.isPlayerEnemy(evt.player))
 				this.handleDiplomacyRequest(gameState, evt.player, "neutral");
 		}
+	}
 
-		// These events will only be sent by other AI players
+	/** checkEvents: diplomacy requests. */
+	onDiplomacyRequest(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.DiplomacyRequest)
 		{
 			// another AI may send any stance; we answer only these two
@@ -297,6 +281,40 @@ export class DiplomacyManager
 				});
 			}
 		}
+	}
+
+	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		// Increase slowly the cooperative personality trait either when we receive tribute from our allies
+		// or if our allies attack enemies inside our territory
+		this.onTributeExchanged(gameState, events);
+
+		for (const evt of events.Attacked)
+		{
+			const target = gameState.getEntityById(evt.target);
+			if (!target || !target.position() ||
+				gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
+				!gameState.isPlayerEnemy(target.owner()))
+				continue;
+			const attacker = gameState.getEntityById(evt.attacker);
+			if (!attacker || attacker.owner() === PlayerID || !gameState.isPlayerAlly(attacker.owner()))
+				continue;
+			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.003);
+		}
+
+		if (events.DiplomacyChanged.length || events.PlayerDefeated.length || events.CeasefireEnded.length)
+			this.lastManStandingCheck(gameState);
+
+		for (const evt of events.PlayerDefeated)
+		{
+			this.receivedDiplomacyRequests.delete(evt.playerId);
+			this.sentDiplomacyRequests.delete(evt.playerId);
+		}
+
+		this.onDiplomacyChanged(gameState, events);
+
+		// These events will only be sent by other AI players
+		this.onDiplomacyRequest(gameState, events);
 
 		// An AI player we sent a diplomacy request to demanded we send them a tribute
 		for (const evt of events.TributeRequest)

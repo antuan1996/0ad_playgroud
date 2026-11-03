@@ -49,6 +49,83 @@ export class GarrisonManager
 	update(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		// First check for possible upgrade of a structure
+		this.onEntityRenamed(gameState, events);
+
+		for (const [id, data] of this.holders.entries())
+		{
+			const list = data.list;
+			const holder = gameState.getEntityById(id);
+			if (!holder || !gameState.isPlayerAlly(holder.owner()))
+			{
+				// this holder was certainly destroyed or captured. Let's remove it
+				for (const entId of list)
+				{
+					const ent = gameState.getEntityById(entId);
+					if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
+						continue;
+					this.leaveGarrison(ent);
+					ent.stopMoving();
+				}
+				this.holders.delete(id);
+				continue;
+			}
+
+			// Update the list of garrisoned units
+			this.updateGarrisonList(gameState, holder, id, list, events);
+
+			if (!holder.position())     // could happen with siege unit inside a ship
+				continue;
+
+			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
+			{
+				const around = this.threatsAround(gameState, holder);
+				// Keep defenseManager.garrisonUnitsInside in sync to avoid garrisoning-ungarrisoning some units
+				data.allowMelee = around.defenseStructure || around.unit;
+
+				for (const entId of holder.garrisoned())
+				{
+					const ent = gameState.getEntityById(entId);
+					if (!ent)
+						continue;
+					if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
+						holder.unload(entId);
+				}
+				for (let j = 0; j < list.length; ++j)
+				{
+					const ent = gameState.getEntityById(list[j]);
+					if (!ent)
+						continue;
+					if (this.keepGarrisoned(ent, holder, around))
+						continue;
+					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
+					{
+						this.leaveGarrison(ent);
+						ent.stopMoving();
+					}
+					list.splice(j--, 1);
+				}
+				if (this.numberOfGarrisonedSlots(holder) === 0)
+					this.holders.delete(id);
+				else
+					holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+			}
+		}
+
+		// Warning new garrison orders (as in the following lines) should be done after having updated the holders
+		// (or TODO we should add a test that the garrison order is from a previous turn when updating)
+		for (const [id, gmin] of this.decayingStructures.entries())
+		{
+			const ent = gameState.getEntityById(id);
+			if (!ent || ent.owner() !== PlayerID)
+				this.decayingStructures.delete(id);
+			else if (this.numberOfGarrisonedSlots(ent) < gmin)
+				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, { "min": gmin, "type": GarrisonManager.TYPE_DECAY });
+		}
+	}
+
+	/** A holder or a decaying structure was upgraded or replaced */
+	onEntityRenamed(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.EntityRenamed)
 		{
 			for (const id of this.holders.keys())
@@ -92,154 +169,96 @@ export class GarrisonManager
 				this.decayingStructures.set(evt.newentity, gmin);
 			}
 		}
+	}
 
-		for (const [id, data] of this.holders.entries())
+	/** Follow the units sent to garrison in a holder: renamed, killed, garrisoned or their order failed */
+	updateGarrisonList(gameState: CommonGameState, holder: CommonEntity, id: EntityId, list: EntityId[], events: EngineAIEvents): void
+	{
+		for (let j = 0; j < list.length; ++j)
 		{
-			const list = data.list;
-			const holder = gameState.getEntityById(id);
-			if (!holder || !gameState.isPlayerAlly(holder.owner()))
+			for (const evt of events.EntityRenamed)
+				if (evt.entity === list[j])
+					list[j] = evt.newentity;
+
+			const ent = gameState.getEntityById(list[j]);
+			if (!ent)	// unit must have been killed while garrisoning
+				list.splice(j--, 1);
+			else if (holder.garrisoned().indexOf(list[j]) !== -1)   // unit is garrisoned
 			{
-				// this holder was certainly destroyed or captured. Let's remove it
-				for (const entId of list)
-				{
-					const ent = gameState.getEntityById(entId);
-					if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
-						continue;
-					this.leaveGarrison(ent);
-					ent.stopMoving();
-				}
-				this.holders.delete(id);
-				continue;
+				this.leaveGarrison(ent);
+				list.splice(j--, 1);
 			}
-
-			// Update the list of garrisoned units
-			for (let j = 0; j < list.length; ++j)
+			else
 			{
-				for (const evt of events.EntityRenamed)
-					if (evt.entity === list[j])
-						list[j] = evt.newentity;
-
-				const ent = gameState.getEntityById(list[j]);
-				if (!ent)	// unit must have been killed while garrisoning
-					list.splice(j--, 1);
-				else if (holder.garrisoned().indexOf(list[j]) !== -1)   // unit is garrisoned
+				if (ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id))
+					continue;
+				if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 				{
+					// The garrison order must have failed
 					this.leaveGarrison(ent);
 					list.splice(j--, 1);
 				}
 				else
 				{
-					if (ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id))
-						continue;
-					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
+					if (gameState.ai.Config.debug > 0)
 					{
-						// The garrison order must have failed
-						this.leaveGarrison(ent);
-						list.splice(j--, 1);
-					}
-					else
-					{
-						if (gameState.ai.Config.debug > 0)
-						{
-							aiWarn("Petra garrison error: unit " + ent.id() + " (" +
-								ent.genericName() + ") is expected to garrison in " + id + " (" +
-								holder.genericName() + "), but has no such garrison order " +
-								uneval(ordersOf(ent)));
-							dumpEntity(ent);
-						}
-						list.splice(j--, 1);
-					}
-				}
-
-			}
-
-			if (!holder.position())     // could happen with siege unit inside a ship
-				continue;
-
-			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
-			{
-				const holderAttackRange = holder.attackRange("Ranged");
-				const range = holderAttackRange ? holderAttackRange.max : 80;
-				const around = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
-				for (const ent of gameState.getEnemyEntities().values())
-				{
-					if (ent.hasClass("Structure"))
-					{
-						if (!ent.attackRange("Ranged"))
-							continue;
-					}
-					else if (ent.hasClass("Unit"))
-					{
-						if (ent.owner() === 0)
-						{
-							if (!hasActivity(ent, "COMBAT"))
-								continue;
-						}
-					}
-					else
-						continue;
-					if (!ent.position())
-						continue;
-					const dist = SquareVectorDistance(ent.position(), holder.position());
-					if (dist > range*range)
-						continue;
-					if (ent.hasClass("Structure"))
-						around.defenseStructure = true;
-					else if (isSiegeUnit(ent))
-					{
-						if (ent.attackTypes()?.indexOf("Melee") !== -1)
-							around.meleeSiege = true;
-						else
-							around.rangeSiege = true;
-					}
-					else
-					{
-						around.unit = true;
-						break;
-					}
-				}
-				// Keep defenseManager.garrisonUnitsInside in sync to avoid garrisoning-ungarrisoning some units
-				data.allowMelee = around.defenseStructure || around.unit;
-
-				for (const entId of holder.garrisoned())
-				{
-					const ent = gameState.getEntityById(entId);
-					if (!ent)
-						continue;
-					if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
-						holder.unload(entId);
-				}
-				for (let j = 0; j < list.length; ++j)
-				{
-					const ent = gameState.getEntityById(list[j]);
-					if (!ent)
-						continue;
-					if (this.keepGarrisoned(ent, holder, around))
-						continue;
-					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
-					{
-						this.leaveGarrison(ent);
-						ent.stopMoving();
+						aiWarn("Petra garrison error: unit " + ent.id() + " (" +
+							ent.genericName() + ") is expected to garrison in " + id + " (" +
+							holder.genericName() + "), but has no such garrison order " +
+							uneval(ordersOf(ent)));
+						dumpEntity(ent);
 					}
 					list.splice(j--, 1);
 				}
-				if (this.numberOfGarrisonedSlots(holder) === 0)
-					this.holders.delete(id);
+			}
+
+		}
+	}
+
+	/** Which threats are within the holder's range: defensive structures, siege and other units */
+	threatsAround(gameState: CommonGameState, holder: CommonEntity): GarrisonThreats
+	{
+		const holderAttackRange = holder.attackRange("Ranged");
+		const range = holderAttackRange ? holderAttackRange.max : 80;
+		const around: GarrisonThreats = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
+		for (const ent of gameState.getEnemyEntities().values())
+		{
+			if (ent.hasClass("Structure"))
+			{
+				if (!ent.attackRange("Ranged"))
+					continue;
+			}
+			else if (ent.hasClass("Unit"))
+			{
+				if (ent.owner() === 0)
+				{
+					if (!hasActivity(ent, "COMBAT"))
+						continue;
+				}
+			}
+			else
+				continue;
+			if (!ent.position())
+				continue;
+			const dist = SquareVectorDistance(ent.position(), holder.position());
+			if (dist > range*range)
+				continue;
+			if (ent.hasClass("Structure"))
+				around.defenseStructure = true;
+			else if (isSiegeUnit(ent))
+			{
+				if (ent.attackTypes()?.indexOf("Melee") !== -1)
+					around.meleeSiege = true;
 				else
-					holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+					around.rangeSiege = true;
+			}
+			else
+			{
+				around.unit = true;
+				break;
 			}
 		}
-
-		// Warning new garrison orders (as in the following lines) should be done after having updated the holders
-		// (or TODO we should add a test that the garrison order is from a previous turn when updating)
-		for (const [id, gmin] of this.decayingStructures.entries())
-		{
-			const ent = gameState.getEntityById(id);
-			if (!ent || ent.owner() !== PlayerID)
-				this.decayingStructures.delete(id);
-			else if (this.numberOfGarrisonedSlots(ent) < gmin)
-				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, { "min": gmin, "type": GarrisonManager.TYPE_DECAY });
-		}
+		return around;
 	}
 
 	/**

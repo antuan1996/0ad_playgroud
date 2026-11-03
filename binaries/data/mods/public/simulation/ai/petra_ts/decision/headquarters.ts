@@ -109,6 +109,20 @@ export const SHORE_TOWER_TRAFFIC = 30;
 /** A tower's reach when its template names none. */
 const DEFAULT_TOWER_RANGE = 60;
 
+/** A civic centre a new civic centre's spot is weighed against */
+type CCSpotCivCentre = { ent: CommonEntity; pos: CommonPosition; ally: boolean };
+/** One of our dropsites a new civic centre's spot is weighed against */
+type CCSpotDropsite = { ent: CommonEntity; pos: CommonPosition };
+/** The squared distances that reject or disfavour a new civic centre's spot */
+type CCSpotLimits = {
+	nearbyRejected: number;
+	nearbyAllyRejected: number;
+	nearbyAllyDisfavored: number;
+	maxAccessRejected: number;
+	maxAccessDisfavored: number;
+	maxNoAccessDisfavored: number;
+};
+
 export class Headquarters
 {
 	Config: Config;
@@ -272,6 +286,49 @@ export class Headquarters
 		return undefined;
 	}
 
+	/** checkEvents: units trained. */
+	onTrainingFinished(gameState: CommonGameState, events: HeadquartersEvents): void
+	{
+		for (const evt of events.TrainingFinished)
+		{
+			for (const entId of evt.entities)
+			{
+				const ent = gameState.getEntityById(entId);
+				if (!ent || !ent.isOwn(PlayerID))
+					continue;
+
+				if (!ent.position())
+				{
+					// we are autogarrisoned, check that the holder is registered in the garrisonManager
+					const holderID = ent.garrisonHolderID();
+					const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
+					// The rally point garrisons a whole building's batches, set from the one
+					// at the head of its queue as we last saw it: a unit not trained to
+					// garrison (one of an attack, say) comes out again.
+					if (holder && !ent.getMetadata(PlayerID, "garrisonType"))
+						holder.unload(ent.id());
+					else if (holder)
+						this.garrisonManager.registerHolder(gameState, holder);
+				}
+				else if (ent.getMetadata(PlayerID, "garrisonType"))
+				{
+					// we were supposed to be autogarrisoned, but this has failed (may-be full)
+					ent.setMetadata(PlayerID, "garrisonType", undefined);
+				}
+
+				// Check if this unit is no more needed in its attack plan
+				// (happen when the training ends after the attack is started or aborted)
+				const plan = ent.getMetadata(PlayerID, "plan");
+				if (plan !== undefined && plan >= 0)
+				{
+					const attack = this.attackManager.getPlan(plan);
+					if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
+						ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
+				}
+			}
+		}
+	}
+
 	checkEvents(gameState: CommonGameState, events: HeadquartersEvents): void
 	{
 		this.buildManager.checkEvents(gameState, events);
@@ -357,44 +414,7 @@ export class Headquarters
 				ent.unsetRallyPoint();
 		}
 
-		for (const evt of events.TrainingFinished)
-		{
-			for (const entId of evt.entities)
-			{
-				const ent = gameState.getEntityById(entId);
-				if (!ent || !ent.isOwn(PlayerID))
-					continue;
-
-				if (!ent.position())
-				{
-					// we are autogarrisoned, check that the holder is registered in the garrisonManager
-					const holderID = ent.garrisonHolderID();
-					const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
-					// The rally point garrisons a whole building's batches, set from the one
-					// at the head of its queue as we last saw it: a unit not trained to
-					// garrison (one of an attack, say) comes out again.
-					if (holder && !ent.getMetadata(PlayerID, "garrisonType"))
-						holder.unload(ent.id());
-					else if (holder)
-						this.garrisonManager.registerHolder(gameState, holder);
-				}
-				else if (ent.getMetadata(PlayerID, "garrisonType"))
-				{
-					// we were supposed to be autogarrisoned, but this has failed (may-be full)
-					ent.setMetadata(PlayerID, "garrisonType", undefined);
-				}
-
-				// Check if this unit is no more needed in its attack plan
-				// (happen when the training ends after the attack is started or aborted)
-				const plan = ent.getMetadata(PlayerID, "plan");
-				if (plan !== undefined && plan >= 0)
-				{
-					const attack = this.attackManager.getPlan(plan);
-					if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
-						ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
-				}
-			}
-		}
+		this.onTrainingFinished(gameState, events);
 
 		for (const evt of events.TerritoryDecayChanged)
 		{
@@ -885,23 +905,7 @@ export class Headquarters
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		const halfSize = footprintHalves(template).halfSize;
 
-		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
-		const dpEnts = gameState.getOwnDropsites().filter(
-			filters.not(filters.byClasses(["CivCentre", "Unit"])));
-		const ccList: Array<{ ent: CommonEntity; pos: CommonPosition; ally: boolean }> = [];
-		for (const cc of ccEnts.values())
-		{
-			const pos = cc.position();
-			if (pos)
-				ccList.push({ "ent": cc, "pos": pos, "ally": gameState.isPlayerAlly(cc.owner()) });
-		}
-		const dpList: Array<{ ent: CommonEntity; pos: CommonPosition; territory: number }> = [];
-		for (const dp of dpEnts.values())
-		{
-			const pos = dp.position();
-			if (pos)
-				dpList.push({ "ent": dp, "pos": pos, "territory": this.geography.territoryMap.getOwner(pos) });
-		}
+		const { ccList, dpList } = this.ccSpotNeighbours(gameState);
 
 		let bestIdx = -1;
 		let bestVal = -Infinity;
@@ -927,12 +931,14 @@ export class Headquarters
 
 		// DistanceSquare cuts to other ccs (bigger or no cuts on inaccessible ccs to allow colonizing other islands).
 		const reduce = (template.hasClass("Colony") ? 30 : 0) + 30 * this.Config.personality.defensive;
-		const nearbyRejected = Math.square(120);			// Reject if too near from any cc
-		const nearbyAllyRejected = Math.square(200);		// Reject if too near from an allied cc
-		const nearbyAllyDisfavored = Math.square(250);		// Disfavor if quite near an allied cc
-		const maxAccessRejected = Math.square(410);		// Reject if too far from an accessible ally cc
-		const maxAccessDisfavored = Math.square(360 - reduce);	// Disfavor if quite far from an accessible ally cc
-		const maxNoAccessDisfavored = Math.square(500);		// Disfavor if quite far from an inaccessible ally cc
+		const limits: CCSpotLimits = {
+			"nearbyRejected": Math.square(120),			// Reject if too near from any cc
+			"nearbyAllyRejected": Math.square(200),		// Reject if too near from an allied cc
+			"nearbyAllyDisfavored": Math.square(250),		// Disfavor if quite near an allied cc
+			"maxAccessRejected": Math.square(410),		// Reject if too far from an accessible ally cc
+			"maxAccessDisfavored": Math.square(360 - reduce),	// Disfavor if quite far from an accessible ally cc
+			"maxNoAccessDisfavored": Math.square(500)		// Disfavor if quite far from an inaccessible ally cc
+		};
 
 		let cut = 60;
 		if (fromStrategic || proximity)  // be less restrictive
@@ -968,68 +974,11 @@ export class Headquarters
 				norm /= 1 + SquareVectorDistance(proximity, pos) / scale;
 			else
 			{
-				let minDist = Math.min();
-				let accessible = false;
-
-				for (const cc of ccList)
-				{
-					const dist = SquareVectorDistance(cc.pos, pos);
-					if (dist < nearbyRejected)
-					{
-						norm = 0;
-						break;
-					}
-					if (!cc.ally)
-						continue;
-					if (dist < nearbyAllyRejected)
-					{
-						norm = 0;
-						break;
-					}
-					if (dist < nearbyAllyDisfavored)
-						norm *= 0.5;
-
-					if (dist < minDist)
-						minDist = dist;
-					accessible = accessible || index === getLandAccess(gameState, cc.ent);
-				}
-				if (norm === 0)
+				const spread = this.ccSpotSpread(gameState, pos, index, norm, ccList, dpList, limits);
+				if (spread === undefined)
 					continue;
-
-				if (accessible && minDist > maxAccessRejected)
-					continue;
-
-				if (minDist > maxAccessDisfavored)     // Disfavor if quite far from any allied cc
-				{
-					if (!accessible)
-					{
-						if (minDist > maxNoAccessDisfavored)
-							norm *= 0.5;
-						else
-							norm *= 0.8;
-					}
-					else
-						norm *= 0.5;
-				}
-
-				// Not near any of our dropsite, except for oversea docks
-				oversea = !accessible && dpList.some(dp => getLandAccess(gameState, dp.ent) === index);
-				if (!oversea)
-				{
-					for (const dp of dpList)
-					{
-						const dist = SquareVectorDistance(dp.pos, pos);
-						if (dist < 3600)
-						{
-							norm = 0;
-							break;
-						}
-						else if (dist < 6400)
-							norm *= 0.5;
-					}
-				}
-				if (norm === 0)
-					continue;
+				norm = spread.norm;
+				oversea = spread.oversea;
 			}
 
 			if (this.geography.borderMap.map[j] & mapMask.fullBorder)	// disfavor the borders of the map
@@ -1076,6 +1025,102 @@ export class Headquarters
 		}
 
 		return worldPos(x, z);
+	}
+
+	/** The civic centres and our dropsites a new civic centre's spot is weighed against */
+	ccSpotNeighbours(gameState: CommonGameState): { ccList: CCSpotCivCentre[]; dpList: CCSpotDropsite[] }
+	{
+		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
+		const dpEnts = gameState.getOwnDropsites().filter(
+			filters.not(filters.byClasses(["CivCentre", "Unit"])));
+		const ccList: CCSpotCivCentre[] = [];
+		for (const cc of ccEnts.values())
+		{
+			const pos = cc.position();
+			if (pos)
+				ccList.push({ "ent": cc, "pos": pos, "ally": gameState.isPlayerAlly(cc.owner()) });
+		}
+		const dpList: CCSpotDropsite[] = [];
+		for (const dp of dpEnts.values())
+		{
+			const pos = dp.position();
+			if (pos)
+				dpList.push({ "ent": dp, "pos": pos });
+		}
+		return { ccList, dpList };
+	}
+
+	/**
+	 * How far a spot for a later civic centre lies from the other civic centres and our dropsites:
+	 * norm, the spot's value factor, lowered by them, and whether it is oversea; undefined when it is rejected.
+	 */
+	ccSpotSpread(gameState: CommonGameState, pos: CommonPosition, index: number, normIn: number,
+		ccList: CCSpotCivCentre[], dpList: CCSpotDropsite[], limits: CCSpotLimits): { norm: number; oversea: boolean } | undefined
+	{
+		let norm = normIn;
+		let minDist = Math.min();
+		let accessible = false;
+
+		for (const cc of ccList)
+		{
+			const dist = SquareVectorDistance(cc.pos, pos);
+			if (dist < limits.nearbyRejected)
+			{
+				norm = 0;
+				break;
+			}
+			if (!cc.ally)
+				continue;
+			if (dist < limits.nearbyAllyRejected)
+			{
+				norm = 0;
+				break;
+			}
+			if (dist < limits.nearbyAllyDisfavored)
+				norm *= 0.5;
+
+			if (dist < minDist)
+				minDist = dist;
+			accessible = accessible || index === getLandAccess(gameState, cc.ent);
+		}
+		if (norm === 0)
+			return undefined;
+
+		if (accessible && minDist > limits.maxAccessRejected)
+			return undefined;
+
+		if (minDist > limits.maxAccessDisfavored)     // Disfavor if quite far from any allied cc
+		{
+			if (!accessible)
+			{
+				if (minDist > limits.maxNoAccessDisfavored)
+					norm *= 0.5;
+				else
+					norm *= 0.8;
+			}
+			else
+				norm *= 0.5;
+		}
+
+		// Not near any of our dropsite, except for oversea docks
+		const oversea = !accessible && dpList.some(dp => getLandAccess(gameState, dp.ent) === index);
+		if (!oversea)
+		{
+			for (const dp of dpList)
+			{
+				const dist = SquareVectorDistance(dp.pos, pos);
+				if (dist < 3600)
+				{
+					norm = 0;
+					break;
+				}
+				else if (dist < 6400)
+					norm *= 0.5;
+			}
+		}
+		if (norm === 0)
+			return undefined;
+		return { norm, oversea };
 	}
 
 	/**

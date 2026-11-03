@@ -139,29 +139,9 @@ export class BasesManager
 		return newbase;
 	}
 
-	/** TODO check if the new anchorless bases should be added to addBase */
-	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	/** checkEvents: an entity renamed (promoted, upgraded, packed). */
+	onEntityRenamed(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		this.turnCache = {};
-		let addBase = false;
-
-		for (const evt of events.Destroy)
-		{
-			// Let's check we haven't lost an important building here.
-			if (evt && !evt.SuccessfulFoundation && evt.metadata?.[PlayerID]?.base)
-			{
-				// A new base foundation was created and destroyed on the same (AI) turn
-				if (evt.metadata[PlayerID].base === -1 || evt.metadata[PlayerID].base === -2)
-					continue;
-				const base = this.getBaseByID(evt.metadata[PlayerID].base);
-				if (!base)
-					continue;
-				base.removeDropsite(gameState, evt.entity);
-				if (evt.metadata[PlayerID].baseAnchor && evt.metadata[PlayerID].baseAnchor === true)
-					base.anchorLost(gameState);
-			}
-		}
-
 		for (const evt of events.EntityRenamed)
 		{
 			const ent = gameState.getEntityById(evt.newentity);
@@ -194,7 +174,11 @@ export class BasesManager
 			base.anchorId = evt.newentity;
 			base.anchor = ent;
 		}
+	}
 
+	/** checkEvents: entities created (foundations). */
+	onCreate(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.Create)
 		{
 			// Let's check if we have a valuable foundation needing builders quickly
@@ -236,7 +220,12 @@ export class BasesManager
 				}
 			}
 		}
+	}
 
+	/** checkEvents: buildings finished.; whether it added a base. */
+	onConstructionFinished(gameState: CommonGameState, events: EngineAIEvents): boolean
+	{
+		let addBase = false;
 		for (const evt of events.ConstructionFinished)
 		{
 			if (evt.newentity === evt.entity)  // repaired building
@@ -261,7 +250,13 @@ export class BasesManager
 				addBase = true;
 			}
 		}
+		return addBase;
+	}
 
+	/** checkEvents: entities changing hands (captured, converted).; whether it added a base. */
+	onOwnershipChanged(gameState: CommonGameState, events: EngineAIEvents): boolean
+	{
+		let addBase = false;
 		for (const evt of events.OwnershipChanged)
 		{
 			if (evt.from === PlayerID)
@@ -317,7 +312,12 @@ export class BasesManager
 					base.assignEntity(gameState, ent);
 			}
 		}
+		return addBase;
+	}
 
+	/** checkEvents: units trained. */
+	onTrainingFinished(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const evt of events.TrainingFinished)
 		{
 			for (const entId of evt.entities)
@@ -371,6 +371,42 @@ export class BasesManager
 				}
 			}
 		}
+	}
+
+	/** TODO check if the new anchorless bases should be added to addBase */
+	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
+	{
+		this.turnCache = {};
+		let addBase = false;
+
+		for (const evt of events.Destroy)
+		{
+			// Let's check we haven't lost an important building here.
+			if (evt && !evt.SuccessfulFoundation && evt.metadata?.[PlayerID]?.base)
+			{
+				// A new base foundation was created and destroyed on the same (AI) turn
+				if (evt.metadata[PlayerID].base === -1 || evt.metadata[PlayerID].base === -2)
+					continue;
+				const base = this.getBaseByID(evt.metadata[PlayerID].base);
+				if (!base)
+					continue;
+				base.removeDropsite(gameState, evt.entity);
+				if (evt.metadata[PlayerID].baseAnchor && evt.metadata[PlayerID].baseAnchor === true)
+					base.anchorLost(gameState);
+			}
+		}
+
+		this.onEntityRenamed(gameState, events);
+
+		this.onCreate(gameState, events);
+
+		if (this.onConstructionFinished(gameState, events))
+			addBase = true;
+
+		if (this.onOwnershipChanged(gameState, events))
+			addBase = true;
+
+		this.onTrainingFinished(gameState, events);
 
 		if (addBase)
 			gameState.ai.HQ.handleNewBase(gameState);

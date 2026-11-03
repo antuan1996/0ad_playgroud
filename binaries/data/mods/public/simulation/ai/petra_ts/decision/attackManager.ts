@@ -312,31 +312,67 @@ export class AttackManager
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		if (this.Config.debug > 2 && gameState.ai.elapsedTime > this.debugTime + 60)
-		{
-			this.debugTime = gameState.ai.elapsedTime;
-			aiWarn(" upcoming attacks =================");
-			for (const attackType of ATTACK_TYPES)
-			{
-				for (const attack of this.upcomingAttacks[attackType])
-				{
-					aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
-						" units " + attack.unitCollection.length);
-				}
-			}
-			aiWarn(" started attacks ==================");
-			for (const attackType of ATTACK_TYPES)
-			{
-				for (const attack of this.startedAttacks[attackType])
-				{
-					aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
-						" units " + attack.unitCollection.length);
-				}
-			}
-			aiWarn(" ==================================");
-		}
+			this.warnAttacks(gameState);
 
 		this.checkEvents(gameState, events);
-		const unexecutedAttacks = {
+		const unexecutedAttacks = this.updateUpcomingAttacks(gameState, events);
+		this.updateStartedAttacks(gameState, events);
+
+		// creating plans after updating because an aborted plan might be reused in that case.
+
+		this.createAttacks(gameState, unexecutedAttacks);
+
+		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 &&
+			gameState.ai.HQ.defenseManager.targetList.length)
+		{
+			let target;
+			for (const targetId of gameState.ai.HQ.defenseManager.targetList)
+			{
+				target = gameState.getEntityById(targetId);
+				if (!target)
+					continue;
+				if (gameState.isPlayerEnemy(target.owner()))
+					break;
+				target = undefined;
+			}
+			if (target) // prepare a raid against this target
+				this.raidTargetEntity(gameState, target);
+		}
+
+		// Check if we have some unused ranged siege unit which could do something useful while waiting
+		if (this.Config.difficulty > difficulty.VERY_EASY && gameState.ai.playedTurn % 5 === 0)
+			this.assignBombers(gameState);
+	}
+
+	/** Debug: the plans in preparation and the started ones */
+	warnAttacks(gameState: CommonGameState): void
+	{
+		this.debugTime = gameState.ai.elapsedTime;
+		aiWarn(" upcoming attacks =================");
+		for (const attackType of ATTACK_TYPES)
+		{
+			for (const attack of this.upcomingAttacks[attackType])
+			{
+				aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
+					" units " + attack.unitCollection.length);
+			}
+		}
+		aiWarn(" started attacks ==================");
+		for (const attackType of ATTACK_TYPES)
+		{
+			for (const attack of this.startedAttacks[attackType])
+			{
+				aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
+					" units " + attack.unitCollection.length);
+			}
+		}
+		aiWarn(" ==================================");
+	}
+
+	/** Prepare the upcoming attacks: start, abort or keep them; returns how many of each type are unexecuted */
+	updateUpcomingAttacks(gameState: CommonGameState, events: EngineAIEvents): Record<AttackType, number>
+	{
+		const unexecutedAttacks: Record<AttackType, number> = {
 			[AttackPlan.TYPE_RUSH]: 0,
 			[AttackPlan.TYPE_RAID]: 0,
 			[AttackPlan.TYPE_DEFAULT]: 0,
@@ -388,7 +424,12 @@ export class AttackManager
 				}
 			}
 		}
+		return unexecutedAttacks;
+	}
 
+	/** Update the started attacks, ending those with nothing left */
+	updateStartedAttacks(gameState: CommonGameState, events: EngineAIEvents): void
+	{
 		for (const attackType of ATTACK_TYPES)
 		{
 			for (let i = 0; i < this.startedAttacks[attackType].length; ++i)
@@ -408,9 +449,11 @@ export class AttackManager
 				}
 			}
 		}
+	}
 
-		// creating plans after updating because an aborted plan might be reused in that case.
-
+	/** A rush, or a default or huge attack, when none of its type waits unexecuted */
+	createAttacks(gameState: CommonGameState, unexecutedAttacks: Record<AttackType, number>): void
+	{
 		const barracksNb = gameState.getOwnEntitiesByClass("Barracks", true).filter(filters.isBuilt()).length;
 		if (this.rushNumber < this.maxRushes && barracksNb >= 1)
 		{
@@ -461,27 +504,6 @@ export class AttackManager
 				this.attackNumber++;
 			}
 		}
-
-		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 &&
-			gameState.ai.HQ.defenseManager.targetList.length)
-		{
-			let target;
-			for (const targetId of gameState.ai.HQ.defenseManager.targetList)
-			{
-				target = gameState.getEntityById(targetId);
-				if (!target)
-					continue;
-				if (gameState.isPlayerEnemy(target.owner()))
-					break;
-				target = undefined;
-			}
-			if (target) // prepare a raid against this target
-				this.raidTargetEntity(gameState, target);
-		}
-
-		// Check if we have some unused ranged siege unit which could do something useful while waiting
-		if (this.Config.difficulty > difficulty.VERY_EASY && gameState.ai.playedTurn % 5 === 0)
-			this.assignBombers(gameState);
 	}
 
 	getPlan(planName: UnitPlan | undefined): AttackPlan | undefined
