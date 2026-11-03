@@ -1939,3 +1939,28 @@ More than half the island games still end at the time limit with our side
 attacks do not finish an opponent (4-5 buildings destroyed a game, against
 home islands held by towers and civic centres), when and where to attack
 being stage 6's fight estimator.
+
+## 45. Stage 5: ships turning in place (2026-11-03)
+
+From the user's watch of a 4-player island match: "ships rotate in place a
+lot, as if they changed their path or order too often; sometimes a ship
+wanders around in the same small region as if stuck". The 4-player
+Dodecanese match (20261101/4242, `-l -b`, our ships' ids from the dump),
+each ship's orders counted: the transports (warships, which carry too) got
+2411 short walks of 30-45 m, the fishing boats 626, the merchant ships 525.
+Those are `NavalManager.moveApart`'s nudges: a transport, a fishing boat on
+its way to fish or a merchant on its way to market whose position had not
+changed for two AI turns was taken for blocked and sent 30-35 m aside. A
+ship turns slowly, in place, keeping its position: nudged as it turned, it
+turned again, and the nudge threw away its queued route, which its plan
+then sent again.
+
+- `isBlocked`: a ship is blocked when it has neither moved nor turned
+  (`angle()`) for 5 game seconds (`STUCK_SECONDS`).
+- A transport its plan sails by a route is left to its plan, which judges
+  it stuck by its headway (§41).
+
+The same match: 14 nudges for the transports, 179 for the fishing boats, 90
+for the merchants (whose orders in all fell from 1465 to 697). Smoke games
+identical. Left: the boarding phase still sent the transports again 1982
+times (next).

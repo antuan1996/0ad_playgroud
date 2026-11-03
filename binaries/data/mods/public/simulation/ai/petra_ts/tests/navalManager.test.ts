@@ -13,9 +13,9 @@ import {
 } from "./harness/hqWorld.ts";
 import { board, type HqWorld, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
 
-import { entityId, landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
+import { entityId, landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import * as baseModule from "../decision/baseManager.ts";
-import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager } from "../decision/navalManager.ts";
+import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager, STUCK_SECONDS } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 
@@ -740,10 +740,11 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		assert.equal(s.naval.isShipBoarding(free.ent), false);
 	});
 
-	it("a transport stuck in one place for two turns nudges itself, and pushes idle ships out of its way", () =>
+	it("a transport with no route, still for STUCK_SECONDS, nudges itself, and pushes idle ships out of its way", () =>
 	{
 		const s = seat();
-		const { carrier } = boarding(s);
+		const { carrier, p } = boarding(s);
+		delete p.routes[200];	// sent straight: no route of its plan
 		// ships trained since the fleet was counted: they learned their sea then (checkEvents)
 		const idle = ship(s.world, 201, [210, 165], { "metadata": { "sea": SEA } });
 		const otherTransport = ship(s.world, 202, [205, 170], { "metadata": { "transporter": 99, "sea": SEA } });
@@ -752,15 +753,30 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 			override(ent, { "moveToRange": (...args: number[]) => ranged.push([id, args]) });
 
 		s.naval.moveApart(s.world.gameState);	// position noted
-		s.world.ai.playedTurn += 2;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + STUCK_SECONDS);
 		otherTransport.state.pos = [204, 170];	// that one is under way
-		s.naval.moveApart(s.world.gameState);	// the first is still there two turns later
+		s.naval.moveApart(s.world.gameState);	// the first is still there STUCK_SECONDS later
 
 		// the stuck ship moves a little around itself; the others make way, away from it
 		const pushed = (id: number, min: number) => ranged.some(([who, args]) => who === id && args[0] === 200 && args[1] === 160 && args[2] === min);
 		assert.ok(ranged.some(([id, args]) => id === 200 && args[2] === 30 && args[3] === 35), "the stuck ship moves a little");
 		assert.ok(pushed(201, 40), "the idle ship makes way, 40 m off");
 		assert.ok(pushed(202, 30), "another passage's ship under way keeps 30 m off");
+	});
+
+	// only the port passes: a nudge threw a routed transport's route away, and its
+	// plan sent it again, round and round one spot (FINDINGS §45)
+	it("a transport its plan sails by a route is left to its plan, however long it stands", () =>
+	{
+		const s = seat();
+		const { carrier, p } = boarding(s);
+		assert.ok(p.routes[200], "sent by a route");
+		const ranged: number[][] = [];
+		override(carrier.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
+		s.naval.moveApart(s.world.gameState);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3 * STUCK_SECONDS);
+		s.naval.moveApart(s.world.gameState);
+		assert.deepEqual(ranged, []);
 	});
 
 	it("a transport moving, or stuck for only a turn, or at its landing spot is left alone", () =>
@@ -833,7 +849,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 			override(ent, { "moveToRange": (...args: number[]) => ranged.push([id, args]) });
 
 		s.naval.moveApart(s.world.gameState);
-		s.world.ai.playedTurn += 2;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + STUCK_SECONDS);
 		s.naval.moveApart(s.world.gameState);
 
 		assert.ok(ranged.some(([id, args]) => id === 210 && args[2] === 30), "the stuck merchant");
@@ -856,7 +872,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 			override(c.ent, { "moveToRange": (...args: number[]) => ranged.push([c.ent.id(), args]) });
 
 		s.naval.moveApart(s.world.gameState);
-		s.world.ai.playedTurn += 2;
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + STUCK_SECONDS);
 		sailing.state.pos = [204, 170];
 		s.naval.moveApart(s.world.gameState);
 
@@ -864,7 +880,9 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		assert.ok(!ranged.some(([id]) => id === 212), "the merchant of another sea is left be");
 	});
 
-	it("a merchant stopped for a single turn on its way to market is not nudged yet", () =>
+	// only the port passes: Petra took a ship unmoved for two turns for blocked,
+	// and a ship turning in place was sent aside again and again (FINDINGS §45)
+	it("a merchant stopped, or turning, on its way to market is not nudged before STUCK_SECONDS", () =>
 	{
 		const s = seat();
 		const merchant = ship(s.world, 210, [200, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
@@ -873,13 +891,22 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		override(merchant.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		init(s);
 
+		let heading = 0;
+		override(merchant.ent, { "angle": () => heading });
+		const start = s.world.ai.elapsedTime;
 		s.naval.moveApart(s.world.gameState);	// position noted
-		s.world.ai.playedTurn += 1;
-		s.naval.moveApart(s.world.gameState);	// one turn: it may just be turning
+		s.world.ai.playedTurn += 2;
+		s.world.ai.elapsedTime = seconds(start + STUCK_SECONDS - 1);
+		s.naval.moveApart(s.world.gameState);	// two turns, but not yet STUCK_SECONDS
 		assert.deepEqual(ranged, []);
 
-		s.world.ai.playedTurn += 1;
-		s.naval.moveApart(s.world.gameState);	// two turns: stuck
+		heading = 1;	// it turned in place
+		s.world.ai.elapsedTime = seconds(start + STUCK_SECONDS);
+		s.naval.moveApart(s.world.gameState);
+		assert.deepEqual(ranged, [], "turning: not stuck");
+
+		s.world.ai.elapsedTime = seconds(start + 2 * STUCK_SECONDS);
+		s.naval.moveApart(s.world.gameState);	// still, neither moved nor turned, for STUCK_SECONDS
 		assert.equal(ranged.length, 1);
 	});
 
