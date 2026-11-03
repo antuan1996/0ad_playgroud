@@ -128,7 +128,10 @@ interface PetraEntityMetadata
 	approachingTime: GameSeconds;
 	timeGarrison: GameSeconds;
 	holderTimeUpdate: GameSeconds;
-	turnPreviousPosition: number;
+	/** the game seconds since which a ship has neither moved nor turned (NavalManager.moveApart) */
+	stillSince: GameSeconds;
+	/** a ship's heading when last seen (NavalManager.moveApart) */
+	previousAngle: number;
 	nextMoveToGatherer: GameSeconds;
 	lastHuntSearch: GameSeconds;
 	role: WorkerRole;

@@ -12,6 +12,8 @@ import { threatsAt } from "../world/seaRoute.ts";
 export const HUNTERS_PER_SEA = 2;
 /** How far from a hunting warship its prey may be. */
 export const HUNT_RANGE = 400;
+/** Seconds a ship must stand still, neither moving nor turning, to be taken for blocked (moveApart). */
+export const STUCK_SECONDS = 5;
 /** A defensive building's reach when its template names none. */
 const DEFAULT_TOWER_REACH = 60;
 
@@ -708,6 +710,31 @@ export class NavalManager
 	 * TODO Ships entity collections are currently in two parts as the trader ships are dealt with
 	 * in the tradeManager. That should be modified to avoid dupplicating all the code here.
 	 */
+	/**
+	 * Whether a ship under way is blocked: neither moved nor turned for
+	 * STUCK_SECONDS (then counted again from now). Petra took a ship unmoved
+	 * for two turns, and a ship turns slowly in place: sent 30 m aside as it
+	 * turned, it turned again, and wandered round one spot (FINDINGS §45).
+	 */
+	isBlocked(gameState: CommonGameState, ship: CommonEntity, shipPosition: CommonPosition): boolean
+	{
+		const now = gameState.ai.elapsedTime;
+		const angle = ship.angle();
+		const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
+		if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
+		    previousPosition[1] !== shipPosition[1] || ship.getMetadata(PlayerID, "previousAngle") !== angle)
+		{
+			ship.setMetadata(PlayerID, "previousPosition", shipPosition);
+			ship.setMetadata(PlayerID, "previousAngle", angle);
+			ship.setMetadata(PlayerID, "stillSince", now);
+			return false;
+		}
+		if (now - requireMetadata(ship, "stillSince") < STUCK_SECONDS)
+			return false;
+		ship.setMetadata(PlayerID, "stillSince", now);
+		return true;
+	}
+
 	moveApart(gameState: CommonGameState): void
 	{
 		const blockedShips = [];
@@ -722,21 +749,17 @@ export class NavalManager
 				continue;
 
 			const state = unitState(ship);
-			if (ship.getMetadata(PlayerID, "transporter") !== undefined ||
+			const transporter = ship.getMetadata(PlayerID, "transporter");
+			if (transporter !== undefined ||
 			    stateIs(state, "INDIVIDUAL.GATHER.APPROACHING") ||
 			    stateIs(state, "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"))
 			{
-				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-				if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
-					                   previousPosition[1] !== shipPosition[1])
-				{
-					ship.setMetadata(PlayerID, "previousPosition", shipPosition);
-					ship.setMetadata(PlayerID, "turnPreviousPosition", gameState.ai.playedTurn);
+				// a ship its transport sails by a route is left to it: its plan
+				// judges it stuck by its headway, and a nudge here threw its route
+				// away, the plan sending it again (FINDINGS §45)
+				if (transporter !== undefined && this.getPlan(transporter)?.routes[ship.id()])
 					continue;
-				}
-				// New transport ships receive boarding commands only on the following turn.
-				// turnPreviousPosition is set together with previousPosition, which is known to be set here.
-				if (gameState.ai.playedTurn < requireMetadata(ship, "turnPreviousPosition") + 2)
+				if (!this.isBlocked(gameState, ship, shipPosition))
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
@@ -785,17 +808,7 @@ export class NavalManager
 
 			if (isInState(ship, "INDIVIDUAL.TRADE.APPROACHINGMARKET"))
 			{
-				const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-				if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
-					                   previousPosition[1] !== shipPosition[1])
-				{
-					ship.setMetadata(PlayerID, "previousPosition", shipPosition);
-					ship.setMetadata(PlayerID, "turnPreviousPosition", gameState.ai.playedTurn);
-					continue;
-				}
-				// New transport ships receives boarding commands only on the following turn.
-				// turnPreviousPosition is set together with previousPosition, which is known to be set here.
-				if (gameState.ai.playedTurn < requireMetadata(ship, "turnPreviousPosition") + 2)
+				if (!this.isBlocked(gameState, ship, shipPosition))
 					continue;
 				ship.moveToRange(shipPosition[0] + randFloat(-1, 1), shipPosition[1] + randFloat(-1, 1), 30, 35);
 				blockedShips.push(ship);
