@@ -16,7 +16,7 @@ import { board, disembark, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "
 import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
-import { ROUTE_RESEND_MIN, TransportPlan } from "../execution/transportPlan.ts";
+import { ROUTE_RESEND_MIN, SHIP_STUCK, TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
 
@@ -435,10 +435,10 @@ describe("a transport plan when boarding goes wrong", () =>
 		const first = carrier.state.moves[0];
 		carrier.state.aiState = "INDIVIDUAL.WALKING";
 
-		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 		p.update(s.world.gameState);
 		assert.deepEqual(carrier.state.moves.at(-1), first, "first retry: the same spot");
-		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 		p.update(s.world.gameState);
 
 		assert.equal(carrier.state.moves.length, 3);
@@ -459,10 +459,31 @@ describe("a transport plan when boarding goes wrong", () =>
 		for (let step = 1; step <= 3; ++step)
 		{
 			carrier.state.pos = [200 - 10 * step, 160];	// coming in
-			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
+			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 			p.update(s.world.gameState);
 		}
 		assert.equal(carrier.state.moves.length, moves, "never sent again");
+	});
+
+	// only the port passes: a ship turning in place to set out kept its position,
+	// and was taken for stuck and sent again as it turned (FINDINGS §45)
+	it("a ship turning on its way to the shore is not sent again", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		let heading = 0;
+		override(carrier.ent, { "angle": () => heading });
+		p.update(s.world.gameState);
+		const moves = carrier.state.moves.length;
+		carrier.state.aiState = "INDIVIDUAL.WALKING";
+		for (let step = 1; step <= 3; ++step)
+		{
+			heading = step;	// turning in place, the same position
+			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
+			p.update(s.world.gameState);
+		}
+		assert.equal(carrier.state.moves.length, moves);
 	});
 
 	it("a ship stopped short of the shore for a while is sent again", () =>

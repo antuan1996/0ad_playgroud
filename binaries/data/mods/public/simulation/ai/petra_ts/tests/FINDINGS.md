@@ -1964,3 +1964,17 @@ The same match: 14 nudges for the transports, 179 for the fishing boats, 90
 for the merchants (whose orders in all fell from 1465 to 697). Smoke games
 identical. Left: the boarding phase still sent the transports again 1982
 times (next).
+
+The boarding phase, its re-sends tagged by the ship's distance from its
+boarding point and state (temporary instrumentation): most were ships 340 m
+out, WALKING, sailing there, judged stuck by §41's headway check, which
+compared the position every 2 s, and a ship turning in place to set out
+keeps its position. The check now takes a ship for stuck only when it has
+neither moved nor turned for 5 s (`SHIP_STUCK`). Tried first and reverted:
+a ship stopped within 40 m of its boarding point counted as arrived (Petra:
+18 m): 7689 route sends against 2461, 8574 garrison orders: its units
+cannot reach a ship that far off the shore, and the landing side kept its
+18 m. The same match with the turning fix: a median 35 s between two route
+sends of a ship (3.2 s before), 81 sends under 5 s apart (2486), at most
+144 for a ship (932); 2740 route sends in all, the game moving more
+transports. Left: 10555 garrison and 6803 unload orders.
