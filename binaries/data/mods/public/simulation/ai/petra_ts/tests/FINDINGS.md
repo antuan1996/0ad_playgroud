@@ -1978,3 +1978,13 @@ cannot reach a ship that far off the shore, and the landing side kept its
 sends of a ship (3.2 s before), 81 sends under 5 s apart (2486), at most
 144 for a ship (932); 2740 route sends in all, the game moving more
 transports. Left: 10555 garrison and 6803 unload orders.
+
+Both ship fixes together (391d718e6c, 40d3d8b9ec) against petra_prev
+(53186dd1dd, before them), 20 island pairs from both slots without the dump
+(pool 4242): 17 won, 6 lost, 17 drawn: 73.9% of the decided games (CI
+53.5-87.5%, above 50%; the SPRT against 55% still undecided). Our side used
+19% more (189100 against 159000) on about the same gathering, held 63% of
+the map at its peak against 50%, lost 12 buildings against 19; ships lost
+and sunk even (97 a side). Draws 17 of 40, against 22 in the two batches
+before on the same pool: ships that keep their course carry expansions and
+attacks across, and some games end.
