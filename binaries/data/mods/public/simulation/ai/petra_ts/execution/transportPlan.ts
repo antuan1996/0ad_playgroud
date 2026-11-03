@@ -58,6 +58,8 @@ function since(ent: CommonEntity, time: GameSeconds): number
 	return sent === undefined ? NaN : time - sent;
 }
 
+/** Seconds a ship sailing to its boarding point must stand still, neither moving nor turning, to be sent again (onBoarding). */
+export const SHIP_STUCK = 5;
 /** Seconds between two checks of the sailing ships' routes against the threats (checkRoutes). */
 const ROUTE_CHECK = 3;
 /** The fewest seconds between two re-routings of a ship (checkRoutes). */
@@ -423,6 +425,7 @@ export class TransportPlan
 						this.sailTo(gameState, ship, bp);
 						ship.setMetadata(PlayerID, "timeGarrison", time);
 						ship.setMetadata(PlayerID, "posGarrison", ship.position());
+						ship.setMetadata(PlayerID, "previousAngle", ship.angle());
 					}
 					ent.garrison(ship);
 					ent.setMetadata(PlayerID, "timeGarrison", time);
@@ -452,17 +455,21 @@ export class TransportPlan
 					if (stateIs(state, "INDIVIDUAL.WALKING") ||
 					    stateIs(state, "INDIVIDUAL.PICKUP.APPROACHING"))
 					{
-						// stuck if the ship itself made no headway in 2 s: Petra looked at
-						// the unit, which waits on the shore for its ship, and sent a ship
-						// sailing round the enemy's shooters again every 2 s, to a new
-						// boarding point every second time (FINDINGS §41)
-						if (since(ship, time) > 2)
+						// stuck if the ship itself neither moved nor turned for 5 s: Petra
+						// looked at the unit, which waits on the shore for its ship, and sent
+						// a ship sailing round the enemy's shooters again every 2 s (FINDINGS
+						// §41); judged by its position alone, a ship turning in place to set
+						// out was sent again as it turned (§45)
+						if (since(ship, time) > SHIP_STUCK)
 						{
 							const oldPos = ship.getMetadata(PlayerID, "posGarrison");
 							const newPos = ship.position();
-							if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
+							const angle = ship.angle();
+							if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1] &&
+							    ship.getMetadata(PlayerID, "previousAngle") === angle)
 								retry = true;
 							ship.setMetadata(PlayerID, "posGarrison", newPos);
+							ship.setMetadata(PlayerID, "previousAngle", angle);
 							ship.setMetadata(PlayerID, "timeGarrison", time);
 						}
 					}
