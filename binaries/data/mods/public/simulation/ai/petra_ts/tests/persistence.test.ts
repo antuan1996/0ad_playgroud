@@ -19,7 +19,7 @@ import { AttackManager, type SerializedAttackManager } from "../decision/attackM
 import { BaseManager, type SerializedBaseManager } from "../decision/baseManager.ts";
 import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
 import { BuildManager, type SerializedBuildManager } from "../decision/buildManager.ts";
-import { Config, type SerializedConfig } from "../decision/config.ts";
+import { Config, type SerializedConfig } from "../world/config.ts";
 import { DefenseManager, type SerializedDefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";

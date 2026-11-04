@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { logs, resetRecorder } from "./harness/engine.ts";
 import { fake, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 
-import { Config } from "../decision/config.ts";
+import { Config } from "../world/config.ts";
 
 const PLAYER_ENTITY = 7;
 

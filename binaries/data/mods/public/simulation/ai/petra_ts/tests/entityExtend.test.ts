@@ -15,6 +15,7 @@ import { collectionOf, ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harn
 
 import { entityId, seaRegion, templateName } from "../adapter/brands.ts";
 import * as ext from "../adapter/entityExtend.ts";
+import { getBestBase } from "../decision/baseManager.ts";
 import { isPlaced } from "../adapter/placed.ts";
 
 /** the real Config's damage weights */
@@ -287,7 +288,7 @@ describe("returnResources: where a worker drops its load", () =>
 	});
 });
 
-describe("getBestBase: the base an entity belongs to", () =>
+describe("getBestBase (decision/baseManager.ts): the base an entity belongs to", () =>
 {
 	interface FakeBase { ID: number; anchor: CommonEntity | undefined; accessIndex: number; buildings: unknown }
 
@@ -317,9 +318,9 @@ describe("getBestBase: the base an entity belongs to", () =>
 		withBases(world, [near, far]);
 		const unit = world.addEntity(makeEntity({ "id": 62, "owner": PLAYER, "position": [110, 100], "classes": ["Unit"] }));
 
-		assert.equal(ext.getBestBase(world.gameState, unit), near);
-		assert.equal(ext.getBestBase(world.gameState, unit, false, 1), far);
-		assert.equal(ext.getBestBase(world.gameState, unit, true), far);
+		assert.equal(getBestBase(world.gameState, unit), near);
+		assert.equal(getBestBase(world.gameState, unit, false, 1), far);
+		assert.equal(getBestBase(world.gameState, unit, true), far);
 	});
 
 	it("a base without a civil centre is placed by its first building, and loses to any anchored base", () =>
@@ -331,10 +332,10 @@ describe("getBestBase: the base an entity belongs to", () =>
 		const town = base(world, 3, anchor(world, 71, [300, 300]));
 		withBases(world, [outpost, empty]);
 		const unit = world.addEntity(makeEntity({ "id": 72, "owner": PLAYER, "position": [110, 100], "classes": ["Unit"] }));
-		assert.equal(ext.getBestBase(world.gameState, unit), outpost);
+		assert.equal(getBestBase(world.gameState, unit), outpost);
 
 		withBases(world, [outpost, empty, town]);
-		assert.equal(ext.getBestBase(world.gameState, unit), town);
+		assert.equal(getBestBase(world.gameState, unit), town);
 	});
 
 	it("a garrisoned unit belongs where its holder stands", () =>
@@ -347,7 +348,7 @@ describe("getBestBase: the base an entity belongs to", () =>
 		world.addEntity(makeEntity({ "id": 82, "owner": PLAYER, "classes": ["Unit", "Infantry"] }));
 		world.addEntity(makeEntity({ "id": 83, "owner": PLAYER, "position": [300, 300], "classes": ["Structure", "Tower"] },
 			{ "isGarrisonHolder": () => true, "garrisoned": () => [82] }));
-		assert.equal(ext.getBestBase(world.gameState, world.ents.get(82)!), east);
+		assert.equal(getBestBase(world.gameState, world.ents.get(82)!), east);
 	});
 
 	it("a unit nowhere is reported and goes to the baseless base", () =>
@@ -356,7 +357,7 @@ describe("getBestBase: the base an entity belongs to", () =>
 		const baseless = withBases(world, [base(world, 1, anchor(world, 90, [100, 100]))]);
 		resetRecorder();
 		const lost = world.addEntity(makeEntity({ "id": 91, "owner": PLAYER, "classes": ["Unit"] }));
-		assert.equal(ext.getBestBase(world.gameState, lost), baseless);
+		assert.equal(getBestBase(world.gameState, lost), baseless);
 		assert.ok(logs.some((line) => line.includes("entity without position, but not garrisoned")));
 	});
 });

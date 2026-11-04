@@ -21,7 +21,7 @@ import { fake, override } from "./harness/fakes.ts";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
 import { seconds } from "../adapter/brands.ts";
-import { Config } from "../decision/config.ts";
+import { Config } from "../world/config.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { Queue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, isQueueName } from "../execution/queueManager.ts";

@@ -14,7 +14,7 @@ import { resetRecorder, sent } from "./harness/engine.ts";
 import { makeEntity } from "./harness/fakes.ts";
 import { makeWorld, PLAYER, type World } from "./harness/world.ts";
 
-import { Config } from "../decision/config.ts";
+import { Config } from "../world/config.ts";
 import { EmergencyManager } from "../decision/emergencyManager.ts";
 
 /** the chat lines setConfig's factors lead to, as chatHelper lists them */

@@ -26,7 +26,7 @@ import * as filtersModule from "simulation/ai/common-api/filters.js";
 
 import { attackPlanId, entityId, landRegion, playerId, seaRegion, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
-import { EASY, SANDBOX, VERY_EASY } from "../decision/difficultyLevel.ts";
+import { EASY, SANDBOX, VERY_EASY } from "../world/difficultyLevel.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
 import { AttackPlan, type AttackPreparation, type AttackPlanData, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
 import type { Queue } from "../execution/queue.ts";

@@ -12,7 +12,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { byClass } from "simulation/ai/common-api/filters.js";
 
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
-import { Config } from "../../decision/config.ts";
+import { Config } from "../../world/config.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 

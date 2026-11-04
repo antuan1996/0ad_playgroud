@@ -20,7 +20,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { GAIA, entityId, templateName, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { BaseManager } from "../decision/baseManager.ts";
-import { EASY, HARD, MEDIUM } from "../decision/difficultyLevel.ts";
+import { EASY, HARD, MEDIUM } from "../world/difficultyLevel.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { Worker } from "../execution/worker.ts";

@@ -31,7 +31,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { cellIndex, templateName, worldPos } from "../../adapter/brands.ts";
 import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
-import { Config } from "../../decision/config.ts";
+import { Config } from "../../world/config.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
 import { Geography } from "../../world/geography.ts";
 import { createBorderMap, createTerritoryMap } from "../../world/mapModule.ts";

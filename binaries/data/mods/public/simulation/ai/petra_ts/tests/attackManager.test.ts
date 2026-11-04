@@ -17,8 +17,8 @@ import { ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from ".
 
 import { armyId, attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
 import { AttackManager } from "../decision/attackManager.ts";
-import { Config } from "../decision/config.ts";
-import { MEDIUM, SANDBOX } from "../decision/difficultyLevel.ts";
+import { Config } from "../world/config.ts";
+import { MEDIUM, SANDBOX } from "../world/difficultyLevel.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { QueueManager } from "../execution/queueManager.ts";

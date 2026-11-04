@@ -19,7 +19,7 @@ import { baseId, entityId, landRegion, playerId, seaRegion } from "../adapter/br
 import type { Headquarters } from "../decision/headquarters.ts";
 import { type SerializedTradeManager, TradeManager, type TradeRoute } from "../decision/tradeManager.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import type { SeaFleet } from "../decision/navalManager.ts";
+import type { SeaFleet } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
 
