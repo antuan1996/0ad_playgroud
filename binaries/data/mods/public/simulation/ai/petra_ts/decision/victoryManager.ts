@@ -33,6 +33,127 @@ export type SerializedVictoryManager = {
 	targetedGaiaRelics: Map<EntityId, AttackPlanId[]>;
 };
 
+/** capture with the capture strength of the units against the relic added */
+function addCaptureStrength(capture: number, units: CommonEntityCollection, relic: CommonEntity): number
+{
+	for (const ent of units.values())
+	{
+		const captureStrength = ent.captureStrength();
+		if (captureStrength)
+			capture += captureStrength * getAttackBonus(ent, relic, "Capture");
+	}
+	return capture;
+}
+
+/** Whether a unit of ours may join a raid on the relic: free, on its land, in no plan but one still preparing. */
+function mayRaidRelic(gameState: CommonGameState, ent: CommonEntity, relic: CommonEntity, access: AccessIndex): boolean
+{
+	if (!isPlaced(ent) || !ent.canCapture(relic))
+		return false;
+	if (ent.getMetadata(PlayerID, "transport") !== undefined)
+		return false;
+	if (ent.getMetadata(PlayerID, "PartOfArmy") !== undefined)
+		return false;
+	const plan = ent.getMetadata(PlayerID, "plan");
+	if (isLent(plan))
+		return false;
+	if (plan !== undefined && plan >= 0)
+	{
+		const attack = gameState.ai.HQ.attackManager.getPlan(plan);
+		if (attack && (attack.state !== AttackPlan.STATE_UNEXECUTED ||
+			attack.type === AttackPlan.TYPE_RAID))
+		{
+			return false;
+		}
+	}
+	return getLandAccess(gameState, ent) === access;
+}
+
+/** Whether one of our units sees the position */
+function seenByUs(gameState: CommonGameState, position: CommonPosition): boolean
+{
+	for (const ent of gameState.getOwnUnits().values())
+	{
+		if (!isPlaced(ent) || !ent.visionRange())
+			continue;
+		if (SquareVectorDistance(ent.position(), position) > Math.square(ent.visionRange()))
+			continue;
+		return true;
+	}
+	return false;
+}
+
+/** Whether a role is a critical entity's healer's or guard's */
+function isGuardRole(role: WorkerRole | undefined): boolean
+{
+	return role === Worker.ROLE_CRITICAL_ENT_HEALER || role === Worker.ROLE_CRITICAL_ENT_GUARD;
+}
+
+/** Let's get a few units from other bases to build the wonder. */
+function sendWonderBuilders(gameState: CommonGameState, ent: CommonEntity): void
+{
+	const baseID = ent.getMetadata(PlayerID, "base");
+	const base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
+	if (!base)
+		return;
+	const builders = gameState.ai.HQ.bulkPickWorkers(gameState, base, 10);
+	if (builders)
+		for (const worker of builders.values())
+		{
+			worker.setMetadata(PlayerID, "base", base.ID);
+			worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
+			worker.setMetadata(PlayerID, "target-foundation", ent.id());
+		}
+}
+
+/** A wounded critical entity stops and leaves its attack plan and its defense army. */
+function withdrawFromFight(gameState: CommonGameState, target: CommonPlacedEntity, plan: UnitPlan | undefined): void
+{
+	target.stopMoving();
+
+	if (plan !== undefined && plan >= 0)
+	{
+		const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
+		if (attackPlan)
+			attackPlan.removeUnit(target, true);
+	}
+
+	const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
+	if (partOfArmy)
+	{
+		const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
+		if (army)
+			army.removeOwn(gameState, target.id());
+	}
+}
+
+/**
+ * Move the current guards to the garrison location.
+ * TODO: try to garrison them with the critical ent.
+ */
+function guardsFollow(gameState: CommonGameState, hero: CriticalEntState, holderEnt: CommonEntity): void
+{
+	for (const guardId of hero.guards.keys())
+	{
+		const guardEnt = gameState.getEntityById(guardId);
+		if (!guardEnt)
+			continue;
+
+		const plan = guardEnt.getMetadata(PlayerID, "plan");
+
+		// Current military guards (with Soldier class) will have been assigned plan metadata, but healer guards
+		// are not assigned a plan, and so they could be already moving to garrison somewhere due to low health.
+		if (!guardEnt.hasClass("Soldier") && isLent(plan))
+			continue;
+
+		const pos = holderEnt.position();
+		// garrison holders always have an obstruction
+		const obstructionRadius = requireValue(holderEnt.obstructionRadius());
+		if (pos)
+			guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
+	}
+}
+
 export class VictoryManager
 {
 	Config: Config;
@@ -133,8 +254,7 @@ export class VictoryManager
 				continue;
 
 			// If this ent travelled to a criticalEnt's accessValue, try again to assign as a guard
-			if ((ent.getMetadata(PlayerID, "role") === Worker.ROLE_CRITICAL_ENT_HEALER ||
-			     ent.getMetadata(PlayerID, "role") === Worker.ROLE_CRITICAL_ENT_GUARD) && !this.guardEnts.get(evt.entity))
+			if (isGuardRole(ent.getMetadata(PlayerID, "role")) && !this.guardEnts.get(evt.entity))
 			{
 				this.assignGuardToCriticalEnt(gameState, ent, ent.getMetadata(PlayerID, "guardedEnt"));
 				continue;
@@ -145,19 +265,24 @@ export class VictoryManager
 
 			// If this is a hero, try to assign ents that should be guarding it, but couldn't previously
 			const criticalEnt = this.criticalEnts.get(evt.entity);
-			if (!criticalEnt)
-				continue;
-			for (const [id, isGuarding] of this.guardEnts)
-			{
-				if (criticalEnt.guards.size >= this.healersPerCriticalEnt)
-					break;
+			if (criticalEnt)
+				this.assignIdleGuards(gameState, evt.entity, criticalEnt);
+		}
+	}
 
-				if (!isGuarding)
-				{
-					const guardEnt = gameState.getEntityById(id);
-					if (guardEnt)
-						this.assignGuardToCriticalEnt(gameState, guardEnt, evt.entity);
-				}
+	/** The guards not guarding are sent to the critical entity, up to its number of healers */
+	private assignIdleGuards(gameState: CommonGameState, criticalEntId: EntityId, criticalEnt: CriticalEntState): void
+	{
+		for (const [id, isGuarding] of this.guardEnts)
+		{
+			if (criticalEnt.guards.size >= this.healersPerCriticalEnt)
+				break;
+
+			if (!isGuarding)
+			{
+				const guardEnt = gameState.getEntityById(id);
+				if (guardEnt)
+					this.assignGuardToCriticalEnt(gameState, guardEnt, criticalEntId);
 			}
 		}
 	}
@@ -235,19 +360,7 @@ export class VictoryManager
 				!ent.hasClass("Wonder"))
 				continue;
 
-			// Let's get a few units from other bases to build the wonder.
-			const baseID = ent.getMetadata(PlayerID, "base");
-			const base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
-			if (!base)
-				continue;
-			const builders = gameState.ai.HQ.bulkPickWorkers(gameState, base, 10);
-			if (builders)
-				for (const worker of builders.values())
-				{
-					worker.setMetadata(PlayerID, "base", base.ID);
-					worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
-					worker.setMetadata(PlayerID, "target-foundation", ent.id());
-				}
+			sendWonderBuilders(gameState, ent);
 		}
 
 		for (const evt of events.ConstructionFinished)
@@ -277,23 +390,7 @@ export class VictoryManager
 			const hero = this.criticalEnts.get(evt.target);
 			if (!isLent(plan))
 			{
-				target.stopMoving();
-
-				if (plan !== undefined && plan >= 0)
-				{
-					const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
-					if (attackPlan)
-						attackPlan.removeUnit(target, true);
-				}
-
-				const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
-				if (partOfArmy)
-				{
-					const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
-					if (army)
-						army.removeOwn(gameState, target.id());
-				}
-
+				withdrawFromFight(gameState, target, plan);
 				if (hero)
 				{
 					hero.garrisonEmergency = target.healthLevel() < this.Config.garrisonHealthLevel.low;
@@ -329,43 +426,25 @@ export class VictoryManager
 				continue;
 
 			if (holderEnt.hasClass("Ship"))
-			{
-				// If the hero is garrisoned on a ship, remove its guards
-				for (const guardId of hero.guards.keys())
-				{
-					const guardEnt = gameState.getEntityById(guardId);
-					if (!guardEnt)
-						continue;
-
-					guardEnt.removeGuard();
-					this.guardEnts.set(guardId, false);
-				}
-				hero.guards.clear();
-				continue;
-			}
-
-			// Move the current guards to the garrison location.
-			// TODO: try to garrison them with the critical ent.
-			for (const guardId of hero.guards.keys())
-			{
-				const guardEnt = gameState.getEntityById(guardId);
-				if (!guardEnt)
-					continue;
-
-				const plan = guardEnt.getMetadata(PlayerID, "plan");
-
-				// Current military guards (with Soldier class) will have been assigned plan metadata, but healer guards
-				// are not assigned a plan, and so they could be already moving to garrison somewhere due to low health.
-				if (!guardEnt.hasClass("Soldier") && isLent(plan))
-					continue;
-
-				const pos = holderEnt.position();
-				// garrison holders always have an obstruction
-				const obstructionRadius = requireValue(holderEnt.obstructionRadius());
-				if (pos)
-					guardEnt.moveToRange(pos[0], pos[1], obstructionRadius.max, obstructionRadius.max + 5);
-			}
+				this.dismissGuards(gameState, hero);
+			else
+				guardsFollow(gameState, hero, holderEnt);
 		}
+	}
+
+	/** If the hero is garrisoned on a ship, remove its guards */
+	private dismissGuards(gameState: CommonGameState, hero: CriticalEntState): void
+	{
+		for (const guardId of hero.guards.keys())
+		{
+			const guardEnt = gameState.getEntityById(guardId);
+			if (!guardEnt)
+				continue;
+
+			guardEnt.removeGuard();
+			this.guardEnts.set(guardId, false);
+		}
+		hero.guards.clear();
 	}
 
 	/** A guard renamed (promoted or upgraded) keeps its role */
@@ -451,105 +530,92 @@ export class VictoryManager
 	{
 		let numWorkers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).length;
 		if (numWorkers < 20)
-		{
-			for (const data of this.criticalEnts.values())
-			{
-				for (const guardId of data.guards.keys())
-				{
-					const guardEnt = gameState.getEntityById(guardId);
-					if (!guardEnt || !guardEnt.hasClass("CitizenSoldier") ||
-					    guardEnt.getMetadata(PlayerID, "role") !== Worker.ROLE_CRITICAL_ENT_GUARD)
-						continue;
+			numWorkers = this.releaseCitizenGuards(gameState, numWorkers);
 
-					guardEnt.removeGuard();
-					guardEnt.setMetadata(PlayerID, "plan", PLAN_RESERVE);
-					guardEnt.setMetadata(PlayerID, "role", undefined);
-					this.guardEnts.delete(guardId);
-					data.guardsAssigned.add(guardId);
-
-					if (guardEnt.getMetadata(PlayerID, "guardedEnt"))
-						guardEnt.setMetadata(PlayerID, "guardedEnt", undefined);
-
-					if (++numWorkers >= 20)
-						break;
-				}
-				if (numWorkers >= 20)
-					break;
-			}
-		}
-
-		const minWorkers = 25;
-		const deltaWorkers = 3;
 		for (const [id, data] of this.criticalEnts)
 		{
 			const criticalEnt = gameState.getEntityById(id);
-			if (!criticalEnt)
-				continue;
-
-			const militaryGuardsPerCriticalEnt = (criticalEnt.hasClass("Wonder") ? 10 : 4) +
-				Math.round(this.Config.personality.defensive * 5);
-
-			if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt)
-				continue;
-
-			// First try to pick guards in the criticalEnt's accessIndex, to avoid unnecessary transports
-			for (const checkForSameAccess of [true, false])
-			{
-				// First try to assign any Champion units we might have
-				for (const entity of gameState.getOwnEntitiesByClass("Champion", true).values())
-				{
-					if (!this.tryAssignMilitaryGuard(gameState, entity, criticalEnt, checkForSameAccess))
-						continue;
-					data.guardsAssigned.add(entity.id());
-					if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt)
-						break;
-				}
-
-				if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt ||
-					numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size)
-				{
-					break;
-				}
-
-				for (const entity of gameState.ai.HQ.attackManager.outOfPlan.values())
-				{
-					if (!this.tryAssignMilitaryGuard(gameState, entity, criticalEnt, checkForSameAccess))
-						continue;
-					--numWorkers;
-					data.guardsAssigned.add(entity.id());
-					if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt ||
-						numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size)
-					{
-						break;
-					}
-				}
-
-				if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt ||
-					numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size)
-				{
-					break;
-				}
-
-				for (const entity of gameState.getOwnEntitiesByClass("Soldier", true).values())
-				{
-					if (!this.tryAssignMilitaryGuard(gameState, entity, criticalEnt, checkForSameAccess))
-						continue;
-					--numWorkers;
-					data.guardsAssigned.add(entity.id());
-					if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt ||
-						numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size)
-					{
-						break;
-					}
-				}
-
-				if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt ||
-					numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size)
-				{
-					break;
-				}
-			}
+			if (criticalEnt)
+				numWorkers = this.recruitGuards(gameState, criticalEnt, data, numWorkers);
 		}
+	}
+
+	/** Short of workers, citizen soldiers guarding go back to work until we have 20; returns the workers then. */
+	private releaseCitizenGuards(gameState: CommonGameState, numWorkers: number): number
+	{
+		for (const data of this.criticalEnts.values())
+		{
+			for (const guardId of data.guards.keys())
+			{
+				const guardEnt = gameState.getEntityById(guardId);
+				if (!guardEnt || !guardEnt.hasClass("CitizenSoldier") ||
+				    guardEnt.getMetadata(PlayerID, "role") !== Worker.ROLE_CRITICAL_ENT_GUARD)
+					continue;
+
+				guardEnt.removeGuard();
+				guardEnt.setMetadata(PlayerID, "plan", PLAN_RESERVE);
+				guardEnt.setMetadata(PlayerID, "role", undefined);
+				this.guardEnts.delete(guardId);
+				data.guardsAssigned.add(guardId);
+
+				if (guardEnt.getMetadata(PlayerID, "guardedEnt"))
+					guardEnt.setMetadata(PlayerID, "guardedEnt", undefined);
+
+				if (++numWorkers >= 20)
+					break;
+			}
+			if (numWorkers >= 20)
+				break;
+		}
+		return numWorkers;
+	}
+
+	/**
+	 * Military guards for criticalEnt up to its number, champions first, then units out of any plan, then soldiers,
+	 * those beside it first, while workers stay enough; returns the workers left.
+	 */
+	private recruitGuards(gameState: CommonGameState, criticalEnt: CommonEntity, data: CriticalEntState, numWorkers: number): number
+	{
+		const minWorkers = 25;
+		const deltaWorkers = 3;
+		const militaryGuardsPerCriticalEnt = (criticalEnt.hasClass("Wonder") ? 10 : 4) +
+			Math.round(this.Config.personality.defensive * 5);
+
+		if (data.guardsAssigned.size >= militaryGuardsPerCriticalEnt)
+			return numWorkers;
+
+		const guarded = (): boolean => data.guardsAssigned.size >= militaryGuardsPerCriticalEnt;
+		const enough = (): boolean => guarded() || numWorkers <= minWorkers + deltaWorkers * data.guardsAssigned.size;
+		/** assigns entities as guards; a worker taken counts down the workers */
+		const recruit = (entities: CommonEntityCollection, checkForSameAccess: boolean, takesWorker: boolean): void =>
+		{
+			for (const entity of entities.values())
+			{
+				if (!this.tryAssignMilitaryGuard(gameState, entity, criticalEnt, checkForSameAccess))
+					continue;
+				if (takesWorker)
+					--numWorkers;
+				data.guardsAssigned.add(entity.id());
+				if (takesWorker ? enough() : guarded())
+					break;
+			}
+		};
+
+		// First try to pick guards in the criticalEnt's accessIndex, to avoid unnecessary transports
+		for (const checkForSameAccess of [true, false])
+		{
+			// First try to assign any Champion units we might have
+			recruit(gameState.getOwnEntitiesByClass("Champion", true), checkForSameAccess, false);
+			if (enough())
+				break;
+			recruit(gameState.ai.HQ.attackManager.outOfPlan, checkForSameAccess, true);
+			if (enough())
+				break;
+			recruit(gameState.getOwnEntitiesByClass("Soldier", true), checkForSameAccess, true);
+			if (enough())
+				break;
+		}
+		return numWorkers;
 	}
 
 	tryAssignMilitaryGuard(gameState: CommonGameState, guardEnt: CommonEntity, criticalEnt: CommonEntity, checkForSameAccess: boolean): boolean
@@ -623,31 +689,7 @@ export class VictoryManager
 		}
 
 		if (!criticalEntId)
-		{
-			const isHealer = guardEnt.hasClass("Healer");
-
-			// Assign to the critical ent with the fewest guards
-			let min = Math.min();
-			for (const [id, data] of this.criticalEnts)
-			{
-				if (isHealer && (data.healersAssigned === undefined || data.healersAssigned.size > min))
-					continue;
-				if (!isHealer && data.guardsAssigned.size > min)
-					continue;
-
-				criticalEntId = id;
-				const assignedSet = isHealer ? data.healersAssigned : data.guardsAssigned;
-				if (assignedSet)
-					min = assignedSet.size;
-			}
-			if (criticalEntId)
-			{
-				const data = this.criticalEnts.get(criticalEntId);
-				const assignedSet = data ? (isHealer ? data.healersAssigned : data.guardsAssigned) : undefined;
-				if (assignedSet)
-					assignedSet.add(guardEnt.id());
-			}
-		}
+			criticalEntId = this.leastGuarded(guardEnt);
 
 		if (!criticalEntId)
 		{
@@ -666,6 +708,42 @@ export class VictoryManager
 		if (guardEnt.getMetadata(PlayerID, "guardedEnt") !== criticalEntId)
 			guardEnt.setMetadata(PlayerID, "guardedEnt", criticalEntId);
 
+		this.sendGuard(gameState, guardEnt, criticalEnt);
+		return true;
+	}
+
+	/** Assign to the critical ent with the fewest guards (healers for a healer); its id, or undefined */
+	private leastGuarded(guardEnt: CommonEntity): EntityId | undefined
+	{
+		const isHealer = guardEnt.hasClass("Healer");
+		let criticalEntId;
+		let min = Math.min();
+		for (const [id, data] of this.criticalEnts)
+		{
+			if (isHealer && (data.healersAssigned === undefined || data.healersAssigned.size > min))
+				continue;
+			if (!isHealer && data.guardsAssigned.size > min)
+				continue;
+
+			criticalEntId = id;
+			const assignedSet = isHealer ? data.healersAssigned : data.guardsAssigned;
+			if (assignedSet)
+				min = assignedSet.size;
+		}
+		if (criticalEntId)
+		{
+			const data = this.criticalEnts.get(criticalEntId);
+			const assignedSet = data ? (isHealer ? data.healersAssigned : data.guardsAssigned) : undefined;
+			if (assignedSet)
+				assignedSet.add(guardEnt.id());
+		}
+		return criticalEntId;
+	}
+
+	/** The guard guards the critical entity on its land, or asks for a ship to it. */
+	private sendGuard(gameState: CommonGameState, guardEnt: CommonPlacedEntity, criticalEnt: CommonPlacedEntity): void
+	{
+		const criticalEntId = criticalEnt.id();
 		const guardEntAccess = getLandAccess(gameState, guardEnt);
 		const criticalEntAccess = getLandAccess(gameState, criticalEnt);
 		if (guardEntAccess === criticalEntAccess)
@@ -689,7 +767,6 @@ export class VictoryManager
 		}
 
 		this.guardEnts.set(guardEnt.id(), guardEntAccess === criticalEntAccess);
-		return true;
 	}
 
 	resetCaptureGaiaRelic(gameState: CommonGameState): void
@@ -730,50 +807,49 @@ export class VictoryManager
 		}
 
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
+			this.updateRelicRaids(gameState);
+	}
+
+	/** Capture the relic: the raids on gaia relics reinforced or aborted, and one more relic raided if seen. */
+	private updateRelicRaids(gameState: CommonGameState): void
+	{
+		if (!this.tryCaptureGaiaRelic && gameState.ai.elapsedTime > this.tryCaptureGaiaRelicLapseTime)
+			this.tryCaptureGaiaRelic = true;
+
+		// Reinforce (if needed) any raid currently trying to capture a gaia relic
+		for (const relicId of this.targetedGaiaRelics.keys())
 		{
-			if (!this.tryCaptureGaiaRelic && gameState.ai.elapsedTime > this.tryCaptureGaiaRelicLapseTime)
-				this.tryCaptureGaiaRelic = true;
-
-			// Reinforce (if needed) any raid currently trying to capture a gaia relic
-			for (const relicId of this.targetedGaiaRelics.keys())
+			const relic = gameState.getEntityById(relicId);
+			if (!relic || relic.owner() !== 0)
+				this.abortCaptureGaiaRelic(gameState, relicId);
+			// a relic held in a structure waits there
+			else if (isPlaced(relic))
+				this.captureGaiaRelic(gameState, relic);
+		}
+		// And look for some new gaia relics visible by any of our units
+		// or that may be on our territory
+		const allGaiaRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"))
+			.filter((relic) => relic.owner() === 0);
+		for (const relic of allGaiaRelics.values())
+		{
+			if (!isPlaced(relic) || this.targetedGaiaRelics.has(relic.id()))
+				continue;
+			const relicPosition = relic.position();
+			const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(relicPosition);
+			if (territoryOwner === PlayerID)
 			{
-				const relic = gameState.getEntityById(relicId);
-				if (!relic || relic.owner() !== 0)
-					this.abortCaptureGaiaRelic(gameState, relicId);
-				// a relic held in a structure waits there
-				else if (isPlaced(relic))
-					this.captureGaiaRelic(gameState, relic);
+				this.targetedGaiaRelics.set(relic.id(), []);
+				this.captureGaiaRelic(gameState, relic);
+				break;
 			}
-			// And look for some new gaia relics visible by any of our units
-			// or that may be on our territory
-			const allGaiaRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"))
-				.filter((relic) => relic.owner() === 0);
-			for (const relic of allGaiaRelics.values())
+
+			if (territoryOwner !== 0 && gameState.isPlayerEnemy(territoryOwner))
+				continue;
+
+			if (seenByUs(gameState, relicPosition))
 			{
-				if (!isPlaced(relic) || this.targetedGaiaRelics.has(relic.id()))
-					continue;
-				const relicPosition = relic.position();
-				const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(relicPosition);
-				if (territoryOwner === PlayerID)
-				{
-					this.targetedGaiaRelics.set(relic.id(), []);
-					this.captureGaiaRelic(gameState, relic);
-					break;
-				}
-
-				if (territoryOwner !== 0 && gameState.isPlayerEnemy(territoryOwner))
-					continue;
-
-				for (const ent of gameState.getOwnUnits().values())
-				{
-					if (!isPlaced(ent) || !ent.visionRange())
-						continue;
-					if (SquareVectorDistance(ent.position(), relicPosition) > Math.square(ent.visionRange()))
-						continue;
-					this.targetedGaiaRelics.set(relic.id(), []);
-					this.captureGaiaRelic(gameState, relic);
-					break;
-				}
+				this.targetedGaiaRelics.set(relic.id(), []);
+				this.captureGaiaRelic(gameState, relic);
 			}
 		}
 	}
@@ -790,44 +866,16 @@ export class VictoryManager
 		for (const plan of plans)
 		{
 			const attack = gameState.ai.HQ.attackManager.getPlan(plan);
-			if (!attack)
-				continue;
-			for (const ent of attack.unitCollection.values())
-			{
-				const captureStrength = ent.captureStrength();
-				if (captureStrength)
-					capture += captureStrength * getAttackBonus(ent, relic, "Capture");
-			}
+			if (attack)
+				capture = addCaptureStrength(capture, attack.unitCollection, relic);
 		}
 		// No need to make a new attack if already enough units
 		if (capture > sumCapturePoints / 50)
 			return;
 		const relicPosition = relic.position();
 		const access = getLandAccess(gameState, relic);
-		const units = gameState.getOwnUnits().filter((ent) =>
-		{
-			if (!isPlaced(ent) || !ent.canCapture(relic))
-				return false;
-			if (ent.getMetadata(PlayerID, "transport") !== undefined)
-				return false;
-			if (ent.getMetadata(PlayerID, "PartOfArmy") !== undefined)
-				return false;
-			const plan = ent.getMetadata(PlayerID, "plan");
-			if (isLent(plan))
-				return false;
-			if (plan !== undefined && plan >= 0)
-			{
-				const attack = gameState.ai.HQ.attackManager.getPlan(plan);
-				if (attack && (attack.state !== AttackPlan.STATE_UNEXECUTED ||
-					attack.type === AttackPlan.TYPE_RAID))
-				{
-					return false;
-				}
-			}
-			if (getLandAccess(gameState, ent) !== access)
-				return false;
-			return true;
-		}).filterNearest(relicPosition);
+		const units = gameState.getOwnUnits().filter((ent) => mayRaidRelic(gameState, ent, relic, access))
+			.filterNearest(relicPosition);
 		const expedition = [];
 		for (const ent of units.values())
 		{
@@ -840,6 +888,12 @@ export class VictoryManager
 		}
 		if (!expedition.length || !plans.length && capture < sumCapturePoints / 100)
 			return;
+		this.raidRelic(gameState, relic, expedition);
+	}
+
+	/** A raid on the relic with the expedition, rallied where its first unit stands, started at once */
+	private raidRelic(gameState: CommonGameState, relic: CommonPlacedEntity, expedition: CommonEntity[]): void
+	{
 		const attack = gameState.ai.HQ.attackManager.raidTargetEntity(gameState, relic);
 		if (!attack)
 			return;
