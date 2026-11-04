@@ -408,7 +408,7 @@ describe("queues, queries and build orders", () =>
 		plan.addBuildOrder(world.gameState, "Siege2", stat, true);
 		assert.equal(emptied.length, 3, "the queues were emptied");
 
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		plan.addBuildOrder(world.gameState, "Siege3", stat, true);
 		assert.equal(plan.buildOrders.length, 5, "a started plan takes no new orders");
 	});
@@ -494,7 +494,7 @@ describe("siege units", () =>
 		plan.siegeState = 2;
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "already added");
 		plan.siegeState = 0;
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "or already started");
 	});
 });
@@ -2009,10 +2009,10 @@ describe("walks and transports during execution", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		const path = [worldPos(11, 12), worldPos(20, 20), worldPos(30, 118)];
+		plan.stage = { "state": "walking", path };
 		plan.targetPos = worldPos(30, 120); // far enough to keep marching
 		plan.lastPosition = worldPos(50, 50);
-		plan.path = [worldPos(11, 12), worldPos(20, 20), worldPos(30, 118)];
 
 		const result = plan.update(world.gameState, emptyEvents());
 		assert.equal(result, 1, "the unit is kept");
@@ -2020,7 +2020,7 @@ describe("walks and transports during execution", () =>
 		assert.equal(walks.length, 1, "one march order");
 		assert.equal(walks[0]?.["x"], 20, "toward the next waypoint");
 		assert.equal(walks[0]?.["z"], 20, "east of nothing");
-		assert.deepEqual(plan.path[0], [20, 20], "the reached waypoint was dropped");
+		assert.deepEqual(path[0], [20, 20], "the reached waypoint was dropped");
 		resetRecorder();
 	});
 
@@ -2036,10 +2036,9 @@ describe("walks and transports during execution", () =>
 		}, { destroy: () => destroyed.push(1011) }, { "plan": 1 }));
 		const destroyed: number[] = [];
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(12, 12)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.position5TurnsAgo = worldPos(11, 12);
-		plan.path = [worldPos(12, 12)];
 		world.ai.playedTurn = 5;
 
 		const result = plan.update(world.gameState, emptyEvents());
@@ -2066,10 +2065,9 @@ describe("walks and transports during execution", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: (cls: string) => cls === "Palisade" }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
-		plan.path = [worldPos(11, 12), worldPos(20, 20)];
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the unit is kept");
 		for (const unit of world.units)
@@ -2089,10 +2087,9 @@ describe("walks and transports during execution", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: () => false }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
-		plan.path = [worldPos(11, 12), worldPos(20, 20)];
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 0, "the plan dissolved");
 		assert.equal(plan.state, "walking", "still walking... nowhere");
@@ -2109,10 +2106,9 @@ describe("walks and transports during execution", () =>
 			id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"]
 		}));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(30, 120)] };
 		plan.targetPos = worldPos(30, 120);
 		// walking, the plan has the way StartAttack made it
-		plan.path = [worldPos(30, 120)];
 		plan.lastPosition = worldPos(50, 50);
 		const events = emptyEvents();
 		for (let i = 0; i < 4; ++i)
@@ -2220,7 +2216,7 @@ describe("chasing a target during execution", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 
 		const events = emptyEvents();
 		events.EntityRenamed.push({ "entity": entityId(2005), "newentity": entityId(2501) });
@@ -2315,7 +2311,7 @@ describe("wrapping up a plan", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(5, 5);
 		const soldier = world.addEntity(makeEntity({
@@ -2362,7 +2358,7 @@ describe("wrapping up a plan", () =>
 		const world = makeWorld();
 		override(world.bases[0].anchor!, { "obstructionRadius": () => ({ "min": 15, "max": 21.2 }) });
 		const plan = makePlan(world, { name: 1 });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
 		const soldier = world.addEntity(makeEntity({
@@ -2386,7 +2382,7 @@ describe("wrapping up a plan", () =>
 		const world = makeWorld();
 		world.bases.length = 0;
 		const plan = makePlan(world, { name: 1 });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
 		const soldier = world.addEntity(makeEntity({
@@ -2461,8 +2457,7 @@ describe("wrapping up a plan", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
-		plan.path = [worldPos(10, 10), worldPos(30, 40)];
+		plan.stage = { "state": "walking", "path": [worldPos(10, 10), worldPos(30, 40)] };
 		plan.position = worldPos(11, 12);
 		plan.overseas = 0;
 
@@ -2801,10 +2796,9 @@ describe("attacking miscellany", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(30, 40)] };
 		plan.targetPos = worldPos(30, 40);
 		// walking, the plan has the way StartAttack made it
-		plan.path = [worldPos(30, 40)];
 		resetRecorder();
 
 		assert.ok(plan.update(world.gameState, emptyEvents()), "the plan marched on");
@@ -2820,9 +2814,8 @@ describe("attacking miscellany", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(30, 40)] };
 		plan.targetPos = worldPos(100, 100);
-		plan.path = [worldPos(30, 40)];
 		resetRecorder();
 
 		assert.ok(plan.update(world.gameState, emptyEvents()), "the plan marched on");
@@ -3610,10 +3603,9 @@ describe("when walls and orders scatter the plan", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: (cls: string) => cls === "Palisade" }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
-		plan.path = [worldPos(11, 12), worldPos(20, 20)];
 		resetRecorder();
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the crew moves in");
@@ -3633,10 +3625,9 @@ describe("when walls and orders scatter the plan", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: () => false }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
-		plan.path = [worldPos(11, 12), worldPos(20, 20)];
 		resetRecorder();
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 0, "the plan gave up");
@@ -4349,10 +4340,9 @@ describe("second pass: the army at work", () =>
 			world.addEntity(makeEntity({ id, owner: PLAYER, position: [...pos], classes: ["Unit", "Siege"] },
 				{ destroy: () => destroyed.push(id) }, { "plan": 1 }));
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [worldPos(12, 12)] };
 		plan.lastPosition = worldPos(12, 12);
 		plan.position5TurnsAgo = worldPos(12, 12);
-		plan.path = [worldPos(12, 12)];
 		world.ai.playedTurn = 5;
 		plan.update(world.gameState, emptyEvents());
 		assert.deepEqual(destroyed, [1011]);
@@ -4391,7 +4381,7 @@ describe("second pass: targets, withdrawal and events", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.state = "walking";
+		plan.stage = { "state": "walking", "path": [] };
 		plan.position = worldPos(100, 100);
 		plan.rallyPoint = worldPos(5, 5);
 		world.bases.push({ "ID": 2, anchor: undefined, accessIndex: 2 });
