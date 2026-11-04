@@ -18,7 +18,7 @@ declare namespace PetraRuntime {
  * path always runs with them present.
  */
 	interface AIState {
-		Config: import("./decision/config.ts").Config;
+		Config: import("./world/config.ts").Config;
 		HQ: import("./decision/headquarters.ts").Headquarters;
 /** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;

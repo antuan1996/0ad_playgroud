@@ -3,7 +3,7 @@ import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, returnResourc
 	"../adapter/entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { Worker } from "./worker.ts";
-import type { Config } from "../decision/config.ts";
+import type { Config } from "../world/config.ts";
 import { armyId, playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 import { lentPlan, releasedPlan } from "./unitPlan.ts";

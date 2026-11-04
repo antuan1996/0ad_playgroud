@@ -1,8 +1,8 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { Config } from "../decision/config.ts";
-import * as difficulty from "../decision/difficultyLevel.ts";
+import { Config } from "../world/config.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
 import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
 import { obstructionShape } from "../adapter/templateData.ts";
@@ -12,6 +12,7 @@ import type { Queue } from "./queue.ts";
 import { INVALID_PLAYER, NO_BASE, NO_LAND, NO_REGION, attackPlanId, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
 import { debugShade, postCommand } from "../adapter/commands.ts";
+import { computePath } from "../adapter/pathfinder.ts";
 import { basesOf } from "../world/bases.ts";
 import { hqOf } from "./hq.ts";
 import { PLAN_RESERVE } from "./unitPlan.ts";
@@ -29,7 +30,7 @@ export type AttackUnitStat = {
 	interests?: Array<[string, number, ...string[]]>;
 };
 
-export type AttackBuildOrder = [
+type AttackBuildOrder = [
 	number,
 	string[],
 	CommonEntityCollection,
@@ -83,11 +84,11 @@ type AttackTransitions = {
 	"arrived": "";
 	"": never;
 };
-export type AttackPlanState = keyof AttackTransitions;
+type AttackPlanState = keyof AttackTransitions;
 /** How near its rally point a withdrawing army stops, past the anchor's footprint when it is a base. */
 const WITHDRAW_RANGE = 15;
 /** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
-export const ECONOMIC_TARGET_WEIGHT = 0.25;
+const ECONOMIC_TARGET_WEIGHT = 0.25;
 
 /** What an attacker's orders are chosen from, worked out once a turn (AttackPlan.updateAttacking). */
 type AttackerContext = {
@@ -135,7 +136,7 @@ export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackTyp
 /** What a new plan is asked for: a target, a unique target, a rush's size. */
 export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number };
 /** Where a plan gathers its army, and the sea to cross to its target (0: none). */
-export type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0 };
+type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0 };
 
 /**
  * Whether one of the plan's units answers a blow: while completing, one bound for a ship, on the attacker's land
@@ -655,14 +656,14 @@ type AttackPlanSetup = { canBuildUnits: boolean } & (
 	| { kind: "saved"; saved: SerializedAttackPlan });
 
 /** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
-export type AttackAim = { target: CommonEntity; pos: CommonPosition };
+type AttackAim = { target: CommonEntity; pos: CommonPosition };
 
 /**
  * An attack plan's state and what the state holds. Walking holds the path the
  * plan walks, made when it sets off (StartAttack); the other states hold
  * nothing more, so the path cannot be read outside walking.
  */
-export type AttackStage =
+type AttackStage =
 	| { state: "unexecuted" | "completing"; prep: AttackPreparation }
 	| { state: "walking"; path: CommonPosition[] }
 	| { state: "transporting" | "arrived" | "" };
@@ -1989,7 +1990,7 @@ export class AttackPlan
 		const startPos = { "x": position[0], "y": position[1] };
 		const endPos = { "x": targetPos[0], "y": targetPos[1] };
 		let blocker;
-		const path = Engine.ComputePath(startPos, endPos, gameState.getPassabilityClassMask("default"));
+		const path = computePath(startPos, endPos, gameState.getPassabilityClassMask("default"));
 		if (!path.length)
 			return undefined;
 
@@ -2038,7 +2039,7 @@ export class AttackPlan
 		Engine.ProfileStart("AI Compute path");
 		const startPos = { "x": this.rallyPoint[0], "y": this.rallyPoint[1] };
 		const endPos = { "x": targetPos[0], "y": targetPos[1] };
-		const path = Engine.ComputePath(startPos, endPos, gameState.getPassabilityClassMask("large"));
+		const path = computePath(startPos, endPos, gameState.getPassabilityClassMask("large"));
 		const way: CommonPosition[] = [clone(targetPos)];
 		for (const point of path)
 			way.push(worldPos(point.x, point.y));

@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import * as difficulty from "./difficultyLevel.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
 import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";

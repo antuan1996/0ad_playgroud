@@ -7,9 +7,16 @@
  * dropsite's sharing with allies) stays with the base.
  */
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import type { ResourceSupply } from "../decision/baseManager.ts";
 import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced, isSupply } from "../adapter/placed.ts";
+
+/** A supply on a base's list: the dropsite it is brought to, its distance there, the entity and its id */
+export type ResourceSupply = {
+	dropsite: EntityId;
+	dist: number;
+	ent?: CommonSupplyEntity;
+	id: EntityId;
+};
 
 export class BaseResources
 {

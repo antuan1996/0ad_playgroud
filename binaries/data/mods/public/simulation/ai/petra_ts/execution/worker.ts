@@ -2,8 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAccess, isFastMoving,
 	isSupplyFull, returnResources } from "../adapter/entityExtend.ts";
-import { TransportPlan } from "./transportPlan.ts";
-import type { ResourceSupply } from "../decision/baseManager.ts";
+import type { ResourceSupply } from "../world/baseResources.ts";
 import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
 import { GAIA, INVALID_ENTITY, NO_REGION, seconds } from "../adapter/brands.ts";
 import { type UnitState, requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
@@ -80,14 +79,14 @@ export class Worker
 		{
 			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
 			const target = gameState.getEntityById(ent.getMetadata(PlayerID, "target-foundation"));
-			if (!target && plan && plan.state === TransportPlan.BOARDING && isPlaced(ent))
+			if (!target && plan && plan.state === "boarding" && isPlaced(ent))
 				plan.removeUnit(gameState, ent);
 		}
 		// and gatherer if there are no more dropsite accessible in the base the ent is going to
 		if (subrole === Worker.SUBROLE_GATHERER || subrole === Worker.SUBROLE_HUNTER)
 		{
 			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
-			if (plan && plan.state === TransportPlan.BOARDING && isPlaced(ent) &&
+			if (plan && plan.state === "boarding" && isPlaced(ent) &&
 				!hasDropsiteOn(gameState, plan.endIndex, ent.getMetadata(PlayerID, "gather-type") || "food"))
 				plan.removeUnit(gameState, ent);
 		}

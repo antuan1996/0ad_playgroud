@@ -96,13 +96,13 @@ export const UNIT_AI_STATES = [
 ] as const;
 
 /** A state of UnitAI's state machine, by its dotted name. */
-export type UnitAIStateName = typeof UNIT_AI_STATES[number];
+type UnitAIStateName = typeof UNIT_AI_STATES[number];
 
 /** The first part of a state name: who the unit acts as. */
-export type UnitAIRole = "INDIVIDUAL" | "FORMATIONCONTROLLER" | "FORMATIONMEMBER";
+type UnitAIRole = "INDIVIDUAL" | "FORMATIONCONTROLLER" | "FORMATIONMEMBER";
 
 /** The second part of a state name, what the unit does: "GATHER", "COMBAT", "FLEEING", ... */
-export type UnitAIActivity = UnitAIStateName extends infer N ?
+type UnitAIActivity = UnitAIStateName extends infer N ?
 	N extends `${string}.${infer A}.${string}` ? A : N extends `${string}.${infer A}` ? A : never : never;
 
 export type UnitState =

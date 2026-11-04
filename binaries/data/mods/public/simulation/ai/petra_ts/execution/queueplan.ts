@@ -1,7 +1,7 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
 /** Land access index -> whether a dock may be built on that landmass. */
-export interface PlanLandSet {
+interface PlanLandSet {
 	[landAccess: number]: boolean;
 }
 
@@ -28,9 +28,9 @@ export interface PlanMetadata extends Partial<PetraEntityMetadata> {
 }
 
 /** What a plan makes: a unit or a structure (an entity template), or a technology. */
-export type PlanTemplate = CommonTemplate | CommonTechnology;
+type PlanTemplate = CommonTemplate | CommonTechnology;
 /** The name a plan's template goes by: a technology's, or an entity template's. */
-export type PlanName<T extends PlanTemplate> = T extends CommonTechnology ? TechName : TemplateName;
+type PlanName<T extends PlanTemplate> = T extends CommonTechnology ? TechName : TemplateName;
 
 /**
  * What a plan does once the queue manager pays for it, with what its check

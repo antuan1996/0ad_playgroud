@@ -1,8 +1,8 @@
 {
-	"layer": 10,
-	"cycle": 2,
-	"engine": 2,
-	"dead-export": 2,
+	"layer": 0,
+	"cycle": 0,
+	"engine": 0,
+	"dead-export": 0,
 	"dead-method": 0,
 	"stale-todo": 0
 }

@@ -1,10 +1,11 @@
 import * as filters from "simulation/ai/common-api/filters.js";
+import { getBestBase } from "./baseManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import type { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { newTradeRoute as chatNewTradeRoute } from "../adapter/chatHelper.ts";
-import { Config } from "./config.ts";
-import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireStructureTemplate } from
+import { Config } from "../world/config.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
+import { gatherTreasure, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireStructureTemplate } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";

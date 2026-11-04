@@ -14,7 +14,7 @@ import { GarrisonManager } from "./garrisonManager.ts";
 import type { Geography } from "../world/geography.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import type { BaseManager } from "./baseManager.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 import { GAIA, playerId } from "../adapter/brands.ts";
 import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
 import { isLent } from "../execution/unitPlan.ts";

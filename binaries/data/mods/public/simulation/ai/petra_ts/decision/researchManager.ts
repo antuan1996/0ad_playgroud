@@ -1,6 +1,6 @@
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { Worker } from "../execution/worker.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 import { PAYBACK_HORIZON, incomeGain, paybackSeconds } from "./economyScore.ts";
 import { techName } from "../adapter/brands.ts";
 

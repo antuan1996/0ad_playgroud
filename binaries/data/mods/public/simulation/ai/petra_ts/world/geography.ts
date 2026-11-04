@@ -17,7 +17,7 @@ import { landRegion, seaRegion } from "../adapter/brands.ts";
 import { isPlaced } from "../adapter/placed.ts";
 
 /** The land and sea regions we use, and whether the map has a sea worth a navy. */
-export type MapRegions = {
+type MapRegions = {
 	landRegions: Record<number, boolean>;
 	navalRegions: Record<number, boolean>;
 	navalMap: boolean;

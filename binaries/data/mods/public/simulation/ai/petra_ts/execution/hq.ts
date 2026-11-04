@@ -12,7 +12,7 @@ import type { Headquarters } from "../decision/headquarters.ts";
 import type { BaseView, SupplyUpkeep } from "../world/bases.ts";
 import type { Geography } from "../world/geography.ts";
 
-export type ExecutionHQ = {
+type ExecutionHQ = {
 	readonly turnCache: Readonly<Headquarters["turnCache"]>;
 	/** the maps and the regions (world/geography.ts), read-only */
 	readonly geography: Readonly<Geography>;

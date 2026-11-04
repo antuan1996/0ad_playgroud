@@ -9,7 +9,14 @@ import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import type { SeaFleet } from "../decision/navalManager.ts";
+
+/** The ships we have on one sea, by kind (a transport may be a warship too) */
+export type SeaFleet = {
+	ships: CommonEntityCollection;
+	transports: CommonEntityCollection;
+	warShips: CommonEntityCollection;
+	fishers: CommonEntityCollection;
+};
 
 /**
  * Describes a transport plan
@@ -34,10 +41,10 @@ import type { SeaFleet } from "../decision/navalManager.ts";
  */
 
 /** The naval manager's ships, from which a plan picks its own by their metadata */
-export type TransportFleet = { ships: CommonEntityCollection; transportShips: CommonEntityCollection;
+type TransportFleet = { ships: CommonEntityCollection; transportShips: CommonEntityCollection;
 	fleet(sea: number): SeaFleet | undefined };
 
-export interface SerializedTransportPlan {
+interface SerializedTransportPlan {
 	ID: TransportPlanId;
 	flotilla: boolean;
 	endPos: CommonPosition;
@@ -54,13 +61,13 @@ export interface SerializedTransportPlan {
 }
 
 /** A transport's way: from a land to another, to a position there */
-export type TransportRoute = { startIndex: AccessIndex; endIndex: AccessIndex; endPos: CommonPosition };
+type TransportRoute = { startIndex: AccessIndex; endIndex: AccessIndex; endPos: CommonPosition };
 
 /** What a new transport plan is: its id, its way and sea, and the ship already holding its units, if any */
 type TransportCrossing = TransportRoute & { id: TransportPlanId; sea: SeaIndex; ship?: CommonEntity };
 
 /** A land's shore on a sea */
-export type Shore = { land: AccessIndex; sea: SeaIndex };
+type Shore = { land: AccessIndex; sea: SeaIndex };
 
 /** The boarding turn's time and the boarding stage */
 type BoardingTurn = { time: GameSeconds; boarding: Boarding };
@@ -118,7 +125,7 @@ type Sailing = {
 	canceled: boolean | undefined;
 };
 /** A transport plan's state and what each state holds (PLAN.md §3.1) */
-export type TransportStage = Boarding | Sailing;
+type TransportStage = Boarding | Sailing;
 
 export class TransportPlan
 {

@@ -3,7 +3,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Queue, type SerializedQueue } from "./queue.ts";
 import { Worker } from "./worker.ts";
-import type { Config } from "../decision/config.ts";
+import type { Config } from "../world/config.ts";
 import { hqOf } from "./hq.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { debugWarn } from "../adapter/debug.ts";

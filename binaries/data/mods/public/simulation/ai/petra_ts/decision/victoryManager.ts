@@ -1,11 +1,12 @@
 import * as filters from "simulation/ai/common-api/filters.js";
+import { getBestBase } from "./baseManager.ts";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { AttackPlan } from "../execution/attackPlan.ts";
-import { getAttackBonus, getBestBase, getLandAccess, returnResources, requireValue } from
+import { getAttackBonus, getLandAccess, requireValue, returnResources } from
 	"../adapter/entityExtend.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 import { NO_BASE, seconds } from "../adapter/brands.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { isPlaced } from "../adapter/placed.ts";

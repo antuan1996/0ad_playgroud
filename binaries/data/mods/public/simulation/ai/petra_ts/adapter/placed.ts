@@ -18,7 +18,7 @@ export function isPlaced(ent: CommonEntity): ent is PlacedEntity
 }
 
 /** A resource supply on the map (CommonSupplyEntity, common-api.d.ts). */
-export type SupplyEntity = CommonSupplyEntity;
+type SupplyEntity = CommonSupplyEntity;
 
 /**
  * Whether the entity is a resource supply on the map, narrowing it to one:
@@ -31,7 +31,7 @@ export function isSupply(ent: CommonEntity): ent is SupplyEntity
 }
 
 /** A structure on the map (CommonStructureEntity, common-api.d.ts). */
-export type StructureEntity = CommonStructureEntity;
+type StructureEntity = CommonStructureEntity;
 
 /** Whether the entity is a structure on the map, with its obstruction and footprint, narrowing it to one. */
 export function isStructure(ent: CommonEntity): ent is StructureEntity

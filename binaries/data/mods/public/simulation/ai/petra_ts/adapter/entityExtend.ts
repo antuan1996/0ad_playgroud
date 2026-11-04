@@ -1,5 +1,4 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import type { BaseManager } from "../decision/baseManager.ts";
 import { worldPos } from "./brands.ts";
 import { attackBonuses, footprintHalves, isStructureTemplate } from "./templateData.ts";
 import { isPlaced } from "./placed.ts";
@@ -367,81 +366,6 @@ export function isSupplyFull(gameState: CommonGameState, ent: CommonSupplyEntity
 {
 	return ent.isFull() === true ||
 		ent.resourceSupplyNumGatherers() + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
-}
-
-/**
- * Get the best base (in terms of distance and accessIndex) for an entity.
- * It should be on the same accessIndex for structures.
- * If nothing found, return the noBase for units and undefined for structures.
- * If exclude is given, we exclude the base with ID = exclude.
- */
-export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyConstructedBase: boolean = false,
-	exclude: number | false = false): BaseManager | undefined
-{
-	const place = placeOf(gameState, ent);
-	if (!place)
-	{
-		aiWarn("Petra error: entity without position, but not garrisoned");
-		dumpEntity(ent);
-		return gameState.ai.HQ.basesManager.baselessBase();
-	}
-	const { pos, accessIndex } = place;
-
-	let distmin = Math.min();
-	let bestbase;
-	for (const base of gameState.ai.HQ.baseManagers())
-	{
-		const baseless = gameState.ai.HQ.basesManager.baselessBase();
-		if (base.ID === baseless.ID || exclude && base.ID === exclude)
-			continue;
-		if (onlyConstructedBase && (!base.anchor || base.anchor.foundationProgress() !== undefined))
-			continue;
-		if (ent.hasClass("Structure") && base.accessIndex !== accessIndex)
-			continue;
-		const dist = baseDistance(base, pos, accessIndex);
-		if (dist === undefined || dist > distmin)
-			continue;
-		distmin = dist;
-		bestbase = base;
-	}
-	if (!bestbase && !ent.hasClass("Structure"))
-		bestbase = gameState.ai.HQ.basesManager.baselessBase();
-	return bestbase;
-}
-
-/** Where ent is, or its holder if garrisoned, and that land; undefined if neither is on the map. */
-function placeOf(gameState: CommonGameState, ent: CommonEntity): { pos: CommonPosition; accessIndex: AccessIndex | undefined } | undefined
-{
-	const pos = ent.position();
-	if (pos)
-		return { pos, "accessIndex": getLandAccess(gameState, ent) };
-	const holder = getHolder(gameState, ent);
-	if (!holder || !isPlaced(holder))
-		return undefined;
-	return { "pos": holder.position(), "accessIndex": getLandAccess(gameState, holder) };
-}
-
-/**
- * The square distance from pos to the base's anchor, or else to its first building (undefined without one),
- * raised for a base on another land or without an anchor.
- */
-function baseDistance(base: BaseManager, pos: CommonPosition, accessIndex: AccessIndex | undefined): number | undefined
-{
-	let dist;
-	if (base.anchor)
-		dist = SquareVectorDistance(base.anchor.position(), pos);
-	else
-	{
-		const first = base.buildings.values().next();
-		if (first.done)
-			return undefined;
-		dist = SquareVectorDistance(first.value.position(), pos);
-	}
-	if (base.accessIndex !== accessIndex)
-		dist += 50000000;
-	if (!base.anchor)
-		dist += 50000000;
-	return dist;
 }
 
 export function getHolder(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined

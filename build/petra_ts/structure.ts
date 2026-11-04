@@ -32,7 +32,8 @@
  * - cycle: modules in a cycle of value imports (type-only imports leave
  *   nothing at run time);
  * - engine: uses of Engine outside adapter/ (profiling apart);
- * - dead-export: exports nothing imports, nor uses in its own module;
+ * - dead-export: exports nothing imports, nor uses in its own module (but
+ *   those marked `TODO never called`);
  * - dead-method: methods (and accessors) no code of the port (nor the
  *   build's bot-state.js) names, not marked `TODO never called`; matched by
  *   name, as a class is often reached through a type of its methods
@@ -102,7 +103,7 @@ export interface ModuleInfo
 	file: string;
 	layer: Layer;
 	imports: ImportEdge[];
-	exports: Array<{ name: string; line: number }>;
+	exports: Array<{ name: string; line: number; todo?: boolean }>;
 	/** names used in the module's own code (identifiers and property names) */
 	identifiers: Map<string, number>;
 	/** methods and accessors: name, line, marked TODO never called */
@@ -334,7 +335,7 @@ export function analyseModule(file: string, text: string): ModuleInfo
 		}
 		else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
 			ts.isInterfaceDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name)
-			info.exports.push({ "name": statement.name.text, line });
+			info.exports.push({ "name": statement.name.text, line, "todo": markedNeverCalled(statement, source) });
 	}
 
 	const exportNames = new Set(info.exports.map((e) => e.name));
@@ -527,7 +528,7 @@ export function deadCode(modules: ModuleInfo[], users: ModuleInfo[], calledMetho
 				result.testOnlyExports.push({ ...finding, "rule": "test-only-export" });
 			else if ((mod.identifiers.get(exp.name) ?? 0) > 0)
 				result.localOnlyExports.push({ ...finding, "rule": "local-only-export" });
-			else
+			else if (!exp.todo)
 				result.deadExports.push({ ...finding, "rule": "dead-export" });
 		}
 

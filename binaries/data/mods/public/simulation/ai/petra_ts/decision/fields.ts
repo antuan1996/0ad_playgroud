@@ -31,7 +31,7 @@ export interface FieldCensus
  * one more (fewer in construction than the goal), enough, or full (at the
  * HQ's limit: the base may build a corral instead).
  */
-export type FieldDecision = "first" | "more" | "enough" | "full";
+type FieldDecision = "first" | "more" | "enough" | "full";
 
 export function nextField(census: Readonly<FieldCensus>): FieldDecision
 {

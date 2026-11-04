@@ -11,7 +11,7 @@
 import { SMOOTHING } from "./gatherEconomy.ts";
 
 /** The classes of the buildings that train our infantry. */
-export const MILITARY_TRAINERS = ["Barracks", "Range"] as const;
+const MILITARY_TRAINERS = ["Barracks", "Range"] as const;
 
 export class ProductionLoad
 {

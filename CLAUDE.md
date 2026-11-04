@@ -79,13 +79,14 @@ holds to `build/petra_ts/structure-baseline.json` (lower one, then
 `--update-baseline` in the same commit): imports against the layers (adapter <
 world < execution < decision < root, `PLAN.md` §3.4; type-only ones too),
 modules in value-import cycles, `Engine` outside `adapter/` (profiling apart),
-dead exports, dead methods (no code of the port or `bot-state.js` names
+dead exports (unmarked), dead methods (no code of the port or `bot-state.js` names
 them, unmarked) and stale `TODO never called` markers (a call of the port
 reaches the method, resolved by the type checker). It also lists exports
 only their module or only the tests use, each module's fan-in and fan-out,
 and per class its methods, fields and LCOM4 (groups of methods sharing no
 field nor call, the members an eighth of the methods use set apart as hubs)
-with the methods using no member (module functions, really).
+with the methods using no member (module functions, really). Every
+count is 0, and no module exports what only it uses: keep it so.
 
 The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
 `tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only
@@ -289,12 +290,13 @@ decision with the game's reason ("last player alive", "wonder victory",
 - `petra_ts/` — the port, in layers (stage 3, `PLAN.md` §3.4): `_petrabot.ts`
   and the `.d.ts` declarations at the root; `adapter/` (the engine boundary:
   `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
-  unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it); `world/` (the
-  AI's model: `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
+  unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it, `pathfinder.ts` the engine's
+  pathfinder); `world/` (the
+  AI's model: `config.ts` and `difficultyLevel.ts`, the bot's settings, read by every layer; `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
   border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
   each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `census.ts`, our population against its room; `seaRoute.ts`, a ship's route round the enemy's shooters on the sea grid; `shipTraffic.ts`, where the enemy's ships sail, fading, owned by the HQ on naval maps and not saved, which places the towers (`FINDINGS.md` §38); `baseResources.ts`,
   the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
-  read-only view of the bases); `decision/` (headquarters, startingStrategy, config, difficultyLevel,
+  read-only view of the bases); `decision/` (headquarters, startingStrategy,
   the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), `housing.ts`, `fields.ts` and `dropsites.ts`, Petra's house, field and dropsite rules as pure functions over a census (§31), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
   the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
   ended with the tag `petra-ts-parity`.

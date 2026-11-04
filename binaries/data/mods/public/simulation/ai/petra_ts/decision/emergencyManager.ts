@@ -1,5 +1,5 @@
 import { emergency as chatEmergency } from "../adapter/chatHelper.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 
 /** The fields a save keeps. */
 export type SerializedEmergencyManager = Pick<EmergencyManager, "referencePopulation" | "referenceStructureCount" | "numRoots" | "hasEmergency">;

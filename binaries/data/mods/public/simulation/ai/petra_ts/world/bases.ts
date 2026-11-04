@@ -8,10 +8,10 @@
  * capabilities below. BaseManager has every member, so it is one of these
  * as it is; the interfaces only limit what the reader may do with it.
  */
-import type { ResourceSupply } from "../decision/baseManager.ts";
+import type { ResourceSupply } from "./baseResources.ts";
 
 /** A base's resource supplies by resource, then by band of distance ("nearby", "medium", "faraway"). */
-export type SupplyBands = Readonly<Record<string, Readonly<Record<string, ReadonlyArray<Readonly<ResourceSupply>>>>>>;
+type SupplyBands = Readonly<Record<string, Readonly<Record<string, ReadonlyArray<Readonly<ResourceSupply>>>>>>;
 
 /** What a base is, for reading. */
 export interface BaseView
@@ -32,7 +32,7 @@ export interface BaseView
 }
 
 /** Booking a supply for a gatherer this turn, so the next one counts it as taken. */
-export interface SupplyBooking
+interface SupplyBooking
 {
 	AddTCGatherer(supply: EntityId): void;
 	RemoveTCGatherer(supply: EntityId): void;
@@ -45,7 +45,7 @@ export interface SupplyUpkeep
 }
 
 /** Handing idle workers back to the base, which finds them work. */
-export interface IdleWorkers
+interface IdleWorkers
 {
 	reassignIdleWorkers(gameState: CommonGameState, idleWorkers?: Iterable<CommonEntity>): void;
 }

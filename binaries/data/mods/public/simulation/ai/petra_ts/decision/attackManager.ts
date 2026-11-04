@@ -2,8 +2,8 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
 import { ATTACK_TYPES, AttackPlan, type AttackType, type SerializedAttackPlan, byAttackType, plansIn } from "../execution/attackPlan.ts";
 import * as chat from "../adapter/chatHelper.ts";
-import { Config } from "./config.ts";
-import * as difficulty from "./difficultyLevel.ts";
+import { Config } from "../world/config.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
 import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
@@ -30,7 +30,7 @@ export type SerializedAttackManager = {
 };
 
 /** The fewest of a leaving plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
-export const LOCAL_FIGHT_MIN = 4;
+const LOCAL_FIGHT_MIN = 4;
 
 /** Where a group stands: the mean of its positions. */
 function centreOf(units: readonly CommonPlacedEntity[]): CommonPosition
@@ -572,7 +572,7 @@ export class AttackManager
 				debugWarn(this.Config, 1, () => "Attack Manager: Starting " + attack.getType() + " plan " +
 					attack.getName());
 				if (this.Config.chat)
-					chat.launchAttack(gameState, requireValue(attack.targetPlayer), attack.getType());
+					chat.launchAttack(gameState, requireValue(attack.targetPlayer), attack.type === AttackPlan.TYPE_HUGE_ATTACK);
 				this.startedAttacks[attackType].push(attack);
 			}
 			else

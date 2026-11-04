@@ -19,7 +19,7 @@ import type { Accessibility } from "simulation/ai/common-api/terrain-analysis.js
 import { GAIA, worldPos } from "../adapter/brands.ts";
 
 /** What a cell within a shooter's reach costs, against 1 for a free one: any way round that exists is taken. */
-export const DANGER_COST = 200;
+const DANGER_COST = 200;
 /** Metres kept beyond a shooter's range. */
 export const DANGER_MARGIN = 12;
 /** The most waypoints a route keeps (the destination included); a longer list of corners is thinned evenly. */

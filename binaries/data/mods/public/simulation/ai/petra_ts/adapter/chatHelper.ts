@@ -1,4 +1,3 @@
-import { AttackPlan } from "../execution/attackPlan.ts";
 import { postCommand } from "./commands.ts";
 
 const launchAttackMessages = {
@@ -151,11 +150,11 @@ const emergencyMessages = {
 	]
 };
 
-export function launchAttack(gameState: CommonGameState, player: PlayerId, type: string): void
+export function launchAttack(gameState: CommonGameState, player: PlayerId, huge: boolean): void
 {
 	postCommand({
 		"type": "aichat",
-		"message": "/allies " + pickRandom(launchAttackMessages[type === AttackPlan.TYPE_HUGE_ATTACK ? "hugeAttack" : "other"]),
+		"message": "/allies " + pickRandom(launchAttackMessages[huge ? "hugeAttack" : "other"]),
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
 		"parameters": { "_player_": player }

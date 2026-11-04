@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import * as chat from "../adapter/chatHelper.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 import { playerId, seconds } from "../adapter/brands.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";

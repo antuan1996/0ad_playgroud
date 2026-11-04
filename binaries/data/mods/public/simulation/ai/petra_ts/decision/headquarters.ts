@@ -6,9 +6,9 @@ import { AttackPlan } from "../execution/attackPlan.ts";
 import type { BaseManager } from "./baseManager.ts";
 import { BasesManager } from "./basesManager.ts";
 import { BuildManager } from "./buildManager.ts";
-import { Config } from "./config.ts";
+import { Config } from "../world/config.ts";
 import { DefenseManager } from "./defenseManager.ts";
-import * as difficulty from "./difficultyLevel.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
@@ -93,7 +93,7 @@ const BUSY_TRAINERS = 0.85;
 const MAX_MILITARY_TRAINERS = 5;
 
 /** What any free land is worth to a base sought for its room (findEconomicCCLocation's forRoom). */
-export const ROOM_VALUE = 10;
+const ROOM_VALUE = 10;
 /** Idle workers from which a dry town stops training more (workforceStalled). */
 export const STALLED_IDLE = 10;
 
@@ -102,7 +102,7 @@ export const CC_ORDER_WAIT = 20;
 /** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
 export const CC_SPOT_MEMORY = 600;
 /** Metres around such a spot avoided, and around enemy soldiers. */
-export const CC_SPOT_AVOID = 80;
+const CC_SPOT_AVOID = 80;
 export const CC_ENEMY_AVOID = 150;
 
 /** The ship-seconds of enemy traffic, fading, a shore tower must reach (findShoreTowerLocation). */

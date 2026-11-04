@@ -16,7 +16,7 @@
 export const MIN_BERRY_GATHERERS = 3;
 
 /** What the food-source decision reads. */
-export interface FoodRates
+interface FoodRates
 {
 	/** units per second a gatherer brings in from the berries, the walk included */
 	fruit: number;

@@ -19,7 +19,7 @@ function numberAt(template: CommonTemplate, path: string): number
 }
 
 /** A footprint's half extents: a square's half depth and width, a circle's radius for both, 0 without one. */
-export type FootprintHalves = {
+type FootprintHalves = {
 	halfDepth: number;
 	halfWidth: number;
 	/** the larger of the two */
@@ -48,7 +48,7 @@ export function footprintHalves(template: CommonTemplate): FootprintHalves
  * half width) or a circle (unit); undefined without an obstruction or with
  * none of these shapes.
  */
-export type ObstructionShape =
+type ObstructionShape =
 	| { kind: "static"; width: number; depth: number }
 	| { kind: "gate"; width: number; depth: number; doorHalfWidth: number }
 	| { kind: "unit"; radius: number };
@@ -84,7 +84,7 @@ export function obstructionShape(template: CommonTemplate): ObstructionShape | u
 }
 
 /** One bonus of an attack: against units of `Classes` (a class list) of civ `Civ`, if given. */
-export type AttackBonus = {
+type AttackBonus = {
 	Civ?: string;
 	Classes?: string;
 	Multiplier: number;

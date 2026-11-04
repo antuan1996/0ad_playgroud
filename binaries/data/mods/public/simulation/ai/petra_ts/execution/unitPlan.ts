@@ -8,7 +8,7 @@ export const PLAN_RESERVE = -1;
 /** Lent to a defense army, a garrison or a guard while it had a plan: back to the reserve when released. */
 export const PLAN_LENT_FROM_PLAN = -2;
 /** Lent the same way while it had no plan: back to no plan when released. */
-export const PLAN_LENT_UNPLANNED = -3;
+const PLAN_LENT_UNPLANNED = -3;
 
 /** Whether the unit is lent out (defense, garrison, guard). */
 export function isLent(plan: UnitPlan | undefined): boolean

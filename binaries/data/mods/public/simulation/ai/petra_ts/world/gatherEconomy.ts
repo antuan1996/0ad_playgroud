@@ -31,8 +31,8 @@ export const PRIOR_RATE: Readonly<Record<string, number>> = { "food": 0.4, "wood
 const DEFAULT_PRIOR = 0.4;
 
 /** The food sources: what a food supply's specific type is. */
-export const FOOD_SOURCES = ["fruit", "grain", "meat", "fish"] as const;
-export type FoodSource = typeof FOOD_SOURCES[number];
+const FOOD_SOURCES = ["fruit", "grain", "meat", "fish"] as const;
+type FoodSource = typeof FOOD_SOURCES[number];
 
 /**
  * What a food gatherer brings in per second before anything is measured, by
@@ -41,7 +41,7 @@ export type FoodSource = typeof FOOD_SOURCES[number];
  */
 export const FOOD_PRIOR_RATE: Readonly<Record<FoodSource, number>> = { "fruit": 0.6, "grain": 0.55, "meat": 1, "fish": 0.5 };
 
-export type SerializedGatherEconomy = {
+type SerializedGatherEconomy = {
 	perGatherer: Record<string, number>;
 	perFoodGatherer: Partial<Record<FoodSource, number>>;
 	lastUpdate: number | undefined;

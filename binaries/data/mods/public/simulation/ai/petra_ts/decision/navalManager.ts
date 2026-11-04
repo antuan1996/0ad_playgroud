@@ -4,14 +4,14 @@ import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetada
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import { TransportPlan } from "../execution/transportPlan.ts";
+import { type SeaFleet, TransportPlan } from "../execution/transportPlan.ts";
 import { plansIn } from "../execution/attackPlan.ts";
 import { threatsAt } from "../world/seaRoute.ts";
 
 /** Warships wanted on a sea where the enemy fishes or trades (huntWithFleet). */
 export const HUNTERS_PER_SEA = 2;
 /** How far from a hunting warship its prey may be. */
-export const HUNT_RANGE = 400;
+const HUNT_RANGE = 400;
 /** Seconds a ship must stand still, neither moving nor turning, to be taken for blocked (moveApart). */
 export const STUCK_SECONDS = 5;
 /** A defensive building's reach when its template names none. */
@@ -21,7 +21,7 @@ const DEFAULT_TOWER_REACH = 60;
 export const FISH_PER_BOAT = 1500;
 export const FISH_MAX_BOATS = 8;
 import { Worker } from "../execution/worker.ts";
-import type { Config } from "./config.ts";
+import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
 import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
@@ -37,14 +37,6 @@ import { isPlaced } from "../adapter/placed.ts";
  * -Scouting, ultimately.
  * Also deals with handling docks, making sure we have access and stuffs like that.
  */
-/** The ships we have on one sea, by kind (a transport may be a warship too) */
-export type SeaFleet = {
-	ships: CommonEntityCollection;
-	transports: CommonEntityCollection;
-	warShips: CommonEntityCollection;
-	fishers: CommonEntityCollection;
-};
-
 /** The enemy's fishing boats and merchant ships by the sea they sail */
 function enemyPreyBySea(gameState: CommonGameState): Map<number, CommonPlacedEntity[]>
 {

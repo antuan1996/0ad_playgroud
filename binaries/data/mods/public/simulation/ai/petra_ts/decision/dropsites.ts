@@ -15,7 +15,7 @@ const WALKING = 0.15;
  * Wait (too few samples yet: 150 for wood, 60 for the others), fine (few
  * carry back), or closer (a dropsite nearer is wanted).
  */
-export type DropsiteVerdict = "wait" | "fine" | "closer";
+type DropsiteVerdict = "wait" | "fine" | "closer";
 
 export function dropsiteVerdict(type: string, gathering: number, carrying: number): DropsiteVerdict
 {
