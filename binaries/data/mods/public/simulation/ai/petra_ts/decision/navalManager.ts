@@ -470,7 +470,7 @@ export class NavalManager
 	}
 
 	/** split a transport plan in two, moving all entities not yet affected to a ship in the new plan */
-	splitTransport(gameState: CommonGameState, plan: TransportPlan): boolean
+	splitTransport(gameState: CommonGameState, plan: TransportPlan, needSplit: CommonEntity[]): boolean
 	{
 		debugWarn(this.Config, 1, () => ">>>> split of transport plan started <<<<");
 		const newplan = TransportPlan.create(gameState, [], plan.startIndex, plan.endIndex, plan.endPos);
@@ -480,7 +480,7 @@ export class NavalManager
 			return false;
 		}
 
-		for (const ent of plan.needSplit)
+		for (const ent of needSplit)
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
@@ -704,7 +704,7 @@ export class NavalManager
 		if (!isPlaced(ship))
 			return false;
 		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
-		const bp = plan?.boardingPos[ship.id()];
+		const bp = plan?.shipPoints()[ship.id()];
 		if (!plan || !bp)
 			return false;
 		return SquareVectorDistance(bp, ship.position()) < plan.boardingRange;

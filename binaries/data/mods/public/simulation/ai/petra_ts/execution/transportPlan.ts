@@ -73,22 +73,39 @@ export const ROUTE_RESEND_MIN = 15;
 /** What a threat in reach of a landing point adds to its distance: a kilometre's detour. */
 const LANDING_THREAT_COST = 1000;
 
+/** A ship's point, by ship id: where it boards, or where it lands */
+type ShipPoints = Record<string, CommonPosition | undefined>;
+/** Boarding: each ship's boarding point, the tries of ships and units to meet, the units waiting for another plan */
+type Boarding = { state: "boarding"; boardingPos: ShipPoints; nTry: Record<number, number>; needSplit: CommonEntity[] };
+/** Sailing: each ship's landing point, the tries to land, the units unloaded last turn and those sent back on board */
+type Sailing = {
+	state: "sailing";
+	landingPos: ShipPoints;
+	nTry: Record<number, number>;
+	unloaded: EntityId[];
+	recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }>;
+	canceled: boolean | undefined;
+};
+/** A transport plan's state and what each state holds (PLAN.md §3.1) */
+export type TransportStage = Boarding | Sailing;
+
 export class TransportPlan
 {
 	ID: TransportPlanId;
 	/** The ships on the plan's sea */
 	seaFleet: SeaFleet;
-	boardingPos: Record<string, CommonPosition | undefined>;
+	/** The plan's state and what it holds: boarding, then sailing (onBoarding moves it on) */
+	stage: TransportStage;
+	get state(): TransportStage["state"]
+	{
+		return this.stage.state;
+	}
 	boardingRange = 18*18;	// TODO compute it from the ship clearance and garrison range
-	canceled: boolean | undefined = undefined;
 	debug: number;
 	endIndex: AccessIndex;
 	endPos: CommonPosition;
 	flotilla: boolean;
-	nTry: Record<number, number>;
-	needSplit: CommonEntity[];
 	needTransportShips: boolean;
-	recovered: Array<{ entId: EntityId; entPos: CommonPosition; shipId: EntityId }> = [];
 	/**
 	 * Each sailing ship's route to its landing point and how many threats
 	 * reached it when planned (FINDINGS §36). Not saved: after a load a ship
@@ -100,10 +117,8 @@ export class TransportPlan
 	sea: SeaIndex;
 	ships: CommonEntityCollection;
 	startIndex: AccessIndex;
-	state: string;
 	transportShips: CommonEntityCollection;
 	units: CommonEntityCollection;
-	unloaded: EntityId[] = [];
 
 	/**
 	 * The sea a transport crosses: a garrisoned ship's own (from the sea,
@@ -140,6 +155,12 @@ export class TransportPlan
 			new TransportPlan(gameState, fleet, seaFleet, id, units, startIndex, endIndex, endPos, sea, ship);
 	}
 
+	/** Each ship's point in this state: where it takes its units on board, then where it lands them */
+	shipPoints(): Record<string, CommonPosition | undefined>
+	{
+		return this.stage.state === TransportPlan.BOARDING ? this.stage.boardingPos : this.stage.landingPos;
+	}
+
 	/** A saved transport, as it was saved: its units and ships found again by their metadata; none when its sea has no fleet. */
 	static restore(gameState: CommonGameState, fleet: TransportFleet, data: SerializedTransportPlan): TransportPlan | undefined
 	{
@@ -158,7 +179,6 @@ export class TransportPlan
 		this.seaFleet = seaFleet;
 		this.debug = gameState.ai.Config.debug;
 		this.flotilla = false;   // when false, only one ship per transport ... not yet tested when true
-		this.needSplit = [];
 
 		this.endPos = endPos;
 		this.endIndex = endIndex;
@@ -182,10 +202,8 @@ export class TransportPlan
 		debugWarn(this, 1, () => "Starting a new transport plan with ID " + this.ID + " to index " + endIndex +
 			" with units length " + units.length);
 
-		this.state = TransportPlan.BOARDING;
-		this.boardingPos = {};
+		this.stage = { "state": TransportPlan.BOARDING, "boardingPos": {}, "nTry": {}, "needSplit": [] };
 		this.needTransportShips = ship === undefined;
-		this.nTry = {};
 
 		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "transport", this.ID));
 		this.ships = fleet.ships.filter(filters.byMetadata(PlayerID, "transporter", this.ID));
@@ -199,11 +217,11 @@ export class TransportPlan
 	/**
 	 * We're trying to board units onto our ships.
 	 */
-	static BOARDING = "boarding";
+	static readonly BOARDING = "boarding";
 	/**
 	 * We're moving ships and eventually unload units.
 	 */
-	static SAILING = "sailing";
+	static readonly SAILING = "sailing";
 
 	/** count available slots. TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	countFreeSlots(): number
@@ -224,7 +242,7 @@ export class TransportPlan
 	}
 
 	/** returns the ship the unit is sent to, if any has room */
-	assignUnitToShip(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined
+	assignUnitToShip(gameState: CommonGameState, ent: CommonEntity, boarding: Boarding): CommonEntity | undefined
 	{
 		if (this.needTransportShips)
 			return undefined;
@@ -250,7 +268,7 @@ export class TransportPlan
 			return undefined;
 		}
 
-		this.needSplit.push(ent);
+		boarding.needSplit.push(ent);
 		return undefined;
 	}
 
@@ -400,7 +418,9 @@ export class TransportPlan
 			if (anchorPos)
 				this.endPos = anchorPos;
 		}
-		this.canceled = true;
+		// (sailing: a plan cancelled while boarding sails nowhere yet)
+		if (this.stage.state === TransportPlan.SAILING)
+			this.stage.canceled = true;
 		return true;
 	}
 
@@ -410,15 +430,16 @@ export class TransportPlan
 	 */
 	update(gameState: CommonGameState): number
 	{
-		if (this.state === TransportPlan.BOARDING)
-			this.onBoarding(gameState);
-		else if (this.state === TransportPlan.SAILING)
-			this.onSailing(gameState);
+		const stage = this.stage;
+		if (stage.state === TransportPlan.BOARDING)
+			this.onBoarding(gameState, stage);
+		else
+			this.onSailing(gameState, stage);
 
 		return this.units.length;
 	}
 
-	onBoarding(gameState: CommonGameState): void
+	onBoarding(gameState: CommonGameState, boarding: Boarding): void
 	{
 		let ready = true;
 		const time = gameState.ai.elapsedTime;
@@ -430,7 +451,7 @@ export class TransportPlan
 			if (!onBoard)
 			{
 				ready = false;
-				this.sendToShip(gameState, ent, time);
+				this.sendToShip(gameState, ent, time, boarding);
 			}
 			else if (onBoard !== "onBoard" && !this.isOnBoard(ent))
 			{
@@ -448,55 +469,55 @@ export class TransportPlan
 				// set when the first unit was sent to this ship; a ship without one
 				// (FINDINGS §32: the original threw too, ending the boarding for the
 				// turn) is not tested for having drifted from it
-				const boardingPos = this.boardingPos[shipId];
+				const boardingPos = boarding.boardingPos[shipId];
 				const distShip = boardingPos ? SquareVectorDistance(boardingPos, ship.position()) : 0;
 				if (boardingPos && !shipTested[shipId] && distShip > this.boardingRange)
 				{
 					shipTested[shipId] = true;
-					this.checkBoardingShip(gameState, ent, ship, shipId, boardingPos, time);
+					this.checkBoardingShip(gameState, ent, ship, shipId, boardingPos, time, boarding);
 				}
 
 				if (since(ent, time) > 2)
-					this.checkBoardingUnit(gameState, ent, ship, boardingPos, distShip, time);
+					this.checkBoardingUnit(gameState, ent, ship, boardingPos, distShip, time, boarding);
 			}
 		}
 
-		if (this.needSplit.length)
+		if (boarding.needSplit.length)
 		{
-			hqOf(gameState).navalManager.splitTransport(gameState, this);
-			this.needSplit = [];
+			hqOf(gameState).navalManager.splitTransport(gameState, this, boarding.needSplit);
+			boarding.needSplit = [];
 		}
 
 		if (!ready)
 			return;
 
+		// the landing points, over the record of the boarding points (a ship no longer in the plan keeps its old one)
+		const landingPos = boarding.boardingPos;
 		const shooters = shootersOf(gameState);
 		for (const ship of this.ships.values())
 		{
 			const bp = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
-			this.boardingPos[ship.id()] = bp;
+			landingPos[ship.id()] = bp;
 			this.sailTo(gameState, ship, bp, shooters);
 		}
-		this.state = TransportPlan.SAILING;
-		this.nTry = {};
-		this.unloaded = [];
-		this.recovered = [];
+		this.stage = { "state": TransportPlan.SAILING, landingPos, "nTry": {}, "unloaded": [], "recovered": [],
+			"canceled": undefined };
 	}
 
 	/** A unit not yet on a ship: give it one, sent to a boarding point near the unit if it has none */
-	sendToShip(gameState: CommonGameState, ent: CommonEntity, time: GameSeconds): void
+	sendToShip(gameState: CommonGameState, ent: CommonEntity, time: GameSeconds, boarding: Boarding): void
 	{
-		const ship = this.assignUnitToShip(gameState, ent);
+		const ship = this.assignUnitToShip(gameState, ent, boarding);
 		if (ship)
 		{
 			const shipId = ship.id();
 			// a ship goes to a boarding point near the unit; one inside a building
 			// leaves that to the next unit on the map (the original threw)
 			const entPos = ent.position();
-			if (!this.boardingPos[shipId] && entPos)
+			if (!boarding.boardingPos[shipId] && entPos)
 			{
 				const bp = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, entPos, false);
-				this.boardingPos[shipId] = bp;
+				boarding.boardingPos[shipId] = bp;
 				this.sailTo(gameState, ship, bp);
 				ship.setMetadata(PlayerID, "timeGarrison", time);
 				ship.setMetadata(PlayerID, "posGarrison", ship.position());
@@ -510,7 +531,7 @@ export class TransportPlan
 
 	/** A ship far from its boarding point while a unit waits for it: is it stuck? Then send it again, or to another point */
 	checkBoardingShip(gameState: CommonGameState, ent: CommonEntity, ship: CommonPlacedEntity, shipId: EntityId,
-		boardingPos: CommonPosition, time: GameSeconds): void
+		boardingPos: CommonPosition, time: GameSeconds, boarding: Boarding): void
 	{
 		let retry = false;
 		const state = unitState(ship);
@@ -546,17 +567,17 @@ export class TransportPlan
 
 		if (retry)
 		{
-			if (!this.nTry[shipId])
-				this.nTry[shipId] = 1;
+			if (!boarding.nTry[shipId])
+				boarding.nTry[shipId] = 1;
 			else
-				++this.nTry[shipId];
+				++boarding.nTry[shipId];
 			let bp = boardingPos;
-			if (this.nTry[shipId] > 1)	// we must have been blocked by something ... try with another boarding point
+			if (boarding.nTry[shipId] > 1)	// we must have been blocked by something ... try with another boarding point
 			{
-				this.nTry[shipId] = 0;
+				boarding.nTry[shipId] = 0;
 				debugWarn(this, 1, () => "ship " + shipId + " new attempt for a landing point ");
 				bp = this.retryBoardingPos(gameState, ship, boardingPos, this.startIndex, false);
-				this.boardingPos[shipId] = bp;
+				boarding.boardingPos[shipId] = bp;
 			}
 			this.sailTo(gameState, ship, bp);
 			ship.setMetadata(PlayerID, "timeGarrison", time);
@@ -565,7 +586,7 @@ export class TransportPlan
 
 	/** A unit that has not moved for 2 s on its way to its ship: get it out of a trap, or nearer the boarding point */
 	checkBoardingUnit(gameState: CommonGameState, ent: CommonEntity, ship: CommonEntity, boardingPos: CommonPosition | undefined,
-		distShip: number, time: GameSeconds): void
+		distShip: number, time: GameSeconds, boarding: Boarding): void
 	{
 		// a unit without a position has just gone in (the original threw too)
 		const oldPos = ent.getMetadata(PlayerID, "posGarrison");
@@ -575,11 +596,11 @@ export class TransportPlan
 			// (a ship without a boarding point is no distance from it)
 			if (!boardingPos || distShip < this.boardingRange)	// looks like we are blocked ... try to go out of this trap
 			{
-				if (!this.nTry[ent.id()])
-					this.nTry[ent.id()] = 1;
+				if (!boarding.nTry[ent.id()])
+					boarding.nTry[ent.id()] = 1;
 				else
-					++this.nTry[ent.id()];
-				if (this.nTry[ent.id()] > 5)
+					++boarding.nTry[ent.id()];
+				if (boarding.nTry[ent.id()] > 5)
 				{
 					debugWarn(this, 1, () => "unit blocked, but no ways out of the trap ... " +
 						"destroy it");
@@ -587,7 +608,7 @@ export class TransportPlan
 					ent.destroy();
 					return;
 				}
-				if (this.nTry[ent.id()] > 1)
+				if (boarding.nTry[ent.id()] > 1)
 					ent.moveToRange(newPos[0], newPos[1], 30, 35);
 				ent.garrison(ship, true);
 			}
@@ -598,7 +619,7 @@ export class TransportPlan
 			}
 		}
 		else
-			this.nTry[ent.id()] = 0;
+			boarding.nTry[ent.id()] = 0;
 		ent.setMetadata(PlayerID, "timeGarrison", time);
 		ent.setMetadata(PlayerID, "posGarrison", ent.position());
 	}
@@ -676,10 +697,11 @@ export class TransportPlan
 			}
 			// require a small distance between all ships of the transport plan to avoid path finder problems
 			// this is also used when the ship is blocked and we want to find a new boarding point
-			for (const shipId in this.boardingPos)
+			const points = this.shipPoints();
+			for (const shipId in points)
 			{
-				if (this.boardingPos[shipId] !== undefined &&
-					SquareVectorDistance(this.boardingPos[shipId], pos) < this.boardingRange)
+				const point = points[shipId];
+				if (point !== undefined && SquareVectorDistance(point, pos) < this.boardingRange)
 				{
 					dist += 1000000;
 				}
@@ -701,40 +723,37 @@ export class TransportPlan
 			distmin = dist;
 			posmin = pos;
 		}
-		// We should always have either destination or the previous boardingPos defined
-		// so let's return this value if everything failed
-		if (!posmin && this.boardingPos[ship.id()])
-			posmin = this.boardingPos[ship.id()];
+		// none found and no destination: the caller keeps the ship's present point (retryBoardingPos)
 		return posmin;
 	}
 
-	onSailing(gameState: CommonGameState): void
+	onSailing(gameState: CommonGameState, sailing: Sailing): void
 	{
 		this.checkRoutes(gameState);
 
-		this.checkRecovered(gameState);
-		this.checkUnloaded(gameState);
+		this.checkRecovered(gameState, sailing);
+		this.checkUnloaded(gameState, sailing);
 
-		if (this.canceled)
+		if (sailing.canceled)
 		{
 			for (const ship of this.ships.values())
 			{
 				const boardingPos = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
-				this.boardingPos[ship.id()] = boardingPos;
+				sailing.landingPos[ship.id()] = boardingPos;
 				this.sailTo(gameState, ship, boardingPos);
 			}
-			this.canceled = undefined;
+			sailing.canceled = undefined;
 		}
 
 		for (const ship of this.transportShips.values())
-			this.landShip(gameState, ship);
+			this.landShip(gameState, ship, sailing);
 	}
 
 	/** Units unloaded on a wrong region last turn and sent back on board: are they on board again? */
-	checkRecovered(gameState: CommonGameState): void
+	checkRecovered(gameState: CommonGameState, sailing: Sailing): void
 	{
 		// Check that the units recovered on the previous turn have been reloaded
-		for (const recov of this.recovered)
+		for (const recov of sailing.recovered)
 		{
 			const ent = gameState.getEntityById(recov.entId);
 			if (!ent)  // entity destroyed
@@ -763,15 +782,15 @@ export class TransportPlan
 				ent.destroy();
 			}
 		}
-		this.recovered = [];
+		sailing.recovered = [];
 	}
 
 	/** Were the units unloaded last turn really unloaded, and in the right region? */
-	checkUnloaded(gameState: CommonGameState): void
+	checkUnloaded(gameState: CommonGameState, sailing: Sailing): void
 	{
 		// Check that the units unloaded on the previous turn have been really unloaded and in the right position
 		const shipsToMove: Record<number, CommonEntity> = {};
-		for (const entId of this.unloaded)
+		for (const entId of sailing.unloaded)
 		{
 			const ent = gameState.getEntityById(entId);
 			if (!ent)  // entity destroyed
@@ -802,10 +821,10 @@ export class TransportPlan
 				// unit unloaded on a wrong region - try to regarrison it and move a bit the ship
 				debugWarn(this, 1, () => ">>> unit unloaded on a wrong region ! try to garrison it again <<<");
 				const ship = this.shipOf(gameState, ent);
-				if (ship && !this.canceled)
+				if (ship && !sailing.canceled)
 				{
 					shipsToMove[ship.id()] = ship;
-					this.recovered.push({ "entId": ent.id(), "entPos": ent.position(), "shipId": ship.id() });
+					sailing.recovered.push({ "entId": ent.id(), "entPos": ent.position(), "shipId": ship.id() });
 					ent.garrison(ship);
 					ent.setMetadata(PlayerID, "onBoard", "onBoard");
 				}
@@ -836,14 +855,14 @@ export class TransportPlan
 		for (const shipId in shipsToMove)
 		{
 			const boardingPos = this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
-			this.boardingPos[shipId] = boardingPos;
+			sailing.landingPos[shipId] = boardingPos;
 			this.sailTo(gameState, shipsToMove[shipId], boardingPos);
 		}
-		this.unloaded = [];
+		sailing.unloaded = [];
 	}
 
 	/** A stopped ship of the plan: unload it at its landing point, release it empty, or send it again */
-	landShip(gameState: CommonGameState, ship: CommonEntity): void
+	landShip(gameState: CommonGameState, ship: CommonEntity, sailing: Sailing): void
 	{
 		// only a ship that has stopped: Petra took any ship not WALKING, one
 		// between two of its route's waypoints too, and sent it again by a new
@@ -852,8 +871,8 @@ export class TransportPlan
 			return;
 		const shipId = ship.id();
 		// set for every ship of the plan when it set sail; a ship that joined since has none yet
-		const bp = this.boardingPos[shipId] ?? this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
-		this.boardingPos[shipId] = bp;
+		const bp = sailing.landingPos[shipId] ?? this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
+		sailing.landingPos[shipId] = bp;
 		const dist = SquareVectorDistance(ship.position(), bp);
 		let remaining = 0;
 		for (const entId of ship.garrisoned())
@@ -865,13 +884,13 @@ export class TransportPlan
 			if (dist < 625)
 			{
 				ship.unload(entId);
-				this.unloaded.push(entId);
+				sailing.unloaded.push(entId);
 				ent.setMetadata(PlayerID, "onBoard", shipId);
 			}
 		}
 
 		let recovering = 0;
-		for (const recov of this.recovered)
+		for (const recov of sailing.recovered)
 			if (recov.shipId === shipId)
 				recovering++;
 
@@ -883,17 +902,17 @@ export class TransportPlan
 		}
 		if (dist > this.boardingRange)
 		{
-			if (!this.nTry[shipId])
-				this.nTry[shipId] = 1;
+			if (!sailing.nTry[shipId])
+				sailing.nTry[shipId] = 1;
 			else
-				++this.nTry[shipId];
+				++sailing.nTry[shipId];
 			let newBp = bp;
-			if (this.nTry[shipId] > 2)	// we must have been blocked by something ... try with another boarding point
+			if (sailing.nTry[shipId] > 2)	// we must have been blocked by something ... try with another boarding point
 			{
-				this.nTry[shipId] = 0;
+				sailing.nTry[shipId] = 0;
 				debugWarn(this, 1, () => shipId + " new attempt for a landing point ");
 				newBp = this.retryBoardingPos(gameState, ship, bp, this.endIndex, true);
-				this.boardingPos[shipId] = newBp;
+				sailing.landingPos[shipId] = newBp;
 			}
 			this.sailTo(gameState, ship, newBp);
 		}
@@ -1008,12 +1027,12 @@ export class TransportPlan
 			"startIndex": this.startIndex,
 			"sea": this.sea,
 			"state": this.state,
-			"boardingPos": this.boardingPos,
+			"boardingPos": this.shipPoints(),
 			"needTransportShips": this.needTransportShips,
-			"nTry": this.nTry,
-			"canceled": this.canceled,
-			"unloaded": this.unloaded,
-			"recovered": this.recovered
+			"nTry": this.stage.nTry,
+			"canceled": this.stage.state === TransportPlan.SAILING ? this.stage.canceled : undefined,
+			"unloaded": this.stage.state === TransportPlan.SAILING ? this.stage.unloaded : [],
+			"recovered": this.stage.state === TransportPlan.SAILING ? this.stage.recovered : []
 		};
 	}
 
@@ -1021,12 +1040,10 @@ export class TransportPlan
 	private resume(data: SerializedTransportPlan): void
 	{
 		this.flotilla = data.flotilla;
-		this.state = data.state;
-		this.boardingPos = data.boardingPos;
 		this.needTransportShips = data.needTransportShips;
-		this.nTry = data.nTry;
-		this.canceled = data.canceled;
-		this.unloaded = data.unloaded;
-		this.recovered = data.recovered;
+		this.stage = data.state === TransportPlan.SAILING ?
+			{ "state": TransportPlan.SAILING, "landingPos": data.boardingPos, "nTry": data.nTry, "unloaded": data.unloaded,
+				"recovered": data.recovered, "canceled": data.canceled } :
+			{ "state": TransportPlan.BOARDING, "boardingPos": data.boardingPos, "nTry": data.nTry, "needSplit": [] };
 	}
 }
