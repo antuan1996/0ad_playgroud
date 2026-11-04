@@ -126,10 +126,14 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 				throw new Error(`no fake template "${template}" — add it to the test's templates`);
 			// plans read the population cost straight off the template JSON
 			const population = found.population ?? 0;
-			return makeTemplate(template, {
+			const made = makeTemplate(template, {
 				"cost": found.cost, "popCost": population, "getPaths": { "Cost": { "Population": population } },
 				"researchTime": found.researchTime
 			});
+			// a structure has an obstruction and a footprint (template_structure.xml)
+			return template.startsWith("structures/") ?
+				fake<CommonTemplate>({ ...made, "obstructionRadius": () => ({ "min": 1, "max": 2 }), "footprintRadius": () => 2 }) :
+				made;
 		};
 		// Plans look for trainers/researchers in their constructor. Answering
 		// "none" keeps them on the cheap path; a test that wants trainers

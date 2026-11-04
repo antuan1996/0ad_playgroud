@@ -260,6 +260,8 @@ export function structureTemplate(name: string, detail: {
 	buildDistance?: { MinDistance?: number; FromClass?: string } | undefined;
 	/** the physical size, as the game returns {min, max}; default 1..2 */
 	obstruction?: { min: number; max: number };
+	/** the footprint's radius (Footprint, as the game reads it); default 2, the obstruction's default size */
+	footprint?: number;
 	/** the cost category m_entityCounts is indexed with */
 	buildCategory?: string | undefined;
 	/** the resources a dropsite template accepts; default no dropsite tag */
@@ -304,6 +306,8 @@ export function structureTemplate(name: string, detail: {
 		buildTerritories: (): string[] => detail.territories ? [...detail.territories] : ["own"],
 		buildDistance: () => detail.buildDistance,
 		obstructionRadius: () => detail.obstruction ?? { "min": 1, "max": 2 },
+		// every structure has a footprint (template_structure.xml): the API probe never saw one without
+		footprintRadius: () => detail.footprint ?? 2,
 		buildCategory: () => detail.buildCategory,
 		trainingCategory: () => undefined,
 		matchLimit: () => undefined,

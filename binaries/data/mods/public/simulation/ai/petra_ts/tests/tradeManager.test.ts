@@ -12,8 +12,7 @@ import { resetRecorder, sent } from "./harness/engine.ts";
 import { eventsWith, fake, makeTemplate, type Methods, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import {
 	doorCalls, doorManagers, ENEMY, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld,
-	PLAYER, seatHQ
-} from "./harness/hqWorld.ts";
+	PLAYER, seatHQ, structureTemplate } from "./harness/hqWorld.ts";
 import { collectionOf } from "./harness/world.ts";
 
 import { baseId, entityId, landRegion, playerId, seaRegion } from "../adapter/brands.ts";
@@ -649,7 +648,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 	function prospecting(options: { route?: boolean; position?: ReturnType<Headquarters["findMarketLocation"]> } = {})
 	{
 		const s = seat();
-		s.world.templates["structures/athen/market"] = makeTemplate("structures/athen/market",
+		s.world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
 			{ "classes": ["Structure", "Trade", "Market"], "cost": { "wood": 300 } });
 		s.hq.canBuild = () => true;
 		market(s.world, 400, [40, 40]);
@@ -688,7 +687,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 
 		const noMarket = seat();
 		noMarket.hq.canBuild = () => true;
-		noMarket.world.templates["structures/athen/market"] = makeTemplate("structures/athen/market", { "classes": ["Structure", "Market"] });
+		noMarket.world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", { "classes": ["Structure", "Market"] });
 		market(noMarket.world, 400, [40, 40], { "dock": 5 });	// a trading dock, no market
 		noMarket.hq.findMarketLocation = () => [200, 200, baseId(2), 0];
 		noMarket.manager.routeProspection = true;

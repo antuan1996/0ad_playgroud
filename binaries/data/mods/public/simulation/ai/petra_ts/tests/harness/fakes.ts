@@ -7,6 +7,7 @@
  * because a call quietly returned undefined.
  */
 import { isPlaced } from "../../adapter/placed.ts";
+import { isStructureTemplate } from "../../adapter/templateData.ts";
 
 /**
  * A fake standing in for the engine's or the port's own `T`: the harness's one
@@ -400,4 +401,16 @@ export function placed(ent: CommonEntity): CommonPlacedEntity
 	if (!isPlaced(ent))
 		throw new Error("the fake entity " + ent.id() + " has no position");
 	return ent;
+}
+
+/**
+ * A fake template, checked to be a structure's (an obstruction and a
+ * footprint), as a construction plan checks its template once: for a port
+ * function that takes a structure's template.
+ */
+export function structure(template: CommonTemplate): CommonStructureTemplate
+{
+	if (!isStructureTemplate(template))
+		throw new Error("the fake template " + template.templateName() + " has no obstruction or footprint");
+	return template;
 }

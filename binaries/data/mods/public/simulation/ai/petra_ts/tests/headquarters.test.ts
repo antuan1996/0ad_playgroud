@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal, placed } from "./harness/fakes.ts";
+import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal, placed, structure } from "./harness/fakes.ts";
 import {
 	centerOfCell, doorCalls, doorManagers, dropsiteCC, ENEMY, GAIA, type HqSeatOptions, type HqWorld,
 	type HqWorldOptions, makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ,
@@ -1785,7 +1785,7 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 
-		const result = hq.findStrategicCCLocation(world.gameState, ccTemplate());
+		const result = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate()));
 		assert.equal(result, undefined, "no position is claimed");
 		// and the transport question was never asked of a positionless base
 		assert.ok(!doorCalls(hq.navalManager).some(([call]: [string, unknown[]]) =>
@@ -1807,7 +1807,7 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [57, 257],
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [57, 257],
 			"the claim sits on the diagonal between the towns");
 	});
 
@@ -1821,10 +1821,10 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 		});
 
 		// the plain economics call answers the ground not worth a town (cut 60)
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			false, "a town for its own sake is too dear there");
 		// the strategic call delegates with the cheaper cut and takes the lot
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [193, 161],
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [193, 161],
 			"expansion settles for the lot plain economics refused");
 	});
 });
@@ -1838,7 +1838,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// the village plants beside the party rather than in the far country
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", worldPos(100, 100), false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", worldPos(100, 100), false),
 			[97, 97], "the first act of founding likes company");
 	});
 
@@ -1853,7 +1853,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			for (let px = 44; px <= 59; ++px)
 				world.map.setPassData(px, pz, 0xB);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", worldPos(72, 72), false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", worldPos(72, 72), false),
 			[151, 81], "the settlement stays on the water's edge");
 	});
 
@@ -1876,7 +1876,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 				resource === undefined || resource === "" || resource === "wood"
 		}));
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			[233, 233], "the yard is kept for the carts");
 	});
 
@@ -1890,12 +1890,12 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
 		});
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			[233, 233], "the denser stand pulls the village");
 		// and the sheet moved south, the village follows the wood
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 40;
 		world.map.ccResourceMaps.wood.map[29 + 15 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			[233, 121], "the sheet moved, the village moved");
 	});
 
@@ -1910,9 +1910,9 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		for (const sheet of Object.values(world.map.ccResourceMaps))
 			sheet.map.fill(0);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true), false,
 			"nothing to gather there: below the cut");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true),
 			[233, 233], "for its room, the free lot");
 	});
 
@@ -1926,12 +1926,12 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		override(hq.attackManager, { "enemiesByLand": () => new Map([[2, [makeHqEntity({
 			"id": 6100, "owner": ENEMY, "position": [240, 240], "classes": ["Unit", "Soldier"] })]]]) });
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true), false,
 			"an enemy soldier beside it: contested");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true),
 			[233, 233], "for its room, the contested lot all the same");
 		hq.ccSpotsAvoided.push({ "pos": worldPos(233, 233), "until": 1e9 });
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, true, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true), false,
 			"but not one that failed");
 	});
 
@@ -1946,7 +1946,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		});
 		hq.defenseManager.armies.push({ "foePosition": [124, 228] } as never);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			[233, 225], "the village plants beyond the raid");
 	});
 
@@ -1967,7 +1967,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 60 } : undefined
 		}));
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			[233, 225], "the village keeps out of range");
 	});
 
@@ -1980,7 +1980,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"territoryOwner": (ix: number, iy: number) => ix >= 35 && iy >= 35 ? 0 : PLAYER
 		});
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false),
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
 			false, "a town that far out never pays");
 		// (the oversea arm needs distances beyond 500, which a 320-wide board
 		// cannot produce, so its lift is not exercisable on this harness)
@@ -1993,7 +1993,7 @@ describe("findMarketLocation: where the trade route settles", () =>
 	{
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 
-		assert.deepEqual(hq.findMarketLocation(world.gameState, marketTemplate()),
+		assert.deepEqual(hq.findMarketLocation(world.gameState, structure(marketTemplate())),
 			[-1, -1, -1, 0], "no partner, no geometry - the plan places it");
 	});
 
@@ -2010,7 +2010,7 @@ describe("findMarketLocation: where the trade route settles", () =>
 		}));
 		hq.updateTerritories(world.gameState);
 
-		const result = hq.findMarketLocation(world.gameState, marketTemplate());
+		const result = hq.findMarketLocation(world.gameState, structure(marketTemplate()));
 		assert.deepEqual(result, [23, 297, 2, 56310],
 			"the new market clings to the far south-west corner");
 		// the trade record is booked under the town's base; base ids start at
@@ -2032,7 +2032,7 @@ describe("findMarketLocation: where the trade route settles", () =>
 		hq.updateTerritories(world.gameState);
 		hq.tradeManager.minimalGain = 10 ** 9;
 
-		assert.equal(hq.findMarketLocation(world.gameState, marketTemplate()), false,
+		assert.equal(hq.findMarketLocation(world.gameState, structure(marketTemplate())), false,
 			"the route is too poor, and one market already stands");
 	});
 
@@ -2054,7 +2054,7 @@ describe("findMarketLocation: where the trade route settles", () =>
 		(engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes = () => [];
 		try
 		{
-			assert.equal(hq.findMarketLocation(world.gameState, marketTemplate()), false,
+			assert.equal(hq.findMarketLocation(world.gameState, structure(marketTemplate())), false,
 				"no tradable goods, no second route");
 		}
 		finally
@@ -2091,9 +2091,9 @@ describe("findDefensiveLocation: where the walls face", () =>
 
 		// cell (33,21) is the frontier cell nearest the enemy town and 80 units
 		// from it (the not-under-80 rule's exact boundary is allowed)
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			[265, 169, 2], "the fortress presses the frontier");
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, towerTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(towerTemplate())),
 			[265, 169, 2],
 			// row 21 is narrow, so the tower's large-frontier exclusion never
 			// bites and the stone tower takes the same post
@@ -2110,7 +2110,7 @@ describe("findDefensiveLocation: where the walls face", () =>
 			"templateName": "structures/athen/fortress"
 		}));
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			[137, 169, 2], "the walls spread out to the mirror post");
 	});
 
@@ -2129,7 +2129,7 @@ describe("findDefensiveLocation: where the walls face", () =>
 			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 120 } : undefined
 		}));
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			[129, 177, 2], "the walls stand clear of the fire");
 	});
 
@@ -2137,14 +2137,14 @@ describe("findDefensiveLocation: where the walls face", () =>
 	{
 		const { world, hq } = seatMarch();
 		// nobody is an enemy yet: no wall is worth raising
-		assert.equal(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.equal(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			undefined, "no walls against everyone");
 		// ... unless a third empire is met but not war-declared — we may be in
 		// cease fire, and Petra still braces toward the neutral town
 		enemyTown(world);
 		world.gameState.playerData.isEnemy[ENEMY] = false;
 		world.gameState.playerData.isNeutral[ENEMY] = true;
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			[265, 169, 2], "the walls face the neutral town all the same");
 	});
 
@@ -2158,7 +2158,7 @@ describe("findDefensiveLocation: where the walls face", () =>
 			"classes": ["Structure", "Wonder"],
 		}, { "footprintRadius": () => 22.6 }));
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()),
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
 			[89, 129, 2], "the fort guards the wonder first");
 		// (the wonder-without-position arm the port guards differently is a
 		// resiliency note, not a counted deviation: the ref would crash on the
@@ -2193,7 +2193,7 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 	it("a tower takes the shore of the busy passage, not the frontier", () =>
 	{
 		const { world, hq } = seatShores([[[72, 40], 100]]);
-		const spot = hq.findDefensiveLocation(world.gameState, tower());
+		const spot = hq.findDefensiveLocation(world.gameState, structure(tower()));
 		assert.ok(near(spot, [72, 40], 60), `within its reach of the passage: ${spot}`);
 		assert.notDeepEqual(spot, [265, 169, 2]);
 	});
@@ -2201,7 +2201,7 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 	it("with little traffic, the frontier as before", () =>
 	{
 		const { world, hq } = seatShores([[[72, 40], SHORE_TOWER_TRAFFIC - 1]]);
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, tower()), [265, 169, 2]);
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(tower())), [265, 169, 2]);
 		assert.equal(hq.hasShoreTowerSpot(world.gameState, "structures/{civ}/defense_tower"), false);
 	});
 
@@ -2212,7 +2212,7 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 			"id": 4200, "owner": PLAYER, "position": [72, 80], "classes": ["Structure", "Tower", "Defensive"]
 		}));
 		// the busy passage, a third once watched, counts about 33 against the other's 60
-		assert.ok(near(hq.findDefensiveLocation(world.gameState, tower()), [232, 40], 60));
+		assert.ok(near(hq.findDefensiveLocation(world.gameState, structure(tower())), [232, 40], 60));
 	});
 
 	it("with every enemy overseas, a tower goes over a passage or nowhere: no frontier facing a town across the sea", () =>
@@ -2220,16 +2220,16 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 		// the enemy's town stands on another island
 		const { world, hq } = seatShores([[[72, 40], SHORE_TOWER_TRAFFIC - 1]], 9);
 		assert.equal(hq.towersByTrafficOnly(world.gameState), true);
-		assert.equal(hq.findDefensiveLocation(world.gameState, tower()), undefined, "too little traffic: no tower");
+		assert.equal(hq.findDefensiveLocation(world.gameState, structure(tower())), undefined, "too little traffic: no tower");
 		hq.shipTraffic?.cells.fill(0);
 		requireValue(hq.shipTraffic).cells[requireValue(hq.shipTraffic?.cellAt(worldPos(72, 40)))] = 100;
-		assert.ok(near(hq.findDefensiveLocation(world.gameState, tower()), [72, 40], 60), "over the passage");
+		assert.ok(near(hq.findDefensiveLocation(world.gameState, structure(tower())), [72, 40], 60), "over the passage");
 	});
 
 	it("a fortress keeps to the frontier", () =>
 	{
 		const { world, hq } = seatShores([[[72, 40], 100]]);
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, fortressTemplate()), [265, 169, 2]);
+		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())), [265, 169, 2]);
 	});
 });
 
@@ -4929,7 +4929,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 		town(world, 2400, ENEMY, [100, 100]);
 
-		const spot = hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false);
 		assert.ok(Array.isArray(spot), "a clear lot is still found");
 		assert.ok(Math.hypot(spot[0] - 100, spot[1] - 100) >= 120,
 			"no town is planted within a hundred and twenty units of a rival");
@@ -4944,7 +4944,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		});
 		town(world, 2401, PLAYER, [100, 100]);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false), false,
 			"no lot is taken inside an allied town's two-hundred-unit ring");
 	});
 
@@ -4958,7 +4958,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		});
 		town(world, 2402, PLAYER, [308, 308]);
 
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, ccTemplate()), [57, 257],
+		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [57, 257],
 			"the lot by the first town is refused; the lot on the diagonal is taken");
 	});
 
@@ -4972,7 +4972,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		// lot, and so is weighed as the middle one of the three
 		town(world, 2403, PLAYER, [280, 133]);
 
-		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate()) as [number, number];
+		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())) as [number, number];
 		for (const ally of [[10, 10], [308, 308], [280, 133]])
 			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
 				"every allied town keeps its distance from the new one");
@@ -4989,7 +4989,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"regionTypes": { 2: "land", 3: "land", 8: "water" }
 		}, { "landRegions": { 2: true, 3: true } });
 
-		const spot = hq.findEconomicCCLocation(world.gameState, ccTemplate(), "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false);
 		assert.ok(Array.isArray(spot));
 		assert.ok(spot[0] >= 160, "the lot is on the island across the water");
 		assert.ok(doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
@@ -5007,7 +5007,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"obstruction": { "min": 15, "max": 21.2 }
 		});
 
-		const spot = hq.findEconomicCCLocation(world.gameState, round, "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(round), "wood", undefined, false);
 		assert.ok(Array.isArray(spot), "the round centre finds its lot like a square one");
 	});
 });
@@ -5038,7 +5038,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 
-		const spot = hq.findStrategicCCLocation(world.gameState, roundCentre());
+		const spot = hq.findStrategicCCLocation(world.gameState, structure(roundCentre()));
 		assert.ok(Array.isArray(spot), "the round centre's claim is found too");
 	});
 
@@ -5057,7 +5057,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 
-		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate());
+		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate()));
 		assert.ok(Array.isArray(spot));
 		assert.ok(spot[0] >= 160, "the strategic lot is across the water");
 		assert.ok(doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
@@ -5081,7 +5081,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			"obstruction": { "min": 15, "max": 21.2 }
 		});
 
-		const spot = hq.findDefensiveLocation(world.gameState, round);
+		const spot = hq.findDefensiveLocation(world.gameState, structure(round));
 		assert.ok(Array.isArray(spot) && spot.length === 3, "the round fortress finds its frontier cell");
 	});
 
@@ -5226,7 +5226,7 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
 		}));
 
-		const spot = hq.findStrategicCCLocation(world.gameState, ccTemplate()) as [number, number];
+		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())) as [number, number];
 		for (const ally of [[10, 10], [308, 308], [300, 10]])
 			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
 				"every allied town keeps its distance from the new one");
@@ -5248,7 +5248,7 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 			"obstruction": { "min": 13, "max": 21.96 }
 		});
 
-		const result = hq.findMarketLocation(world.gameState, round);
+		const result = hq.findMarketLocation(world.gameState, structure(round));
 		assert.ok(Array.isArray(result) && result.length === 4, "the round market finds its route");
 		assert.equal(result[2], 2, "the route is booked under the town's base, as for a square market");
 	});
@@ -5269,7 +5269,7 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 		}));
 		hq.updateTerritories(world.gameState);
 
-		const result = hq.findMarketLocation(world.gameState, marketTemplate());
+		const result = hq.findMarketLocation(world.gameState, structure(marketTemplate()));
 		assert.ok(Array.isArray(result) && result[0] < 160,
 			"the second market is placed on the home side of the water, reachable by land");
 	});
