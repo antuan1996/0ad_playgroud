@@ -2109,3 +2109,34 @@ its worst from 545 to 41, the AI's computation's from 123 and 536 to 15 and
 ms on a few turns at minutes 15-20 (an army reaching its target), and the
 simulation's own cost, up to about 45 ms on every other turn in big
 battles, which is the engine's.
+
+## 49. Left for stage 6: attacks and ships (2026-11-04)
+
+From the user's watch of visual games after §48's fix: the stalls past
+minute 30 are gone, but "ship management and attack planning still looks
+funny". What the measurements so far say, none of it fixed:
+
+- **A started attack's update** (§48): with the leak gone, the worst AI
+  turns left are a started attack's `Update Attack`, 50-85 ms on a few turns
+  at minutes 15-20 of the four long games (70 ms in game 2 at minute 19.1,
+  58 and 54 in game 3 at 15.3-15.4, 53 in game 1 at 15.3), the moment an
+  army reaches its target and every unit is given one. Not a rhythm, one
+  hitch per arrival; the per-unit work could be spread over turns or capped
+  per turn, which changes the play.
+- **An army held at its rally point** (§47, game 19 of `stage5-aitimes`):
+  a Rush plan that could start (`canStart` true) stayed `unexecuted` for
+  five minutes while units kept joining it, 152 infantry against a maximum
+  of 22, the targets read 0, and set off with 6; then 55 HugeAttack plans in
+  90 s, each made, filled with the whole army (about 154 units,
+  `completing`) and aborted within 2-3 s, its units sent out and called back
+  (7754 `walk-to-range` in a minute). The same churn, without the army,
+  is §6.1's "224 plans made and dropped within 30 s". In four games of 20
+  the bot's turns showed it.
+- **Stuck ships** (§45): the nudges and route re-sends of ships turning in
+  place were fixed, but the user still saw ships wandering in a small region
+  as if stuck, and the boarding and landing phases still sent 10555 garrison
+  and 6803 unload orders in the 4-player Dodecanese match. A ship is judged
+  stuck by not moving or turning for 5 s (`isBlocked`, `SHIP_STUCK`); a ship
+  that moves without getting anywhere (circling, or shuttling between two
+  points) is not caught, and nothing escalates when the same order fails
+  again and again.

@@ -489,7 +489,7 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 | 3. Layers (**done** 2026-10-26, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). Met: the layer folders; `unitState.ts`, `commands.ts`, `SAVE_VERSION`; the execution layer reaches the HQ only through a read-only view (`execution/hq.ts`) and reads bases as `BaseView`s; the maps and regions (`world/geography.ts`) and the bases' resource model (`world/baseResources.ts`) moved out of the managers. Fingerprint unchanged throughout; the same games as `petra_parity` in every paired check, within the budget. The decision layer still changes the world objects it owns; read-only views for decisions come with stages 4–5, as they are rewritten |
 | 4. Fix the known weaknesses (**done** 2026-10-27, `FINDINGS.md` §16) | In order of what each costs, as replays showed it: withdrawal to a reachable point (**done**: past the anchor's footprint); idle workers (**done**: they were mercenaries, booked as workers by class though they cannot gather); attacks that never end (**done**: units garrisoned in our buildings leave the plan; a stuck plan held up every later attack); attacks that cannot fill (**done**, measured with an attack lifecycle log: the plans that never fill belong to a side that already lost, its queues paused for want of workers; what churned was a winner at the population cap, whose plans the cap rule aborted and recreated, 124 times in 200 games; now they wait: 21 of the 22 games it moved ended sooner, 50.3% as before); first field by food income, not fruit left, and the town-phase population: not what loses games (`FINDINGS.md` §16: in 139 of 196 games the loser was beaten in a fight at minutes 10-15, far below the threshold, starving after it). Measured with the four fixes: 50.3% vs `petra_parity` (CI 43-57%): the fixes help the economy (+12% gathered), not the result. Games are decided by a border skirmish at minutes 1-11 that both bots fight with the same opening, so the start decides; an earlier army (`alpha` 0.6) gave 52.2% (CI 49.1-55.3%, 975 games) and was reverted; calling back workers that chase into enemy land, 47.7% (reverted: the chases hurt the enemy's economy); six small original bugs fixed (`FINDINGS.md` §1, stage-4 rows), 50.5%. The first fight is stage 5's first domain. Type hygiene (3.5): items 1-4 and 6-8 done, without a change to any game | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT). Met for the first: every fix has a test the original fails. The second is not met (50.3%, CI 43-57%, 200 games) and moves to stage 5: every measurement places what decides a game in the economy of minutes 2-8 and the first fight, which are stage 5's domains, not in the weaknesses fixed here |
 | 5. Utility decisions (**done** 2026-11-04, `FINDINGS.md` §18-46, tag `petra-ts-stage5`) | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data. Where to start, from stage 4's logs (`FINDINGS.md` §16): the two games of a seed pair are the same until minute 6, and the side that wins is a few units ahead at minutes 7-8 (wood: its food comes faster, so fewer gatherers go to food), a lead the first fight at minute 9 amplifies; so first the gatherer split of minutes 2-8 by how fast each resource comes in, then when to take a fight. Measured (`FINDINGS.md` §18): the split's rate estimate is always 0 since an engine change to `unitAIOrderData()` (orders, not their data), so the split follows the queues' wishes alone; food is the slow resource (about 22 per gatherer-minute at minutes 4-10 against wood's 51), and a long food trip is what the lost game of a pair has. First change, **done** 2026-10-27: the orders' data read again (`adapter/orders.ts`): 62.9% vs `petra_parity` on 150 fresh seed pairs (CI 57.3-68.2%, SPRT accepts 55%), 58.1% on stage 4's pairs. The split by measured income per gatherer (`world/gatherEconomy.ts`, `decision/gatherSplit.ts`; `FINDINGS.md` §19): four variants, 42-52% against `petra_prev` (the best: 52.0% over 494 games, 48.6% on fresh pairs, 2-3% more food, and women idle on full fields): dropped, Petra's order kept; the measured rates stay as the next domain's measurement. The domains in order, each measured against `petra_prev` on fresh seed pairs: (1) the split (tried, dropped); (2) where food comes from (**done**, `FINDINGS.md` §20: a field as soon as a gatherer brings in less at the berries than at a field, measured; 56.3% against `petra_prev` on 150 fresh pairs, CI 50.7-61.8%, 13% more gathered); (3) the houses (**done**, `FINDINGS.md` §22: a needed house before the training queues; 56.0% against `petra_prev` on 150 fresh pairs, CI 50.4-61.6%, 8% more gathered; the first fights, tried three ways, are decided by the soldiers a side has when the raid comes: §21); (3b) funding (**done**, `FINDINGS.md` §24: the best plan the stock can complete is paid from the split accounts; 61.0% against `petra_prev` on 150 fresh pairs, CI 55.4-66.3%; then the women's queue above the soldiers', §25: 74.2%, CI 68.9-78.8%; then the women's share 0.5, §26: 61.3%, CI 55.7-66.7%); (4) dropsite placement by the trips it saves; (5) the worker/soldier mix and the population targets; (6) when to fight (stage 6's fight estimator). Tools: `economy-log.ts`, and `pair-score.ts`, the early proxy (§5.3). Measure on the paired games (`attack-log.ts`, the replays' 30 s statistics), and position logging for the start's layout; with each rewritten class, its remaining `declare` fields (3.5: the 18 set on some paths, the 12 in subclasses, the 57 set outside the constructor) and long functions | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed`, and win-rate vs `petra_parity` > 50% at 95% (SPRT; carried over from stage 4). **Met** 2026-10-28 (§6.1): 78.7% against both on 150 fresh pairs (CI 73.7-83.0%); later comparisons use `petra_parity` alone (§2) |
-| 6. Narrow search | Build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
+| 6. Narrow search | First the attacks' and the ships' handling (§6.2: the army held at its rally point, the HugeAttack churn, a started attack's per-unit work, stuck ships); then the build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
 
 Running throughout: determinism and save/load checks (5.2), `FINDINGS.md`
 for what each stage finds, and upstream reports for bugs that are the
@@ -635,6 +635,37 @@ Each step as before: measured first, tuned on one seed pool, decided on 150
 fresh pairs against `petra_prev`; the early proxy tells a change's direction,
 not its worth; `random/mainland_mirror` checks that a gain does not depend on
 unequal starts.
+
+### 6.2 Stage 6: where it starts
+
+Stage 5's last measurements (`FINDINGS.md` §47-49) and the user's watch of
+visual games ("ship management and attack planning still looks funny") put
+four items before the planner and the estimator. Each is measured as any
+change (against `petra_prev`, now the stage 5 bot, on fresh pairs; islands
+for the ships), with the turn times of `match.sh -P` (`turntimes.txt`, §4)
+beside the win-rate:
+
+1. **The army held at its rally point** (§47, §49): a plan that may start
+   and does not, drafting far past its maximum. Find why it waits (the
+   targets reading 0 once it is over its maximum, `mustStart`, the
+   population rules), cap what it drafts, and start it when it can.
+2. **The HugeAttack churn** (§6.1's table, §47, §49): plans made and aborted
+   within seconds, the whole army drafted and released each time. A plan
+   that cannot find a target or start should not be made again at once,
+   nor take the army with it.
+3. **A started attack's per-unit work** (§48, §49): 50-85 ms on the turn an
+   army reaches its target. Spread the target choice over turns or cap it
+   per turn, so no turn of the attack goes past the budget.
+4. **Stuck ships** (§45, §49): a ship judged stuck only when it neither
+   moves nor turns for 5 s; one that circles or shuttles without getting
+   anywhere is not caught, and the same garrison and unload orders are sent
+   thousands of times. A stuck test by progress toward the ship's goal over
+   time, and an escalation when it fails (another route or boarding point,
+   another ship, the plan released), measured by the orders sent per
+   transport and the island games' draws.
+
+Then the build-order planner and the fight estimator (3.4), where the
+attack timing of §46 is decided.
 
 ## 7. Open questions
 
