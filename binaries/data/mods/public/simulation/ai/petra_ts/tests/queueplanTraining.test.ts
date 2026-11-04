@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, makeTemplate, placed } from "./harness/fakes.ts";
+import { fake, makeTemplate, override } from "./harness/fakes.ts";
 import {
 	doorManagers, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, PLAYER, seatHQ
 } from "./harness/hqWorld.ts";
@@ -17,6 +17,7 @@ import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { NO_BASE, entityId, techName } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 
 const SPEARMAN = "units/athen/infantry_spearman_b";
 const FEMALE = "units/athen/support_female_citizen";
@@ -71,11 +72,11 @@ describe("a batch of units: TrainingPlan", () =>
 	{
 		const { world } = seat();
 		const plan = new TrainingPlan(world.gameState, SPEARMAN);
-		assert.equal(plan.canStart(world.gameState), false);
+		assert.equal(plan.canStart(world.gameState), undefined);
 
 		trainer(world, 300, ["CivCentre", "Civic"], [SPEARMAN]);
 		trainer(world, 301, ["Barracks"], [SPEARMAN]);
-		assert.equal(plan.canStart(world.gameState), true);
+		assert.ok(plan.canStart(world.gameState));
 		assert.equal(plan.cost.food, 40, "at the barracks' price");
 		assert.deepEqual(plan.getBestTrainers(world.gameState)?.map((e) => e.id()), [301]);
 	});
@@ -100,9 +101,9 @@ describe("a batch of units: TrainingPlan", () =>
 		const { world } = seat();
 		const barracks = trainer(world, 301, ["Barracks"], [SPEARMAN], { "metadata": { "base": 2 } });
 		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "trainer": entityId(301), "role": "worker", "base": NO_BASE }, 5);
-		plan.canStart(world.gameState);
+		const start = requireValue(plan.canStart(world.gameState));
 
-		plan.start(world.gameState);
+		start();
 
 		assert.deepEqual(barracks.orders, [["athen", SPEARMAN, 5, { "role": "worker", "base": 2 }]],
 			"a plan for no town in particular takes its building's town");
@@ -115,13 +116,14 @@ describe("a batch of units: TrainingPlan", () =>
 		const busy = trainer(world, 301, ["Barracks"], [SPEARMAN], { "queueTime": 20 });
 		const idle = trainer(world, 302, ["Barracks"], [SPEARMAN], { "queueTime": 12 });
 		const plan = new TrainingPlan(world.gameState, SPEARMAN);
-		plan.canStart(world.gameState);
 		// every building at the same price for this test
-		plan.trainers = [placed(cc.ent), placed(busy.ent), placed(idle.ent)];
+		override(plan.template, { "costSum": () => 100 });
+		const start = requireValue(plan.canStart(world.gameState));
 
-		plan.start(world.gameState);
+		start();
 
-		assert.equal(idle.orders.length, 1, "12 beats 5 + 10 for the town centre, and 20");
+		assert.deepEqual([cc.orders.length, busy.orders.length, idle.orders.length], [0, 0, 1],
+			"12 beats 5 + 10 for the town centre, and 20");
 	});
 
 	it("keeps support units away from an invading army", () =>
@@ -131,9 +133,9 @@ describe("a batch of units: TrainingPlan", () =>
 		const threatened = trainer(world, 300, ["CivCentre", "Civic"], [FEMALE], { "position": [80, 80] });
 		const safe = trainer(world, 301, ["CivCentre", "Civic"], [FEMALE], { "position": [280, 280], "queueTime": 30 });
 		const plan = new TrainingPlan(world.gameState, FEMALE);
-		plan.canStart(world.gameState);
+		const start = requireValue(plan.canStart(world.gameState));
 
-		plan.start(world.gameState);
+		start();
 
 		assert.deepEqual([threatened.orders.length, safe.orders.length], [0, 1]);
 	});
@@ -150,9 +152,9 @@ describe("a batch of units: TrainingPlan", () =>
 		const noTown = trainer(world, 301, ["Barracks"], [SPEARMAN]);
 		const home = trainer(world, 302, ["Barracks"], [SPEARMAN], { "metadata": { "base": town.ID }, "queueTime": 20 });
 		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "index": town.accessIndex, "role": "worker" });
-		plan.canStart(world.gameState);
+		const start = requireValue(plan.canStart(world.gameState));
 
-		plan.start(world.gameState);
+		start();
 
 		assert.deepEqual([away.orders.length, noTown.orders.length, home.orders.length], [0, 0, 1],
 			"20 on the wanted land beats 0 + 30 elsewhere");
@@ -189,12 +191,12 @@ describe("a technology: ResearchPlan", () =>
 	{
 		const none = lab();
 		const plan = new ResearchPlan(none.world.gameState, TECH);
-		assert.equal(plan.canStart(none.world.gameState), false);
+		assert.equal(plan.canStart(none.world.gameState), undefined);
 
 		const s = lab();
 		s.researchers.push(trainer(s.world, 300, ["Storehouse"], []));
 		const ready = new ResearchPlan(s.world.gameState, TECH);
-		assert.equal(ready.canStart(s.world.gameState), true);
+		assert.ok(ready.canStart(s.world.gameState));
 		assert.equal(ready.cost.wood, 200);
 	});
 
@@ -205,9 +207,9 @@ describe("a technology: ResearchPlan", () =>
 		const free = trainer(s.world, 301, ["Storehouse"], [], { "queueTime": 2 });
 		s.researchers.push(busy, free);
 		const plan = new ResearchPlan(s.world.gameState, TECH, true);
-		plan.canStart(s.world.gameState);
+		const start = requireValue(plan.canStart(s.world.gameState));
 
-		plan.start(s.world.gameState);
+		start();
 
 		assert.deepEqual(free.orders, [["stop", 0.45], ["research", TECH]]);
 		assert.deepEqual(busy.orders, []);
@@ -226,9 +228,9 @@ describe("a technology: ResearchPlan", () =>
 		queueManager.changePriority("majorTech", 1);
 		const plan = new ResearchPlan(s.world.gameState, techName("phase_town_generic"), true);
 		plan.queueToReset = "majorTech";
-		plan.canStart(s.world.gameState);
+		const start = requireValue(plan.canStart(s.world.gameState));
 
-		plan.start(s.world.gameState);
+		start();
 
 		assert.deepEqual(phasedUp, [2]);
 		assert.equal(s.hq.phasing, 0);

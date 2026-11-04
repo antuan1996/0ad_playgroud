@@ -58,18 +58,19 @@ function makeConfig(overrides: ConfigOverrides = {}): Config
 }
 
 /** A plan as a QueueManager sees it: its cost and readiness. */
-function makePlan(overrides: Record<string, unknown> = {}): PetraRuntime.ConcretePlan
+function makePlan(overrides: Record<string, unknown> & { start?: () => void } = {}): PetraRuntime.ConcretePlan
 {
+	const { start = () => undefined, ...rest } = overrides;
 	return fake<PetraRuntime.ConcretePlan>({
 		category: "unit",
 		type: "test_unit",
 		number: 1,
 		isInvalid: () => false,
 		isGo: () => true,
-		canStart: () => true,
+		// the start it found: run when the manager pays
+		canStart: () => start,
 		getCost: () => food(0),
-		start: () => undefined,
-		...overrides
+		...rest
 	});
 }
 
@@ -513,7 +514,7 @@ describe("QueueManager", () =>
 		const gameState = worldWithResources();
 		let started = 0;
 		const manager = makeManager(makeConfig(), {
-			villager: [makePlan({ getCost: costOf(100), canStart: () => false, start: () => { ++started; } })]
+			villager: [makePlan({ getCost: costOf(100), canStart: () => undefined, start: () => { ++started; } })]
 		});
 		account(manager, "villager").food = 100;
 

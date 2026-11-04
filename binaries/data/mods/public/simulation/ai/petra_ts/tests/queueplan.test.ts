@@ -128,7 +128,7 @@ describe("QueuePlan", () =>
 		const plan = new BarePlan(gameState, SOLDITE);
 		assert.equal(plan.isInvalid(gameState), false, "the base plan never goes stale");
 		assert.equal(plan.isGo(gameState), true, "the queue manager may account for it");
-		assert.equal(plan.canStart(gameState), false, "the base plan cannot be started on its own");
+		assert.equal(plan.canStart(gameState), undefined, "the base plan cannot be started on its own");
 	});
 
 	it("does nothing when it is started", () =>
@@ -137,7 +137,6 @@ describe("QueuePlan", () =>
 		const plan = new BarePlan(gameState, SOLDITE);
 		// Petra's own record of what the AI asked the game to do.
 		resetRecorder();
-		plan.start(gameState);
 		plan.onStart(gameState);
 		assert.equal(commands.length, 0, "the base plan asks nothing of the game");
 	});

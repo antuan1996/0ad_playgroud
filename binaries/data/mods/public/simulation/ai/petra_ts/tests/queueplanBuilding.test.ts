@@ -83,7 +83,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 		builder(world, hq, [barracks]);
 		hq.turnCache.buildingBuilt = true;
 
-		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), false);
+		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), undefined);
 	});
 
 	it("waits while the civ cannot build the card", () =>
@@ -92,7 +92,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"], "available": false });
 		builder(world, hq, [barracks]);
 
-		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), false);
+		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), undefined);
 	});
 
 	it("waits while the town does not need the house yet", () =>
@@ -103,7 +103,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 		const plan = new ConstructionPlan(world.gameState, house);
 		plan.goRequirement = "houseNeeded";
 
-		assert.equal(plan.canStart(world.gameState), false, "20 free slots");
+		assert.equal(plan.canStart(world.gameState), undefined, "20 free slots");
 	});
 
 	it("waits while no builder of ours knows the card, and starts once one does", () =>
@@ -115,7 +115,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 		assert.ok(!plan.canStart(world.gameState), "no builder yet");
 
 		builder(world, hq, [barracks]);
-		assert.equal(plan.canStart(world.gameState), true);
+		assert.ok(plan.canStart(world.gameState));
 	});
 });
 

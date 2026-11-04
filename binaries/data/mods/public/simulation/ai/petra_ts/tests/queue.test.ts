@@ -45,7 +45,6 @@ function makePlan(overrides: Record<string, unknown> = {}): PetraRuntime.Concret
 		isInvalid: () => false,
 		isGo: () => true,
 		getCost: () => food(0),
-		start: () => undefined,
 		// Reads the plan itself so an overridden type or count is reflected.
 		Serialize: () => ({ category: plan.category, type: plan.type, number: plan.number }),
 		addItem: (amount: number) => { plan.number += amount; },
@@ -146,15 +145,15 @@ describe("Queue", () =>
 
 	it("starts the next plan and removes it from the queue", () =>
 	{
-		const { gameState } = makeFakeGameState();
 		const queue = new Queue();
 		let started = 0;
-		queue.addPlan(makePlan({ start: () => { ++started; } }));
+		queue.addPlan(makePlan());
 
-		assert.equal(queue.startNext(gameState), true);
+		assert.equal(queue.startNext(() => { ++started; }), true);
 		assert.equal(started, 1);
 		assert.equal(queue.length(), 0);
-		assert.equal(queue.startNext(gameState), false, "an empty queue cannot start anything");
+		assert.equal(queue.startNext(() => { ++started; }), false, "an empty queue cannot start anything");
+		assert.equal(started, 1);
 	});
 
 	it("counts queued units across plans", () =>
