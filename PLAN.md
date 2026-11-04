@@ -129,6 +129,24 @@ Plans are the AI's own objects, so their transitions can be enforced. Today
   computed while preparing), so moving it into the states changes the logic,
   not only its types. It goes with stage 4, where the withdrawal and the
   attack's handling are rewritten anyway.
+- **Done in stage 5, the data per state that moves no game** (24 of 24 smoke
+  games and the island game the same): the attack plan's `stage`
+  (`AttackStage`) holds the preparation (its three queues, build orders and
+  siege state) in `unexecuted` and `completing` and the path in `walking`;
+  the queues go when the plan sets off, and a plan saved after it set off no
+  longer looks them up on loading (that threw). The transport plan's `stage`
+  (`TransportStage`) holds in `boarding` the boarding points, the tries and the
+  units to split off, in `sailing` the landing points, the unloaded and
+  recovered units and the cancel. A queue plan's `canStart` returns its start
+  (`PlanStart`) holding what the check found, the buildings to train or
+  research at (never empty for training), or undefined; the queue manager runs
+  it when it pays. A building's spot stays sought at the start: a building
+  without room is dropped from its queue all the same, which a check before
+  paying would change.
+- **Left for stage 6, the target per state** (`TargetRef` in `walking`,
+  `transporting`, `arrived`, as sketched above): Petra chooses and updates
+  the target in every state, preparation included, so moving it changes the
+  play; it goes with the attack's rewrite.
 
 ### 3.2 Parsing what the AI only observes
 
