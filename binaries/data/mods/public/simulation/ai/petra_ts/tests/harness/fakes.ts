@@ -184,6 +184,8 @@ export function makeEntity(spec: {
 		foundationProgress: () => undefined,
 		resourceCarrying: () => undefined,
 		obstructionRadius: () => ({ "max": 2 }),
+		// every entity on the map has a footprint (structures and units alike), as the API probe found
+		footprintRadius: () => 2,
 		captureStrength: () => 0,
 		capturePoints: () => undefined,
 		canCapture: () => false,
