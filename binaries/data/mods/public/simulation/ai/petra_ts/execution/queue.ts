@@ -3,7 +3,7 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { ResearchPlan } from "./queueplanResearch.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
-import { samePlanType } from "./queueplan.ts";
+import { type PlanStart, samePlanType } from "./queueplan.ts";
 
 export type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> | ReturnType<TrainingPlan["Serialize"]>;
 
@@ -73,14 +73,13 @@ export class Queue
 		return this.plans.length > 0 ? this.plans[0] : undefined;
 	}
 
-	/** Starts (shifts) the head plan; false when the queue is empty. */
-	startNext(gameState: CommonGameState): boolean
+	/** Takes the head plan off and starts it with what its canStart found; false when the queue is empty. */
+	startNext(start: PlanStart): boolean
 	{
 		if (this.plans.length > 0)
 		{
-			const plan = this.plans.shift();
-			if (plan)
-				plan.start(gameState);
+			this.plans.shift();
+			start();
 			return true;
 		}
 		return false;

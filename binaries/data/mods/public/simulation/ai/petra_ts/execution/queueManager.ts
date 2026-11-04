@@ -567,16 +567,14 @@ export class QueueManager
 			{
 				// the queue just said it has plans
 				const item = requireValue(queue.getNext());
-				if (this.accounts[name].canAfford(item.getCost()) && item.canStart(gameState))
+				const start = this.accounts[name].canAfford(item.getCost()) ? item.canStart(gameState) : undefined;
+				// canStart may update the cost because of the costMultiplier so we must check it again
+				if (start && this.accounts[name].canAfford(item.getCost()))
 				{
-					// canStart may update the cost because of the costMultiplier so we must check it again
-					if (this.accounts[name].canAfford(item.getCost()))
-					{
-						this.finishingTime = gameState.ai.elapsedTime;
-						this.accounts[name].subtract(item.getCost());
-						queue.startNext(gameState);
-						queue.switched = 0;
-					}
+					this.finishingTime = gameState.ai.elapsedTime;
+					this.accounts[name].subtract(item.getCost());
+					queue.startNext(start);
+					queue.switched = 0;
 				}
 			}
 			else if (!queue.hasQueuedUnits())

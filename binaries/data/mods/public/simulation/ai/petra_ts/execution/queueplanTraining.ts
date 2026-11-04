@@ -1,14 +1,22 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, type PlanStart, QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 import { hqOf } from "./hq.ts";
 import { isPlaced } from "../adapter/placed.ts";
 
+/** Buildings that may train a plan's units: never empty. */
+type Trainers = [CommonPlacedEntity, ...CommonPlacedEntity[]];
+
+function atLeastOne<E>(list: E[]): [E, ...E[]] | undefined
+{
+	const [first, ...rest] = list;
+	return first === undefined ? undefined : [first, ...rest];
+}
+
 export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 {
 	maxMerge: number;
-	trainers: CommonPlacedEntity[] | undefined;
 
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		number: number = 1, maxMerge: number = 5)
@@ -19,24 +27,24 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		// Refine the estimated cost and add pop cost
 		const template = this.template;
 		const trainers = this.getBestTrainers(gameState);
-		const trainer = trainers ? trainers[0] : undefined;
-		this.cost = new ResourcesManager(template.cost(trainer), Number(template.get("Cost/Population")));
+		this.cost = new ResourcesManager(template.cost(trainers?.[0]), Number(template.get("Cost/Population")));
 
 		this.number = number;
 		this.maxMerge = maxMerge;
 	}
 
-	canStart(gameState: CommonGameState): boolean
+	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
-		this.trainers = this.getBestTrainers(gameState);
-		if (!this.trainers)
-			return false;
+		const trainers = this.getBestTrainers(gameState);
+		if (!trainers)
+			return undefined;
 		const template = this.template;
-		this.cost = new ResourcesManager(template.cost(this.trainers[0]), Number(template.get("Cost/Population")));
-		return true;
+		this.cost = new ResourcesManager(template.cost(trainers[0]), Number(template.get("Cost/Population")));
+		return () => this.start(gameState, trainers);
 	}
 
-	getBestTrainers(gameState: CommonGameState): CommonPlacedEntity[] | undefined
+	/** The cheapest buildings that may train the units, at least one; undefined when none may. */
+	getBestTrainers(gameState: CommonGameState): Trainers | undefined
 	{
 		if (this.metadata && this.metadata.trainer)
 		{
@@ -70,15 +78,12 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 				trainers = [ent];
 			}
 		}
-		return trainers;
+		return atLeastOne(trainers);
 	}
 
-	start(gameState: CommonGameState): void
+	/** Trains the units at the best of the buildings canStart found. */
+	private start(gameState: CommonGameState, trainers: Trainers): void
 	{
-		const trainers = this.trainers;
-		if (!trainers)
-			return;
-
 		if (this.metadata && this.metadata.trainer)
 		{
 			const { trainer, ...metadata } = this.metadata;

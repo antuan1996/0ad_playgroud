@@ -32,6 +32,12 @@ export type PlanTemplate = CommonTemplate | CommonTechnology;
 /** The name a plan's template goes by: a technology's, or an entity template's. */
 export type PlanName<T extends PlanTemplate> = T extends CommonTechnology ? TechName : TemplateName;
 
+/**
+ * What a plan does once the queue manager pays for it, with what its check
+ * (`canStart`) found: the buildings to train or research at.
+ */
+export type PlanStart = () => void;
+
 /** What every plan's save holds; each kind of plan adds its own fields. */
 export type SerializedQueuePlan<T extends PlanTemplate> = {
 	category: string;
@@ -91,16 +97,14 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 		return true;
 	}
 
-	/** can we start this plan immediately? */
-	canStart(gameState: CommonGameState): boolean
+	/**
+	 * Can the plan start now? Its start, holding what the check found, or
+	 * undefined. The check may set the cost (a building's price), which the
+	 * queue manager reads again before it pays and starts.
+	 */
+	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
-		return false;
-	}
-
-	/** process the plan. */
-	start(gameState: CommonGameState): void
-	{
-		// should call onStart.
+		return undefined;
 	}
 
 	getCost(): ResourcesManager

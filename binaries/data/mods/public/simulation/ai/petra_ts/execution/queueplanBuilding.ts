@@ -5,7 +5,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { getBuiltEntity, getLandAccess, getSeaAccess, requireTemplate, requireValue } from "../adapter/entityExtend.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
-import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, type PlanStart, QueuePlan } from "./queueplan.ts";
 import { NEW_ANCHORLESS_BASE, NO_BASE, NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
 import { footprintHalves, isStructureTemplate } from "../adapter/templateData.ts";
 import { hqOf } from "./hq.ts";
@@ -41,19 +41,24 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		this.position = position ? position : 0;
 	}
 
-	canStart(gameState: CommonGameState): boolean
+	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
 		if (hqOf(gameState).turnCache.buildingBuilt)   // do not start another building if already one this turn
-			return false;
+			return undefined;
 
 		if (!this.isGo(gameState))
-			return false;
+			return undefined;
 
 		if (!this.template.available(gameState))
-			return false;
+			return undefined;
 
-		return hqOf(gameState).buildManager.hasBuilder(this.type) === true;
+		if (hqOf(gameState).buildManager.hasBuilder(this.type) !== true)
+			return undefined;
+		// the spot is sought once paid: a building without room is dropped all the same
+		return () => this.start(gameState);
 	}
+
+	/** Lays the foundation at the best spot found; with none, the plan is dropped and the building marked unbuildable a while. */
 
 	start(gameState: CommonGameState): void
 	{

@@ -1,10 +1,9 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
+import { type PlanMetadata, type PlanStart, QueuePlan } from "./queueplan.ts";
 import { hqOf } from "./hq.ts";
 
 export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 {
-	researchers: CommonEntity[] | undefined;
 	rush: boolean;
 
 	constructor(gameState: CommonGameState, type: TechName, rush: boolean = false)
@@ -19,13 +18,13 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		this.rush = rush;
 	}
 
-	canStart(gameState: CommonGameState): boolean
+	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
-		this.researchers = this.getBestResearchers(gameState);
-		if (!this.researchers)
-			return false;
-		this.cost = new ResourcesManager(this.template.cost(this.researchers[0]));
-		return true;
+		const researchers = this.getBestResearchers(gameState);
+		if (!researchers)
+			return undefined;
+		this.cost = new ResourcesManager(this.template.cost(researchers[0]));
+		return () => this.start(gameState, researchers);
 	}
 
 	getBestResearchers(gameState: CommonGameState, noRequirementCheck: boolean = false): CommonEntity[] | undefined
@@ -56,13 +55,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		return gameState.isResearched(this.type) || gameState.isResearching(this.type);
 	}
 
-	start(gameState: CommonGameState): void
+	/** Researches the technology at the building with the shortest queue among those canStart found. */
+	private start(gameState: CommonGameState, researchers: CommonEntity[]): void
 	{
-		// Prefer researcher with shortest queues (no need to serialize this.researchers
-		// as the functions canStart and start are always called on the same turn)
-		const researchers = this.researchers;
-		if (!researchers)
-			return;
 		researchers.sort((a: CommonEntity, b: CommonEntity): number => (a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN));
 		// Drop anything in the queue if we rush it.
 		if (this.rush)
