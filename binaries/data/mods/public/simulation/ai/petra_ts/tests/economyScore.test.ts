@@ -38,15 +38,15 @@ describe("economyScore", () =>
 	it("adds up what a tech's rate multipliers bring in, and nothing for other effects", () =>
 	{
 		const economy = town();
-		const plough = [{ "value": "ResourceGatherer/Rates/food.grain", "multiply": 1.2 }];
+		const plough = [{ value: "ResourceGatherer/Rates/food.grain", multiply: 1.2 }];
 		assert.ok(Math.abs(incomeGain(economy, plough) - 3.432) < 1e-9);
-		const both = [{ "value": "ResourceGatherer/Rates/food.fruit", "multiply": 1.5 }, {
-			"value": "ResourceGatherer/Rates/wood.tree",
-			"multiply": 1.25,
+		const both = [{ value: "ResourceGatherer/Rates/food.fruit", multiply: 1.5 }, {
+			value: "ResourceGatherer/Rates/wood.tree",
+			multiply: 1.25,
 		}];
 		assert.ok(Math.abs(incomeGain(economy, both) - (0.9 + 3)) < 1e-9);
-		assert.equal(incomeGain(economy, [{ "value": "ResourceGatherer/Capacities/food", "add": 5 }]), 0);
-		assert.equal(incomeGain(economy, [{ "value": "Health/Max", "multiply": 1.2 }]), 0);
+		assert.equal(incomeGain(economy, [{ value: "ResourceGatherer/Capacities/food", add: 5 }]), 0);
+		assert.equal(incomeGain(economy, [{ value: "Health/Max", multiply: 1.2 }]), 0);
 	});
 
 	it("pays back after its delay and its cost over its gain, never without a gain", () =>
@@ -57,7 +57,7 @@ describe("economyScore", () =>
 			paybackSeconds(
 				300,
 				40,
-				incomeGain(town(), [{ "value": "ResourceGatherer/Rates/food.grain", "multiply": 1.2 }]),
+				incomeGain(town(), [{ value: "ResourceGatherer/Rates/food.grain", multiply: 1.2 }]),
 			) < PAYBACK_HORIZON,
 			"the plough pays back within the horizon on 26 farmers",
 		);

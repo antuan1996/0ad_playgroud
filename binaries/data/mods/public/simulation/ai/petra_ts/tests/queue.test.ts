@@ -356,7 +356,7 @@ describe("restoring a saved queue", () =>
 
 		assert.equal(queue.length(), 1, "an entry the queue cannot build must not be queued");
 		assert.equal(
-			logs.slice(logged).filter(message => message.includes("Petra deserialization error")).length,
+			logs.slice(logged).filter((message) => message.includes("Petra deserialization error")).length,
 			1,
 			"the entry should have been reported to the game log",
 		);

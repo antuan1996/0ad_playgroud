@@ -68,7 +68,7 @@ export interface FakeGameStateOptions
 	 * `width`/`cellSize` and wrong for anything that navigates, so a test that
 	 * navigates has to say so in its own fake.
 	 */
-	map?: { width?: number; height?: number; cellSize?: number };
+	map?: { width?: number; height?: number; cellSize?: number; };
 	/**
 	 * The player's own entities, as `getOwnStructures()`/`getOwnUnits()` return
 	 * them. Pass an empty array to say "the player has none" — declaring the
@@ -125,21 +125,23 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		{
 			const found = templates[template];
 			if (found === undefined)
+			{
 				throw new Error(`no fake template "${template}" — add it to the test's templates`);
+			}
 			// plans read the population cost straight off the template JSON
 			const population = found.population ?? 0;
 			const made = makeTemplate(template, {
-				"cost": found.cost,
-				"popCost": population,
-				"getPaths": { "Cost": { "Population": population } },
-				"researchTime": found.researchTime,
+				cost: found.cost,
+				popCost: population,
+				getPaths: { Cost: { Population: population } },
+				researchTime: found.researchTime,
 			});
 			// a structure has an obstruction and a footprint (template_structure.xml)
 			return template.startsWith("structures/") ?
 				fake<CommonTemplate>({
 					...made,
-					"obstructionRadius": () => ({ "min": 1, "max": 2 }),
-					"footprintRadius": () => 2,
+					obstructionRadius: () => ({ min: 1, max: 2 }),
+					footprintRadius: () => 2,
 				}) :
 				made;
 		};
@@ -157,16 +159,20 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		// InfoMap copies the dimensions off the shared script and allocates its
 		// own array, so one object serves both map types.
 		state["sharedScript"] = { territoryMap: dimensions, passabilityMap: dimensions };
-		ai["territoryMap"] = { ...dimensions, "data": new Uint8Array(width * height) };
-		state["getPassabilityMap"] = () => ({ ...dimensions, "data": new Uint16Array(width * height) });
+		ai["territoryMap"] = { ...dimensions, data: new Uint8Array(width * height) };
+		state["getPassabilityMap"] = () => ({ ...dimensions, data: new Uint16Array(width * height) });
 		state["getPassabilityClassMask"] = () => 0;
 		state["circularMap"] = false;
 	}
 
 	if (options.ownStructures)
+	{
 		state["getOwnStructures"] = () => fakeEntityList(options.ownStructures);
+	}
 	if (options.ownUnits)
+	{
 		state["getOwnUnits"] = () => fakeEntityList(options.ownUnits);
+	}
 
 	if (options.emptyWorld)
 	{
@@ -191,5 +197,5 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		};
 	}
 
-	return { "gameState": fake<CommonGameState>(state), priorityChanges };
+	return { gameState: fake<CommonGameState>(state), priorityChanges };
 }

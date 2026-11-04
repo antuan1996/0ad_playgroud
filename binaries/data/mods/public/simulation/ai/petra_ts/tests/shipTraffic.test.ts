@@ -13,8 +13,8 @@ import { fake, makeEntity } from "./harness/fakes.ts";
 function stateAt(time: number, units: CommonEntity[]): CommonGameState
 {
 	return fake<CommonGameState>({
-		"ai": { "elapsedTime": time },
-		"getEnemyUnits": () => ({ "values": () => units.values() }),
+		ai: { elapsedTime: time },
+		getEnemyUnits: () => ({ values: () => units.values() }),
 	});
 }
 

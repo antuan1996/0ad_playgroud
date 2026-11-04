@@ -27,7 +27,7 @@ const hackOf = (strength: number) => 0.075 * strength / 4;
 function makeSoldier(
 	id: number,
 	position: [number, number],
-	spec: { owner?: number; strength?: number; classes?: string[] } = {},
+	spec: { owner?: number; strength?: number; classes?: string[]; } = {},
 ): CommonEntity
 {
 	return makeEntity({
@@ -35,7 +35,7 @@ function makeSoldier(
 		owner: spec.owner ?? ENEMY,
 		position,
 		classes: ["Unit", "Infantry", ...(spec.classes ?? [])],
-	}, { attackTypes: () => ["Melee"], attackStrengths: () => ({ "Hack": spec.strength ?? 100 }) });
+	}, { attackTypes: () => ["Melee"], attackStrengths: () => ({ Hack: spec.strength ?? 100 }) });
 }
 
 /** a structure a capture army chases: a gaia ruin inside our territory */
@@ -54,14 +54,14 @@ function makeDefender(
 {
 	return makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "CitizenSoldier"] }, {
 		attackTypes: () => ["Melee"],
-		attackStrengths: () => ({ "Hack": 100 }),
+		attackStrengths: () => ({ Hack: 100 }),
 		canAttackTarget: () => true,
 		...methods,
 	}, metadata);
 }
 
 /** an army holding one raider, with nothing assigned yet */
-function raidedWorld(): { world: World; army: DefenseArmy }
+function raidedWorld(): { world: World; army: DefenseArmy; }
 {
 	const world = makeWorld();
 	world.addEntity(makeSoldier(2000, [40, 40]));
@@ -234,7 +234,7 @@ describe("calling defenders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		world.addEntity(makeDefender(3000, [10, 10], {}, { "plan": 7, "subrole": Worker.SUBROLE_ATTACKING }));
+		world.addEntity(makeDefender(3000, [10, 10], {}, { plan: 7, subrole: Worker.SUBROLE_ATTACKING }));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		army.addOwn(world.gameState, entityId(3000));
@@ -251,7 +251,7 @@ describe("calling defenders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		world.addEntity(makeDefender(3000, [10, 10], {}, { "plan": -3, "subrole": Worker.SUBROLE_DEFENDER }));
+		world.addEntity(makeDefender(3000, [10, 10], {}, { plan: -3, subrole: Worker.SUBROLE_DEFENDER }));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		army.addOwn(world.gameState, entityId(3000));
@@ -272,7 +272,7 @@ describe("calling defenders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		world.addEntity(makeDefender(3000, undefined, {}, { "transport": 9 }));
+		world.addEntity(makeDefender(3000, undefined, {}, { transport: 9 }));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		// merges recruit transportees even though their position sank
@@ -283,7 +283,7 @@ describe("calling defenders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		world.addEntity(makeDefender(3000, [10, 10], {}, { "plan": 7, "subrole": Worker.SUBROLE_ATTACKING }));
+		world.addEntity(makeDefender(3000, [10, 10], {}, { plan: 7, subrole: Worker.SUBROLE_ATTACKING }));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		army.addOwn(world.gameState, entityId(3000));
 		army.assignedAgainst[4000] = [];
@@ -336,7 +336,7 @@ describe("calling defenders", () =>
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
-		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 12 }));
+		world.addEntity(makeDefender(3000, [10, 10], {}, { transport: 12 }));
 		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
 			name === 12 ?
 				{
@@ -356,7 +356,7 @@ describe("calling defenders", () =>
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
-		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 13 }));
+		world.addEntity(makeDefender(3000, [10, 10], {}, { transport: 13 }));
 		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
 			name === 13 ?
 				{
@@ -379,11 +379,11 @@ describe("choosing whom to fight", () =>
 		const { world, army } = raidedWorld();
 		const defender = world.ents.get(3000)!;
 		// the raider already charged our defender — the engine order data says so
-		world.ents.get(2000)!.unitAIOrderData = () => orders({ "target": entityId(3000) });
+		world.ents.get(2000)!.unitAIOrderData = () => orders({ target: entityId(3000) });
 
 		const strikes: unknown[][] = [];
 		override(defender, {
-			"attack": (target: unknown, capture?: unknown, queued?: unknown) => strikes.push([target, capture, queued]),
+			attack: (target: unknown, capture?: unknown, queued?: unknown) => strikes.push([target, capture, queued]),
 		});
 
 		assert.equal(army.assignUnit(world.gameState, entityId(3000)), true, "an order was given");
@@ -400,7 +400,7 @@ describe("choosing whom to fight", () =>
 		const defender = world.ents.get(3000)!;
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes[0], [2000], "the nearer raider won");
@@ -422,7 +422,7 @@ describe("choosing whom to fight", () =>
 		const defender = world.ents.get(3000)!;
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes[0], [2001], "the mild mob was left to its opponents");
@@ -438,7 +438,7 @@ describe("choosing whom to fight", () =>
 		}
 		const defender = world.ents.get(3000)!;
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		assert.equal(army.assignUnit(world.gameState, entityId(3000)), false, "no order was given");
 		assert.deepEqual(strikes, [], "the raider's crowd was already the whole army");
@@ -456,7 +456,7 @@ describe("choosing whom to fight", () =>
 		army.addFoe(world.gameState, entityId(2001));
 		const defender = world.ents.get(3000)!;
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes, [[2001]], "the mob was left at eight");
@@ -473,7 +473,7 @@ describe("choosing whom to fight", () =>
 		world.ents.get(2000)!.hasClass = (cls: string) => cls === "Infantry" || cls === "Hero";
 		const defender = world.ents.get(3000)!;
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes, [[2000]], "heroes never lose their escort");
@@ -491,7 +491,7 @@ describe("choosing whom to fight", () =>
 		army.addFoe(world.gameState, entityId(2011), true);
 		const defender = world.ents.get(3000)!;
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes, [[ram.id()]], "rams never lose their escort");
@@ -504,7 +504,7 @@ describe("choosing whom to fight", () =>
 		// e.g. a pure melee defender whose engine refuses the target class
 		defender.canAttackTarget = () => false;
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		assert.equal(army.assignUnit(world.gameState, entityId(3000)), false, "no order was given");
 		assert.deepEqual(strikes, [], "nothing was aimed");
@@ -521,7 +521,7 @@ describe("choosing whom to fight", () =>
 		world.addEntity(makeDefender(3000, [20, 10]));
 
 		army.assignUnit(world.gameState, entityId(3000));
-		const call = world.transportCalls.find(row => row[0].id() === 3000);
+		const call = world.transportCalls.find((row) => row[0].id() === 3000);
 		assert.ok(call, "a ferry was asked for");
 		assert.deepEqual(army.assignedAgainst[2000], [], "no strike was booked before the ride");
 		assert.deepEqual([call![1], call![2], call![3]], [2, 3, [50, 10]], "there and then");
@@ -537,13 +537,13 @@ describe("choosing whom to fight", () =>
 		const defender = world.addEntity(
 			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Ship"] }, {
 				attackTypes: () => ["Melee"],
-				attackStrengths: () => ({ "Hack": 100 }),
+				attackStrengths: () => ({ Hack: 100 }),
 				canAttackTarget: () => true,
 			}),
 		);
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 
 		assert.equal(army.assignUnit(world.gameState, entityId(3000)), true, "the order went out");
 		assert.deepEqual(strikes[0], [2000], "the ship hunted the raider");
@@ -553,7 +553,7 @@ describe("choosing whom to fight", () =>
 	{
 		const { world, army } = raidedWorld();
 		const defender = world.ents.get(3000)!;
-		defender.resourceCarrying = () => [{ "type": "wood", "amount": 10 }];
+		defender.resourceCarrying = () => [{ type: "wood", amount: 10 }];
 		const dropsite = world.addEntity(
 			makeEntity({ id: 6000, owner: PLAYER, position: [10, 10], classes: ["Structure"] }),
 		);
@@ -567,14 +567,14 @@ describe("choosing whom to fight", () =>
 
 		const order: string[] = [];
 		override(defender, {
-			"returnResources": () =>
+			returnResources: () =>
 			{
 				order.push("returns");
 				return true;
 			},
 		});
 		override(defender, {
-			"attack": (target: unknown, _c?: unknown, queued?: unknown) =>
+			attack: (target: unknown, _c?: unknown, queued?: unknown) =>
 			{
 				order.push(`attack ${String(target)} queued=${String(queued)}`);
 			},
@@ -592,7 +592,7 @@ describe("choosing whom to fight", () =>
 describe("asking for defenders", () =>
 {
 	/** an army of one raider on the given ground */
-	function armyOn(territory: Map<string, number>, strength = 100): { world: World; army: DefenseArmy }
+	function armyOn(territory: Map<string, number>, strength = 100): { world: World; army: DefenseArmy; }
 	{
 		const world = makeWorld({ territory });
 		world.addEntity(makeSoldier(2000, [40, 40], { strength }));
@@ -622,9 +622,9 @@ describe("asking for defenders", () =>
 		const { world, army } = armyOn(new Map([["40,40", 3]]), 400);
 		// we and another ally both answer for the owner
 		world.gameState.playerData.isAlly[3] = true;
-		const playersData = (world.gameState.sharedScript as { playersData: { isAlly: boolean[] }[] }).playersData;
+		const playersData = (world.gameState.sharedScript as { playersData: { isAlly: boolean[]; }[]; }).playersData;
 		playersData[1].isAlly[3] = true;
-		playersData[2] = { "isAlly": [false, false, true, true] };
+		playersData[2] = { isAlly: [false, false, true, true] };
 
 		const need = army.needsDefenders(world.gameState) as number;
 		assert.ok(Math.abs(need - hackOf(400) * 1.4 / 1.5) < 1e-10, "two sharers split their share of the ratio");
@@ -659,7 +659,7 @@ describe("asking for defenders", () =>
 		// removal subtracts the upgraded strength, more than it added
 		// the blacksmith finished between the enlistment and the discharge: the
 		// removal subtracts the upgraded strength, more than it added
-		world.ents.get(3000)!.attackStrengths = () => ({ "Hack": 600 });
+		world.ents.get(3000)!.attackStrengths = () => ({ Hack: 600 });
 		army.removeOwn(world.gameState, entityId(3000));
 		assert.ok(army.ownStrength < 0, "the book went negative");
 
@@ -687,7 +687,7 @@ describe("scattering home", () =>
 
 		const walks: unknown[][] = [];
 		override(lost, {
-			"moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
+			moveToRange: (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
 		});
 
 		army.clear(world.gameState);
@@ -717,7 +717,7 @@ describe("scattering home", () =>
 		};
 		const walks: unknown[] = [];
 		override(onGoal, {
-			"moveToRange": () =>
+			moveToRange: () =>
 			{
 				walks.push("walk");
 			},
@@ -755,7 +755,7 @@ describe("scattering home", () =>
 		);
 		const walks: unknown[][] = [];
 		override(walker, {
-			"moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
+			moveToRange: (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
 		});
 
 		army.clear(world.gameState);
@@ -778,7 +778,7 @@ describe("scattering home", () =>
 
 		const walks: unknown[] = [];
 		override(wounded, {
-			"moveToRange": () =>
+			moveToRange: () =>
 			{
 				walks.push("walk");
 			},
@@ -803,7 +803,7 @@ describe("scattering home", () =>
 		army.addOwn(world.gameState, entityId(3002));
 
 		const walks: unknown[][] = [];
-		override(wounded, { "moveToRange": (x: number, z: number) => walks.push([x, z]) });
+		override(wounded, { moveToRange: (x: number, z: number) => walks.push([x, z]) });
 		army.clear(world.gameState);
 		assert.deepEqual(walks, [[10, 10]], "he walked to the home centre with the rest");
 	});
@@ -812,13 +812,13 @@ describe("scattering home", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
-		const aboard = world.addEntity(makeDefender(3000, undefined, {}, { "transport": 9 }));
+		const aboard = world.addEntity(makeDefender(3000, undefined, {}, { transport: 9 }));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		army.addOwn(world.gameState, entityId(3000), true);
 
 		const moves: unknown[] = [];
 		override(aboard, {
-			"moveToRange": () =>
+			moveToRange: () =>
 			{
 				moves.push("move");
 			},
@@ -916,7 +916,7 @@ describe("merging armies", () =>
 		// a third defender goes at the nearer raider, two on him being no mob
 		world.addEntity(makeDefender(3000, [20, 20]));
 		const strikes: unknown[] = [];
-		override(world.ents.get(3000)!, { "attack": (target: unknown) => strikes.push(target) });
+		override(world.ents.get(3000)!, { attack: (target: unknown) => strikes.push(target) });
 		army.assignUnit(world.gameState, entityId(3000));
 		assert.deepEqual(strikes, [2000]);
 	});
@@ -936,7 +936,7 @@ describe("hearing events", () =>
 		army.assignedTo[3000] = entityId(2000);
 
 		const events = emptyEvents();
-		events.EntityRenamed.push({ "entity": entityId(2000), "newentity": entityId(2005) });
+		events.EntityRenamed.push({ entity: entityId(2000), newentity: entityId(2005) });
 		army.checkEvents(world.gameState, events);
 
 		assert.deepEqual(army.foeEntities, [2005], "the row now names the promoted raider");
@@ -959,7 +959,7 @@ describe("hearing events", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		const events = emptyEvents();
-		events.EntityRenamed.push({ "entity": entityId(2000), "newentity": entityId(2010) });
+		events.EntityRenamed.push({ entity: entityId(2000), newentity: entityId(2010) });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.foeEntities, [2000], "the army held the old roster");
 	});
@@ -976,7 +976,7 @@ describe("hearing events", () =>
 		army.assignedTo[3000] = entityId(2000);
 
 		const events = emptyEvents();
-		events.EntityRenamed.push({ "entity": entityId(3000), "newentity": entityId(3010) });
+		events.EntityRenamed.push({ entity: entityId(3000), newentity: entityId(3010) });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.ownEntities, [3010]);
 		assert.deepEqual(army.assignedAgainst[2000], [3010]);
@@ -1001,7 +1001,7 @@ describe("hearing events", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		const events = emptyEvents();
-		events.EntityRenamed.push({ "entity": entityId(3000), "newentity": entityId(3020) });
+		events.EntityRenamed.push({ entity: entityId(3000), newentity: entityId(3020) });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.ownEntities, [3000], "the roster stayed on the attacker");
 	});
@@ -1013,7 +1013,7 @@ describe("hearing events", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		const events = emptyEvents();
-		events.Garrison.push({ "entity": entityId(2000), "holder": entityId(6000) });
+		events.Garrison.push({ entity: entityId(2000), holder: entityId(6000) });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.foeEntities, [], "the garrisoned raider was no raider anymore");
 	});
@@ -1025,7 +1025,7 @@ describe("hearing events", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 
 		const events = emptyEvents();
-		events.OwnershipChanged.push({ "entity": entityId(2000), "from": ENEMY, "to": PLAYER });
+		events.OwnershipChanged.push({ entity: entityId(2000), from: ENEMY, to: PLAYER });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.foeEntities, [], "a captured raider is no raider");
 	});
@@ -1039,7 +1039,7 @@ describe("hearing events", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		const events = emptyEvents();
-		events.OwnershipChanged.push({ "entity": entityId(3000), "from": PLAYER, "to": ENEMY });
+		events.OwnershipChanged.push({ entity: entityId(3000), from: PLAYER, to: ENEMY });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.ownEntities, [], "the captured one no longer fights for us");
 	});
@@ -1054,7 +1054,7 @@ describe("hearing events", () =>
 
 		const events = emptyEvents();
 		events.Destroy.length = 0;
-		events.Destroy.push({ "entity": entityId(2000) }, { "entity": entityId(3000) });
+		events.Destroy.push({ entity: entityId(2000) }, { entity: entityId(3000) });
 		army.checkEvents(world.gameState, events);
 		assert.deepEqual(army.foeEntities, [], "the raider was buried");
 		assert.deepEqual(army.ownEntities, [], "and our defender with him");
@@ -1072,7 +1072,7 @@ describe("walking the daily cycle", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
+		override(defender, { attack: (target: unknown) => strikes.push([target]) });
 		army.update(world.gameState);
 		assert.deepEqual(strikes[0], [2000], "the idle defender got an order");
 	});
@@ -1082,11 +1082,11 @@ describe("walking the daily cycle", () =>
 		const world = makeWorld();
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
-		const ferrying = world.addEntity(makeDefender(3000, [20, 20], {}, { "transport": 7 }));
+		const ferrying = world.addEntity(makeDefender(3000, [20, 20], {}, { transport: 7 }));
 		army.addOwn(world.gameState, entityId(3000));
 
 		const strikes: unknown[][] = [];
-		override(ferrying, { "attack": (target: unknown) => strikes.push([target]) });
+		override(ferrying, { attack: (target: unknown) => strikes.push([target]) });
 		army.update(world.gameState);
 		assert.deepEqual(strikes, [], "the ferry had first right");
 	});
@@ -1099,10 +1099,10 @@ describe("walking the daily cycle", () =>
 		const busy = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
 		// already in combat with something else (order target set, no capture)
-		busy.unitAIOrderData = () => orders({ "target": entityId(2222) });
+		busy.unitAIOrderData = () => orders({ target: entityId(2222) });
 
 		const strikes: unknown[][] = [];
-		override(busy, { "attack": (target: unknown) => strikes.push([target]) });
+		override(busy, { attack: (target: unknown) => strikes.push([target]) });
 		army.update(world.gameState);
 		assert.deepEqual(strikes, [], "no order reached a defender already fighting");
 	});
@@ -1121,11 +1121,11 @@ describe("walking the daily cycle", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		const capturer = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
-		capturer.unitAIOrderData = () => orders({ "target": entityId(2000), "attackType": "Capture" });
+		capturer.unitAIOrderData = () => orders({ target: entityId(2000), attackType: "Capture" });
 		capturer.canCapture = () => true;
 
 		const strikes: unknown[][] = [];
-		override(capturer, { "attack": (target: unknown, capture?: unknown) => strikes.push([target, capture]) });
+		override(capturer, { attack: (target: unknown, capture?: unknown) => strikes.push([target, capture]) });
 		army.update(world.gameState);
 		assert.deepEqual(strikes, [], "no re-cut for a lawful capture order");
 	});
@@ -1137,11 +1137,11 @@ describe("walking the daily cycle", () =>
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		const defender = world.addEntity(makeDefender(3000, [20, 20]));
 		army.addOwn(world.gameState, entityId(3000));
-		defender.unitAIOrderData = () => orders({ "target": entityId(2000), "attackType": "Capture" });
+		defender.unitAIOrderData = () => orders({ target: entityId(2000), attackType: "Capture" });
 		defender.canCapture = () => false; // a plain hacker never captures
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown, capture?: unknown) => strikes.push([target, capture]) });
+		override(defender, { attack: (target: unknown, capture?: unknown) => strikes.push([target, capture]) });
 		army.update(world.gameState);
 		assert.deepEqual(strikes, [[2000, false]], "the order was re-cut to plain attack");
 	});
@@ -1316,16 +1316,16 @@ describe("saved and restored", () =>
 	{
 		const world = makeWorld();
 		const data = {
-			"ID": armyId(77),
-			"type": "default",
-			"foePosition": worldPos(5, 5),
-			"positionLastUpdate": 3,
-			"assignedAgainst": { "99": [entityId(7)] },
-			"assignedTo": { "7": entityId(99) },
-			"foeEntities": [entityId(99)],
-			"foeStrength": 12,
-			"ownEntities": [entityId(55)],
-			"ownStrength": 3,
+			ID: armyId(77),
+			type: "default",
+			foePosition: worldPos(5, 5),
+			positionLastUpdate: 3,
+			assignedAgainst: { "99": [entityId(7)] },
+			assignedTo: { "7": entityId(99) },
+			foeEntities: [entityId(99)],
+			foeStrength: 12,
+			ownEntities: [entityId(55)],
+			ownStrength: 3,
 		};
 		const shell = DefenseArmy.restore(world.gameState, data);
 		assert.deepEqual([shell.ID, shell.type, shell.foeEntities, shell.ownEntities, shell.assignedAgainst["99"]], [

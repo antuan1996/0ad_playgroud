@@ -15,8 +15,12 @@ export function ordersOf(ent: CommonEntity): CommonUnitOrderData[]
 {
 	const data: CommonUnitOrderData[] = [];
 	for (const order of ent.unitAIOrderData())
+	{
 		if (order.data)
+		{
 			data.push(order.data);
+		}
+	}
 	return data;
 }
 
@@ -31,14 +35,20 @@ export function gatherRate(gameState: CommonGameState, ent: CommonEntity): numbe
 {
 	const rates = ent.resourceGatherRates();
 	if (!rates)
+	{
 		return undefined;
+	}
 	if (ent.unitAIState()?.split(".")[1] !== "GATHER")
+	{
 		return undefined;
+	}
 	const data = ordersOf(ent);
 	const target = data[0]?.target ?? data[1]?.target;
 	const supply = target === undefined ? undefined : gameState.getEntityById(target);
 	const type = supply?.resourceSupplyType();
 	if (!type)
+	{
 		return 0;
+	}
 	return rates[type.generic + "." + type.specific] || 0;
 }

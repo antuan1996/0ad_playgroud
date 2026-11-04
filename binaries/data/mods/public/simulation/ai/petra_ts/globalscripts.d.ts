@@ -44,8 +44,8 @@ declare global
 
 	/** Structural subset of an entity template's `<Identity>` node used by the class helpers of Templates.js. */
 	type IdentityTemplate = {
-		Classes?: { _string?: string };
-		VisibleClasses?: { _string?: string };
+		Classes?: { _string?: string; };
+		VisibleClasses?: { _string?: string; };
 		Rank?: string;
 		[key: string]: unknown;
 	};
@@ -76,11 +76,11 @@ declare global
 	 * never be met by the given civ.
 	 */
 	type TechnologyRequirements = Array<
-		{ techs?: string[]; entities?: Array<{ class: string; number: number; check: "count" | "variants" }> }
+		{ techs?: string[]; entities?: Array<{ class: string; number: number; check: "count" | "variants"; }>; }
 	>;
 
 	/** A message passed to FSM.ProcessMessage / handler functions. */
-	type FSMMessage = { type: string; [key: string]: unknown };
+	type FSMMessage = { type: string; [key: string]: unknown; };
 	/** A message handler function of an FSM spec. */
 	type FSMHandler<T = unknown> = (this: T, message: FSMMessage) => unknown;
 	/**
@@ -89,7 +89,7 @@ declare global
 	 * State names may only contain the characters A-Z, joined with "." for
 	 * sub-states (see globalscripts/FSM.js and UnitAI.js for the full syntax).
 	 */
-	type FSMStateSpec<T = unknown> = { [key: string]: FSMHandler<T> | FSMStateSpec<T> | string };
+	type FSMStateSpec<T = unknown> = { [key: string]: FSMHandler<T> | FSMStateSpec<T> | string; };
 
 	/**
 	 * The bookkeeping an FSM keeps on the managed object itself
@@ -328,7 +328,7 @@ declare global
 	{
 		constructor();
 		/** The possible attack impact effects and the component interface ("IID", e.g. "IID_StatusEffectsReceiver") plus method name that receives each effect type. */
-		Receivers(): Array<{ type: string; IID: string; method: string }>;
+		Receivers(): Array<{ type: string; IID: string; method: string; }>;
 	}
 
 	/**
@@ -514,7 +514,7 @@ declare global
 		 */
 		getData(
 			code: string,
-		): { applierTooltip?: string; code?: string; icon?: string; statusName?: string; receiverTooltip?: string };
+		): { applierTooltip?: string; code?: string; icon?: string; statusName?: string; receiverTooltip?: string; };
 		/** Tooltip shown to the entity applying the effect; undefined for unknown codes. */
 		getApplierTooltip(code: string): string | undefined;
 		/** Icon path of the effect, defaulting to "default"; undefined for unknown codes. */
@@ -592,7 +592,7 @@ declare global
 	 * each phase comes after the phase it supersedes/requires.
 	 */
 	function UnravelPhases(
-		phases: Record<string, { reqs: Array<{ techs?: string[] }>; replaces?: string[] }>,
+		phases: Record<string, { reqs: Array<{ techs?: string[]; }>; replaces?: string[]; }>,
 	): string[];
 
 	/**
@@ -683,8 +683,8 @@ declare global
 	 * (the Object.value || 0 idiom means 0-valued entries survive).
 	 */
 	function calculateCarriedResources(
-		carriedResources?: Array<{ type: string; amount: number }>,
-		tradingGoods?: { type: string; amount?: { traderGain?: number; market1Gain?: number; market2Gain?: number } },
+		carriedResources?: Array<{ type: string; amount: number; }>,
+		tradingGoods?: { type: string; amount?: { traderGain?: number; market1Gain?: number; market2Gain?: number; }; },
 	): Record<string, number>;
 	/** Strips a leading "filter|" prefix (mirage, corpse, etc.) from a template name: only the segment after the last "|" survives. */
 	function removeFiltersFromTemplateName(templateName: string): string;
@@ -796,7 +796,7 @@ declare global
 	 * The engine's `global` script object. LoadModificationTemplates() assigns
 	 * these two caches, which hold every aura resp. technology definition:
 	 */
-	const global: { AuraTemplates?: ModificationTemplates; TechnologyTemplates?: ModificationTemplates };
+	const global: { AuraTemplates?: ModificationTemplates; TechnologyTemplates?: ModificationTemplates; };
 }
 
 export {};

@@ -44,18 +44,21 @@ const option = (name: string): string | undefined =>
 const pair = option("pair")?.split("/").map(Number);
 const player = Number(option("player"));
 if (!pair || pair.length != 2 || !pair.every(Number.isInteger) || (player != 1 && player != 2))
+{
 	fail("usage: --pair MAPSEED/AISEED --player 1|2 [--with m1,m2] [--jobs J] [--out DIR]");
+}
 const withModules = option("with")?.split(",").filter(Boolean) ?? [];
 const jobs = Number(option("jobs") ?? 12);
 const out = resolve(
 	option("out") ?? join(repoRoot, "build/petra_ts/batches", `bisect-${pair[0]}-${pair[1]}-p${player}`),
 );
 
-if (spawnSync(process.execPath, [join(repoRoot, "build/petra_ts/baselines.ts")], { "stdio": "inherit" }).status !== 0)
+if (spawnSync(process.execPath, [join(repoRoot, "build/petra_ts/baselines.ts")], { stdio: "inherit" }).status !== 0)
+{
 	fail("building the baselines failed");
-const modules = readdirSync(join(aiDir, "petra_parity")).filter(f => f.endsWith(".js")).map(f => f.slice(0, -3)).filter(
-	m => !withModules.includes(m)
-);
+}
+const modules = readdirSync(join(aiDir, "petra_parity")).filter((f) => f.endsWith(".js")).map((f) => f.slice(0, -3))
+	.filter((m) => !withModules.includes(m));
 
 interface Run
 {
@@ -64,12 +67,13 @@ interface Run
 	dir: string;
 	divergence?: Divergence;
 }
-const runs: Run[] = [{ "label": "petra_parity", "bot": "petra_parity", "dir": join(out, "parity") }, {
-	"label": "petra_fixed" + (withModules.length ? ` + ${withModules.join(", ")}` : ""),
-	"bot": withModules.length ? "petra_hybrid_with" : "petra_fixed",
-	"dir": join(out, "fixed"),
-}, ...modules.map(m => ({ "label": m, "bot": `petra_hybrid_${m}`, "dir": join(out, m) }))];
+const runs: Run[] = [{ label: "petra_parity", bot: "petra_parity", dir: join(out, "parity") }, {
+	label: "petra_fixed" + (withModules.length ? ` + ${withModules.join(", ")}` : ""),
+	bot: withModules.length ? "petra_hybrid_with" : "petra_fixed",
+	dir: join(out, "fixed"),
+}, ...modules.map((m) => ({ label: m, bot: `petra_hybrid_${m}`, dir: join(out, m) }))];
 for (const run of runs)
+{
 	if (run.bot.startsWith("petra_hybrid"))
 	{
 		const own = run.bot == "petra_hybrid_with" ? [] : [run.label];
@@ -79,10 +83,13 @@ for (const run of runs)
 			run.bot,
 			...withModules,
 			...own,
-		], { "stdio": "inherit" });
+		], { stdio: "inherit" });
 		if (built.status !== 0)
+		{
 			fail(`building ${run.bot} failed`);
+		}
 	}
+}
 
 function play(run: Run, job: number, limit?: number): Promise<void>
 {
@@ -110,9 +117,9 @@ function play(run: Run, job: number, limit?: number): Promise<void>
 		"-r",
 		run.dir,
 	];
-	return new Promise(done =>
+	return new Promise((done) =>
 	{
-		const child = spawn(join(repoRoot, "build/petra_ts/match.sh"), matchArgs, { env, "stdio": "ignore" });
+		const child = spawn(join(repoRoot, "build/petra_ts/match.sh"), matchArgs, { env, stdio: "ignore" });
 		child.on("close", () => done());
 	});
 }
@@ -121,7 +128,7 @@ let finished = 0;
 async function playAll(list: Run[], limit?: number): Promise<void>
 {
 	const queue = [...list];
-	await Promise.all(Array.from({ "length": Math.min(jobs, queue.length) }, async (_, job) =>
+	await Promise.all(Array.from({ length: Math.min(jobs, queue.length) }, async (_, job) =>
 	{
 		for (let run = queue.shift(); run; run = queue.shift())
 		{
@@ -144,9 +151,14 @@ const limit = base.line === undefined ? undefined : Math.floor((base.time ?? 0) 
 if (limit !== undefined)
 {
 	await playAll(runs.slice(2), limit);
-	const upToLimit = reference.filter(line => Number(line.split(" ", 1)[0]) < limit * 60000);
+	const upToLimit = reference.filter((line) => Number(line.split(" ", 1)[0]) < limit * 60000);
 	for (const run of runs.slice(2))
-		run.divergence = diverge(upToLimit, log(run.dir).filter(line => Number(line.split(" ", 1)[0]) < limit * 60000));
+	{
+		run.divergence = diverge(
+			upToLimit,
+			log(run.dir).filter((line) => Number(line.split(" ", 1)[0]) < limit * 60000),
+		);
+	}
 }
 const clock = (ms = 0): string => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const describe = (d?: Divergence): string =>
@@ -157,10 +169,12 @@ const describe = (d?: Divergence): string =>
 		`differs from command ${d.line + 1} at ${clock(d.time)} (player ${d.player})`;
 console.log(`${runs[1].label}: ${describe(base)}`);
 if (base?.line === undefined)
+{
 	console.log("nothing to bisect: petra_fixed plays as petra_parity in this game");
+}
 else
 {
-	const further = runs.slice(2).filter(r => (r.divergence?.line ?? Infinity) > (base.line ?? 0)).sort((a, b) =>
+	const further = runs.slice(2).filter((r) => (r.divergence?.line ?? Infinity) > (base.line ?? 0)).sort((a, b) =>
 		(b.divergence?.line ?? Infinity) - (a.divergence?.line ?? Infinity)
 	);
 	console.log(
@@ -169,9 +183,15 @@ else
 			"no single module plays past the divergence: the difference spans modules (try --with)",
 	);
 	for (const r of further)
+	{
 		console.log(`  ${r.label}: ${describe(r.divergence)}`);
+	}
 }
 for (const run of runs)
+{
 	if (run.bot.startsWith("petra_hybrid"))
-		rmSync(join(aiDir, run.bot), { "recursive": true, "force": true });
+	{
+		rmSync(join(aiDir, run.bot), { recursive: true, force: true });
+	}
+}
 console.log(`games: ${out}`);

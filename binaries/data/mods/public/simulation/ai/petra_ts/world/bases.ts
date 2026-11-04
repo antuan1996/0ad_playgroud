@@ -21,7 +21,7 @@ export interface BaseView
 	readonly accessIndex: AccessIndex | undefined;
 	readonly anchor: CommonStructureEntity | undefined;
 	/** The supplies within reach of its dropsites (world/baseResources.ts), read-only. */
-	readonly resources: { readonly dropsiteSupplies: SupplyBands };
+	readonly resources: { readonly dropsiteSupplies: SupplyBands; };
 	/** How many of our gatherers this turn are booked on `supply` beyond what the engine counts. */
 	GetTCGatherer(supply: EntityId): number;
 	workersBySubrole(gameState: CommonGameState, subrole: WorkerSubrole): CommonEntityCollection;
@@ -32,7 +32,7 @@ export interface BaseView
 		gameState: CommonGameState,
 		resource: string,
 		templateName: TemplateName,
-	): { quality: number; pos: CommonPosition };
+	): { quality: number; pos: CommonPosition; };
 }
 
 /** Booking a supply for a gatherer this turn, so the next one counts it as taken. */

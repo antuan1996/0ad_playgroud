@@ -27,14 +27,20 @@ export class ProductionLoad
 		let trainers = 0;
 		let training = 0;
 		for (const cls of MILITARY_TRAINERS)
+		{
 			for (const ent of gameState.getOwnEntitiesByClass(cls, true).values())
 			{
 				if (ent.foundationProgress() !== undefined)
+				{
 					continue;
+				}
 				++trainers;
 				if (ent.trainingQueue()?.length)
+				{
 					++training;
+				}
 			}
+		}
 		this.trainers = trainers;
 		const now = gameState.ai.elapsedTime;
 		const weight = this.lastUpdate === undefined ? 1 : 1 - Math.exp(-(now - this.lastUpdate) / SMOOTHING);

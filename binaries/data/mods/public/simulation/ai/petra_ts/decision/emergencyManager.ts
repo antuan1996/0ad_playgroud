@@ -49,16 +49,26 @@ export class EmergencyManager
 			((pop / this.referencePopulation) < factors.population || pop === 0) &&
 			((nStructures / this.referenceStructureCount) < factors.structures || nStructures === 0)
 		)
+		{
 			this.setEmergency(gameState, true);
+		}
 		else if ((nRoots / this.numRoots) <= factors.roots || (nRoots === 0 && this.numRoots !== 0))
+		{
 			this.setEmergency(gameState, true);
+		}
 
 		if (pop > this.referencePopulation || this.hasEmergency)
+		{
 			this.referencePopulation = pop;
+		}
 		if (nStructures > this.referenceStructureCount || this.hasEmergency)
+		{
 			this.referenceStructureCount = nStructures;
+		}
 		if (nRoots > this.numRoots || this.hasEmergency)
+		{
 			this.numRoots = nRoots;
+		}
 	}
 
 	emergencyUpdate(gameState: CommonGameState): void
@@ -82,11 +92,13 @@ export class EmergencyManager
 	rootCount(gameState: CommonGameState): number
 	{
 		let roots = 0;
-		gameState.getOwnStructures().toEntityArray().forEach(ent =>
+		gameState.getOwnStructures().toEntityArray().forEach((ent) =>
 		{
 			const influence = ent?.get("TerritoryInfluence");
 			if (typeof influence === "object" && influence !== null && "Root" in influence && influence.Root === "true")
+			{
 				roots++;
+			}
 		});
 		return roots;
 	}
@@ -100,10 +112,10 @@ export class EmergencyManager
 	Serialize(): SerializedEmergencyManager
 	{
 		return {
-			"referencePopulation": this.referencePopulation,
-			"referenceStructureCount": this.referenceStructureCount,
-			"numRoots": this.numRoots,
-			"hasEmergency": this.hasEmergency,
+			referencePopulation: this.referencePopulation,
+			referenceStructureCount: this.referenceStructureCount,
+			numRoots: this.numRoots,
+			hasEmergency: this.hasEmergency,
 		};
 	}
 

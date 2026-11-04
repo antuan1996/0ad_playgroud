@@ -10,7 +10,7 @@ import { analyse, analyseModule, calledMethods, importCycles, layerOf, layerViol
 
 function rules(file: string, text: string): string[]
 {
-	return analyseModule(file, text).findings.map(f => f.rule);
+	return analyseModule(file, text).findings.map((f) => f.rule);
 }
 
 test("a module's layer is its folder; the bot's root is above them all", () =>
@@ -76,7 +76,7 @@ test("imports against the layers' order are counted, type-only ones too; hq.ts's
 			"import { E } from \"../execution/e.ts\"; import { F } from \"simulation/ai/common-api/f.js\";",
 		),
 	];
-	assert.deepEqual(layerViolations(modules).map(e => [e.from, e.to, e.typeOnly]), [[
+	assert.deepEqual(layerViolations(modules).map((e) => [e.from, e.to, e.typeOnly]), [[
 		"adapter/a.ts",
 		"world/b.ts",
 		false,
@@ -109,9 +109,9 @@ test("exports: dead, used only in their module, only by the tests, or through a 
 	];
 	const users = [analyseModule("tests/a.test.ts", "import { TESTED } from \"../world/a.ts\";")];
 	const { dead } = analyse(modules, users);
-	assert.deepEqual(dead.deadExports.map(f => f.text), ["DEAD"]);
-	assert.deepEqual(dead.localOnlyExports.map(f => f.text), ["LOCAL"]);
-	assert.deepEqual(dead.testOnlyExports.map(f => f.text), ["TESTED"]);
+	assert.deepEqual(dead.deadExports.map((f) => f.text), ["DEAD"]);
+	assert.deepEqual(dead.localOnlyExports.map((f) => f.text), ["LOCAL"]);
+	assert.deepEqual(dead.testOnlyExports.map((f) => f.text), ["TESTED"]);
 });
 
 test("methods no code names are dead, unless marked; a marked one the port calls is stale", () =>
@@ -132,8 +132,8 @@ test("methods no code names are dead, unless marked; a marked one the port calls
 	)];
 	const users = [analyseModule("tests/a.test.ts", "new A().unused(); new A().marked();")];
 	const { dead } = analyse(modules, users);
-	assert.deepEqual(dead.deadMethods.map(f => f.text), ["A.unused", "A.run"]);
-	assert.deepEqual(dead.staleTodos.map(f => f.text), ["A.called"]);
+	assert.deepEqual(dead.deadMethods.map((f) => f.text), ["A.unused", "A.run"]);
+	assert.deepEqual(dead.staleTodos.map((f) => f.text), ["A.called"]);
 });
 
 test("the type checker tells the calls of one method from those of another of the same name", () =>
@@ -146,13 +146,13 @@ test("the type checker tells the calls of one method from those of another of th
 		"/port/tests/t.ts": "import { A } from \"../a.ts\"; new A().size();",
 	};
 	const options: ts.CompilerOptions = {
-		"allowImportingTsExtensions": true,
-		"noEmit": true,
-		"target": ts.ScriptTarget.ES2022,
-		"module": ts.ModuleKind.ESNext,
-		"moduleResolution": ts.ModuleResolutionKind.Bundler,
-		"noLib": true,
-		"types": [],
+		allowImportingTsExtensions: true,
+		noEmit: true,
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler,
+		noLib: true,
+		types: [],
 	};
 	const host = ts.createCompilerHost(options);
 	host.getSourceFile = (name: string) =>
@@ -165,7 +165,7 @@ test("the type checker tells the calls of one method from those of another of th
 
 	const modules = [analyseModule("a.ts", files["/port/a.ts"]), analyseModule("b.ts", files["/port/b.ts"])];
 	assert.deepEqual(analyse(modules, [], called).dead.staleTodos, [], "by name, A.size would look called");
-	assert.deepEqual(analyse(modules, []).dead.staleTodos.map(f => f.text), ["A.size"]);
+	assert.deepEqual(analyse(modules, []).dead.staleTodos.map((f) => f.text), ["A.size"]);
 });
 
 test("a class's cohesion: groups of methods linked by fields and calls, and methods using neither", () =>
@@ -192,7 +192,7 @@ test("a class's cohesion: groups of methods linked by fields and calls, and meth
 
 test("in a class of nine methods or more, a member used by more than an eighth of them links no group", () =>
 {
-	const methods = "abcdefghklmnopqr".split("").map(m => `${m}(): number { return this.config; }`).join("\n");
+	const methods = "abcdefghklmnopqr".split("").map((m) => `${m}(): number { return this.config; }`).join("\n");
 	const [cls] = analyseModule(
 		"world/a.ts",
 		`class Big

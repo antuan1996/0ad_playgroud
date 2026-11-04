@@ -67,7 +67,9 @@ export function targetGatherers(
 	}
 	const target: Record<string, number> = {};
 	for (const res in costs)
+	{
 		target[res] = sum > 0 ? total * weights[res] / sum : gatherers[res] ?? 0;
+	}
 	return target;
 }
 
@@ -101,14 +103,20 @@ export function capAtSaturation(
 		{
 			capped[res] = target[res];
 			if (!idle[res])
+			{
 				open += target[res];
+			}
 		}
 	}
 	if (freed > 0 && open > 0)
 	{
 		for (const res in target)
+		{
 			if (!idle[res])
+			{
 				capped[res] += freed * target[res] / open;
+			}
+		}
 	}
 	return capped;
 }

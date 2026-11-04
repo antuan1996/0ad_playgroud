@@ -11,7 +11,7 @@
 type CommonPosition = WorldPos;
 type CommonResourceAmounts = ResourceAmounts;
 type CommonResourcesManager = import("simulation/ai/common-api/resources.js").ResourcesManager;
-type CommonEntityFilter = { func: (entity: CommonEntity | CommonTemplate) => boolean; dynamicProperties: string[] };
+type CommonEntityFilter = { func: (entity: CommonEntity | CommonTemplate) => boolean; dynamicProperties: string[]; };
 /**
  * A raw engine grid as common-api sees it: `EngineGridMap` (see
  * engine-api.d.ts), with the `cellSize` the engine does NOT send filled in
@@ -35,7 +35,7 @@ type CommonGrid<G extends GridKind> = EngineGridMap & {
  * to every consecutive-collection InfoMap built on top of engine data,
  * indexing an 8-bit `map` array.
  */
-type CommonMap = { width: number; height: number; cellSize: number; map: Uint8Array };
+type CommonMap = { width: number; height: number; cellSize: number; map: Uint8Array; };
 /**
  * The engine's requirement-group shape as documented on `TechnologyRequirements`
  * (globalscripts.d.ts — the two are the same type, aliased for the common-api
@@ -61,10 +61,10 @@ type CommonTrainingQueueItem = {
  * "Attack", "Walk", ...) and its data, which some orders lack. Read the data
  * through `adapter/orders.ts`.
  */
-type CommonUnitOrder = { type: string; data?: CommonUnitOrderData };
+type CommonUnitOrder = { type: string; data?: CommonUnitOrderData; };
 /** An order's data: its target entity and the rest of what the order carries. */
-type CommonUnitOrderData = { target?: EntityId; force?: boolean; [key: string]: unknown };
-type CommonResourceSupplyType = { generic: string; specific: string | undefined };
+type CommonUnitOrderData = { target?: EntityId; force?: boolean; [key: string]: unknown; };
+type CommonResourceSupplyType = { generic: string; specific: string | undefined; };
 
 type CommonTemplate = import("simulation/ai/common-api/entity.js").Template;
 
@@ -82,7 +82,7 @@ type CommonEntityCollection<E extends CommonEntity = CommonEntity> =
  * Structures and resource supplies are always on the map: their queries
  * return these; a unit is one only while it is not garrisoned or aboard.
  */
-type CommonPlacedEntity = { position(): CommonPosition } & CommonEntity;
+type CommonPlacedEntity = { position(): CommonPosition; } & CommonEntity;
 
 /**
  * A resource supply on the map (adapter/placed.ts isSupply): a tree, a mine,
@@ -96,12 +96,12 @@ type CommonPlacedEntity = { position(): CommonPosition } & CommonEntity;
  * them, never a structure's: the API probe, FINDINGS §23).
  */
 type CommonStructureTemplate =
-	& { obstructionRadius(): { max: number; min: number }; footprintRadius(): number }
+	& { obstructionRadius(): { max: number; min: number; }; footprintRadius(): number; }
 	& CommonTemplate;
 
 /** A structure on the map: what the structure queries return. */
 type CommonStructureEntity =
-	& { obstructionRadius(): { max: number; min: number }; footprintRadius(): number }
+	& { obstructionRadius(): { max: number; min: number; }; footprintRadius(): number; }
 	& CommonPlacedEntity;
 
 type CommonSupplyEntity = {
@@ -142,54 +142,54 @@ type WorkerSubrole =
 interface PetraEntityMetadata
 {
 	[key: string]: unknown;
-	plan: UnitPlan;
-	base: BaseId;
-	transport: TransportPlanId;
+	"plan": UnitPlan;
+	"base": BaseId;
+	"transport": TransportPlanId;
 	/** on a ship: the id of the transport plan it serves (a plan, not an entity) */
-	transporter: TransportPlanId;
-	sea: SeaIndex;
-	access: AccessIndex;
-	PartOfArmy: ArmyId;
+	"transporter": TransportPlanId;
+	"sea": SeaIndex;
+	"access": AccessIndex;
+	"PartOfArmy": ArmyId;
 	"target-foundation": EntityId;
-	supply: EntityId;
-	treasure: EntityId;
-	garrisonHolder: EntityId;
-	guardedEnt: EntityId;
-	distance: number;
-	lastAttackPlanUpdateTime: GameSeconds;
-	inaccessibleTime: GameSeconds;
-	approachingTime: GameSeconds;
-	timeGarrison: GameSeconds;
-	holderTimeUpdate: GameSeconds;
+	"supply": EntityId;
+	"treasure": EntityId;
+	"garrisonHolder": EntityId;
+	"guardedEnt": EntityId;
+	"distance": number;
+	"lastAttackPlanUpdateTime": GameSeconds;
+	"inaccessibleTime": GameSeconds;
+	"approachingTime": GameSeconds;
+	"timeGarrison": GameSeconds;
+	"holderTimeUpdate": GameSeconds;
 	/** the game seconds since which a ship has neither moved nor turned (NavalManager.moveApart) */
-	stillSince: GameSeconds;
+	"stillSince": GameSeconds;
 	/** a ship's heading when last seen (NavalManager.moveApart) */
-	previousAngle: number;
-	nextMoveToGatherer: GameSeconds;
-	lastHuntSearch: GameSeconds;
-	role: WorkerRole;
-	subrole: WorkerSubrole;
+	"previousAngle": number;
+	"nextMoveToGatherer": GameSeconds;
+	"lastHuntSearch": GameSeconds;
+	"role": WorkerRole;
+	"subrole": WorkerSubrole;
 	"gather-type": string;
-	garrisonType: string;
-	onBoard: EntityId | "onBoard";
-	endPos: CommonPosition;
-	posGarrison: CommonPosition;
-	previousPosition: CommonPosition;
-	previousIdlePosition: CommonPosition;
-	approachingPos: CommonPosition;
-	allied: boolean;
-	opensea: boolean;
-	baseAnchor: boolean;
-	garrisoning: boolean;
-	approachingTarget: number | boolean;
-	stationnary: boolean;
-	alreadyTried: number | boolean;
-	phaseUp: boolean;
-	route: { source: EntityId; target: EntityId; gain: number; land?: number; sea?: number };
-	lastGathered: GameSeconds;
-	carriedBefore: number;
+	"garrisonType": string;
+	"onBoard": EntityId | "onBoard";
+	"endPos": CommonPosition;
+	"posGarrison": CommonPosition;
+	"previousPosition": CommonPosition;
+	"previousIdlePosition": CommonPosition;
+	"approachingPos": CommonPosition;
+	"allied": boolean;
+	"opensea": boolean;
+	"baseAnchor": boolean;
+	"garrisoning": boolean;
+	"approachingTarget": number | boolean;
+	"stationnary": boolean;
+	"alreadyTried": number | boolean;
+	"phaseUp": boolean;
+	"route": { source: EntityId; target: EntityId; gain: number; land?: number; sea?: number; };
+	"lastGathered": GameSeconds;
+	"carriedBefore": number;
 	/** The subrole of the entity before it was turned into a defender. */
-	formerSubrole?: WorkerSubrole;
+	"formerSubrole"?: WorkerSubrole;
 }
 
 /**
@@ -201,14 +201,14 @@ interface CommonTemplateData
 {
 	[key: string]: unknown;
 	affects?: Array<string | string[]>;
-	Cost?: { Population?: number; [resource: string]: number | undefined };
+	Cost?: { Population?: number; [resource: string]: number | undefined; };
 	cost?: CommonResourceAmounts;
 	modifications?: CommonTechnologyModificationList;
 	requirements?: CommonRequirement[];
-	BuildDistance?: { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined };
-	UnitAI?: { DefaultStance?: string };
+	BuildDistance?: { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined; };
+	UnitAI?: { DefaultStance?: string; };
 	/** per attack type, its bonuses keyed by name; parsed leaves are strings (adapter/templateData.ts reads them) */
-	Attack?: Record<string, { Bonuses?: Record<string, { Civ?: string; Classes?: string; Multiplier: string }> }>;
+	Attack?: Record<string, { Bonuses?: Record<string, { Civ?: string; Classes?: string; Multiplier: string; }>; }>;
 }
 
 /** One modification entry of a tech/aura template (engine-side shapes, see TechnologyModification in globalscripts.d.ts). */
@@ -532,11 +532,11 @@ declare module "simulation/ai/common-api/resources.js"
 		/** Multiplies every resource amount by `multiplier`. */
 		multiply(multiplier: number): void;
 		/** Round-trips the account (amounts keyed by resource name, plus population). */
-		Serialize(): { amounts: CommonResourceAmounts; population: number };
+		Serialize(): { amounts: CommonResourceAmounts; population: number; };
 		/** Restores the account from Serialize()'s output. */
-		Deserialize(data: { amounts: CommonResourceAmounts; population: number }): void;
+		Deserialize(data: { amounts: CommonResourceAmounts; population: number; }): void;
 	}
-	export type ResourcesManager = ResourcesManagerMethods & { [resource: string]: number };
+	export type ResourcesManager = ResourcesManagerMethods & { [resource: string]: number; };
 	export const ResourcesManager: new(amounts?: CommonResourceAmounts, population?: number) => ResourcesManager;
 }
 
@@ -605,7 +605,7 @@ declare module "simulation/ai/common-api/map-module.js"
 		findBestTile<O extends GridKind>(
 			radius: number,
 			obstruction: InfoMap<O>,
-		): { idx: CellIndex<O> | undefined; val: number };
+		): { idx: CellIndex<O> | undefined; val: number; };
 		/** Searches the nearest non-obstructed tile of radius `radius` around the cell `index`. */
 		getNonObstructedTile<O extends GridKind>(
 			index: CellIndex<G>,
@@ -613,7 +613,7 @@ declare module "simulation/ai/common-api/map-module.js"
 			obstruction: InfoMap<O>,
 		): CellIndex<O>;
 		/** Tests whether a circular building at (x, y) overlaps an obstruction in the map, returning one blocked cell. */
-		isObstructedTile(x: number, y: number, radius: number): { x: number; y: number } | null;
+		isObstructedTile(x: number, y: number, radius: number): { x: number; y: number; } | null;
 		/** Writes the map out as a PNG via Engine.DumpImage (debugging helper; values above `threshold`, or at maxVal when omitted). */
 		dumpIm(name?: string, threshold?: number): void;
 	}
@@ -647,7 +647,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 		ceasefireActive: boolean;
 		ceasefireTimeRemaining: number;
 		/** Phase progression of this civ, precomputed at init from the civil centre's researchable techs ({name, requirements} in research order). */
-		phases: Array<{ name: string; requirements: CommonRequirement[] }>;
+		phases: Array<{ name: string; requirements: CommonRequirement[]; }>;
 		/** Fills this per-player state from the shared script (and refreshes the phases list). */
 		init(sharedScript: CommonSharedScript, state: Record<string, unknown>, player: PlayerId): void;
 		/** Copies the shared script's current values into this object (per-turn refresh). */
@@ -673,7 +673,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 		/** Time since the game started, in milliseconds. */
 		getTimeElapsed(): GameMs;
 		/** Current barter prices as {buy, sell} per-resource-value objects. */
-		getBarterPrices(): { buy: CommonResourceAmounts; sell: CommonResourceAmounts };
+		getBarterPrices(): { buy: CommonResourceAmounts; sell: CommonResourceAmounts; };
 		/** The set of active victory condition codes shared by all players. */
 		getVictoryConditions(): Set<string>;
 		/** Whether team-victory (allied victory) is enabled. */
@@ -700,7 +700,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 		/** Name of phase `i` (1-based); undefined when out of range. */
 		getPhaseName(index: number): TechName | undefined;
 		/** Entity-class requirements ("check: count" entries only) of phase `i`, flattened to {class, count} pairs. */
-		getPhaseEntityRequirements(index: number): Array<{ class: string; count: number }>;
+		getPhaseEntityRequirements(index: number): Array<{ class: string; count: number; }>;
 		/** Whether `template` is already researched by this player. */
 		isResearched(template: TechName): boolean;
 		/** Whether `template` is currently being researched (by anyone in this player's queues). */
@@ -854,7 +854,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 		/** Whether category `category` has reached its entity limit. */
 		isEntityLimitReached(category: string): boolean;
 		/** Trade-gain multipliers of the trainable trader templates, keyed by land/naval transport. */
-		getTraderTemplatesGains(): { landGainMultiplier?: number; navalGainMultiplier?: number };
+		getTraderTemplatesGains(): { landGainMultiplier?: number; navalGainMultiplier?: number; };
 	}
 }
 
@@ -941,9 +941,12 @@ declare module "simulation/ai/common-api/entitycollection.js"
 		/** Whether updates from the engine are queued (deferred) rather than applied instantly. */
 		frozen: boolean;
 		/** Round-trips the entity ids, the frozen flag and the filter specs by name. */
-		Serialize(): { ents: EntityId[]; frozen: boolean; filters: string[] };
+		Serialize(): { ents: EntityId[]; frozen: boolean; filters: string[]; };
 		/** Restores the collection from Serialize()'s output. */
-		Deserialize(data: { ents: EntityId[]; frozen: boolean; filters: string[] }, sharedAI: CommonSharedScript): void;
+		Deserialize(
+			data: { ents: EntityId[]; frozen: boolean; filters: string[]; },
+			sharedAI: CommonSharedScript,
+		): void;
 		/** Freeze: auto-updates stop adding entities (removals still happen), so dead members are cleaned up automatically. */
 		freeze(): void;
 		/** Applies all deferred updates. */
@@ -988,7 +991,7 @@ declare module "simulation/ai/common-api/entitycollection.js"
 		attackMove(
 			x: number,
 			z: number,
-			targetClasses: string[] | { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> },
+			targetClasses: string[] | { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; },
 			allowCapture?: boolean,
 			queued?: boolean,
 			pushFront?: boolean,
@@ -1080,7 +1083,7 @@ declare module "simulation/ai/common-api/entity.js"
 		/** Technician "Researcher/TechCostMultiplier/<type>" of the template, coerced to number with default 1. */
 		techCostMultiplier(type: string): number;
 		/** Obstruction radii derived from the template's footprint; undefined for structures without a footprint. */
-		obstructionRadius(): { max: number; min: number } | undefined;
+		obstructionRadius(): { max: number; min: number; } | undefined;
 		/** Inscribed circle radius of the footprint (half the shorter side). */
 		footprintRadius(): number | undefined;
 		/** Max hitpoints of the template (0 when the template has none). */
@@ -1092,11 +1095,11 @@ declare module "simulation/ai/common-api/entity.js"
 		/** Population/Bonus of the template (0 when it adds none). */
 		getPopulationBonus(): number;
 		/** Damage/Capture resistances of the template (undefined for templates without a Resistance component). */
-		resistanceStrengths(): { Capture?: number; Damage?: Record<string, number> } | undefined;
+		resistanceStrengths(): { Capture?: number; Damage?: Record<string, number>; } | undefined;
 		/** Names of the attack types the template performs (Melee, Ranged, Capture, ...). */
 		attackTypes(): string[] | undefined;
 		/** Range (min/max) of one attack type; undefined when the type has no Range. */
-		attackRange(type: string): { max: number; min: number } | undefined;
+		attackRange(type: string): { max: number; min: number; } | undefined;
 		/** Damage strengths (Hack, Pierce, Crush...) of one attack type. */
 		attackStrengths(type: string): Record<string, number> | undefined;
 		/** Capture-attack strength of the template (undefined when it has none). */
@@ -1169,7 +1172,7 @@ declare module "simulation/ai/common-api/entity.js"
 		buildCategory(): string | undefined;
 		/** Minimum-distance build constraint {MinDistance, FromClass}; undefined when unconstrained. */
 		buildDistance():
-			| { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined }
+			| { MinDistance?: number; FromClass?: string; [key: string]: number | string | undefined; }
 			| undefined;
 		/** Placement type marker ("shore" for shore-constrained structures), undefined for normal structures. */
 		buildPlacementType(): string | undefined;
@@ -1301,7 +1304,7 @@ declare module "simulation/ai/common-api/entity.js"
 		/** Whether the supply has the maximum simultaneous gatherers (undefined without gatherers). */
 		isFull(): boolean | undefined;
 		/** Carried resources of a gatherer ({class, type, amount} entries; undefined for non-gatherers). */
-		resourceCarrying(): Array<{ class?: string; type: string; amount: number }> | undefined;
+		resourceCarrying(): Array<{ class?: string; type: string; amount: number; }> | undefined;
 		/** Id of the entity this unit is garrisoned in (undefined unless garrisoned). */
 		garrisonHolderID(): EntityId | undefined;
 		/** Entity ids of the units garrisoned in this holder (empty for empty holder). */
@@ -1322,7 +1325,7 @@ declare module "simulation/ai/common-api/entity.js"
 		attackMove(
 			x: number,
 			z: number,
-			targetClasses: string[] | { attack: string[]; avoid?: string[]; vetoEntities?: Record<string, boolean> },
+			targetClasses: string[] | { attack: string[]; avoid?: string[]; vetoEntities?: Record<string, boolean>; },
 			allowCapture?: boolean,
 			queued?: boolean,
 			pushFront?: boolean,

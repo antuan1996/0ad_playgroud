@@ -18,15 +18,15 @@ import {
 function town(overrides: Partial<WorkforceCensus> = {}): WorkforceCensus
 {
 	return {
-		"workers": 40,
-		"queuedSupports": 2,
-		"queuedSoldiers": 2,
-		"inTraining": 4,
-		"target": 150,
-		"popPhase2": 150,
-		"waitingForTown": false,
-		"saving": false,
-		"stalled": false,
+		workers: 40,
+		queuedSupports: 2,
+		queuedSoldiers: 2,
+		inTraining: 4,
+		target: 150,
+		popPhase2: 150,
+		waitingForTown: false,
+		saving: false,
+		stalled: false,
 		...overrides,
 	};
 }
@@ -44,34 +44,34 @@ describe("workforce", () =>
 	it("stops past the target, or at the town phase's population before it is researched", () =>
 	{
 		assert.equal(trainingStopped(town()), false);
-		assert.equal(trainingStopped(town({ "workers": 147 })), true, "147 + 4 queued past 150");
+		assert.equal(trainingStopped(town({ workers: 147 })), true, "147 + 4 queued past 150");
 		assert.equal(
-			trainingStopped(town({ "workers": 144, "waitingForTown": true })),
+			trainingStopped(town({ workers: 144, waitingForTown: true })),
 			false,
 			"144 + 4 queued: 148, under 150",
 		);
 		assert.equal(
-			trainingStopped(town({ "workers": 146, "waitingForTown": true })),
+			trainingStopped(town({ workers: 146, waitingForTown: true })),
 			true,
 			"150: the town phase awaited",
 		);
-		assert.equal(trainingStopped(town({ "workers": 146 })), false, "the same town with the phase researched");
+		assert.equal(trainingStopped(town({ workers: 146 })), false, "the same town with the phase researched");
 	});
 
 	// only the port passes: a town whose islands ran dry went on training
 	// workers while 200 stood idle (FINDINGS §40)
 	it("stops while the land has run dry with many hands idle", () =>
 	{
-		assert.equal(trainingStopped(town({ "stalled": true })), true);
+		assert.equal(trainingStopped(town({ stalled: true })), true);
 	});
 
 	it("stops with the queues full, and while saving past the town phase's population", () =>
 	{
-		assert.equal(trainingStopped(town({ "queuedSupports": 30, "queuedSoldiers": 21 })), true, "51 queued");
-		assert.equal(trainingStopped(town({ "queuedSupports": 21, "queuedSoldiers": 21 })), true, "both above 20");
-		assert.equal(trainingStopped(town({ "inTraining": 16 })), true);
-		assert.equal(trainingStopped(town({ "workers": 157, "saving": true, "target": 200 })), true, "161 > 160");
-		assert.equal(trainingStopped(town({ "workers": 150, "saving": true, "target": 200 })), false, "154 is not");
+		assert.equal(trainingStopped(town({ queuedSupports: 30, queuedSoldiers: 21 })), true, "51 queued");
+		assert.equal(trainingStopped(town({ queuedSupports: 21, queuedSoldiers: 21 })), true, "both above 20");
+		assert.equal(trainingStopped(town({ inTraining: 16 })), true);
+		assert.equal(trainingStopped(town({ workers: 157, saving: true, target: 200 })), true, "161 > 160");
+		assert.equal(trainingStopped(town({ workers: 150, saving: true, target: 200 })), false, "154 is not");
 	});
 
 	it("starts the support share at 0.85, at 0.7 before a rush, towards 1 in a long truce", () =>

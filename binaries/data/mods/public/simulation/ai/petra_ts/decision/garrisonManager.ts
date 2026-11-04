@@ -7,8 +7,8 @@ import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 
-export type GarrisonHolderData = { list: EntityId[]; allowMelee: boolean };
-type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSiege: boolean; unit: boolean };
+export type GarrisonHolderData = { list: EntityId[]; allowMelee: boolean; };
+type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSiege: boolean; unit: boolean; };
 
 /** The fields a save keeps. */
 export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decayingStructures">;
@@ -17,9 +17,13 @@ export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decay
 function mayThreaten(ent: CommonEntity): boolean
 {
 	if (ent.hasClass("Structure"))
+	{
 		return !!ent.attackRange("Ranged");
+	}
 	if (ent.hasClass("Unit"))
+	{
 		return ent.owner() !== 0 || hasActivity(ent, "COMBAT");
+	}
 	return false;
 }
 
@@ -69,11 +73,15 @@ export class GarrisonManager
 			// Update the list of garrisoned units
 			this.updateGarrisonList(gameState, holder, id, list, events);
 
-			if (!isPlaced(holder)) // could happen with siege unit inside a ship
+			if (!isPlaced(holder))
+			{ // could happen with siege unit inside a ship
 				continue;
+			}
 
 			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
+			{
 				this.reviewHolder(gameState, holder, data);
+			}
 		}
 
 		// Warning new garrison orders (as in the following lines) should be done after having updated the holders
@@ -83,12 +91,16 @@ export class GarrisonManager
 			const ent = gameState.getEntityById(id);
 			// a decaying structure: on the map
 			if (!ent || !isPlaced(ent) || ent.owner() !== PlayerID)
+			{
 				this.decayingStructures.delete(id);
+			}
 			else if (this.numberOfGarrisonedSlots(ent) < gmin)
+			{
 				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, {
-					"min": gmin,
-					"type": GarrisonManager.TYPE_DECAY,
+					min: gmin,
+					type: GarrisonManager.TYPE_DECAY,
 				});
+			}
 		}
 	}
 
@@ -99,7 +111,9 @@ export class GarrisonManager
 		{
 			const ent = gameState.getEntityById(entId);
 			if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
+			{
 				continue;
+			}
 			this.leaveGarrison(ent);
 			ent.stopMoving();
 		}
@@ -118,17 +132,25 @@ export class GarrisonManager
 		{
 			const ent = gameState.getEntityById(entId);
 			if (!ent)
+			{
 				continue;
+			}
 			if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
+			{
 				holder.unload(entId);
+			}
 		}
 		for (let j = 0; j < list.length; ++j)
 		{
 			const ent = gameState.getEntityById(list[j]);
 			if (!ent)
+			{
 				continue;
+			}
 			if (this.keepGarrisoned(ent, holder, around))
+			{
 				continue;
+			}
 			if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 			{
 				this.leaveGarrison(ent);
@@ -137,9 +159,13 @@ export class GarrisonManager
 			list.splice(j--, 1);
 		}
 		if (this.numberOfGarrisonedSlots(holder) === 0)
+		{
 			this.holders.delete(id);
+		}
 		else
+		{
 			holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+		}
 	}
 
 	/** A holder or a decaying structure was upgraded or replaced */
@@ -164,10 +190,14 @@ export class GarrisonManager
 			}
 
 			if (!this.decayingStructures.delete(evt.entity) || this.decayingStructures.has(evt.newentity))
+			{
 				continue;
+			}
 			const ent = gameState.getEntityById(evt.newentity);
 			if (!ent || !ent.territoryDecayRate() || !ent.garrisonRegenRate())
+			{
 				continue;
+			}
 			const gmin = Math.ceil((ent.territoryDecayRate() - ent.defaultRegenRate()) / ent.garrisonRegenRate());
 			this.decayingStructures.set(evt.newentity, gmin);
 		}
@@ -185,12 +215,18 @@ export class GarrisonManager
 		for (let j = 0; j < list.length; ++j)
 		{
 			for (const evt of events.EntityRenamed)
+			{
 				if (evt.entity === list[j])
+				{
 					list[j] = evt.newentity;
+				}
+			}
 
 			const ent = gameState.getEntityById(list[j]);
-			if (!ent) // unit must have been killed while garrisoning
+			if (!ent)
+			{ // unit must have been killed while garrisoning
 				list.splice(j--, 1);
+			}
 			else if (holder.garrisoned().indexOf(list[j]) !== -1)
 			{ // unit is garrisoned
 				this.leaveGarrison(ent);
@@ -201,7 +237,9 @@ export class GarrisonManager
 				if (
 					ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id)
 				)
+				{
 					continue;
+				}
 				if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 				{
 					// The garrison order must have failed
@@ -231,27 +269,32 @@ export class GarrisonManager
 	{
 		const holderAttackRange = holder.attackRange("Ranged");
 		const range = holderAttackRange ? holderAttackRange.max : 80;
-		const around: GarrisonThreats = {
-			"defenseStructure": false,
-			"meleeSiege": false,
-			"rangeSiege": false,
-			"unit": false,
-		};
+		const around: GarrisonThreats = { defenseStructure: false, meleeSiege: false, rangeSiege: false, unit: false };
 		for (const ent of gameState.getEnemyEntities().values())
 		{
 			if (!mayThreaten(ent) || !isPlaced(ent))
+			{
 				continue;
+			}
 			const dist = SquareVectorDistance(ent.position(), holder.position());
 			if (dist > range * range)
+			{
 				continue;
+			}
 			if (ent.hasClass("Structure"))
+			{
 				around.defenseStructure = true;
+			}
 			else if (isSiegeUnit(ent))
 			{
 				if (ent.attackTypes()?.indexOf("Melee") !== -1)
+				{
 					around.meleeSiege = true;
+				}
 				else
+				{
 					around.rangeSiege = true;
+				}
 			}
 			else
 			{
@@ -288,7 +331,9 @@ export class GarrisonManager
 	garrison(gameState: CommonGameState, ent: CommonEntity, holder: CommonEntity, type: string): void
 	{
 		if (this.numberOfGarrisonedSlots(holder) >= holder.garrisonMax() || !ent.canGarrison())
+		{
 			return;
+		}
 
 		this.registerHolder(gameState, holder).list.push(ent.id());
 
@@ -336,7 +381,9 @@ export class GarrisonManager
 		{
 			const index = holderData.list.indexOf(ent.id());
 			if (index !== -1)
+			{
 				holderData.list.splice(index, 1);
+			}
 		}
 	}
 
@@ -355,8 +402,10 @@ export class GarrisonManager
 			case GarrisonManager.TYPE_EMERGENCY: // f.e. hero in regicide mode
 				return this.keepInEmergency(ent, holder, around);
 			default:
-				if (ent.getMetadata(PlayerID, "onBoard") === "onBoard") // transport is not (yet ?) managed by garrisonManager
+				if (ent.getMetadata(PlayerID, "onBoard") === "onBoard")
+				{ // transport is not (yet ?) managed by garrisonManager
 					return true;
+				}
 				aiWarn(
 					"unknown type in garrisonManager " + ent.getMetadata(PlayerID, "garrisonType") +
 						" for " + ent.genericName() + " id " + ent.id() + " inside " + holder.genericName() +
@@ -371,10 +420,14 @@ export class GarrisonManager
 	private keepShooting(ent: CommonEntity, around: GarrisonThreats): boolean
 	{
 		if (around.unit || around.defenseStructure)
+		{
 			return true;
+		}
 		if (around.meleeSiege || around.rangeSiege)
+		{
 			return ent.attackTypes()?.indexOf("Melee") === -1 ||
 				ent.healthLevel() < this.Config.garrisonHealthLevel.low;
+		}
 		return false;
 	}
 
@@ -382,12 +435,16 @@ export class GarrisonManager
 	private keepInEmergency(ent: CommonEntity, holder: CommonEntity, around: GarrisonThreats): boolean
 	{
 		if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+		{
 			return true;
+		}
 		if (
 			around.unit || around.defenseStructure || around.meleeSiege ||
 			around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high
 		)
+		{
 			return true;
+		}
 		return !!holder.buffHeal() && ent.needsHeal();
 	}
 
@@ -395,19 +452,31 @@ export class GarrisonManager
 	private keepProtected(ent: CommonEntity, holder: CommonEntity, around: GarrisonThreats): boolean
 	{
 		if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+		{
 			return true;
+		}
 		const capture = ent.capturePoints();
 		if (capture && capture[PlayerID] / capture.reduce((a: number, b: number): number => a + b) < 0.8)
+		{
 			return true;
+		}
 		if (ent.hasClasses(holder.getGarrisonArrowClasses()))
+		{
 			return this.keepShooting(ent, around);
+		}
 		const entAttackTypes = ent.attackTypes();
 		if (entAttackTypes && entAttackTypes.indexOf("Melee") !== -1)
+		{
 			return false;
+		}
 		if (around.unit)
+		{
 			return ent.hasClass("Support") || isSiegeUnit(ent); // only ranged siege here and below as melee siege already released above
+		}
 		if (isSiegeUnit(ent))
+		{
 			return around.meleeSiege;
+		}
 		return !!holder.buffHeal() && ent.needsHeal();
 	}
 
@@ -417,7 +486,7 @@ export class GarrisonManager
 		let holderData = this.holders.get(holder.id()); // already registered
 		if (!holderData)
 		{
-			holderData = { "list": [], "allowMelee": true };
+			holderData = { list: [], allowMelee: true };
 			this.holders.set(holder.id(), holderData);
 			holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
 		}
@@ -432,12 +501,18 @@ export class GarrisonManager
 	addDecayingStructure(gameState: CommonGameState, entId: EntityId, justCaptured?: boolean): boolean
 	{
 		if (this.decayingStructures.has(entId))
+		{
 			return true;
+		}
 		const ent = gameState.getEntityById(entId);
 		if (!ent || !(ent.hasClass("Barracks") && justCaptured) && !ent.hasDefensiveFire())
+		{
 			return false;
+		}
 		if (!ent.territoryDecayRate() || !ent.garrisonRegenRate())
+		{
 			return false;
+		}
 		const gmin = Math.ceil((ent.territoryDecayRate() - ent.defaultRegenRate()) / ent.garrisonRegenRate());
 		this.decayingStructures.set(entId, gmin);
 		return true;
@@ -446,13 +521,15 @@ export class GarrisonManager
 	removeDecayingStructure(entId: EntityId): void
 	{
 		if (!this.decayingStructures.has(entId))
+		{
 			return;
+		}
 		this.decayingStructures.delete(entId);
 	}
 
 	Serialize(): SerializedGarrisonManager
 	{
-		return { "holders": this.holders, "decayingStructures": this.decayingStructures };
+		return { holders: this.holders, decayingStructures: this.decayingStructures };
 	}
 
 	/** A saved garrison manager: its holders and decaying structures */

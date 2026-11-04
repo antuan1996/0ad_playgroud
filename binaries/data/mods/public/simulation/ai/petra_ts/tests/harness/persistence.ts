@@ -61,7 +61,7 @@ export interface RoundTrip<T>
  * Sets are left as constructed — a test that wants them filled says so in
  * `set`, because only it knows what a sensible entry is.
  */
-export function populate(target: object, options: { keep?: readonly string[] } = {}): string[]
+export function populate(target: object, options: { keep?: readonly string[]; } = {}): string[]
 {
 	const keep = new Set(options.keep ?? []);
 	const values = target as Record<string, unknown>;
@@ -70,16 +70,26 @@ export function populate(target: object, options: { keep?: readonly string[] } =
 	for (const [key, value] of Object.entries(values))
 	{
 		if (keep.has(key))
+		{
 			continue;
+		}
 
 		if (typeof value === "number")
+		{
 			values[key] = 7;
+		}
 		else if (typeof value === "string")
+		{
 			values[key] = `${key}_probe`;
+		}
 		else if (typeof value === "boolean")
+		{
 			values[key] = !value;
+		}
 		else
+		{
 			continue;
+		}
 
 		touched.push(key);
 	}
@@ -99,20 +109,30 @@ export function populate(target: object, options: { keep?: readonly string[] } =
 function snapshot(value: unknown): unknown
 {
 	if (Array.isArray(value))
+	{
 		return value.map(snapshot);
+	}
 	if (value instanceof Map)
+	{
 		return new Map([...value].map(([key, item]) => [snapshot(key), snapshot(item)]));
+	}
 	if (value instanceof Set)
+	{
 		return new Set([...value].map(snapshot));
+	}
 
 	if (value && typeof value === "object")
 	{
 		const proto = Object.getPrototypeOf(value);
 		if (proto !== Object.prototype && proto !== null)
+		{
 			return value;
+		}
 		const copy: Record<string, unknown> = {};
 		for (const [key, item] of Object.entries(value))
+		{
 			copy[key] = snapshot(item);
+		}
 		return copy;
 	}
 
@@ -137,12 +157,16 @@ function allKeys(value: unknown, into = new Set<string>()): Set<string>
 	if (Array.isArray(value))
 	{
 		for (const item of value)
+		{
 			allKeys(item, into);
+		}
 	}
 	else if (value instanceof Map)
 	{
 		for (const item of value.values())
+		{
 			allKeys(item, into);
+		}
 	}
 	else if (value && typeof value === "object")
 	{
@@ -159,15 +183,21 @@ function allKeys(value: unknown, into = new Set<string>()): Set<string>
 function keyDiff(before: unknown, after: unknown): string
 {
 	if (!before || !after || typeof before !== "object" || typeof after !== "object")
+	{
 		return "";
+	}
 
 	const out: string[] = [];
-	const dropped = Object.keys(before).filter(key => !(key in after));
-	const appeared = Object.keys(after).filter(key => !(key in before));
+	const dropped = Object.keys(before).filter((key) => !(key in after));
+	const appeared = Object.keys(after).filter((key) => !(key in before));
 	if (dropped.length)
+	{
 		out.push(`lost on reload: ${dropped.join(", ")}`);
+	}
 	if (appeared.length)
+	{
 		out.push(`only present after a reload: ${appeared.join(", ")}`);
+	}
 	return out.join("; ");
 }
 
@@ -183,9 +213,13 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 	const original = rt.original();
 	const touched = populate(original, { keep: rt.keep });
 	if (rt.set)
+	{
 		Object.assign(original, rt.set);
+	}
 	if (rt.prepare)
+	{
 		rt.prepare(original);
+	}
 
 	const saved = snapshot(callSerialize(original, rt.label));
 
@@ -193,7 +227,7 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 	// below — both saves would be missing it and agree — so check the save
 	// against the state that went into it.
 	const notSaved = rt.notSaved ?? {};
-	const forgotten = touched.filter(key => !(key in notSaved) && !allKeys(saved).has(key));
+	const forgotten = touched.filter((key) => !(key in notSaved) && !allKeys(saved).has(key));
 	assert.equal(
 		forgotten.length,
 		0,

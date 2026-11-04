@@ -44,12 +44,14 @@ export function petraTarget(): PetraTarget
 {
 	const raw = process.env["PETRA_TARGET"] ?? "src";
 	if (!isTarget(raw))
+	{
 		throw new Error(`PETRA_TARGET must be one of ${TARGETS.join(", ")} (got "${raw}")`);
+	}
 	return raw;
 }
 
 /** Directory holding the modules under test, and the extension they use. */
-export function petraModuleDir(target = petraTarget()): { dir: string; ext: string }
+export function petraModuleDir(target = petraTarget()): { dir: string; ext: string; }
 {
-	return target === "src" ? { "dir": portRoot, "ext": ".ts" } : { "dir": outRoot, "ext": ".js" };
+	return target === "src" ? { dir: portRoot, ext: ".ts" } : { dir: outRoot, ext: ".js" };
 }

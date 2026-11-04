@@ -31,7 +31,9 @@ export function incomeOf(economy: Readonly<GatherEconomy>, type: string): number
 	if (generic === "food")
 	{
 		if (specific === "fruit" || specific === "grain" || specific === "meat" || specific === "fish")
+		{
 			return economy.foodGatherers[specific] * economy.foodRateOf(specific);
+		}
 		return 0;
 	}
 	return (economy.gatherers[generic] ?? 0) * economy.rateOf(generic);
@@ -49,8 +51,12 @@ export function incomeGain(
 {
 	let gain = 0;
 	for (const modification of modifications)
+	{
 		if (modification.value.startsWith(RATES) && modification.multiply !== undefined)
+		{
 			gain += (modification.multiply - 1) * incomeOf(economy, modification.value.slice(RATES.length));
+		}
+	}
 	return gain;
 }
 

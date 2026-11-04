@@ -11,7 +11,7 @@ import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced, isSupply } from "../adapter/placed.ts";
 
 /** A supply on a base's list: the dropsite it is brought to, its distance there, the entity and its id */
-export type ResourceSupply = { dropsite: EntityId; dist: number; ent?: CommonSupplyEntity; id: EntityId };
+export type ResourceSupply = { dropsite: EntityId; dist: number; ent?: CommonSupplyEntity; id: EntityId; };
 
 export class BaseResources
 {
@@ -23,7 +23,9 @@ export class BaseResources
 	constructor()
 	{
 		for (const res of Resources.GetCodes())
-			this.dropsiteSupplies[res] = { "nearby": [], "medium": [], "faraway": [] };
+		{
+			this.dropsiteSupplies[res] = { nearby: [], medium: [], faraway: [] };
+		}
 	}
 
 	/**
@@ -40,14 +42,18 @@ export class BaseResources
 	): boolean
 	{
 		if (this.dropsites[dropsite.id()])
+		{
 			return false;
+		}
 		this.dropsites[dropsite.id()] = true;
 
 		const dropsiteTypes = dropsite.resourceDropsiteTypes();
 		if (dropsiteTypes)
 		{
 			for (const type of dropsiteTypes)
+			{
 				this.listSupplies(gameState, dropsite, type, access, maxDistResourceSquare);
+			}
 		}
 		return true;
 	}
@@ -63,7 +69,9 @@ export class BaseResources
 	{
 		const resources = gameState.getResourceSupplies(type);
 		if (!resources.length)
+		{
 			return;
+		}
 
 		const dropsitePos = dropsite.position();
 		const dropsiteId = dropsite.id();
@@ -74,23 +82,35 @@ export class BaseResources
 		resources.forEach(function(supply: CommonEntity): void
 		{
 			if (!isPlaced(supply))
+			{
 				return;
+			}
 			// Moving resources and fields are treated differently.
 			if (supply.hasClasses(["Animal", "Field"]))
+			{
 				return;
+			}
 			// quick accessibility check
 			if (getLandAccess(gameState, supply) !== access)
+			{
 				return;
+			}
 
 			const dist = SquareVectorDistance(supply.position(), dropsitePos);
 			if (dist < maxDistResourceSquare)
 			{
-				if (dist < maxDistResourceSquare / 16) // distmax/4
-					nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-				else if (dist < maxDistResourceSquare / 4) // distmax/2
-					medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+				if (dist < maxDistResourceSquare / 16)
+				{ // distmax/4
+					nearby.push({ dropsite: dropsiteId, id: supply.id(), dist: dist });
+				}
+				else if (dist < maxDistResourceSquare / 4)
+				{ // distmax/2
+					medium.push({ dropsite: dropsiteId, id: supply.id(), dist: dist });
+				}
 				else
-					faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+				{
+					faraway.push({ dropsite: dropsiteId, id: supply.id(), dist: dist });
+				}
 			}
 		});
 
@@ -103,7 +123,9 @@ export class BaseResources
 	removeDropsite(gameState: CommonGameState, entityID: EntityId): void
 	{
 		if (!entityID)
+		{
 			return;
+		}
 
 		const removeSupply = function(supply: ResourceSupply[]): void
 		{
@@ -117,7 +139,9 @@ export class BaseResources
 				// here the removal follows the intent the original comments
 				// describe (pinned port-only in tests/baseManager.test.ts).
 				if (supply[i].dropsite === entityID || !gameState.getEntityById(supply[i].id))
+				{
 					supply.splice(i--, 1);
+				}
 			}
 		};
 
@@ -140,15 +164,21 @@ export class BaseResources
 		let count = 0;
 		const check: Record<number, boolean> = {};
 		for (const proxim of distances)
+		{
 			for (const supply of this.dropsiteSupplies[type][proxim])
 			{
-				if (check[supply.id]) // avoid double counting as same resource can appear several time
+				if (check[supply.id])
+				{ // avoid double counting as same resource can appear several time
 					continue;
+				}
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);
 				if (supplyEntity && isSupply(supplyEntity))
+				{
 					count += supplyEntity.resourceSupplyAmount();
+				}
 			}
+		}
 		return count;
 	}
 

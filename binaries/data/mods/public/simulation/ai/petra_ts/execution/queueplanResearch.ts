@@ -13,7 +13,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		// Refine the estimated cost
 		const researchers = this.getBestResearchers(gameState, true);
 		if (researchers)
+		{
 			this.cost = new ResourcesManager(this.template.cost(researchers[0]));
+		}
 
 		this.rush = rush;
 	}
@@ -22,7 +24,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 	{
 		const researchers = this.getBestResearchers(gameState);
 		if (!researchers)
+		{
 			return undefined;
+		}
 		this.cost = new ResourcesManager(this.template.cost(researchers[0]));
 		return () => this.start(gameState, researchers);
 	}
@@ -31,7 +35,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 	{
 		const allResearchers = gameState.findResearchers(this.type, noRequirementCheck);
 		if (!allResearchers || !allResearchers.hasEntities())
+		{
 			return undefined;
+		}
 
 		// Keep only researchers with smallest cost
 		let costMin = Math.min();
@@ -40,7 +46,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		{
 			const cost = this.template.costSum(ent);
 			if (cost === costMin)
+			{
 				researchers.push(ent);
+			}
 			else if (cost < costMin)
 			{
 				costMin = cost;
@@ -63,7 +71,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		);
 		// Drop anything in the queue if we rush it.
 		if (this.rush)
+		{
 			researchers[0]?.stopAllProduction(0.45);
+		}
 		researchers[0]?.research(this.type);
 		this.onStart(gameState);
 	}
@@ -71,15 +81,19 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 	onStart(gameState: CommonGameState): void
 	{
 		if (this.queueToReset)
+		{
 			gameState.ai.queueManager.changePriority(
 				this.queueToReset,
 				gameState.ai.Config.priorities[this.queueToReset],
 			);
+		}
 
 		for (let i = gameState.getNumberOfPhases(); i > 0; --i)
 		{
 			if (this.type !== gameState.getPhaseName(i))
+			{
 				continue;
+			}
 			hqOf(gameState).phaseResearched(gameState, i);
 			break;
 		}
@@ -90,21 +104,21 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		type: TechName;
 		ID: number;
 		metadata: PlanMetadata | undefined;
-		cost: { amounts: Record<string, number>; population: number };
+		cost: { amounts: Record<string, number>; population: number; };
 		number: number;
 		rush: boolean;
 		queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
 	}
 	{
 		return {
-			"category": "technology",
-			"type": this.type,
-			"ID": this.ID,
-			"metadata": this.metadata,
-			"cost": this.cost.Serialize(),
-			"number": this.number,
-			"rush": this.rush,
-			"queueToReset": this.queueToReset || undefined,
+			category: "technology",
+			type: this.type,
+			ID: this.ID,
+			metadata: this.metadata,
+			cost: this.cost.Serialize(),
+			number: this.number,
+			rush: this.rush,
+			queueToReset: this.queueToReset || undefined,
 		};
 	}
 

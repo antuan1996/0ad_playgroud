@@ -6,9 +6,13 @@ function addBuilder(builders: Map<TemplateName, EntityId[]>, civ: string, entity
 	{
 		const buildableList = builders.get(buildable);
 		if (buildableList)
+		{
 			buildableList.push(entity.id());
+		}
 		else
+		{
 			builders.set(buildable, [entity.id()]);
+		}
 	}
 }
 
@@ -18,7 +22,9 @@ function removeBuilder(builders: Map<TemplateName, EntityId[]>, entityId: Entity
 	{
 		const entityIndex = entities.indexOf(entityId);
 		if (entityIndex !== -1)
+		{
 			entities.splice(entityIndex, 1);
+		}
 	}
 }
 
@@ -29,7 +35,7 @@ function removeBuilder(builders: Map<TemplateName, EntityId[]>, entityId: Entity
  */
 
 /** a structure not to try again before `time`, and why */
-type Unbuildable = { reason: string; time: number };
+type Unbuildable = { reason: string; time: number; };
 
 export type SerializedBuildManager = {
 	builders: Map<TemplateName, EntityId[]>;
@@ -50,7 +56,9 @@ export class BuildManager
 		const manager = new BuildManager();
 		const civ = gameState.getPlayerCiv();
 		for (const ent of gameState.getOwnUnits().values())
+		{
 			addBuilder(manager.builders, civ, ent);
+		}
 		return manager;
 	}
 
@@ -62,14 +70,20 @@ export class BuildManager
 		for (const evt of events.Create)
 		{
 			if (events.Destroy.some((e: EngineAIDestroyEvent): boolean => e.entity === evt.entity))
+			{
 				continue;
+			}
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent && ent.isOwn(PlayerID) && ent.hasClass("Unit"))
+			{
 				addBuilder(this.builders, civ, ent);
+			}
 		}
 
 		for (const evt of events.Destroy)
+		{
 			removeBuilder(this.builders, evt.entity);
+		}
 
 		for (const evt of events.OwnershipChanged)
 		{ // capture events
@@ -79,11 +93,15 @@ export class BuildManager
 				continue;
 			}
 			else if (evt.to !== PlayerID)
+			{
 				continue;
+			}
 
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent?.hasClass("Unit"))
+			{
 				addBuilder(this.builders, civ, ent);
+			}
 		}
 
 		for (const evt of events.ValueModification)
@@ -92,14 +110,18 @@ export class BuildManager
 				evt.component !== "Builder" ||
 				!evt.valueNames.some((val: string): boolean => val.startsWith("Builder/Entities/"))
 			)
+			{
 				continue;
+			}
 
 			// Unfortunately there really is not an easy way to determine the changes
 			// at this stage, so we simply have to dump the cache.
 			this.builders = new Map();
 
 			for (const ent of gameState.getOwnUnits().values())
+			{
 				addBuilder(this.builders, civ, ent);
+			}
 		}
 	}
 
@@ -112,12 +134,18 @@ export class BuildManager
 		for (const [templateName, entities] of this.builders)
 		{
 			if (!entities.length || gameState.isTemplateDisabled(templateName))
+			{
 				continue;
+			}
 			const template = gameState.getTemplate(templateName);
 			if (!template || !template.available(gameState))
+			{
 				continue;
+			}
 			if (filter.func(template))
+			{
 				result.push(templateName);
+			}
 		}
 		return result;
 	}
@@ -146,7 +174,9 @@ export class BuildManager
 	setBuildable(template: string): void
 	{
 		if (this.unbuildables.has(template))
+		{
 			this.unbuildables.delete(template);
+		}
 	}
 
 	/** Time is the duration in second that we will wait before checking again if it is buildable */
@@ -155,7 +185,7 @@ export class BuildManager
 		const unbuildable = this.unbuildables.get(template);
 		if (unbuildable === undefined)
 		{
-			this.unbuildables.set(template, { "reason": reason, "time": gameState.ai.elapsedTime + time });
+			this.unbuildables.set(template, { reason: reason, time: gameState.ai.elapsedTime + time });
 		}
 		else
 		{
@@ -172,8 +202,12 @@ export class BuildManager
 	{
 		let num = 0;
 		for (const unbuildable of this.unbuildables.values())
+		{
 			if (unbuildable.reason === "room" && unbuildable.time > gameState.ai.elapsedTime)
+			{
 				++num;
+			}
+		}
 		return num;
 	}
 
@@ -181,13 +215,17 @@ export class BuildManager
 	resetMissingRoom(gameState: CommonGameState): void
 	{
 		for (const [key, unbuildable] of this.unbuildables)
+		{
 			if (unbuildable.reason === "room")
+			{
 				this.unbuildables.delete(key);
+			}
+		}
 	}
 
 	Serialize(): SerializedBuildManager
 	{
-		return { "builders": this.builders, "unbuildables": this.unbuildables };
+		return { builders: this.builders, unbuildables: this.unbuildables };
 	}
 
 	/** A saved build manager: its builders and what it cannot build yet */

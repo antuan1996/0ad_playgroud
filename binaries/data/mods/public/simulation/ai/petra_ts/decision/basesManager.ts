@@ -13,7 +13,7 @@ import { BaseManager, getBestBase, type SerializedBaseManager } from "./baseMana
 
 export interface SerializedBasesManager
 {
-	properties: { currentBase: number };
+	properties: { currentBase: number; };
 	noBase: SerializedBaseManager;
 	baseManagers: SerializedBaseManager[];
 }
@@ -22,7 +22,7 @@ type BasesManagerTurnCache = {
 	currentRates?: Record<string, number>;
 	resourceGatherer?: Record<number, number>;
 	resourceGathererByType?: Record<string, number>;
-	base?: { active: number; potential: number };
+	base?: { active: number; potential: number; };
 };
 
 /** A trained animal (a supply) walks to the nearest of our dropsites for its resource on its land. */
@@ -30,7 +30,9 @@ function toNearestDropsite(gameState: CommonGameState, ent: CommonPlacedEntity):
 {
 	const type = ent.resourceSupplyType();
 	if (!type || !type.generic)
+	{
 		return;
+	}
 	const dropsites = gameState.getOwnDropsites(type.generic);
 	const pos = ent.position();
 	const access = getLandAccess(gameState, ent);
@@ -39,15 +41,21 @@ function toNearestDropsite(gameState: CommonGameState, ent: CommonPlacedEntity):
 	for (const dropsite of dropsites.values())
 	{
 		if (!isPlaced(dropsite) || getLandAccess(gameState, dropsite) !== access)
+		{
 			continue;
+		}
 		const dist = SquareVectorDistance(pos, dropsite.position());
 		if (dist > distmin)
+		{
 			continue;
+		}
 		distmin = dist;
 		goal = dropsite.position();
 	}
 	if (goal)
+	{
 		ent.move(goal[0], goal[1]);
+	}
 }
 
 /**
@@ -86,21 +94,31 @@ export class BasesManager
 		}
 		this.currentBase = saved.properties.currentBase;
 		this.noBase = BaseManager.restore(gameState, this, saved.noBase);
-		this.baseManagers = saved.baseManagers.map(data => BaseManager.restore(gameState, this, data));
+		this.baseManagers = saved.baseManagers.map((data) => BaseManager.restore(gameState, this, data));
 		// the base map, from the territory indices of each base
 		for (const base of this.baseManagers)
+		{
 			for (const j of base.territoryIndices)
+			{
 				this.basesMap.map[j] = base.ID;
+			}
+		}
 	}
 
 	/** At the start of a game, a base for each of our civic centres */
 	createStartingBases(gameState: CommonGameState): void
 	{
 		for (const cc of gameState.getOwnStructures().filter(filters.byClass("CivCentre")).values())
+		{
 			if (cc.foundationProgress() === undefined)
+			{
 				this.createBase(gameState, cc, BaseManager.STATE_WITH_ANCHOR);
+			}
 			else
+			{
 				this.createBase(gameState, cc, BaseManager.STATE_UNCONSTRUCTED);
+			}
+		}
 	}
 
 	/**
@@ -121,9 +139,13 @@ export class BasesManager
 		for (const base of this.baseManagers)
 		{
 			if (base.accessIndex !== access)
+			{
 				continue;
+			}
 			if (type !== BaseManager.STATE_ANCHORLESS && base.anchor)
+			{
 				continue;
+			}
 			if (type !== BaseManager.STATE_ANCHORLESS)
 			{
 				// TODO we keep the first one, we should rather use the nearest if buildings
@@ -135,10 +157,14 @@ export class BasesManager
 			{
 				// TODO here also test on distance instead of first
 				if (newbase && !base.anchor)
+				{
 					continue;
+				}
 				newbase = base;
 				if (newbase.anchor)
+				{
 					break;
+				}
 			}
 		}
 
@@ -160,12 +186,18 @@ export class BasesManager
 			this.baseManagers.push(newbase);
 		}
 		else
+		{
 			newbase.reset(gameState, type);
+		}
 
 		if (type !== BaseManager.STATE_ANCHORLESS)
+		{
 			newbase.setAnchor(gameState, ent, deserialize);
+		}
 		else
+		{
 			newbase.setAnchorlessEntity(gameState, ent, deserialize);
+		}
 
 		return newbase;
 	}
@@ -178,11 +210,15 @@ export class BasesManager
 			const ent = gameState.getEntityById(evt.newentity);
 			const baseID = ent?.getMetadata(PlayerID, "base");
 			if (!ent || ent.owner() !== PlayerID || baseID === undefined)
+			{
 				continue;
+			}
 
 			const base = this.getBaseByID(baseID);
 			if (!base)
+			{
 				continue;
+			}
 
 			// Promoted workers should be reset - their new gathering rates/capabilities might differ meaningfully.
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
@@ -201,7 +237,9 @@ export class BasesManager
 
 			// Handle cases where a base anchor changes
 			if (!base.anchorId || base.anchorId !== evt.entity)
+			{
 				continue;
+			}
 			base.anchorId = evt.newentity;
 			base.anchor = ent && isStructure(ent) ? ent : undefined;
 		}
@@ -216,7 +254,9 @@ export class BasesManager
 			// (normal foundations are taken care in baseManager.assignToFoundations)
 			const ent = gameState.getEntityById(evt.entity);
 			if (!ent || ent.owner() !== PlayerID || ent.foundationProgress() === undefined)
+			{
 				continue;
+			}
 
 			if (ent.getMetadata(PlayerID, "base") === NEW_BASE)
 			{ // Standard base around a cc
@@ -245,8 +285,10 @@ export class BasesManager
 	{
 		const builders = this.bulkPickWorkers(gameState, newbase, count);
 		if (builders === false)
+		{
 			return;
-		builders.forEach(worker =>
+		}
+		builders.forEach((worker) =>
 		{
 			worker.setMetadata(PlayerID, "base", newbase.ID);
 			worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -260,25 +302,37 @@ export class BasesManager
 		let addBase = false;
 		for (const evt of events.ConstructionFinished)
 		{
-			if (evt.newentity === evt.entity) // repaired building
+			if (evt.newentity === evt.entity)
+			{ // repaired building
 				continue;
+			}
 			const ent = gameState.getEntityById(evt.newentity);
 			if (!ent || ent.owner() !== PlayerID)
+			{
 				continue;
+			}
 			const baseID = ent.getMetadata(PlayerID, "base");
 			if (baseID === undefined)
+			{
 				continue;
+			}
 			const base = this.getBaseByID(baseID);
 			if (!base)
+			{
 				continue;
+			}
 			base.buildings.updateEnt(ent);
 			if (ent.resourceDropsiteTypes())
+			{
 				base.assignResourceToDropsite(gameState, ent, false);
+			}
 
 			if (ent.getMetadata(PlayerID, "baseAnchor") === true)
 			{
 				if (base.constructing)
+				{
 					base.constructing = false;
+				}
 				addBase = true;
 			}
 		}
@@ -292,9 +346,13 @@ export class BasesManager
 		for (const evt of events.OwnershipChanged)
 		{
 			if (evt.from === PlayerID)
+			{
 				this.lostToOther(gameState, evt.entity);
+			}
 			if (evt.to === PlayerID && this.gainedFromOther(gameState, evt.entity))
+			{
 				addBase = true;
+			}
 		}
 		return addBase;
 	}
@@ -304,17 +362,27 @@ export class BasesManager
 	{
 		const ent = gameState.getEntityById(entityId);
 		if (!ent)
+		{
 			return;
+		}
 		const baseID = ent.getMetadata(PlayerID, "base");
 		if (baseID === undefined)
+		{
 			return;
+		}
 		const base = this.getBaseByID(baseID);
 		if (!base)
+		{
 			return;
+		}
 		if (ent.resourceDropsiteTypes() && ent.hasClass("Structure"))
+		{
 			base.removeDropsite(gameState, ent.id());
+		}
 		if (ent.getMetadata(PlayerID, "baseAnchor") === true)
+		{
 			base.anchorLost(gameState);
+		}
 	}
 
 	/**
@@ -326,12 +394,16 @@ export class BasesManager
 	{
 		const ent = gameState.getEntityById(entityId);
 		if (!ent)
+		{
 			return false;
+		}
 		if (ent.hasClass("Unit"))
 		{
 			const bestBase = getBestBase(gameState, ent);
 			if (bestBase)
+			{
 				bestBase.assignEntity(gameState, ent);
+			}
 			return false;
 		}
 		if (ent.hasClass("CivCentre"))
@@ -348,11 +420,17 @@ export class BasesManager
 		let base;
 		// If dropsite on new island, create a base around it
 		if (!ent.decaying() && ent.resourceDropsiteTypes())
+		{
 			base = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
+		}
 		else
+		{
 			base = getBestBase(gameState, ent) || this.noBase;
+		}
 		if (base)
+		{
 			base.assignEntity(gameState, ent);
+		}
 		return false;
 	}
 
@@ -365,13 +443,19 @@ export class BasesManager
 			{
 				const ent = gameState.getEntityById(entId);
 				if (!ent || !ent.isOwn(PlayerID))
+				{
 					continue;
+				}
 
 				// Assign it immediately to something useful to do.
 				if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
+				{
 					this.setNewWorkerToWork(gameState, ent);
+				}
 				else if (ent.resourceSupplyType() && isPlaced(ent))
+				{
 					toNearestDropsite(gameState, ent);
+				}
 			}
 		}
 	}
@@ -384,7 +468,9 @@ export class BasesManager
 		{
 			base = getBestBase(gameState, ent);
 			if (base)
+			{
 				base.assignEntity(gameState, ent);
+			}
 		}
 		else
 		{
@@ -392,7 +478,9 @@ export class BasesManager
 			base = baseID === undefined ? undefined : this.getBaseByID(baseID);
 		}
 		if (!base)
+		{
 			return;
+		}
 		base.reassignIdleWorkers(gameState, [ent]);
 		base.workerObject.update(gameState, ent);
 	}
@@ -410,13 +498,19 @@ export class BasesManager
 			{
 				// A new base foundation was created and destroyed on the same (AI) turn
 				if (evt.metadata[PlayerID].base === -1 || evt.metadata[PlayerID].base === -2)
+				{
 					continue;
+				}
 				const base = this.getBaseByID(evt.metadata[PlayerID].base);
 				if (!base)
+				{
 					continue;
+				}
 				base.removeDropsite(gameState, evt.entity);
 				if (evt.metadata[PlayerID].baseAnchor && evt.metadata[PlayerID].baseAnchor === true)
+				{
 					base.anchorLost(gameState);
+				}
 			}
 		}
 
@@ -425,15 +519,21 @@ export class BasesManager
 		this.onCreate(gameState, events);
 
 		if (this.onConstructionFinished(gameState, events))
+		{
 			addBase = true;
+		}
 
 		if (this.onOwnershipChanged(gameState, events))
+		{
 			addBase = true;
+		}
 
 		this.onTrainingFinished(gameState, events);
 
 		if (addBase)
+		{
 			gameState.ai.HQ.handleNewBase(gameState);
+		}
 	}
 
 	/**
@@ -444,16 +544,22 @@ export class BasesManager
 	{
 		const accessIndex = baseRef.accessIndex;
 		if (!accessIndex)
+		{
 			return false;
+		}
 		const baseBest = this.baseManagers.slice();
 		// We can also use workers without a base.
 		baseBest.push(this.noBase);
 		baseBest.sort((a: BaseManager, b: BaseManager): 0 | 1 | -1 =>
 		{
 			if (a.accessIndex === accessIndex && b.accessIndex !== accessIndex)
+			{
 				return -1;
+			}
 			else if (b.accessIndex === accessIndex && a.accessIndex !== accessIndex)
+			{
 				return 1;
+			}
 			return 0;
 		});
 
@@ -462,14 +568,20 @@ export class BasesManager
 		for (const base of baseBest)
 		{
 			if (base.ID === baseRef.ID)
+			{
 				continue;
+			}
 			base.pickBuilders(gameState, workers, needed);
 			if (workers.length >= number)
+			{
 				break;
+			}
 			needed = number - workers.length;
 		}
 		if (!workers.length)
+		{
 			return false;
+		}
 		return workers;
 	}
 
@@ -484,10 +596,16 @@ export class BasesManager
 	{
 		const total: Record<string, number> = {};
 		for (const res of resources)
+		{
 			total[res] = 0;
+		}
 		for (const base of this.baseManagers)
+		{
 			for (const res in total)
+			{
 				total[res] += base.getResourceLevel(gameState, res, proximity);
+			}
+		}
 
 		return total;
 	}
@@ -502,12 +620,16 @@ export class BasesManager
 		{
 			const currentRates: Record<string, number> = {};
 			for (const res of Resources.GetCodes())
+			{
 				currentRates[res] = 0.5 * this.GetTCResGatherer(res);
+			}
 
 			this.addGatherRates(gameState, currentRates);
 
 			for (const res of Resources.GetCodes())
+			{
 				currentRates[res] = Math.max(currentRates[res], 0);
+			}
 
 			this.turnCache.currentRates = currentRates;
 		}
@@ -521,11 +643,15 @@ export class BasesManager
 	AddTCGatherer(supplyID: EntityId): void
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID] !== undefined)
+		{
 			++this.turnCache.resourceGatherer[supplyID];
+		}
 		else
 		{
 			if (!this.turnCache.resourceGatherer)
+			{
 				this.turnCache.resourceGatherer = {};
+			}
 			this.turnCache.resourceGatherer[supplyID] = 1;
 		}
 	}
@@ -534,11 +660,15 @@ export class BasesManager
 	RemoveTCGatherer(supplyID: EntityId): void
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
+		{
 			--this.turnCache.resourceGatherer[supplyID];
+		}
 		else
 		{
 			if (!this.turnCache.resourceGatherer)
+			{
 				this.turnCache.resourceGatherer = {};
+			}
 			this.turnCache.resourceGatherer[supplyID] = -1;
 		}
 	}
@@ -546,7 +676,9 @@ export class BasesManager
 	GetTCGatherer(supplyID: EntityId): number
 	{
 		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
+		{
 			return this.turnCache.resourceGatherer[supplyID];
+		}
 
 		return 0;
 	}
@@ -555,11 +687,15 @@ export class BasesManager
 	AddTCResGatherer(resource: string): void
 	{
 		if (!this.turnCache.resourceGathererByType)
+		{
 			this.turnCache.resourceGathererByType = {};
+		}
 		this.turnCache.resourceGathererByType[resource] = (this.turnCache.resourceGathererByType[resource] ?? 0) + 1;
 
 		if (this.turnCache.currentRates)
+		{
 			this.turnCache.currentRates[resource] += 0.5;
+		}
 	}
 
 	GetTCResGatherer(resource: string): number
@@ -575,7 +711,9 @@ export class BasesManager
 	numActiveBases(): number
 	{
 		if (!this.turnCache.base)
+		{
 			this.updateBaseCache();
+		}
 		return this.turnCache.base?.active ?? 0;
 	}
 
@@ -587,7 +725,9 @@ export class BasesManager
 	numPotentialBases(): number
 	{
 		if (!this.turnCache.base)
+		{
 			this.updateBaseCache();
+		}
 		return this.turnCache.base?.potential ?? 0;
 	}
 
@@ -603,14 +743,18 @@ export class BasesManager
 	 */
 	updateBaseCache(): void
 	{
-		this.turnCache.base = { "active": 0, "potential": 0 };
+		this.turnCache.base = { active: 0, potential: 0 };
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor)
+			{
 				continue;
+			}
 			++this.turnCache.base.potential;
 			if (base.anchor.foundationProgress() === undefined)
+			{
 				++this.turnCache.base.active;
+			}
 		}
 	}
 
@@ -631,7 +775,9 @@ export class BasesManager
 	getBaseByID(baseID: BaseId): BaseManager | undefined
 	{
 		if (this.noBase.ID === baseID)
+		{
 			return this.noBase;
+		}
 		return this.baseManagers.find((base: BaseManager): boolean => base.ID === baseID);
 	}
 
@@ -654,19 +800,25 @@ export class BasesManager
 	assignGatherers(): void
 	{
 		for (const base of this.baseManagers)
+		{
 			for (const worker of base.workers.values())
 			{
 				const aiState = requireStateName(worker);
 				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
+				{
 					continue;
+				}
 				const orders = ordersOf(worker);
 				if (
 					orders.length < 2 || !orders[1].target ||
 					orders[1].target !== worker.getMetadata(PlayerID, "supply")
 				)
+				{
 					continue;
+				}
 				this.AddTCGatherer(orders[1].target);
 			}
+		}
 	}
 
 	/**
@@ -683,7 +835,9 @@ export class BasesManager
 			{
 				const garrisoned = gameState.getEntityById(id);
 				if (bestbase && garrisoned)
+				{
 					bestbase.assignEntity(gameState, garrisoned);
+				}
 			}
 		}
 		// and find something useful to do if we already have a base
@@ -711,18 +865,26 @@ export class BasesManager
 				(!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
 				base.territoryIndices.indexOf(territoryIndex) === -1
 			)
+			{
 				continue;
+			}
 			base.assignEntity(gameState, ent);
 			return base;
 		}
 		// entity outside our territory
 		let bestbase;
 		if (ent.hasClass("Structure") && !ent.decaying() && ent.resourceDropsiteTypes())
+		{
 			bestbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
+		}
 		else
+		{
 			bestbase = getBestBase(gameState, ent) || this.noBase;
+		}
 		if (bestbase)
+		{
 			bestbase.assignEntity(gameState, ent);
+		}
 		return bestbase;
 	}
 
@@ -734,7 +896,9 @@ export class BasesManager
 	addGatherRates(gameState: CommonGameState, rates: Record<string, number>): void
 	{
 		for (const base of this.baseManagers)
+		{
 			base.addGatherRates(gameState, rates);
+		}
 	}
 
 	/**
@@ -754,18 +918,26 @@ export class BasesManager
 	{
 		const baseID = this.baseAtIndex(territoryIndex);
 		if (baseID === NO_BASE)
+		{
 			return;
+		}
 		const base = this.getBaseByID(baseID);
 		if (base)
 		{
 			const index = base.territoryIndices.indexOf(territoryIndex);
 			if (index !== -1)
+			{
 				base.territoryIndices.splice(index, 1);
+			}
 			else
+			{
 				aiWarn(" problem in headquarters::updateTerritories for base " + baseID);
+			}
 		}
 		else
+		{
 			aiWarn(" problem in headquarters::updateTerritories without base " + baseID);
+		}
 		this.basesMap.map[territoryIndex] = 0;
 	}
 
@@ -779,20 +951,26 @@ export class BasesManager
 	): boolean
 	{
 		if (this.baseAtIndex(territoryIndex) !== 0)
+		{
 			return false;
+		}
 		let landPassable = false;
 		const ind = getMapIndices(territoryIndex, gameState.ai.HQ.geography.territoryMap, passabilityMap);
 		let access;
 		for (const k of ind)
 		{
 			if (!gameState.ai.HQ.geography.landRegions[gameState.ai.accessibility.landPassMap[k]])
+			{
 				continue;
+			}
 			landPassable = true;
 			access = gameState.ai.accessibility.landPassMap[k];
 			break;
 		}
 		if (!landPassable)
+		{
 			return false;
+		}
 		let distmin = Math.min();
 		let baseID;
 		const pos: CommonPosition = worldPos(
@@ -804,20 +982,30 @@ export class BasesManager
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor)
+			{
 				continue;
+			}
 			if (base.accessIndex !== access)
+			{
 				continue;
+			}
 			const dist = SquareVectorDistance(base.anchor.position(), pos);
 			if (dist >= distmin)
+			{
 				continue;
+			}
 			distmin = dist;
 			baseID = base.ID;
 		}
 		if (!baseID)
+		{
 			return false;
+		}
 		const territoryBase = this.getBaseByID(baseID);
 		if (territoryBase)
+		{
 			territoryBase.territoryIndices.push(territoryIndex);
+		}
 		this.basesMap.map[territoryIndex] = baseID;
 		return true;
 	}
@@ -845,12 +1033,14 @@ export class BasesManager
 
 	Serialize(): SerializedBasesManager
 	{
-		const properties = { "currentBase": this.currentBase };
+		const properties = { currentBase: this.currentBase };
 
 		const baseManagers = [];
 		for (const base of this.baseManagers)
+		{
 			baseManagers.push(base.Serialize());
+		}
 
-		return { "properties": properties, "noBase": this.noBase.Serialize(), "baseManagers": baseManagers };
+		return { properties: properties, noBase: this.noBase.Serialize(), baseManagers: baseManagers };
 	}
 }

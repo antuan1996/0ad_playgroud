@@ -40,13 +40,19 @@ export function batchSize(workers: number): number
 export function trainingStopped(census: Readonly<WorkforceCensus>): boolean
 {
 	if (census.stalled)
+	{
 		return true;
+	}
 	const queued = census.queuedSupports + census.queuedSoldiers;
 	const total = census.workers + queued;
 	if (census.saving && total > census.popPhase2 + 10)
+	{
 		return true;
+	}
 	if (total > census.target || total >= census.popPhase2 && census.waitingForTown)
+	{
 		return true;
+	}
 	return queued > 50 || census.queuedSupports > 20 && census.queuedSoldiers > 20 || census.inTraining > 15;
 }
 
@@ -58,7 +64,9 @@ export function supportAlpha(rushToCome: boolean, ceasefireLeft: number | undefi
 {
 	let alpha = rushToCome ? 0.7 : 0.85;
 	if (ceasefireLeft !== undefined)
+	{
 		alpha += (1 - alpha) * Math.min(Math.max(ceasefireLeft - 120, 0), 180) / 180;
+	}
 	return alpha;
 }
 
@@ -84,6 +92,8 @@ export function supportShare(
 export function soldierRequirements(total: number): TrainableRequirement[]
 {
 	if (total < 45)
+	{
 		return [["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"]];
+	}
 	return [["strength", 1]];
 }

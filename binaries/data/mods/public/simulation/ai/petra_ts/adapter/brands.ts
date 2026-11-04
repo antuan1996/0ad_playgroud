@@ -114,7 +114,7 @@ export function attackPlanId(value: number): AttackPlanId
 export const NO_TEMPLATE: TemplateName = templateName("");
 
 /** The cell `index` of `map`, on that map's grid. */
-export function cellIndex<G extends GridKind>(map: { readonly __grid?: G }, index: number): CellIndex<G>
+export function cellIndex<G extends GridKind>(map: { readonly __grid?: G; }, index: number): CellIndex<G>
 {
 	return index as CellIndex<G>;
 }

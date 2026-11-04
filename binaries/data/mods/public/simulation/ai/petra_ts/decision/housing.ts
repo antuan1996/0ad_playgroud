@@ -24,14 +24,22 @@ export function planAnotherHouse(planned: number, population: number): boolean
 export function houseNeeded(census: Readonly<Census>, saving: boolean): boolean
 {
 	if (census.max <= census.limit)
+	{
 		return false;
+	}
 	const free = census.limit - census.population + census.coming;
 	if (saving)
+	{
 		return free <= 10;
+	}
 	if (census.population > 55)
+	{
 		return free <= 21;
+	}
 	if (census.population > 30)
+	{
 		return free <= 15;
+	}
 	return free <= 10;
 }
 

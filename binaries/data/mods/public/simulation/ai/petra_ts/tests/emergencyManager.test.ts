@@ -32,7 +32,7 @@ interface Town
 {
 	world: World;
 	/** the population the game counts now */
-	population: { value: number };
+	population: { value: number; };
 	/** add structures: `roots` of them root territory (civil centres), the rest do not (houses) */
 	build(roots: number, others: number): void;
 	/** destroy structures of either kind */
@@ -49,7 +49,7 @@ function town(population: number, roots: number, others: number): Town
 	const world = makeWorld();
 	// the seed civil centre of the world is not part of this town's count
 	world.removeEntity(1000);
-	const pop = { "value": population };
+	const pop = { value: population };
 	world.gameState.getPopulation = () => pop.value;
 	const rootIds: number[] = [];
 	const otherIds: number[] = [];
@@ -59,16 +59,16 @@ function town(population: number, roots: number, others: number): Town
 		world.addEntity(
 			makeEntity({
 				id,
-				"owner": PLAYER,
-				"position": [100, 100],
-				"classes": root ? ["Structure", "CivCentre"] : ["Structure", "House"],
-				"templateName": root ? "structures/athen/civil_centre" : "structures/athen/house",
+				owner: PLAYER,
+				position: [100, 100],
+				classes: root ? ["Structure", "CivCentre"] : ["Structure", "House"],
+				templateName: root ? "structures/athen/civil_centre" : "structures/athen/house",
 			}, {
 				// as the parsed template gives it: every structure has a
 				// TerritoryInfluence node; only the roots say Root "true"
-				"get": (path: string) =>
+				get: (path: string) =>
 					path === "TerritoryInfluence" ?
-						{ "Root": root ? "true" : "false", "Radius": root ? "140" : "20", "Weight": "30000" } :
+						{ Root: root ? "true" : "false", Radius: root ? "140" : "20", Weight: "30000" } :
 						undefined,
 			}),
 		);
@@ -77,28 +77,36 @@ function town(population: number, roots: number, others: number): Town
 	const build = (r: number, o: number) =>
 	{
 		for (let i = 0; i < r; ++i)
+		{
 			add(true);
+		}
 		for (let i = 0; i < o; ++i)
+		{
 			add(false);
+		}
 	};
 	const lose = (r: number, o: number) =>
 	{
 		for (const id of rootIds.splice(0, r))
+		{
 			world.removeEntity(id);
+		}
 		for (const id of otherIds.splice(0, o))
+		{
 			world.removeEntity(id);
+		}
 	};
 	build(roots, others);
 	const config = new Config();
-	config.emergencyValues = { "population": 0.6, "structures": 0.6, "roots": 0.5 };
+	config.emergencyValues = { population: 0.6, structures: 0.6, roots: 0.5 };
 	const manager = EmergencyManager.start(config, world.gameState);
-	return { world, "population": pop, build, lose, manager };
+	return { world, population: pop, build, lose, manager };
 }
 
 /** the ally chats the manager posted, as their message text */
 function chats(): string[]
 {
-	return sent("aichat").map(c =>
+	return sent("aichat").map((c) =>
 	{
 		assert.equal(c.translateMessage, true);
 		assert.ok(c.message.startsWith("/allies "));

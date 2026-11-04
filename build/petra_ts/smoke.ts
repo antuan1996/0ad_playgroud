@@ -66,7 +66,7 @@ function fail(message: string): never
 	process.exit(2);
 }
 
-function parseOptions(args: string[]): { jobs: number; update: boolean; from: string | undefined }
+function parseOptions(args: string[]): { jobs: number; update: boolean; from: string | undefined; }
 {
 	let jobs = 12;
 	let update = false;
@@ -74,17 +74,25 @@ function parseOptions(args: string[]): { jobs: number; update: boolean; from: st
 	for (let i = 0; i < args.length; ++i)
 	{
 		if (args[i] === "--update")
+		{
 			update = true;
+		}
 		else if (args[i] === "--jobs" && i + 1 < args.length)
 		{
 			jobs = Number(args[++i]);
 			if (!Number.isInteger(jobs) || jobs < 1)
+			{
 				fail("--jobs takes a whole number from 1");
+			}
 		}
 		else if (args[i] === "--from" && i + 1 < args.length)
+		{
 			from = resolve(args[++i]);
+		}
 		else
+		{
 			fail(`unknown option ${args[i]} (see the header of build/petra_ts/smoke.ts)`);
+		}
 	}
 	return { jobs, update, from };
 }
@@ -92,23 +100,27 @@ function parseOptions(args: string[]): { jobs: number; update: boolean; from: st
 function readReference(): ReferenceGame[]
 {
 	if (!existsSync(referencePath))
+	{
 		fail(`no reference at ${referencePath}`);
-	const lines = readFileSync(referencePath, "utf8").split("\n").filter(line => line && !line.startsWith("#"));
+	}
+	const lines = readFileSync(referencePath, "utf8").split("\n").filter((line) => line && !line.startsWith("#"));
 	const [header, ...rows] = lines;
 	if (header !== COLUMNS.join("\t"))
+	{
 		fail(`the reference's columns are not ${COLUMNS.join(", ")}`);
+	}
 	return rows.map((line): ReferenceGame =>
 	{
 		const cells = line.split("\t");
 		return {
-			"game": Number(cells[0]),
-			"mapSeed": Number(cells[1]),
-			"aiSeed": Number(cells[2]),
-			"swapped": cells[3] === "true",
-			"outcome": cells[4],
-			"reason": cells[5],
-			"decided": Number(cells[6]),
-			"fingerprint": cells[7],
+			game: Number(cells[0]),
+			mapSeed: Number(cells[1]),
+			aiSeed: Number(cells[2]),
+			swapped: cells[3] === "true",
+			outcome: cells[4],
+			reason: cells[5],
+			decided: Number(cells[6]),
+			fingerprint: cells[7],
 		};
 	});
 }
@@ -121,7 +133,9 @@ function pairsOf(reference: ReferenceGame[]): string
 	{
 		const pair = `${game.mapSeed}/${game.aiSeed}`;
 		if (!pairs.includes(pair))
+		{
 			pairs.push(pair);
+		}
 	}
 	return pairs.join(",");
 }
@@ -130,7 +144,9 @@ function readRows(batch: string): BatchRow[]
 {
 	const path = join(batch, "results.jsonl");
 	if (!existsSync(path))
+	{
 		fail(`no results.jsonl in ${batch}`);
+	}
 	return readFileSync(path, "utf8").split("\n").filter(Boolean).map((line): BatchRow => JSON.parse(line)).sort((
 		a,
 		b,
@@ -139,14 +155,16 @@ function readRows(batch: string): BatchRow[]
 
 function git(...args: string[]): string
 {
-	return spawnSync("git", args, { "cwd": repoRoot, "encoding": "utf8" }).stdout.trim();
+	return spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" }).stdout.trim();
 }
 
 /** m:ss of a game time in ms */
 function clock(ms: number | undefined): string
 {
 	if (ms === undefined)
+	{
 		return "-";
+	}
 	const s = Math.round(ms / 1000);
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
@@ -173,13 +191,19 @@ function play(pairs: string, jobs: number): string
 	for (let attempt = 0; attempt < 3; ++attempt)
 	{
 		// a later attempt resumes the batch: only the games without a result play again
-		const run = spawnSync(process.execPath, args, { "cwd": repoRoot, "stdio": ["ignore", "inherit", "inherit"] });
+		const run = spawnSync(process.execPath, args, { cwd: repoRoot, stdio: ["ignore", "inherit", "inherit"] });
 		if (run.status !== 0 && !existsSync(join(out, "results.jsonl")))
+		{
 			fail(`the batch did not run (status ${run.status})`);
-		if (!readRows(out).some(row => row.outcome === "failed"))
+		}
+		if (!readRows(out).some((row) => row.outcome === "failed"))
+		{
 			break;
+		}
 		if (attempt < 2)
+		{
 			console.log("smoke: replaying the games the engine did not finish");
+		}
 	}
 	return out;
 }
@@ -200,7 +224,7 @@ function record(rows: BatchRow[], batch: string): void
 		"# A change to the bot's play, the game data or the engine moves fingerprints:",
 		"# record anew with --update when it is meant, and commit this file with it.",
 		COLUMNS.join("\t"),
-		...rows.map(row =>
+		...rows.map((row) =>
 			[
 				row.game,
 				row.mapSeed,
@@ -219,7 +243,7 @@ function record(rows: BatchRow[], batch: string): void
 
 function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 {
-	const byGame = new Map(rows.map(row => [row.game, row]));
+	const byGame = new Map(rows.map((row) => [row.game, row]));
 	const differing: string[] = [];
 	const broken: string[] = [];
 	for (const expected of reference)
@@ -232,9 +256,13 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 			continue;
 		}
 		if (row.mapSeed !== expected.mapSeed || row.aiSeed !== expected.aiSeed || row.swapped !== expected.swapped)
+		{
 			fail(`game ${expected.game} was played with other seeds than the reference's`);
+		}
 		if (row.errors || row.warnings)
+		{
 			broken.push(`game ${expected.game} (${seeds}): ${row.errors} errors, ${row.warnings} warnings`);
+		}
 		if (row.fingerprint !== expected.fingerprint)
 		{
 			differing.push(
@@ -243,12 +271,16 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 			);
 		}
 	}
-	const same = reference.length - differing.length - broken.filter(b => b.includes("not played")).length;
+	const same = reference.length - differing.length - broken.filter((b) => b.includes("not played")).length;
 	console.log(`smoke: ${same} of ${reference.length} games identical to the reference`);
 	for (const line of differing)
+	{
 		console.log(`  differs: ${line}`);
+	}
 	for (const line of broken)
+	{
 		console.log(`  ${line}`);
+	}
 	if (differing.length)
 	{
 		console.log(
@@ -262,13 +294,17 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 const options = parseOptions(process.argv.slice(2));
 const reference = options.update && options.from ? [] : readReference();
 if (!options.from && !existsSync(join(repoRoot, "binaries/system/pyrogenesis")))
+{
 	fail("needs the engine built from this repository (binaries/system/pyrogenesis)");
+}
 const batch = options.from ?? play(pairsOf(reference), options.jobs);
 const rows = readRows(batch);
 if (options.update)
 {
-	if (rows.some(row => row.outcome === "failed" || row.errors || row.warnings))
+	if (rows.some((row) => row.outcome === "failed" || row.errors || row.warnings))
+	{
 		fail("a game failed or had errors: not recorded");
+	}
 	record(rows, batch);
 	process.exit(0);
 }

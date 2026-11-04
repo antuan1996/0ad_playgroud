@@ -35,12 +35,12 @@ class BarePlan extends QueuePlan<CommonTemplate>
 	Serialize(): SerializedQueuePlan<CommonTemplate>
 	{
 		return {
-			"category": this.category,
-			"type": this.type,
-			"ID": this.ID,
-			"metadata": this.metadata,
-			"cost": this.cost.Serialize(),
-			"number": this.number,
+			category: this.category,
+			type: this.type,
+			ID: this.ID,
+			metadata: this.metadata,
+			cost: this.cost.Serialize(),
+			number: this.number,
 		};
 	}
 }

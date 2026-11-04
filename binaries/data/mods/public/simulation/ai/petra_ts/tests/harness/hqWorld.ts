@@ -83,9 +83,9 @@ export interface HqMap
 	 * them; on the plain the sea map is the land map itself */
 	landPassMap: Uint8Array;
 	navalPassMap: Uint8Array;
-	ccResourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array }>;
+	ccResourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array; }>;
 	/** the gather-estimation maps (wood/metal/stone) as HQ.updateResources keeps them */
-	resourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array }>;
+	resourceMaps: Record<string, { width: number; length: number; cellSize: number; map: Float32Array; }>;
 	/** set a territory cell's owner (bit-true, keeps the decaying bit) */
 	setTerritoryOwner(ix: number, iy: number, owner: number): void;
 	/** flag a territory cell as decaying (or not) */
@@ -148,26 +148,26 @@ export function makeHqMap(options: MapOptions = {}): HqMap
 	// flat value per cell (a test that wants a gradient pokes .map[j])
 	const ccResourceValue = options.ccResourceValue ?? 40;
 	const ccResourceMaps: HqMap["ccResourceMaps"] = Object.fromEntries(
-		["food", "wood", "stone", "metal"].map(
-			res => [res, {
-				width: MAP_CELLS,
-				length: MAP_CELLS * MAP_CELLS,
-				cellSize: TERRITORY_CELL,
-				map: new Float32Array(MAP_CELLS * MAP_CELLS).fill(ccResourceValue),
-			}]
-		),
+		["food", "wood", "stone", "metal"].map((
+			res,
+		) => [res, {
+			width: MAP_CELLS,
+			length: MAP_CELLS * MAP_CELLS,
+			cellSize: TERRITORY_CELL,
+			map: new Float32Array(MAP_CELLS * MAP_CELLS).fill(ccResourceValue),
+		}]),
 	);
 	// the dropsite-estimation maps start flat (nothing recorded yet), as the
 	// first turn of a game does before updateResources writes them
 	const resourceMaps: HqMap["resourceMaps"] = Object.fromEntries(
-		["wood", "stone", "metal"].map(
-			res => [res, {
-				width: MAP_CELLS,
-				length: MAP_CELLS * MAP_CELLS,
-				cellSize: TERRITORY_CELL,
-				map: new Float32Array(MAP_CELLS * MAP_CELLS),
-			}]
-		),
+		["wood", "stone", "metal"].map((
+			res,
+		) => [res, {
+			width: MAP_CELLS,
+			length: MAP_CELLS * MAP_CELLS,
+			cellSize: TERRITORY_CELL,
+			map: new Float32Array(MAP_CELLS * MAP_CELLS),
+		}]),
 	);
 	return {
 		territory,
@@ -232,15 +232,19 @@ export function makeHQConfig(
 	const config = new Config(options.difficulty ?? 3);
 	// setConfig's outcome for difficulty MEDIUM: the entries of
 	// factors.criticalRootRatio etc. indexed by 3
-	config.emergencyValues = { "population": 0.6, "structures": 0.6, "roots": 0.5 };
-	config.personality = { "aggressive": 0.4, "defensive": 0.6, "cooperative": 0.5, ...options.personality };
+	config.emergencyValues = { population: 0.6, structures: 0.6, roots: 0.5 };
+	config.personality = { aggressive: 0.4, defensive: 0.6, cooperative: 0.5, ...options.personality };
 	// what setConfig books at a game start: the cuts that read discontinuous
 	// behavior off the personality
-	config.personalityCut = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
+	config.personalityCut = { weak: 0.3, medium: 0.5, strong: 0.7 };
 	if (options.debug !== undefined)
+	{
 		config.debug = options.debug;
+	}
 	if (options.popScaling !== undefined)
+	{
 		config.popScaling = options.popScaling;
+	}
 	return config;
 }
 
@@ -257,9 +261,9 @@ export function structureTemplate(name: string, detail: {
 	 * template_structure.xml declares (<BuildRestrictions><Territory>own) */
 	territories?: string[];
 	/** the build distance rule (FromClass/MinDistance walked by the template get) */
-	buildDistance?: { MinDistance?: number; FromClass?: string } | undefined;
+	buildDistance?: { MinDistance?: number; FromClass?: string; } | undefined;
 	/** the physical size, as the game returns {min, max}; default 1..2 */
-	obstruction?: { min: number; max: number };
+	obstruction?: { min: number; max: number; };
 	/** the footprint's radius (Footprint, as the game reads it); default 2, the obstruction's default size */
 	footprint?: number;
 	/** the cost category m_entityCounts is indexed with */
@@ -285,7 +289,7 @@ export function structureTemplate(name: string, detail: {
 		getPopulationBonus: () => detail.popBonus ?? 0,
 		// as common-api Template.trainableEntities: undefined for a building with
 		// no Trainer node, the list otherwise
-		trainableEntities: (civ: string) => detail.trainable?.map(unit => unit.replace("{civ}", civ)),
+		trainableEntities: (civ: string) => detail.trainable?.map((unit) => unit.replace("{civ}", civ)),
 		// as common-api Template.hasDefensiveFire: false without a ranged attack
 		hasDefensiveFire: () => detail.defensiveFire ?? false,
 		// hasBuildTerritory is the common-api read of BuildRestrictions/Territory
@@ -304,7 +308,7 @@ export function structureTemplate(name: string, detail: {
 		// no-active-base branch reads this exact answer).
 		buildTerritories: (): string[] => detail.territories ? [...detail.territories] : ["own"],
 		buildDistance: () => detail.buildDistance,
-		obstructionRadius: () => detail.obstruction ?? { "min": 1, "max": 2 },
+		obstructionRadius: () => detail.obstruction ?? { min: 1, max: 2 },
 		// every structure has a footprint (template_structure.xml): the API probe never saw one without
 		footprintRadius: () => detail.footprint ?? 2,
 		buildCategory: () => detail.buildCategory,
@@ -338,7 +342,7 @@ export function makeHqEntity(
 /** What the common-api gameState asks every entity, and the manager campaigns never needed. */
 function hqEntityAnswers(owner: number): Methods
 {
-	return { "isOwn": (player: number) => player === owner, "isTreasure": () => false };
+	return { isOwn: (player: number) => player === owner, isTreasure: () => false };
 }
 
 /**
@@ -366,7 +370,7 @@ export function makeGaiaSupply(
 ): CommonEntity
 {
 	return makeHqEntity({ id: spec.id, owner: GAIA, position: spec.position, classes: spec.classes ?? [] }, {
-		resourceSupplyType: () => ({ "generic": spec.generic, "specific": spec.specific ?? spec.generic }),
+		resourceSupplyType: () => ({ generic: spec.generic, specific: spec.specific ?? spec.generic }),
 		resourceSupplyMax: () => spec.amount ?? 1000,
 		resourceSupplyAmount: () => spec.amount ?? 1000,
 		// the common-api's own answer for non-animal supplies (see docstring)
@@ -381,7 +385,7 @@ const ALL_RESOURCES = ["food", "wood", "stone", "metal"];
 /** The world's civil centre (the seat's anchor), answering as a dropsite for every resource. */
 export function dropsiteCC(world: World): CommonEntity
 {
-	return override(requireValue(world.ents.get(1000)), { "resourceDropsiteTypes": () => [...ALL_RESOURCES] });
+	return override(requireValue(world.ents.get(1000)), { resourceDropsiteTypes: () => [...ALL_RESOURCES] });
 }
 
 /**
@@ -392,10 +396,10 @@ export function bookCentreSupplies(world: World, base: BaseManager): void
 {
 	override(dropsiteCC(world), {
 		// a dropsite is no supply: the common-api answers undefined (entity.js)
-		"resourceSupplyType": () => undefined,
-		"resourceSupplyNumGatherers": () => undefined,
-		"resourceSupplyAmount": () => undefined,
-		"isResourceDropsite": (resource?: string) => !resource || ALL_RESOURCES.includes(resource),
+		resourceSupplyType: () => undefined,
+		resourceSupplyNumGatherers: () => undefined,
+		resourceSupplyAmount: () => undefined,
+		isResourceDropsite: (resource?: string) => !resource || ALL_RESOURCES.includes(resource),
 	});
 	base.assignResourceToDropsite(world.gameState, requireValue(base.anchor), false);
 }
@@ -404,7 +408,7 @@ export function bookCentreSupplies(world: World, base: BaseManager): void
 export function layNavalPassMap(world: HqWorld, naval: Uint8Array): void
 {
 	world.map.navalPassMap = naval;
-	Object.assign(world.ai.accessibility, { "navalPassMap": naval });
+	Object.assign(world.ai.accessibility, { navalPassMap: naval });
 }
 
 /** Extra world-level state the Headquarters tests stop in. */
@@ -421,11 +425,11 @@ export interface HqWorldOptions extends MapOptions, WorldOptions
 	/** the disabled-template list the game ships per civ */
 	disabledTemplates?: string[];
 	/** what a template's gainMultiplier is worth (trader gains) */
-	traderGains?: { landGainMultiplier?: number; navalGainMultiplier?: number };
+	traderGains?: { landGainMultiplier?: number; navalGainMultiplier?: number; };
 	/** whether the ceasefire is active (and for how long) */
 	ceasefire?: boolean | number;
 	/** the phase-entity requirements per phase, keyed by phase number */
-	phaseRequirements?: Record<number, { class: string; count: number }[]>;
+	phaseRequirements?: Record<number, { class: string; count: number; }[]>;
 	/** the phases the game declares; default 3 */
 	numPhases?: number;
 	/** whether victory is shared with allies; default false */
@@ -448,7 +452,7 @@ export interface HqWorld extends World
 	/** the resets gameState.resetOnDiplomacyChanged recorded */
 	diplomacyResets: number[];
 	/** counts the town is queued for, by template (countEntitiesAndQueuedByType) */
-	hqKnobs: { queuedTypes: Record<string, number> };
+	hqKnobs: { queuedTypes: Record<string, number>; };
 }
 
 /** Build a manager world, then lay the map and the engine answers over it. */
@@ -466,10 +470,12 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 	// defaults — give it the same answers (no treasure, its own owner)
 	const seedCC = world.ents.get(1000);
 	if (seedCC)
+	{
 		Object.assign(seedCC, hqEntityAnswers(seedCC.owner()));
+	}
 
 	// the raw grids, where InfoMap and the map-module functions read them
-	Object.assign(world.ai, { "territoryMap": map.territory });
+	Object.assign(world.ai, { territoryMap: map.territory });
 	Object.assign(world.ai.accessibility, {
 		landPassMap: map.landPassMap,
 		navalPassMap: map.navalPassMap,
@@ -480,32 +486,32 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		) => [Math.floor(p[0] / (TERRITORY_CELL / PASS_RATIO)), Math.floor(p[1] / (TERRITORY_CELL / PASS_RATIO))],
 		regionLinks: options.regionLinks ?? { 2: [2], 3: [3] },
 		regionType: options.regionTypes ?? { 2: "land", 3: "land" },
-		"getTrajectToIndex": (from: number, to: number) => trajectories[`${from},${to}`] ?? null,
+		getTrajectToIndex: (from: number, to: number) => trajectories[`${from},${to}`] ?? null,
 	});
 	Object.assign(world.gameState.sharedScript, {
-		"territoryMap": map.territory,
-		"passabilityMap": map.passability,
-		"ccResourceMaps": map.ccResourceMaps,
-		"resourceMaps": map.resourceMaps,
-		"mapSize": MAP_CELLS * TERRITORY_CELL,
+		territoryMap: map.territory,
+		passabilityMap: map.passability,
+		ccResourceMaps: map.ccResourceMaps,
+		resourceMaps: map.resourceMaps,
+		mapSize: MAP_CELLS * TERRITORY_CELL,
 	});
 
 	// as GameState.prototype.isTemplateDisabled (gamestate.js 943) reads
 	// playerData.disabledTemplates: the per-civ disabled-template list the game
 	// ships, so a template name mapped to a truthy value is disabled
 	const playerData = Object.assign(fake<Record<string, unknown>>(world.gameState.playerData), {
-		"disabledTemplates": Object.fromEntries([...disabled].map(name => [name, true])),
-		"isNeutral": [false, false, false, false],
+		disabledTemplates: Object.fromEntries([...disabled].map((name) => [name, true])),
+		isNeutral: [false, false, false, false],
 	});
-	const diplomacy = fake<{ isEnemy: boolean[]; isNeutral: boolean[]; isMutualAlly: boolean[] }>(playerData);
+	const diplomacy = fake<{ isEnemy: boolean[]; isNeutral: boolean[]; isMutualAlly: boolean[]; }>(playerData);
 
 	const gs = world.gameState;
 	const all = () => [...world.ents.values()];
 	// as GameState.getOwnEntities and getOwnEntitiesByClass (gamestate.js 488, 583):
 	// every entity of ours, units and structures, foundations included
-	const ownEntities = () => all().filter(e => e.owner() === PLAYER);
-	const ownFoundations = () => ownEntities().filter(e => e.foundationProgress() !== undefined);
-	const countEntitiesByType = (type: string) => ownEntities().filter(e => e.templateName() === type).length;
+	const ownEntities = () => all().filter((e) => e.owner() === PLAYER);
+	const ownFoundations = () => ownEntities().filter((e) => e.foundationProgress() !== undefined);
+	const countEntitiesByType = (type: string) => ownEntities().filter((e) => e.templateName() === type).length;
 	Object.assign(gs, {
 		hqKnobs,
 		getPassabilityMap: () => map.passability,
@@ -513,7 +519,9 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		{
 			const mask = fake<Record<string, number>>(passMask)[name];
 			if (mask === undefined)
+			{
 				throw new Error(`passability class "${name}" is not defined in tests/harness/hqWorld.ts`);
+			}
 			return mask;
 		},
 		circularMap: options.circularMap ?? false,
@@ -523,17 +531,19 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		getEnemyStructures: (owner?: number) =>
 			collectionOf(
 				world,
-				world.structures.filter(s => owner === undefined ? diplomacy.isEnemy[s.owner()] : s.owner() === owner),
+				world.structures.filter((s) =>
+					owner === undefined ? diplomacy.isEnemy[s.owner()] : s.owner() === owner
+				),
 			),
-		getNeutralStructures: () => collectionOf(world, world.structures.filter(s => diplomacy.isNeutral[s.owner()])),
+		getNeutralStructures: () => collectionOf(world, world.structures.filter((s) => diplomacy.isNeutral[s.owner()])),
 		// as GameState.prototype.getOwnDropsites (gamestate.js 702): the own
 		// entities that accept the resource, or any resource when none is named
 		getOwnDropsites: (resource?: string) =>
-			collectionOf(world, ownEntities().filter(e => e.isResourceDropsite(resource ?? ""))),
+			collectionOf(world, ownEntities().filter((e) => e.isResourceDropsite(resource ?? ""))),
 		getExclusiveAllyEntities: () =>
-			collectionOf(world, all().filter(e => diplomacy.isMutualAlly[e.owner()] && e.owner() !== PLAYER)),
+			collectionOf(world, all().filter((e) => diplomacy.isMutualAlly[e.owner()] && e.owner() !== PLAYER)),
 		getAlliedVictory: () => options.alliedVictory ?? false,
-		getResources: () => new ResourcesManager({ "food": 0, "wood": 0, "stone": 0, "metal": 0, ...options.stock }),
+		getResources: () => new ResourcesManager({ food: 0, wood: 0, stone: 0, metal: 0, ...options.stock }),
 		// as GameState.prototype.getResourceSupplies: the supplies of one resource
 		// type, found over the whole world
 		getResourceSupplies: (resource: string) =>
@@ -554,9 +564,9 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		getEntityCounts: () => options.entityCounts ?? {},
 		getEntityMatchCounts: () => options.matchCounts ?? {},
 		getOwnEntities: () => collectionOf(world, ownEntities()),
-		getOwnEntitiesByClass: (cls: string) => collectionOf(world, ownEntities().filter(e => e.hasClass(cls))),
+		getOwnEntitiesByClass: (cls: string) => collectionOf(world, ownEntities().filter((e) => e.hasClass(cls))),
 		getOwnFoundations: () => collectionOf(world, ownFoundations()),
-		getOwnFoundationsByClass: (cls: string) => collectionOf(world, ownFoundations().filter(e => e.hasClass(cls))),
+		getOwnFoundationsByClass: (cls: string) => collectionOf(world, ownFoundations().filter((e) => e.hasClass(cls))),
 		isTemplateAvailable: (name: string) => !disabled.has(name) && world.templates[name] !== undefined,
 		isTemplateDisabled: (name: string) => !!fake<Record<string, unknown>>(playerData["disabledTemplates"])[name],
 		isCeasefireActive: () => options.ceasefire !== undefined && options.ceasefire !== false,
@@ -576,7 +586,7 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		// the own entities carrying a metadata value, as the game gathers them for a
 		// task keyed by an entity id (a foundation's builders, a repair crew)
 		getOwnEntitiesByMetadata: (key: string, value: unknown) =>
-			ownEntities().filter(e => e.getMetadata(PLAYER, key) === value),
+			ownEntities().filter((e) => e.getMetadata(PLAYER, key) === value),
 		countEntitiesAndQueuedByType: (type: string) => countEntitiesByType(type) + (hqKnobs.queuedTypes[type] ?? 0),
 		// as GameState.prototype.findTrainableUnits: every template our own
 		// facilities train, filtered by the class rules of the game
@@ -585,7 +595,9 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 			// the training facilities (an own entity whose trainingQueue is
 			// truthy), each list of cards
 			const allTrainable = new Set(
-				world.structures.filter(s => s.trainingQueue()).flatMap(ent => ent.trainableEntities("athen") ?? []),
+				world.structures.filter((s) => s.trainingQueue()).flatMap((ent) =>
+					ent.trainableEntities("athen") ?? []
+				),
 			);
 			const limits = gs.getEntityLimits();
 			const current = gs.getEntityCounts();
@@ -594,21 +606,31 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 			for (const trainable of allTrainable)
 			{
 				if (gs.isTemplateDisabled(templateName(trainable)))
+				{
 					continue;
+				}
 				const template = world.templates[trainable];
 				if (!template || !template.available(gs))
+				{
 					continue;
+				}
 				const limit = template.matchLimit();
 				if (limit && matchCounts[trainable] >= limit)
+				{
 					continue;
+				}
 				// the class list may nest (a common-api class list carries
 				// AND-groups as sub-arrays); MatchesClassList reads both
 				if (!template.hasClasses(classes) || template.hasClasses(anticlasses))
+				{
 					continue;
+				}
 				// the TrainingRestrictions category, counted like the game counts it
 				const category = template.trainingCategory();
 				if (category && limits[category] && current[category] >= limits[category])
+				{
 					continue;
+				}
 				found.push([trainable, template]);
 			}
 			return found;
@@ -617,9 +639,13 @@ export function makeHqWorld(options: HqWorldOptions = {}): HqWorld
 		{
 			const gains: Record<string, number> = {};
 			if (!disabled.has("units/{civ}/support_trader") && world.templates["units/{civ}/support_trader"])
+			{
 				gains.landGainMultiplier = options.traderGains?.landGainMultiplier ?? 0.7;
+			}
 			if (!disabled.has("units/{civ}/ship_merchant") && world.templates["units/{civ}/ship_merchant"])
+			{
 				gains.navalGainMultiplier = options.traderGains?.navalGainMultiplier ?? 0.35;
+			}
 			return gains;
 		},
 	});
@@ -641,9 +667,13 @@ export function doorStub<T = never>(extra: Record<string, unknown> = {}): T
 			get(t, property)
 			{
 				if (typeof property === "symbol")
+				{
 					return undefined;
+				}
 				if (property in t)
+				{
 					return t[property];
+				}
 				return (...args: unknown[]) => calls.push([property, args]);
 			},
 			set(t, property, value)
@@ -658,7 +688,7 @@ export function doorStub<T = never>(extra: Record<string, unknown> = {}): T
 /** The calls recorded on a door stub, oldest first. */
 export function doorCalls(stub: object): Array<[string, unknown[]]>
 {
-	return fake<{ calls: Array<[string, unknown[]]> }>(stub).calls;
+	return fake<{ calls: Array<[string, unknown[]]>; }>(stub).calls;
 }
 
 /**
@@ -695,13 +725,13 @@ export interface HqSeatOptions
  * Keyed by manager name. */
 const doorFields: Record<string, Record<string, unknown>> = {
 	// a fresh DefenseManager has raised no armies yet
-	"defenseManager": { "armies": [] },
+	defenseManager: { armies: [] },
 	// a fresh NavalManager has no transports (find*Location counts them)
-	"navalManager": { "transportShips": [] },
+	navalManager: { transportShips: [] },
 	// a fresh TradeManager books its minimal gain from navalMap
-	"tradeManager": { "minimalGain": 5 },
+	tradeManager: { minimalGain: 5 },
 	// a fresh AttackManager prepares no attack (NavalManager.shipPriority reads them)
-	"attackManager": { "upcomingAttacks": { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] } },
+	attackManager: { upcomingAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] } },
 };
 
 /**
@@ -721,15 +751,17 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 
 	// what analyseMap finds before the first update of a game
 	const geography = new Geography(createTerritoryMap(world.gameState), createBorderMap(world.gameState), {
-		"landRegions": options.landRegions ?? { 2: true },
-		"navalMap": options.navalMap ?? false,
-		"navalRegions": options.navalRegions ?? {},
+		landRegions: options.landRegions ?? { 2: true },
+		navalMap: options.navalMap ?? false,
+		navalRegions: options.navalRegions ?? {},
 	});
 	const hq = new Headquarters(config, world.gameState, geography);
 	world.ai.HQ = hq;
 
 	if (options.seatBases ?? true)
+	{
 		hq.basesManager.createStartingBases(world.gameState);
+	}
 	// what gameAnalysis bookends the seat with: the AI explores and builds
 	// unless a test disables it
 	hq.canBuildUnits = true;

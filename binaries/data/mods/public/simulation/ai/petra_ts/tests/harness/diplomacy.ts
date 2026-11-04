@@ -48,42 +48,42 @@ export function setPlayers(world: World, players: PlayerSpec[], us = 1): PlayerR
 	const stance = (i: number, j: number): Stance =>
 		i === j ? "ally" : i === 0 || j === 0 ? "enemy" : players[i].towards?.[j] ?? "enemy";
 	const rows: PlayerRow[] = players.map((spec, i) => ({
-		"state": spec.state ?? "active",
-		"civ": spec.civ ?? "athen",
-		"name": "Player " + i,
-		"teamLocked": spec.teamLocked ?? false,
-		"resourceCounts": { "food": 0, "wood": 0, "stone": 0, "metal": 0, ...spec.resourceCounts },
-		"popCount": spec.popCount ?? 0,
-		"isAlly": [...Array(n).keys()].map(j => stance(i, j) === "ally"),
-		"isMutualAlly": [...Array(n).keys()].map(j => stance(i, j) === "ally" && stance(j, i) === "ally"),
-		"isNeutral": [...Array(n).keys()].map(j => stance(i, j) === "neutral"),
-		"isEnemy": [...Array(n).keys()].map(j => stance(i, j) === "enemy"),
+		state: spec.state ?? "active",
+		civ: spec.civ ?? "athen",
+		name: "Player " + i,
+		teamLocked: spec.teamLocked ?? false,
+		resourceCounts: { food: 0, wood: 0, stone: 0, metal: 0, ...spec.resourceCounts },
+		popCount: spec.popCount ?? 0,
+		isAlly: [...Array(n).keys()].map((j) => stance(i, j) === "ally"),
+		isMutualAlly: [...Array(n).keys()].map((j) => stance(i, j) === "ally" && stance(j, i) === "ally"),
+		isNeutral: [...Array(n).keys()].map((j) => stance(i, j) === "neutral"),
+		isEnemy: [...Array(n).keys()].map((j) => stance(i, j) === "enemy"),
 	}));
 
 	const gs = world.gameState;
-	Object.assign(gs.sharedScript, { "playersData": rows });
+	Object.assign(gs.sharedScript, { playersData: rows });
 	Object.assign(gs.playerData, {
-		"civ": rows[us].civ,
-		"isAlly": rows[us].isAlly,
-		"isMutualAlly": rows[us].isMutualAlly,
-		"isNeutral": rows[us].isNeutral,
-		"isEnemy": rows[us].isEnemy,
-		"teamLocked": rows[us].teamLocked,
+		civ: rows[us].civ,
+		isAlly: rows[us].isAlly,
+		isMutualAlly: rows[us].isMutualAlly,
+		isNeutral: rows[us].isNeutral,
+		isEnemy: rows[us].isEnemy,
+		teamLocked: rows[us].teamLocked,
 	});
 	const own = () => rows[us];
 	const defeated = (i: number | string) => rows[+i].state === "defeated";
 	Object.assign(gs, {
-		"isPlayerAlly": (id: number) => own().isAlly[id],
-		"isPlayerMutualAlly": (id: number) => own().isMutualAlly[id],
-		"isPlayerNeutral": (id: number) => own().isNeutral[id],
-		"isPlayerEnemy": (id: number) => own().isEnemy[id],
-		"hasAllies": () => own().isAlly.some((a, i) => a && i !== us && !defeated(i)),
-		"hasEnemies": () => own().isEnemy.some((e, i) => e && i !== 0 && !defeated(i)),
-		"hasNeutrals": () => own().isNeutral.some((ne, i) => ne && !defeated(i)),
-		"getEnemies": () => own().isEnemy.flatMap((e, i) => e ? [i] : []),
-		"getMutualAllies": () => own().isMutualAlly.flatMap((a, i) => a && rows[i].isMutualAlly[us] ? [i] : []),
-		"getNumPlayerEnemies": () => own().isEnemy.filter((e, i) => e && i > 0 && !defeated(i)).length,
-		"getPlayerCiv": (player?: number) => player === undefined ? own().civ : rows[player].civ,
+		isPlayerAlly: (id: number) => own().isAlly[id],
+		isPlayerMutualAlly: (id: number) => own().isMutualAlly[id],
+		isPlayerNeutral: (id: number) => own().isNeutral[id],
+		isPlayerEnemy: (id: number) => own().isEnemy[id],
+		hasAllies: () => own().isAlly.some((a, i) => a && i !== us && !defeated(i)),
+		hasEnemies: () => own().isEnemy.some((e, i) => e && i !== 0 && !defeated(i)),
+		hasNeutrals: () => own().isNeutral.some((ne, i) => ne && !defeated(i)),
+		getEnemies: () => own().isEnemy.flatMap((e, i) => e ? [i] : []),
+		getMutualAllies: () => own().isMutualAlly.flatMap((a, i) => a && rows[i].isMutualAlly[us] ? [i] : []),
+		getNumPlayerEnemies: () => own().isEnemy.filter((e, i) => e && i > 0 && !defeated(i)).length,
+		getPlayerCiv: (player?: number) => player === undefined ? own().civ : rows[player].civ,
 	});
 	return rows;
 }

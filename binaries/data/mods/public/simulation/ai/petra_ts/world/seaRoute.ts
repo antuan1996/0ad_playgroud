@@ -46,20 +46,23 @@ export function shootersOf(gameState: CommonGameState): Shooter[]
 	{
 		const pos = ent.position();
 		if (!pos || ent.owner() === GAIA)
+		{
 			continue;
+		}
 		if (ent.hasClass("Structure"))
 		{
 			if (ent.hasDefensiveFire())
-				shooters.push({ pos, "range": ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE });
+			{
+				shooters.push({ pos, range: ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE });
+			}
 			continue;
 		}
 		const attacks = ent.attackTypes();
 		if (!attacks?.length)
+		{
 			continue;
-		shooters.push({
-			pos,
-			"range": attacks.includes("Ranged") ? ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE : 0,
-		});
+		}
+		shooters.push({ pos, range: attacks.includes("Ranged") ? ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE : 0 });
 	}
 	return shooters;
 }
@@ -74,7 +77,9 @@ export function threatsAt(pos: CommonPosition, shooters: readonly Shooter[]): nu
 		const dx = pos[0] - shooter.pos[0];
 		const dz = pos[1] - shooter.pos[1];
 		if (dx * dx + dz * dz <= reach * reach)
+		{
 			++threats;
+		}
 	}
 	return threats;
 }
@@ -128,7 +133,9 @@ class CellHeap
 		{
 			const parent = (i - 1) >> 1;
 			if (this.priorities[parent] <= priority)
+			{
 				break;
+			}
 			this.cells[i] = this.cells[parent];
 			this.priorities[i] = this.priorities[parent];
 			i = parent;
@@ -143,18 +150,24 @@ class CellHeap
 		const lastCell = this.cells.pop();
 		const lastPriority = this.priorities.pop();
 		if (!this.cells.length || lastCell === undefined || lastPriority === undefined)
+		{
 			return top;
+		}
 		let i = 0;
 		const n = this.cells.length;
 		for (;;)
 		{
 			const left = 2 * i + 1;
 			if (left >= n)
+			{
 				break;
+			}
 			const right = left + 1;
 			const child = right < n && this.priorities[right] < this.priorities[left] ? right : left;
 			if (this.priorities[child] >= lastPriority)
+			{
 				break;
+			}
 			this.cells[i] = this.cells[child];
 			this.priorities[i] = this.priorities[child];
 			i = child;
@@ -201,25 +214,25 @@ export function seaRoute(
 	};
 	const start = cellOf(from);
 	const goal = cellOf(to);
-	const grid: SeaGrid = {
-		access,
-		sea,
-		width,
-		"height": access.height,
-		"danger": new Uint8Array(width * access.height),
-	};
+	const grid: SeaGrid = { access, sea, width, height: access.height, danger: new Uint8Array(width * access.height) };
 	if (!onSea(grid, start) || !onSea(grid, goal))
+	{
 		return undefined;
+	}
 	markDanger(grid, shooters);
 
 	const cells = searchPath(grid, start, goal);
 	if (!cells)
+	{
 		return undefined;
+	}
 	const corners = pathCorners(grid, cells);
 	const every = Math.max(1, Math.ceil((corners.length + 1) / MAX_WAYPOINTS));
 	const route: CommonPosition[] = [];
 	for (let i = every - 1; i < corners.length; i += every)
+	{
 		route.push(worldPosOf(corners[i] % width, Math.floor(corners[i] / width), access.cellSize));
+	}
 	route.push(to);
 	return route;
 }
@@ -233,9 +246,15 @@ function markDanger(grid: SeaGrid, shooters: readonly Shooter[]): void
 		const c = access.gamePosToMapPos(shooter.pos);
 		const r = Math.ceil((shooter.range + DANGER_MARGIN) / access.cellSize);
 		for (let y = Math.max(0, c[1] - r); y <= Math.min(height - 1, c[1] + r); ++y)
+		{
 			for (let x = Math.max(0, c[0] - r); x <= Math.min(width - 1, c[0] + r); ++x)
+			{
 				if ((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1]) <= r * r)
+				{
 					danger[x + y * width] = 1;
+				}
+			}
+		}
 	}
 }
 
@@ -259,15 +278,21 @@ function searchPath(grid: SeaGrid, start: number, goal: number): number[] | unde
 	for (let cell = heap.pop(); cell !== undefined; cell = heap.pop())
 	{
 		if (cell === goal)
+		{
 			break;
+		}
 		relaxNeighbours(grid, cell, cost, cameFrom, (next, reached) => heap.push(next, reached + estimate(next)));
 	}
 	if (cameFrom[goal] === -1 && goal !== start)
+	{
 		return undefined;
+	}
 
 	const cells: number[] = [start];
 	for (let cell = goal; cell !== start; cell = cameFrom[cell])
+	{
 		cells.splice(1, 0, cell);
+	}
 	return cells;
 }
 
@@ -284,23 +309,31 @@ function relaxNeighbours(
 	const x = cell % width;
 	const y = Math.floor(cell / width);
 	for (let dy = -1; dy <= 1; ++dy)
+	{
 		for (let dx = -1; dx <= 1; ++dx)
 		{
 			const nx = x + dx;
 			const ny = y + dy;
 			if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= width || ny >= height)
+			{
 				continue;
+			}
 			const next = nx + ny * width;
 			if (!onSea(grid, next))
+			{
 				continue;
+			}
 			const step = (dx && dy ? Math.SQRT2 : 1) * (danger[next] ? DANGER_COST : 1);
 			const reached = cost[cell] + step;
 			if (reached >= cost[next])
+			{
 				continue;
+			}
 			cost[next] = reached;
 			cameFrom[next] = cell;
 			queue(next, reached);
 		}
+	}
 }
 
 /** The cells a straight leg from cell a to cell b crosses: all at sea, and how many in danger (undefined: not at sea). */
@@ -318,10 +351,14 @@ function legDanger(grid: SeaGrid, a: number, b: number): number | undefined
 	{
 		const cell = Math.floor(ax + dx * k / steps) + Math.floor(ay + dy * k / steps) * width;
 		if (cell === previous)
+		{
 			continue;
+		}
 		previous = cell;
 		if (!onSea(grid, cell))
+		{
 			return undefined;
+		}
 		count += grid.danger[cell];
 	}
 	return count;
@@ -338,7 +375,9 @@ function pathCorners(grid: SeaGrid, cells: number[]): number[]
 	// danger cells along the path up to each cell
 	const dangerBefore = new Int32Array(cells.length);
 	for (let i = 1; i < cells.length; ++i)
+	{
 		dangerBefore[i] = dangerBefore[i - 1] + grid.danger[cells[i]];
+	}
 	const corners: number[] = [];
 	for (let anchor = 0; anchor < cells.length - 1;)
 	{
@@ -347,11 +386,15 @@ function pathCorners(grid: SeaGrid, cells: number[]): number[]
 		{
 			const leg = legDanger(grid, cells[anchor], cells[j]);
 			if (leg === undefined || leg > dangerBefore[j] - dangerBefore[anchor])
+			{
 				break;
+			}
 			next = j;
 		}
 		if (next < cells.length - 1)
+		{
 			corners.push(cells[next]);
+		}
 		anchor = next;
 	}
 	return corners;

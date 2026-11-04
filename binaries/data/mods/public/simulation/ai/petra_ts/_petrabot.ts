@@ -8,7 +8,7 @@ import { QueueManager, configuredQueues, type SerializedQueueManager } from "./e
 import { Config, type SerializedConfig } from "./world/config.ts";
 import { analyseMap } from "./world/geography.ts";
 
-type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior?: string };
+type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior?: string; };
 
 /**
  * The version of what the bot saves (constraint 4, PLAN.md §1). Raise it with
@@ -78,10 +78,14 @@ function detachEventsCopy<T>(events: Array<T>): Array<T>
 		const evt = events[i];
 		// Empty slots are kept as they were serialized.
 		if (evt)
+		{
 			// A plain copy of the event itself.
 			copy[i] = { ...evt };
+		}
 		else
+		{
 			copy[i] = evt;
+		}
 	}
 	return copy;
 }
@@ -169,27 +173,27 @@ function mergeSharedEvents(saved: HeadquartersEvents, shared: HeadquartersEvents
 function copySavedEvents(events: HeadquartersEvents): HeadquartersEvents
 {
 	return {
-		"Create": detachEventsCopy(events.Create),
-		"Destroy": detachEventsCopy(events.Destroy),
-		"Attacked": detachEventsCopy(events.Attacked),
-		"ConstructionFinished": detachEventsCopy(events.ConstructionFinished),
-		"DiplomacyChanged": detachEventsCopy(events.DiplomacyChanged),
-		"TrainingStarted": detachEventsCopy(events.TrainingStarted),
-		"TrainingFinished": detachEventsCopy(events.TrainingFinished),
-		"AIMetadata": detachEventsCopy(events.AIMetadata),
-		"PlayerDefeated": detachEventsCopy(events.PlayerDefeated),
-		"EntityRenamed": detachEventsCopy(events.EntityRenamed),
-		"ValueModification": detachEventsCopy(events.ValueModification),
-		"OwnershipChanged": detachEventsCopy(events.OwnershipChanged),
-		"Garrison": detachEventsCopy(events.Garrison),
-		"UnGarrison": detachEventsCopy(events.UnGarrison),
-		"TerritoriesChanged": detachEventsCopy(events.TerritoriesChanged),
-		"TerritoryDecayChanged": detachEventsCopy(events.TerritoryDecayChanged),
-		"TributeExchanged": detachEventsCopy(events.TributeExchanged),
-		"AttackRequest": detachEventsCopy(events.AttackRequest),
-		"CeasefireEnded": detachEventsCopy(events.CeasefireEnded),
-		"DiplomacyRequest": detachEventsCopy(events.DiplomacyRequest),
-		"TributeRequest": detachEventsCopy(events.TributeRequest),
+		Create: detachEventsCopy(events.Create),
+		Destroy: detachEventsCopy(events.Destroy),
+		Attacked: detachEventsCopy(events.Attacked),
+		ConstructionFinished: detachEventsCopy(events.ConstructionFinished),
+		DiplomacyChanged: detachEventsCopy(events.DiplomacyChanged),
+		TrainingStarted: detachEventsCopy(events.TrainingStarted),
+		TrainingFinished: detachEventsCopy(events.TrainingFinished),
+		AIMetadata: detachEventsCopy(events.AIMetadata),
+		PlayerDefeated: detachEventsCopy(events.PlayerDefeated),
+		EntityRenamed: detachEventsCopy(events.EntityRenamed),
+		ValueModification: detachEventsCopy(events.ValueModification),
+		OwnershipChanged: detachEventsCopy(events.OwnershipChanged),
+		Garrison: detachEventsCopy(events.Garrison),
+		UnGarrison: detachEventsCopy(events.UnGarrison),
+		TerritoriesChanged: detachEventsCopy(events.TerritoriesChanged),
+		TerritoryDecayChanged: detachEventsCopy(events.TerritoryDecayChanged),
+		TributeExchanged: detachEventsCopy(events.TributeExchanged),
+		AttackRequest: detachEventsCopy(events.AttackRequest),
+		CeasefireEnded: detachEventsCopy(events.CeasefireEnded),
+		DiplomacyRequest: detachEventsCopy(events.DiplomacyRequest),
+		TributeRequest: detachEventsCopy(events.TributeRequest),
 	};
 }
 
@@ -220,10 +224,10 @@ export class PetraBot extends BaseAI
 		this.elapsedTime = seconds(0);
 
 		this.uniqueIDs = {
-			"armies": 1, // starts at 1 to allow easier tests on armies ID existence
-			"bases": 1, // base manager ID starts at one because "0" means "no base" on the map
-			"plans": 0, // training/building/research plans
-			"transports": 1, // transport plans start at 1 because 0 might be used as none
+			armies: 1, // starts at 1 to allow easier tests on armies ID existence
+			bases: 1, // base manager ID starts at one because "0" means "no base" on the map
+			plans: 0, // training/building/research plans
+			transports: 1, // transport plans start at 1 because 0 might be used as none
 		};
 
 		this.Config = new Config(settings.difficulty, settings.behavior);
@@ -237,7 +241,9 @@ export class PetraBot extends BaseAI
 		{
 			// WARNING: the deserializations should not modify the metadatas infos inside their init functions
 			if (!this.data)
+			{
 				return;
+			}
 			this.canPlay = this.data.canPlay;
 			this.turn = this.data.turn;
 			this.playedTurn = this.data.playedTurn;
@@ -278,10 +284,14 @@ export class PetraBot extends BaseAI
 	OnUpdate(sharedScript: CommonSharedScript): void
 	{
 		if (this.isDeserialized)
+		{
 			this.Init(PlayerID, sharedScript);
+		}
 
 		if (this.gameFinished || this.gameState.playerData.state === "defeated")
+		{
 			return;
+		}
 
 		mergeSharedEvents(this.savedEvents, sharedScript.events);
 
@@ -300,10 +310,14 @@ export class PetraBot extends BaseAI
 			}
 
 			if (this.HQ)
+			{
 				this.HQ.update(this.gameState, this.queues, this.savedEvents);
+			}
 
 			if (this.queueManager)
+			{
 				this.queueManager.update(this.gameState);
+			}
 
 			// Every event of this turn has been processed: start with empty buckets.
 			this.savedEvents = createEmptyEvents();
@@ -319,24 +333,28 @@ export class PetraBot extends BaseAI
 		if (this.isDeserialized)
 		{
 			if (!this.data)
+			{
 				throw new Error("Cannot serialize: data is undefined during deserialization");
+			}
 			return this.data;
 		}
 
 		if (!this.queueManager)
+		{
 			throw new Error("Cannot serialize: queueManager is undefined");
+		}
 
 		return {
-			"saveVersion": SAVE_VERSION,
-			"canPlay": this.canPlay,
-			"uniqueIDs": this.uniqueIDs,
-			"turn": this.turn,
-			"playedTurn": this.playedTurn,
-			"elapsedTime": this.elapsedTime,
-			"savedEvents": copySavedEvents(this.savedEvents),
-			"config": this.Config.Serialize(),
-			"queueManager": this.queueManager.Serialize(),
-			"HQ": this.HQ?.Serialize(),
+			saveVersion: SAVE_VERSION,
+			canPlay: this.canPlay,
+			uniqueIDs: this.uniqueIDs,
+			turn: this.turn,
+			playedTurn: this.playedTurn,
+			elapsedTime: this.elapsedTime,
+			savedEvents: copySavedEvents(this.savedEvents),
+			config: this.Config.Serialize(),
+			queueManager: this.queueManager.Serialize(),
+			HQ: this.HQ?.Serialize(),
 		};
 	}
 

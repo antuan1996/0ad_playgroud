@@ -52,14 +52,11 @@ const match = [
 ];
 
 test("a mirror match of Petra TS in the game shows no anomaly", {
-	"skip": existsSync(game) ? false : `${game} is missing: build the engine first (see CLAUDE.md)`,
-	"timeout": 10 * 60 * 1000,
-}, async t =>
+	skip: existsSync(game) ? false : `${game} is missing: build the engine first (see CLAUDE.md)`,
+	timeout: 10 * 60 * 1000,
+}, async (t) =>
 {
-	const run = spawnSync(join(repo, "build", "petra_ts", "match.sh"), match, {
-		"encoding": "utf8",
-		"maxBuffer": 1 << 30,
-	});
+	const run = spawnSync(join(repo, "build", "petra_ts", "match.sh"), match, { encoding: "utf8", maxBuffer: 1 << 30 });
 	assert.equal(run.status, 0, `match.sh failed:\n${run.stderr.slice(-2000)}`);
 	const report = readFileSync(join(record, "match.txt"), "utf8");
 	t.diagnostic(`record: ${record}`);
@@ -67,9 +64,11 @@ test("a mirror match of Petra TS in the game shows no anomaly", {
 	t.diagnostic(/^rerun.*$/m.exec(report)?.[0] ?? "");
 
 	for (const { name, ok, detail } of checkMatch(record))
+	{
 		await t.test(name, () =>
 		{
 			t.diagnostic(`${name}: ${detail}`);
 			assert.ok(ok, detail);
 		});
+	}
 });

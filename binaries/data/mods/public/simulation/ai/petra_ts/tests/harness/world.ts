@@ -132,7 +132,7 @@ export interface World
 	/** resetCaptureGaiaRelic calls the victoryManager saw */
 	relicResets: unknown[];
 	/** the collections the plan asked the sharedScript to keep updated */
-	collections: { registered: CommonEntityCollection[] };
+	collections: { registered: CommonEntityCollection[]; };
 }
 
 export const PLAYER = playerId(1);
@@ -144,13 +144,15 @@ export function mapOf(items: Iterable<CommonEntity>): Map<EntityId, CommonEntity
 {
 	const map = new Map<EntityId, CommonEntity>();
 	for (const ent of items)
+	{
 		map.set(ent.id(), ent);
+	}
 	return map;
 }
 
 /** A real EntityCollection over `items`, kept by the world's shared script. */
 export function collectionOf(
-	world: { gameState: CommonGameState },
+	world: { gameState: CommonGameState; },
 	items: Iterable<CommonEntity> = [],
 	filters?: CommonEntityFilter[],
 ): CommonEntityCollection
@@ -210,16 +212,18 @@ export function makeWorld(options: WorldOptions = {}): World
 		{
 			const index = collections.registered.indexOf(collection);
 			if (index !== -1)
+			{
 				collections.registered.splice(index, 1);
+			}
 		},
 		// three players, so the plan's endgame counting loop leaves player 2
 		// (the enemy) and skips our own player 1. Each row carries the per-player
 		// diplomacy the engine fills (PlayerManager): a player is always its own
 		// ally, nobody else by default.
-		playersData: [{ "state": "active", "isAlly": [true, false, false, false] }, {
-			"state": "active",
-			"isAlly": [false, true, false, false],
-		}, { "state": "active", "isAlly": [false, false, true, false] }],
+		playersData: [{ state: "active", isAlly: [true, false, false, false] }, {
+			state: "active",
+			isAlly: [false, true, false, false],
+		}, { state: "active", isAlly: [false, false, true, false] }],
 	});
 	const collect = (items: Iterable<CommonEntity> = [], filters?: CommonEntityFilter[]) =>
 		new EntityCollection(sharedAI, mapOf(items), filters);
@@ -270,9 +274,13 @@ export function makeWorld(options: WorldOptions = {}): World
 		{
 			ents.set(ent.id(), ent);
 			if (ent.hasClass("Unit"))
+			{
 				units.push(ent);
+			}
 			else
+			{
 				structures.push(ent);
+			}
 			return ent;
 		},
 		removeEntity(id: number)
@@ -282,13 +290,21 @@ export function makeWorld(options: WorldOptions = {}): World
 			if (gone)
 			{
 				for (const collection of collections.registered)
+				{
 					collection.removeEnt(gone);
+				}
 			}
 			ents.delete(id);
 			for (const list of [units, structures])
+			{
 				for (let i = list.length - 1; i >= 0; --i)
+				{
 					if (list[i].id() === id)
+					{
 						list.splice(i, 1);
+					}
+				}
+			}
 		},
 	};
 
@@ -305,12 +321,12 @@ export function makeWorld(options: WorldOptions = {}): World
 		navalManager: {
 			// the fleet per sea: none on sea 4
 			fleets: new Map([[4, {
-				"ships": collect(),
-				"transports": collect(),
-				"warShips": collect(),
-				"fishers": collect(),
+				ships: collect(),
+				transports: collect(),
+				warShips: collect(),
+				fishers: collect(),
 			}]]),
-			fleet(this: { fleets: Map<number, unknown> }, sea: number)
+			fleet(this: { fleets: Map<number, unknown>; }, sea: number)
 			{
 				return this.fleets.get(sea);
 			},
@@ -328,8 +344,8 @@ export function makeWorld(options: WorldOptions = {}): World
 		// the houses have room (AttackPlan.cannotGrow reads it)
 		buildManager: { isUnbuildable: () => false },
 		attackManager: {
-			upcomingAttacks: { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] },
-			startedAttacks: { "Raid": [], "Rush": [], "Attack": [], "HugeAttack": [] },
+			upcomingAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] },
+			startedAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] },
 			defeated: {},
 			bombingAttacks: new Map<string, Set<number>>(),
 			outOfPlan: collect(),
@@ -341,13 +357,13 @@ export function makeWorld(options: WorldOptions = {}): World
 				switchCalls.push([target, data]);
 				return true;
 			},
-			splitLocalFights: (_gs: CommonGameState, plan: { name: number }, targetLand: number | undefined) =>
+			splitLocalFights: (_gs: CommonGameState, plan: { name: number; }, targetLand: number | undefined) =>
 				leavingPlans.push([plan.name, targetLand]),
 			// the lands named in enemyLands, each with the world's enemies standing on it
 			enemiesByLand: () =>
-				new Map([...enemyLands].map(land => [
+				new Map([...enemyLands].map((land) => [
 					land,
-					[...ents.values()].filter(ent =>
+					[...ents.values()].filter((ent) =>
 					{
 						const pos = ent.position();
 						return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
@@ -392,7 +408,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
 		capturableTargets: new Map(),
-		getBaseByID: (id: number) => bases.find(b => b.ID === id),
+		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
 		isDefendable: () => false,
 		hasActiveBase: () => true,
 		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>
@@ -411,7 +427,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		templateName: "structures/athen_civil_centre",
 	});
 	world.addEntity(anchor);
-	bases.push({ "ID": 1, anchor, accessIndex: 2 });
+	bases.push({ ID: 1, anchor, accessIndex: 2 });
 
 	// the engine diplomacy matrix: every player is its own and everyone's
 	// gaia enemy; the player who reads this row is always their own ally
@@ -424,7 +440,7 @@ export function makeWorld(options: WorldOptions = {}): World
 	};
 	const isEnemy = (owner: number) => playerData.isEnemy[owner];
 	const ownedBy = (owner: number | undefined) => (ent: CommonEntity) => owner === undefined || ent.owner() === owner;
-	const trainingFacilities = () => structures.filter(s => s.trainingQueue());
+	const trainingFacilities = () => structures.filter((s) => s.trainingQueue());
 
 	world.gameState = fake<CommonGameState>({
 		ai,
@@ -445,7 +461,9 @@ export function makeWorld(options: WorldOptions = {}): World
 		// collection (see below), so membership is a truthy trainingQueue
 		findTrainers: (template: string) =>
 			collect(
-				trainingFacilities().filter(s => (s.trainableEntities("athen") ?? []).includes(templateName(template))),
+				trainingFacilities().filter((s) =>
+					(s.trainableEntities("athen") ?? []).includes(templateName(template))
+				),
 			),
 		getNumPlayerEnemies: () => knobs.enemyPlayer === undefined ? 0 : 1,
 		getEntityById: (id: number | string) => ents.get(+id),
@@ -458,17 +476,17 @@ export function makeWorld(options: WorldOptions = {}): World
 		// as GameState.prototype.getEnemyStructures: with no owner, the
 		// structures of every player the diplomacy row calls an enemy
 		getEnemyStructures: (owner?: number) =>
-			collect(structures.filter(s => owner === undefined ? isEnemy(s.owner()) : s.owner() === owner)),
+			collect(structures.filter((s) => owner === undefined ? isEnemy(s.owner()) : s.owner() === owner)),
 		// every entity of a player the diplomacy row calls an enemy, as the
 		// common-api byOwners(getEnemies()) does
-		getEnemyEntities: () => collect([...ents.values()].filter(e => isEnemy(e.owner()))),
+		getEnemyEntities: () => collect([...ents.values()].filter((e) => isEnemy(e.owner()))),
 		getOwnStructures: () => collect(structures.filter(ownedBy(PLAYER)), [byClass("Structure")]),
 		getEnemyUnits: (owner?: number) =>
-			collect(units.filter(u => owner === undefined ? u.owner() !== PLAYER : u.owner() === owner)),
+			collect(units.filter((u) => owner === undefined ? u.owner() !== PLAYER : u.owner() === owner)),
 		getStructures: () => collect(structures),
 		getOwnEntitiesByRole: (role: string | undefined) =>
-			collect(units.filter(u => u.getMetadata(PLAYER, "role") == role)),
-		getOwnEntitiesByClass: (cls: string) => collect(structures.filter(s => s.hasClass(cls))),
+			collect(units.filter((u) => u.getMetadata(PLAYER, "role") == role)),
+		getOwnEntitiesByClass: (cls: string) => collect(structures.filter((s) => s.hasClass(cls))),
 		// as GameState.prototype.getOwnTrainingFacilities: facilities are the
 		// own entities a truthy trainingQueue answers for (filters.byTrainingQueue),
 		// not a class test
@@ -490,7 +508,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		isEntityEnemy: (ent: CommonEntity) => isEnemy(ent.owner()),
 		isEntityExclusiveAlly: (ent: CommonEntity) => playerData.isAlly[ent.owner()] && ent.owner() !== PLAYER,
 		/** structures of everyone we and they consider an ally, as the game defines ally collections */
-		getAllyStructures: () => collect(structures.filter(s => playerData.isMutualAlly[s.owner()])),
+		getAllyStructures: () => collect(structures.filter((s) => playerData.isMutualAlly[s.owner()])),
 		getPassabilityClassMask: () => 0,
 	});
 	return world;

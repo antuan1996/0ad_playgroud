@@ -33,7 +33,7 @@ function makeGarrisonManager(world: World): GarrisonManager
 }
 
 /** a watch structure: the tower of the frontier week, with per-test answers */
-function towerWorld(overrides: Methods = {}): { world: World; manager: GarrisonManager; tower: CommonEntity }
+function towerWorld(overrides: Methods = {}): { world: World; manager: GarrisonManager; tower: CommonEntity; }
 {
 	const world = makeWorld();
 	const manager = makeGarrisonManager(world);
@@ -41,7 +41,7 @@ function towerWorld(overrides: Methods = {}): { world: World; manager: GarrisonM
 		isGarrisonHolder: () => true,
 		garrisonableClasses: () => ["Infantry"],
 		garrisonMax: () => 10,
-		attackRange: (type: string) => type == "Ranged" ? ({ "max": 60 }) : undefined,
+		attackRange: (type: string) => type == "Ranged" ? ({ max: 60 }) : undefined,
 		...overrides,
 	});
 	world.addEntity(tower);
@@ -58,7 +58,7 @@ function walker(
 {
 	return makeEntity({ id, owner: PLAYER, position: [20, 20], classes: ["Unit", "Infantry"] }, {
 		canGarrison: () => true,
-		unitAIOrderData: () => orders({ "target": entityId(holderId) }),
+		unitAIOrderData: () => orders({ target: entityId(holderId) }),
 		...methods,
 	}, metadata);
 }
@@ -82,7 +82,7 @@ function residentArm(
 	id: number,
 	attackTypes: string[],
 	methods: Methods = {},
-	metadata: Record<string, unknown> = { "garrisonType": GarrisonManager.TYPE_PROTECTION },
+	metadata: Record<string, unknown> = { garrisonType: GarrisonManager.TYPE_PROTECTION },
 ): CommonEntity
 {
 	return makeEntity({ id, owner: PLAYER, position: [30, 31], classes: ["Unit", "Infantry", "CitizenSoldier"] }, {
@@ -96,7 +96,7 @@ function residentArm(
 function foeUnit(
 	id: number,
 	position: [number, number] | undefined,
-	spec: { classes?: string[]; owner?: number; attackTypes?: string[]; combat?: boolean; methods?: Methods } = {},
+	spec: { classes?: string[]; owner?: number; attackTypes?: string[]; combat?: boolean; methods?: Methods; } = {},
 ): CommonEntity
 {
 	return makeEntity({ id, owner: spec.owner ?? ENEMY, position, classes: ["Unit", ...(spec.classes ?? [])] }, {
@@ -168,7 +168,7 @@ describe("garrisonManager", () =>
 		it("a unit that serves a plan keeps him marked -2 and lands him back", () =>
 		{
 			const { world, manager, tower } = towerWorld();
-			const archer = walker(3000, tower.id(), {}, { "plan": 4 });
+			const archer = walker(3000, tower.id(), {}, { plan: 4 });
 			world.addEntity(archer);
 
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
@@ -268,7 +268,7 @@ describe("garrisonManager", () =>
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 			// the worker's office reseated him on another structure, engine order too
 			archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
-			archer.unitAIOrderData = () => orders({ "target": entityId(5001) });
+			archer.unitAIOrderData = () => orders({ target: entityId(5001) });
 
 			manager.update(world.gameState, emptyEvents());
 
@@ -360,9 +360,9 @@ describe("garrisonManager", () =>
 			world.ai.elapsedTime = seconds(104); // the patrol runs three wall-seconds later
 			// a grazing gaia animal is no threat (listed first: the patrol stops at the first plain foe)
 			world.addEntity(
-				foeUnit(2010, [35, 31], { "owner": GAIA, "classes": ["Animal"], "attackTypes": [], "combat": false }),
+				foeUnit(2010, [35, 31], { owner: GAIA, classes: ["Animal"], attackTypes: [], combat: false }),
 			);
-			world.addEntity(foeUnit(2000, [40, 30], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
+			world.addEntity(foeUnit(2000, [40, 30], { classes: ["Infantry"], attackTypes: ["Melee"] }));
 
 			manager.update(world.gameState, emptyEvents());
 
@@ -381,17 +381,17 @@ describe("garrisonManager", () =>
 			world.ai.elapsedTime = seconds(104);
 			world.addEntity(
 				foeUnit(2010, [35, 31], {
-					"owner": GAIA,
-					"classes": ["Animal"],
-					"attackTypes": [],
-					"methods": { "unitAIState": () => undefined },
+					owner: GAIA,
+					classes: ["Animal"],
+					attackTypes: [],
+					methods: { unitAIState: () => undefined },
 				}),
 			);
 			world.addEntity(
 				foeUnit(2000, [40, 30], {
-					"classes": ["Infantry"],
-					"attackTypes": ["Melee"],
-					"methods": { "unitAIState": () => undefined },
+					classes: ["Infantry"],
+					attackTypes: ["Melee"],
+					methods: { unitAIState: () => undefined },
 				}),
 			);
 
@@ -443,8 +443,8 @@ describe("garrisonManager", () =>
 			const archer = residentArm(3021, ["Ranged"]);
 			world.addEntity(archer);
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
-			world.addEntity(foeUnit(2001, undefined, { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
-			world.addEntity(foeUnit(2002, [200, 200], { "classes": ["Infantry"], "attackTypes": ["Melee"] }));
+			world.addEntity(foeUnit(2001, undefined, { classes: ["Infantry"], attackTypes: ["Melee"] }));
+			world.addEntity(foeUnit(2002, [200, 200], { classes: ["Infantry"], attackTypes: ["Melee"] }));
 			world.ai.elapsedTime = seconds(104);
 
 			manager.update(world.gameState, emptyEvents());
@@ -481,11 +481,11 @@ describe("garrisonManager", () =>
 			world.addEntity(archer);
 			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 			world.removeEntity(3000);
-			world.addEntity(walker(3100, tower.id(), {}, { "garrisonHolder": tower.id() }));
+			world.addEntity(walker(3100, tower.id(), {}, { garrisonHolder: tower.id() }));
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(3000), "newentity": entityId(3100) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(3000), newentity: entityId(3100) }] }),
 			);
 
 			assert.deepEqual(leaf(manager, 5000).list, [3100]);
@@ -506,7 +506,7 @@ describe("garrisonManager", () =>
 			);
 			world.addEntity(
 				makeEntity({ id: 5011, owner: ENEMY, position: [40, 31], classes: ["Structure", "Tower"] }, {
-					attackRange: (t: string) => t == "Ranged" ? ({ "max": 50 }) : undefined,
+					attackRange: (t: string) => t == "Ranged" ? ({ max: 50 }) : undefined,
 				}),
 			);
 
@@ -777,19 +777,19 @@ describe("garrisonManager", () =>
 				manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
 				// the worker's office reseated him on another structure
 				archer.setMetadata(PLAYER, "garrisonHolder", entityId(5001));
-				archer.unitAIOrderData = () => orders({ "target": entityId(5001) });
+				archer.unitAIOrderData = () => orders({ target: entityId(5001) });
 				let events = emptyEvents();
 				if (fall === "destroyed")
+				{
 					world.removeEntity(5000);
+				}
 				else
 				{
 					// the tower was turned into something no one can enter
 					world.addEntity(
 						makeEntity({ id: 5050, owner: PLAYER, position: [30, 30], classes: ["Structure"] }),
 					);
-					events = eventsWith({
-						"EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }],
-					});
+					events = eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] });
 				}
 
 				manager.update(world.gameState, events);
@@ -837,16 +837,16 @@ describe("garrisonManager", () =>
 						isGarrisonHolder: () => true,
 						garrisonableClasses: () => ["Infantry"],
 						garrisonMax: () => 20,
-						attackRange: (t: string) => t == "Ranged" ? ({ "max": 80 }) : undefined,
+						attackRange: (t: string) => t == "Ranged" ? ({ max: 80 }) : undefined,
 					},
 				),
 			);
 			// the engine relabels the marcher's order together with the tower
-			archer.unitAIOrderData = () => orders({ "target": entityId(5050) });
+			archer.unitAIOrderData = () => orders({ target: entityId(5050) });
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] }),
 			);
 
 			assert.equal(manager.holders.has(entityId(5000)), false, "the old name left the book");
@@ -874,7 +874,7 @@ describe("garrisonManager", () =>
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] }),
 			);
 
 			assert.deepEqual(stopCalls, [3000], "the marcher was recalled");
@@ -901,7 +901,7 @@ describe("garrisonManager", () =>
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] }),
 			);
 
 			assert.equal(manager.decayingStructures.has(entityId(5000)), false, "the ruin's watch ended");
@@ -927,7 +927,7 @@ describe("garrisonManager", () =>
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] }),
 			);
 
 			assert.equal(manager.decayingStructures.size, 0, "the rebuilt keep needs no men");
@@ -952,7 +952,7 @@ describe("garrisonManager", () =>
 
 			manager.update(
 				world.gameState,
-				eventsWith({ "EntityRenamed": [{ "entity": entityId(5000), "newentity": entityId(5050) }] }),
+				eventsWith({ EntityRenamed: [{ entity: entityId(5000), newentity: entityId(5050) }] }),
 			);
 
 			assert.equal(manager.decayingStructures.get(entityId(5050)), 1, "the earlier leaf stands");
@@ -1048,8 +1048,8 @@ describe("garrisonManager", () =>
 			manager.update(world.gameState, emptyEvents());
 
 			assert.deepEqual(world.decayGarrisonCalls.map(([ent, data]) => [ent.id(), data]), [[5000, {
-				"min": 2,
-				"type": GarrisonManager.TYPE_DECAY,
+				min: 2,
+				type: GarrisonManager.TYPE_DECAY,
 			}]], "the decay office asked the defense office for one more man");
 		});
 
@@ -1080,8 +1080,8 @@ describe("garrisonManager", () =>
 
 			assert.equal(manager.decayingStructures.has(entityId(5000)), false, "the captured keep left the watch");
 			assert.deepEqual(world.decayGarrisonCalls.map(([ent, data]) => [ent.id(), data]), [[5001, {
-				"min": 2,
-				"type": GarrisonManager.TYPE_DECAY,
+				min: 2,
+				type: GarrisonManager.TYPE_DECAY,
 			}]], "ours begged for its last man");
 		});
 
@@ -1109,12 +1109,12 @@ describe("garrisonManager", () =>
 	describe("the fit of the lodged men", () =>
 	{
 		/** the quiet roster around a question: who may stay */
-		const quiet = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
+		const quiet = { defenseStructure: false, meleeSiege: false, rangeSiege: false, unit: false };
 
 		it("a call to empty the hold is honored", () =>
 		{
 			const { world, manager, tower } = towerWorld();
-			const heldForced = residentArm(3021, ["Melee"], {}, { "garrisonType": GarrisonManager.TYPE_FORCE });
+			const heldForced = residentArm(3021, ["Melee"], {}, { garrisonType: GarrisonManager.TYPE_FORCE });
 			world.addEntity(heldForced);
 
 			assert.equal(manager.keepGarrisoned(heldForced, tower, quiet), false, "a force call is the ticket out");
@@ -1123,7 +1123,7 @@ describe("garrisonManager", () =>
 		it("traders rest aboard their ship", () =>
 		{
 			const { world, manager, tower } = towerWorld();
-			const trader = residentArm(3021, [], {}, { "garrisonType": GarrisonManager.TYPE_TRADE });
+			const trader = residentArm(3021, [], {}, { garrisonType: GarrisonManager.TYPE_TRADE });
 			world.addEntity(trader);
 
 			assert.equal(
@@ -1137,7 +1137,7 @@ describe("garrisonManager", () =>
 		{
 			const { world, manager, tower } = towerWorld();
 			const captive = residentArm(3021, ["Melee"], { capturePoints: () => [2, 1, 1] }, {
-				"garrisonType": GarrisonManager.TYPE_PROTECTION,
+				garrisonType: GarrisonManager.TYPE_PROTECTION,
 			});
 			world.addEntity(captive);
 
@@ -1155,10 +1155,10 @@ describe("garrisonManager", () =>
 			world.addEntity(keep);
 			assert.equal(manager.addDecayingStructure(world.gameState, entityId(5000)), true);
 			const doomed = residentArm(3021, ["Melee"], { captureStrength: () => 4 }, {
-				"garrisonType": GarrisonManager.TYPE_DECAY,
+				garrisonType: GarrisonManager.TYPE_DECAY,
 			});
 			const spent = residentArm(3022, ["Melee"], { captureStrength: () => 0 }, {
-				"garrisonType": GarrisonManager.TYPE_DECAY,
+				garrisonType: GarrisonManager.TYPE_DECAY,
 			});
 			world.addEntity(doomed);
 			world.addEntity(spent);
@@ -1175,7 +1175,7 @@ describe("garrisonManager", () =>
 			const keep = decayedTower(5000);
 			world.addEntity(keep);
 			const doomed = residentArm(3021, ["Melee"], { captureStrength: () => 4 }, {
-				"garrisonType": GarrisonManager.TYPE_DECAY,
+				garrisonType: GarrisonManager.TYPE_DECAY,
 			});
 			world.addEntity(doomed);
 
@@ -1186,17 +1186,17 @@ describe("garrisonManager", () =>
 		{
 			const { world, manager } = towerWorld();
 			const hero = residentArm(3021, ["Melee"], { healthLevel: () => 1 }, {
-				"garrisonType": GarrisonManager.TYPE_EMERGENCY,
+				garrisonType: GarrisonManager.TYPE_EMERGENCY,
 			});
 			world.addEntity(hero);
-			const attacked = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": true };
+			const attacked = { defenseStructure: false, meleeSiege: false, rangeSiege: false, unit: true };
 			assert.equal(
 				manager.keepGarrisoned(hero, entOf(world, 5000), attacked),
 				true,
 				"the assault keeps the hero behind the walls",
 			);
 
-			const noFoe = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
+			const noFoe = { defenseStructure: false, meleeSiege: false, rangeSiege: false, unit: false };
 			// the armed manager answers a bare undefined here, the port a false;
 			// both empty truth for every caller
 			assert.ok(
@@ -1234,7 +1234,7 @@ describe("garrisonManager", () =>
 			);
 			world.addEntity(temple);
 			const hero = residentArm(3021, ["Melee"], { isHealable: () => true, healthLevel: () => 0.5 }, {
-				"garrisonType": GarrisonManager.TYPE_EMERGENCY,
+				garrisonType: GarrisonManager.TYPE_EMERGENCY,
 			});
 			world.addEntity(hero);
 			assert.equal(manager.keepGarrisoned(hero, temple, quiet), true);
@@ -1255,13 +1255,13 @@ describe("garrisonManager", () =>
 					makeEntity({ id, owner: PLAYER, position: [30, 31], classes: ["Unit", ...classes] }, {
 						attackTypes: () => attackTypes,
 						needsHeal: () => false,
-					}, { "garrisonType": GarrisonManager.TYPE_PROTECTION }),
+					}, { garrisonType: GarrisonManager.TYPE_PROTECTION }),
 				);
 			const ram = machine(3031, ["Siege", "Ram"], ["Melee"]);
 			const catapult = machine(3032, ["Siege", "StoneThrower"], ["Ranged"]);
 			const villager = machine(3033, ["Support", "Worker"], undefined);
-			const soldiers = { ...quiet, "unit": true };
-			const rams = { ...quiet, "meleeSiege": true };
+			const soldiers = { ...quiet, unit: true };
+			const rams = { ...quiet, meleeSiege: true };
 
 			assert.equal(manager.keepGarrisoned(ram, fortress, soldiers), false);
 			assert.equal(manager.keepGarrisoned(catapult, fortress, soldiers), true);
@@ -1277,7 +1277,7 @@ describe("garrisonManager", () =>
 		it("an on-board soldier is the transports' business, never ours", () =>
 		{
 			const { world, manager, tower } = towerWorld();
-			const aboard = residentArm(3021, ["Melee"], {}, { "garrisonType": "unknownToUs", "onBoard": "onBoard" });
+			const aboard = residentArm(3021, ["Melee"], {}, { garrisonType: "unknownToUs", onBoard: "onBoard" });
 			world.addEntity(aboard);
 
 			assert.equal(
@@ -1290,7 +1290,7 @@ describe("garrisonManager", () =>
 		it("an unknown booking is refilled as protection and warned about", () =>
 		{
 			const { world, manager, tower } = towerWorld();
-			const drifted = residentArm(3021, ["Melee"], {}, { "garrisonType": "somberLost" });
+			const drifted = residentArm(3021, ["Melee"], {}, { garrisonType: "somberLost" });
 			world.addEntity(drifted);
 			resetRecorder();
 
@@ -1300,7 +1300,7 @@ describe("garrisonManager", () =>
 				"the drifted sleeper is treated as a defender",
 			);
 			assert.ok(
-				logs.some(entry => /unknown type in garrisonManager somberLost/.test(entry)),
+				logs.some((entry) => /unknown type in garrisonManager somberLost/.test(entry)),
 				"the office made noise about the unknown booking",
 			);
 			assert.equal(

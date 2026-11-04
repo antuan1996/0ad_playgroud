@@ -74,8 +74,8 @@ declare namespace PetraRuntime
 	type QueueName = ConfiguredQueueName | AttackQueueName;
 	/** All Petra queues by name: the configured ones always, an attack plan's while it prepares. */
 	type QueueCollection =
-		& { [K in ConfiguredQueueName]: import("./execution/queue.ts").Queue }
-		& { [K in AttackQueueName]?: import("./execution/queue.ts").Queue };
+		& { [K in ConfiguredQueueName]: import("./execution/queue.ts").Queue; }
+		& { [K in AttackQueueName]?: import("./execution/queue.ts").Queue; };
 
 	/**
 	 * The three adjustable personality axes Petra reads from the game settings

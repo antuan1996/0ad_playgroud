@@ -115,8 +115,8 @@ type AttackerContext = {
 	attackedByStructure: Record<number, boolean>;
 	enemyUnits: CommonEntityCollection;
 	enemyStructures: CommonEntityCollection;
-	targetClassesUnit: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
-	targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
+	targetClassesUnit: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
+	targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
 };
 
 /** The four kinds of attack plan, in the order the attack manager keeps them. */
@@ -127,13 +127,15 @@ export const ATTACK_TYPES: readonly AttackType[] = ["Rush", "Raid", "Attack", "H
 export function* plansIn(records: Record<AttackType, AttackPlan[]>): Generator<AttackPlan>
 {
 	for (const type of ATTACK_TYPES)
+	{
 		yield* records[type];
+	}
 }
 
 /** A record over the four attack types, in ATTACK_TYPES' order, of what `make` gives for each. */
 export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackType, T>
 {
-	return { "Rush": make("Rush"), "Raid": make("Raid"), "Attack": make("Attack"), "HugeAttack": make("HugeAttack") };
+	return { Rush: make("Rush"), Raid: make("Raid"), Attack: make("Attack"), HugeAttack: make("HugeAttack") };
 }
 
 /**
@@ -145,9 +147,9 @@ export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackTyp
  * as that would cause oos.
  */
 /** What a new plan is asked for: a target, a unique target, a rush's size. */
-export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number };
+export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number; };
 /** Where a plan gathers its army, and the sea to cross to its target (0: none). */
-type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0 };
+type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0; };
 
 /**
  * Whether one of the plan's units answers a blow: while completing, one bound for a ship, on the attacker's land
@@ -163,11 +165,15 @@ function answersBlow(
 {
 	const pos = ent.position();
 	if (completing)
+	{
 		return !(ent.getMetadata(PlayerID, "transport") === undefined || !pos || !near ||
 			getLandAccess(gameState, ent) !== attackerLand ||
 			SquareVectorDistance(pos, near) > AttackPlan.ANSWER_RANGE * AttackPlan.ANSWER_RANGE);
+	}
 	if (ent.getMetadata(PlayerID, "transport") !== undefined)
+	{
 		return !(!pos || getLandAccess(gameState, ent) !== attackerLand);
+	}
 	return !!ent.isIdle();
 }
 
@@ -179,27 +185,35 @@ function destroyFarthestSiege(units: CommonEntityCollection, pos: CommonPosition
 	for (const ent of units.filter(filters.byClass("Siege")).values())
 	{
 		if (!isPlaced(ent))
+		{
 			continue;
+		}
 		const entPos = ent.position();
 		const dist = SquareVectorDistance(entPos, pos);
 		if (dist < farthest)
+		{
 			continue;
+		}
 		farthest = dist;
 		farthestEnt = ent;
 	}
 	if (farthestEnt)
+	{
 		farthestEnt.destroy();
+	}
 }
 
 /** Where an attacker stands, how far it looks for its next target (squared), and its land */
-type AttackerReach = { pos: CommonPosition; range: number; access: AccessIndex | undefined };
+type AttackerReach = { pos: CommonPosition; range: number; access: AccessIndex | undefined; };
 
 /** The unit strikes back at the attacker if it can (capturing if worth it): whether it did */
 function strike(gameState: CommonGameState, ent: CommonEntity, attacker: CommonEntity, time: GameSeconds): boolean
 {
 	const shouldCapture = allowCapture(gameState, ent, attacker);
 	if (!ent.canAttackTarget(attacker, shouldCapture))
+	{
 		return false;
+	}
 	ent.attack(attacker.id(), shouldCapture);
 	ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
 	return true;
@@ -210,9 +224,13 @@ function busyFighting(gameState: CommonGameState, ent: CommonEntity, attacker: C
 {
 	const orderData = ordersOf(ent);
 	if (!orderData || !orderData.length || !orderData[0].target)
+	{
 		return false;
+	}
 	if (orderData[0].target === attacker.id())
+	{
 		return true;
+	}
 	const target = gameState.getEntityById(orderData[0].target);
 	return !!target && !target.hasClasses(["Structure", "Support"]);
 }
@@ -232,23 +250,33 @@ function targetVerdict(
 {
 	const target = gameState.getEntityById(targetId);
 	if (!target || gameState.isPlayerAlly(target.owner()))
+	{
 		return "needs";
+	}
 	if (unitTargets[targetId] && unitTargets[targetId] > 0)
 	{
 		--unitTargets[targetId];
 		return "needs";
 	}
 	if (isSiegeUnit(ent))
+	{
 		return !target.hasClass("Structure") ? "maybe" : "keeps";
+	}
 	if (target.hasClass("Ship") && !ent.hasClass("Ship"))
+	{
 		return "maybe";
+	}
 	if (attackedByStructure[ent.id()] && target.hasClass("Field"))
+	{
 		return "maybe";
+	}
 	if (
 		!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
 		target.hasClass("Civilian") && requiredActivityIs(target, "FLEEING")
 	)
+	{
 		return "maybe";
+	}
 	return "keeps";
 }
 
@@ -257,11 +285,17 @@ function structureValue(struct: CommonEntity, ent: CommonEntity, defensiveBonus:
 {
 	let val = struct.costSum();
 	if (struct.hasClass("Gate") && ent.canAttackClass("Wall"))
+	{
 		val += 10000;
+	}
 	else if (defensiveBonus && struct.hasDefensiveFire())
+	{
 		val += defensiveBonus;
+	}
 	else if (struct.hasClass("ConquestCritical"))
+	{
 		val += criticalBonus;
+	}
 	return val;
 }
 
@@ -278,20 +312,30 @@ function enemyUnitsInReach(
 {
 	const { targetPos, veto, enemyUnits } = ctx;
 	const nearby = !ent.hasClasses(["FastMoving", "Ranged"]);
-	return enemyUnits.filter(enemy =>
+	return enemyUnits.filter((enemy) =>
 	{
 		const enemyPos = enemy.position();
 		if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
+		{
 			return false;
+		}
 		if (enemy.hasClass("Animal"))
+		{
 			return false;
+		}
 		if (nearby && enemy.hasClass("Civilian") && requiredActivityIs(enemy, "FLEEING"))
+		{
 			return false;
+		}
 		const dist = SquareVectorDistance(enemyPos, reach.pos);
 		if (dist > reach.range)
+		{
 			return false;
+		}
 		if (getLandAccess(gameState, enemy) !== reach.access)
+		{
 			return false;
+		}
 		// if already too much units targeting this enemy, let's continue towards our main target
 		if (veto[enemy.id()] && SquareVectorDistance(targetPos, reach.pos) > 2500)
 		{
@@ -310,16 +354,22 @@ function marchOn(ent: CommonEntity, maybeUpdate: boolean, ctx: AttackerContext):
 	if (maybeUpdate && isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING"))
 	{ // we may be blocked by walls, attack everything
 		if (!ent.hasClasses(["Ranged", "Ship"]))
-			targetClasses = { "attack": ["Unit", "Structure"], "avoid": ["Ship"], "vetoEntities": veto };
+		{
+			targetClasses = { attack: ["Unit", "Structure"], avoid: ["Ship"], vetoEntities: veto };
+		}
 		else
-			targetClasses = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
+		{
+			targetClasses = { attack: ["Unit", "Structure"], avoid: [], vetoEntities: veto };
+		}
 	}
 	else if (!ent.hasClasses(["Ranged", "Ship"]))
+	{
 		targetClasses = {
-			"attack": targetClassesUnit.attack,
-			"avoid": targetClassesUnit.avoid.concat("Ship"),
-			"vetoEntities": veto,
+			attack: targetClassesUnit.attack,
+			avoid: targetClassesUnit.avoid.concat("Ship"),
+			vetoEntities: veto,
 		};
+	}
 	ent.attackMove(targetPos[0], targetPos[1], targetClasses);
 }
 
@@ -329,23 +379,35 @@ function countUnitTargets(gameState: CommonGameState, units: CommonEntityCollect
 	const unitTargets: Record<number, number> = {};
 	for (const ent of units.values())
 	{
-		if (ent.hasClass("Ship")) // TODO What to do with ships
+		if (ent.hasClass("Ship"))
+		{ // TODO What to do with ships
 			continue;
+		}
 		const orderData = ordersOf(ent);
 		if (!orderData || !orderData.length || !orderData[0].target)
+		{
 			continue;
+		}
 		const targetId = orderData[0].target;
 		const target = gameState.getEntityById(targetId);
 		if (!target || target.hasClass("Structure"))
+		{
 			continue;
+		}
 		if (!(targetId in unitTargets))
 		{
 			if (isSiegeUnit(target) || target.hasClass("Hero"))
+			{
 				unitTargets[targetId] = -8;
+			}
 			else if (target.hasClasses(["Champion", "Ship"]))
+			{
 				unitTargets[targetId] = -5;
+			}
 			else
+			{
 				unitTargets[targetId] = -3;
+			}
 		}
 		++unitTargets[targetId];
 	}
@@ -360,7 +422,7 @@ function nearestBaseAnchors(
 	gameState: CommonGameState,
 	targetIndex: AccessIndex,
 	targetPos: CommonPosition,
-): { rallySame: CommonPosition | undefined; rallyDiff: CommonPosition | undefined }
+): { rallySame: CommonPosition | undefined; rallyDiff: CommonPosition | undefined; }
 {
 	let distminSame = Math.min();
 	let rallySame;
@@ -371,23 +433,31 @@ function nearestBaseAnchors(
 		const anchor = base.anchor;
 		const anchorPos = anchor ? anchor.position() : undefined;
 		if (!anchorPos)
+		{
 			continue;
+		}
 		const accessIndex = base.accessIndex;
 		let dist = SquareVectorDistance(anchorPos, targetPos);
 		if (accessIndex === targetIndex)
 		{
 			if (dist >= distminSame)
+			{
 				continue;
+			}
 			distminSame = dist;
 			rallySame = anchorPos;
 		}
 		else
 		{
 			if (accessIndex === undefined)
+			{
 				continue;
+			}
 			dist /= Math.sqrt(gameState.ai.accessibility.regionSize[accessIndex]);
 			if (dist >= distminDiff)
+			{
 				continue;
+			}
 			distminDiff = dist;
 			rallyDiff = anchorPos;
 		}
@@ -401,10 +471,14 @@ function isDefended(pos: CommonPosition, buildings: CommonStructureEntity[]): bo
 	for (const defense of buildings)
 	{
 		if (!defense.hasDefensiveFire())
+		{
 			continue;
+		}
 		const defPos = defense.position();
 		if (SquareVectorDistance(pos, defPos) < 6400)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -416,23 +490,29 @@ function isDefended(pos: CommonPosition, buildings: CommonStructureEntity[]): bo
 function blocksWay(
 	struct: CommonEntity,
 	shape: NonNullable<ReturnType<typeof obstructionShape>>,
-	at: { x: number; y: number },
-	path: Array<{ x: number; y: number }>,
+	at: { x: number; y: number; },
+	path: Array<{ x: number; y: number; }>,
 ): boolean
 {
 	const { x, y } = at;
 	if (shape.kind !== "static" && shape.kind !== "gate")
+	{
 		return x * x + y * y < shape.radius * shape.radius;
+	}
 	const angle = struct.angle();
 	if (angle === undefined)
+	{
 		return false;
+	}
 	const { width, depth } = shape;
 	const cosa = Math.cos(angle);
 	const sina = Math.sin(angle);
 	const u = x * cosa - y * sina;
 	const v = x * sina + y * cosa;
 	if (Math.abs(u) < width / 2 && Math.abs(v) < depth / 2)
+	{
 		return true;
+	}
 	return shape.kind === "gate" && crossesGate(struct, shape.doorHalfWidth, cosa, sina, path);
 }
 
@@ -442,7 +522,7 @@ function crossesGate(
 	doorHalfWidth: number,
 	cosa: number,
 	sina: number,
-	path: Array<{ x: number; y: number }>,
+	path: Array<{ x: number; y: number; }>,
 ): boolean
 {
 	const structPos = requireValue(struct.position());
@@ -456,7 +536,9 @@ function crossesGate(
 		{
 			const u0 = (u1 * v2 - u2 * v1) / (v2 - v1);
 			if (Math.abs(u0) > doorHalfWidth)
+			{
 				continue;
+			}
 			return true;
 		}
 	}
@@ -471,19 +553,29 @@ function byTrainingAdvancement(a: AttackBuildOrder, b: AttackBuildOrder): number
 {
 	let va = a[0] / a[3].targetSize - a[3].priority;
 	if (a[0] >= a[3].targetSize)
+	{
 		va += 1000;
+	}
 	let vb = b[0] / b[3].targetSize - b[3].priority;
 	if (b[0] >= b[3].targetSize)
+	{
 		vb += 1000;
+	}
 
 	const calcResult = va - vb;
 	if (calcResult !== 0)
+	{
 		return calcResult;
+	}
 
 	if (a[4] < b[4])
+	{
 		return 1;
+	}
 	if (a[4] > b[4])
+	{
 		return -1;
+	}
 	return 0;
 }
 
@@ -496,17 +588,27 @@ function trainersFor(gameState: CommonGameState, classes: string[][]): boolean[]
 	{
 		const trainables = ent.trainableEntities(civ);
 		if (!trainables)
+		{
 			continue;
+		}
 		for (const trainable of trainables)
 		{
 			if (gameState.isTemplateDisabled(trainable))
+			{
 				continue;
+			}
 			const template = gameState.getTemplate(trainable);
 			if (!template || !template.available(gameState))
+			{
 				continue;
+			}
 			for (let i = 0; i < classes.length; ++i)
+			{
 				if (template.hasClasses(classes[i]))
+				{
 					hasTrainer[i] = true;
+				}
+			}
 		}
 	}
 	return hasTrainer;
@@ -517,11 +619,15 @@ function siegeSize(config: Config, type: AttackType): number
 {
 	let targetSize;
 	if (config.difficulty < difficulty.MEDIUM)
+	{
 		targetSize = type === AttackPlan.TYPE_HUGE_ATTACK ?
 			Math.max(config.difficulty, 1) :
 			Math.max(config.difficulty - 1, 0);
+	}
 	else
+	{
 		targetSize = type === AttackPlan.TYPE_HUGE_ATTACK ? config.difficulty + 1 : config.difficulty - 1;
+	}
 	return Math.max(Math.round(config.popScaling * targetSize), type === AttackPlan.TYPE_HUGE_ATTACK ? 1 : 0);
 }
 
@@ -534,7 +640,7 @@ function planSizes(
 	type: AttackType,
 	data: AttackPlanData | undefined,
 	variation: number,
-): { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number }
+): { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number; }
 {
 	const composition = attackComposition(type, data);
 	let priority = composition.priority;
@@ -585,7 +691,7 @@ function planSizes(
  */
 function rallyPoints(
 	gameState: CommonGameState,
-): { rallyPoint: CommonPosition; rallyAccess: AccessIndex; allAccesses: Record<number, CommonPosition> } | undefined
+): { rallyPoint: CommonPosition; rallyAccess: AccessIndex; allAccesses: Record<number, CommonPosition>; } | undefined
 {
 	let rallyPoint;
 	let rallyAccess;
@@ -593,66 +699,80 @@ function rallyPoints(
 	for (const base of basesOf(gameState))
 	{
 		if (!base.anchor || !isPlaced(base.anchor))
+		{
 			continue;
+		}
 		const anchorPos = base.anchor.position();
 		const access = getLandAccess(gameState, base.anchor);
 		if (access === undefined)
+		{
 			continue;
+		}
 		if (!rallyPoint)
 		{
 			rallyPoint = anchorPos;
 			rallyAccess = access;
 		}
 		if (!allAccesses[access])
+		{
 			allAccesses[access] = anchorPos;
+		}
 	}
 	if (rallyPoint && rallyAccess !== undefined)
+	{
 		return { rallyPoint, rallyAccess, allAccesses };
+	}
 	// no base ?  take the position of any of our entities
 	for (const ent of gameState.getOwnEntities().values())
 	{
 		if (!isPlaced(ent))
+		{
 			continue;
+		}
 		const access = getLandAccess(gameState, ent);
 		if (access === undefined)
+		{
 			continue;
+		}
 		const entPos = ent.position();
 		allAccesses[access] = entPos;
-		return { "rallyPoint": entPos, "rallyAccess": access, allAccesses };
+		return { rallyPoint: entPos, rallyAccess: access, allAccesses };
 	}
 	return undefined;
 }
 
 /** An attack's unit categories and queues, and the ships needed before difficulty and population scaling. */
-type AttackComposition = { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number };
+type AttackComposition = { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number; };
 
 /** A rush's citizen infantry, its target size overridden by the plan's data. */
 function rushComposition(data: AttackPlanData | undefined): AttackComposition
 {
 	const infantry: AttackUnitStat = {
-		"priority": 1,
-		"minSize": 10,
-		"targetSize": 20,
-		"batchSize": 2,
-		"classes": ["Infantry"],
-		"interests": [["strength", 1], ["costsResource", 0.5, "stone"], ["costsResource", 0.6, "metal"]],
+		priority: 1,
+		minSize: 10,
+		targetSize: 20,
+		batchSize: 2,
+		classes: ["Infantry"],
+		interests: [["strength", 1], ["costsResource", 0.5, "stone"], ["costsResource", 0.6, "metal"]],
 	};
 	if (data && data.targetSize)
+	{
 		infantry.targetSize = data.targetSize;
+	}
 	return {
-		"priority": 250,
-		"unitStat": {
-			"Infantry": infantry,
-			"FastMoving": {
-				"priority": 1,
-				"minSize": 2,
-				"targetSize": 4,
-				"batchSize": 2,
-				"classes": ["FastMoving+CitizenSoldier"],
-				"interests": [["strength", 1]],
+		priority: 250,
+		unitStat: {
+			Infantry: infantry,
+			FastMoving: {
+				priority: 1,
+				minSize: 2,
+				targetSize: 4,
+				batchSize: 2,
+				classes: ["FastMoving+CitizenSoldier"],
+				interests: [["strength", 1]],
 			},
 		},
-		"neededShips": 1,
+		neededShips: 1,
 	};
 }
 
@@ -660,18 +780,18 @@ function rushComposition(data: AttackPlanData | undefined): AttackComposition
 function raidComposition(): AttackComposition
 {
 	return {
-		"priority": 150,
-		"unitStat": {
-			"FastMoving": {
-				"priority": 1,
-				"minSize": 3,
-				"targetSize": 4,
-				"batchSize": 2,
-				"classes": ["FastMoving+CitizenSoldier"],
-				"interests": [["strength", 1]],
+		priority: 150,
+		unitStat: {
+			FastMoving: {
+				priority: 1,
+				minSize: 3,
+				targetSize: 4,
+				batchSize: 2,
+				classes: ["FastMoving+CitizenSoldier"],
+				interests: [["strength", 1]],
 			},
 		},
-		"neededShips": 1,
+		neededShips: 1,
 	};
 }
 
@@ -679,37 +799,37 @@ function raidComposition(): AttackComposition
 function hugeAttackInfantry(): Record<string, AttackUnitStat>
 {
 	return {
-		"RangedInfantry": {
-			"priority": 0.7,
-			"minSize": 5,
-			"targetSize": 20,
-			"batchSize": 5,
-			"classes": ["Infantry+Ranged+CitizenSoldier"],
-			"interests": [["strength", 3]],
+		RangedInfantry: {
+			priority: 0.7,
+			minSize: 5,
+			targetSize: 20,
+			batchSize: 5,
+			classes: ["Infantry+Ranged+CitizenSoldier"],
+			interests: [["strength", 3]],
 		},
-		"MeleeInfantry": {
-			"priority": 0.7,
-			"minSize": 5,
-			"targetSize": 20,
-			"batchSize": 5,
-			"classes": ["Infantry+Melee+CitizenSoldier"],
-			"interests": [["strength", 3]],
+		MeleeInfantry: {
+			priority: 0.7,
+			minSize: 5,
+			targetSize: 20,
+			batchSize: 5,
+			classes: ["Infantry+Melee+CitizenSoldier"],
+			interests: [["strength", 3]],
 		},
-		"ChampRangedInfantry": {
-			"priority": 1,
-			"minSize": 3,
-			"targetSize": 18,
-			"batchSize": 3,
-			"classes": ["Infantry+Ranged+Champion"],
-			"interests": [["strength", 3]],
+		ChampRangedInfantry: {
+			priority: 1,
+			minSize: 3,
+			targetSize: 18,
+			batchSize: 3,
+			classes: ["Infantry+Ranged+Champion"],
+			interests: [["strength", 3]],
 		},
-		"ChampMeleeInfantry": {
-			"priority": 1,
-			"minSize": 3,
-			"targetSize": 18,
-			"batchSize": 3,
-			"classes": ["Infantry+Melee+Champion"],
-			"interests": [["strength", 3]],
+		ChampMeleeInfantry: {
+			priority: 1,
+			minSize: 3,
+			targetSize: 18,
+			batchSize: 3,
+			classes: ["Infantry+Melee+Champion"],
+			interests: [["strength", 3]],
 		},
 	};
 }
@@ -718,53 +838,46 @@ function hugeAttackInfantry(): Record<string, AttackUnitStat>
 function hugeAttackFastMoving(): Record<string, AttackUnitStat>
 {
 	return {
-		"RangedFastMoving": {
-			"priority": 0.7,
-			"minSize": 4,
-			"targetSize": 20,
-			"batchSize": 4,
-			"classes": ["FastMoving+Ranged+CitizenSoldier"],
-			"interests": [["strength", 2]],
+		RangedFastMoving: {
+			priority: 0.7,
+			minSize: 4,
+			targetSize: 20,
+			batchSize: 4,
+			classes: ["FastMoving+Ranged+CitizenSoldier"],
+			interests: [["strength", 2]],
 		},
-		"MeleeFastMoving": {
-			"priority": 0.7,
-			"minSize": 4,
-			"targetSize": 20,
-			"batchSize": 4,
-			"classes": ["FastMoving+Melee+CitizenSoldier"],
-			"interests": [["strength", 2]],
+		MeleeFastMoving: {
+			priority: 0.7,
+			minSize: 4,
+			targetSize: 20,
+			batchSize: 4,
+			classes: ["FastMoving+Melee+CitizenSoldier"],
+			interests: [["strength", 2]],
 		},
-		"ChampRangedFastMoving": {
-			"priority": 1,
-			"minSize": 3,
-			"targetSize": 15,
-			"batchSize": 3,
-			"classes": ["FastMoving+Ranged+Champion"],
-			"interests": [["strength", 3]],
+		ChampRangedFastMoving: {
+			priority: 1,
+			minSize: 3,
+			targetSize: 15,
+			batchSize: 3,
+			classes: ["FastMoving+Ranged+Champion"],
+			interests: [["strength", 3]],
 		},
-		"ChampMeleeFastMoving": {
-			"priority": 1,
-			"minSize": 3,
-			"targetSize": 15,
-			"batchSize": 3,
-			"classes": ["FastMoving+Melee+Champion"],
-			"interests": [["strength", 2]],
+		ChampMeleeFastMoving: {
+			priority: 1,
+			minSize: 3,
+			targetSize: 15,
+			batchSize: 3,
+			classes: ["FastMoving+Melee+Champion"],
+			interests: [["strength", 2]],
 		},
-		"Hero": {
-			"priority": 1,
-			"minSize": 0,
-			"targetSize": 1,
-			"batchSize": 1,
-			"classes": ["Hero"],
-			"interests": [["strength", 2]],
-		},
+		Hero: { priority: 1, minSize: 0, targetSize: 1, batchSize: 1, classes: ["Hero"], interests: [["strength", 2]] },
 	};
 }
 
 /** A huge attack: foot units, fast-moving units and a hero. */
 function hugeAttackComposition(): AttackComposition
 {
-	return { "priority": 90, "unitStat": { ...hugeAttackInfantry(), ...hugeAttackFastMoving() }, "neededShips": 5 };
+	return { priority: 90, unitStat: { ...hugeAttackInfantry(), ...hugeAttackFastMoving() }, neededShips: 5 };
 }
 
 /** A standard attack: ranged and melee infantry that can gather, and fast-moving citizen soldiers. */
@@ -776,34 +889,34 @@ function standardAttackComposition(): AttackComposition
 		"stone",
 	], ["costsResource", 0.3, "metal"]];
 	return {
-		"priority": 70,
-		"unitStat": {
-			"RangedInfantry": {
-				"priority": 1,
-				"minSize": 6,
-				"targetSize": 16,
-				"batchSize": 3,
-				"classes": ["Infantry+Ranged"],
+		priority: 70,
+		unitStat: {
+			RangedInfantry: {
+				priority: 1,
+				minSize: 6,
+				targetSize: 16,
+				batchSize: 3,
+				classes: ["Infantry+Ranged"],
 				interests,
 			},
-			"MeleeInfantry": {
-				"priority": 1,
-				"minSize": 6,
-				"targetSize": 16,
-				"batchSize": 3,
-				"classes": ["Infantry+Melee"],
+			MeleeInfantry: {
+				priority: 1,
+				minSize: 6,
+				targetSize: 16,
+				batchSize: 3,
+				classes: ["Infantry+Melee"],
 				interests,
 			},
-			"FastMoving": {
-				"priority": 1,
-				"minSize": 2,
-				"targetSize": 6,
-				"batchSize": 2,
-				"classes": ["FastMoving+CitizenSoldier"],
-				"interests": [["strength", 1]],
+			FastMoving: {
+				priority: 1,
+				minSize: 2,
+				targetSize: 6,
+				batchSize: 2,
+				classes: ["FastMoving+CitizenSoldier"],
+				interests: [["strength", 1]],
 			},
 		},
-		"neededShips": 3,
+		neededShips: 3,
 	};
 }
 
@@ -820,11 +933,17 @@ function standardAttackComposition(): AttackComposition
 function attackComposition(type: AttackType, data: AttackPlanData | undefined): AttackComposition
 {
 	if (type === AttackPlan.TYPE_RUSH)
+	{
 		return rushComposition(data);
+	}
 	if (type === AttackPlan.TYPE_RAID)
+	{
 		return raidComposition();
+	}
 	if (type === AttackPlan.TYPE_HUGE_ATTACK)
+	{
 		return hugeAttackComposition();
+	}
 	return standardAttackComposition();
 }
 
@@ -834,24 +953,24 @@ function attackComposition(type: AttackType, data: AttackPlanData | undefined): 
  * (the headquarters' canBuildUnits: the plan then has build orders).
  */
 type AttackPlanSetup =
-	& { canBuildUnits: boolean }
-	& ({ kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number } | {
+	& { canBuildUnits: boolean; }
+	& ({ kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number; } | {
 		kind: "saved";
 		saved: SerializedAttackPlan;
 	});
 
 /** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
-type AttackAim = { target: CommonEntity; pos: CommonPosition };
+type AttackAim = { target: CommonEntity; pos: CommonPosition; };
 
 /**
  * An attack plan's state and what the state holds. Walking holds the path the
  * plan walks, made when it sets off (StartAttack); the other states hold
  * nothing more, so the path cannot be read outside walking.
  */
-type AttackStage = { state: "unexecuted" | "completing"; prep: AttackPreparation } | {
+type AttackStage = { state: "unexecuted" | "completing"; prep: AttackPreparation; } | {
 	state: "walking";
 	path: CommonPosition[];
-} | { state: "transporting" | "arrived" | "" };
+} | { state: "transporting" | "arrived" | ""; };
 
 /**
  * What a preparing plan trains with: its three queues (removed from the
@@ -915,10 +1034,14 @@ export class AttackPlan
 	private stageFor(state: Exclude<AttackPlanState, "walking">): AttackStage
 	{
 		if (state !== AttackPlan.STATE_UNEXECUTED && state !== AttackPlan.STATE_COMPLETING)
+		{
 			return { state };
+		}
 		const prep = this.preparation();
 		if (!prep)
+		{
 			throw new Error("Petra error: attack plan " + this.name + " back to \"" + state + "\" after it set off");
+		}
 		return { state, prep };
 	}
 	target: CommonEntity | undefined;
@@ -946,21 +1069,29 @@ export class AttackPlan
 		// get a starting rallyPoint ... will be improved later
 		const rally = rallyPoints(gameState);
 		if (!rally)
+		{
 			return undefined;
+		}
 		const { rallyPoint, rallyAccess, allAccesses } = rally;
-		let start: AttackStart = { rallyPoint, "overseas": 0 };
+		let start: AttackStart = { rallyPoint, overseas: 0 };
 		if (!hqOf(gameState).geography.navalMap)
+		{
 			return start;
+		}
 		for (const structure of gameState.getEnemyStructures().values())
 		{
 			if (target && structure.id() !== target.id())
+			{
 				continue;
+			}
 			const access = getLandAccess(gameState, structure);
 			if (access === undefined)
+			{
 				continue;
+			}
 			if (access in allAccesses)
 			{
-				start = { "rallyPoint": allAccesses[access], "overseas": 0 };
+				start = { rallyPoint: allAccesses[access], overseas: 0 };
 				break;
 			}
 			else if (!start.overseas && rallyAccess !== undefined)
@@ -978,7 +1109,7 @@ export class AttackPlan
 					}
 					continue;
 				}
-				start = { "rallyPoint": start.rallyPoint, "overseas": sea };
+				start = { rallyPoint: start.rallyPoint, overseas: sea };
 				hqOf(gameState).navalManager.setMinimalTransportShips(gameState, sea, 1);
 			}
 		}
@@ -998,12 +1129,12 @@ export class AttackPlan
 		// some randomness on the attack's size
 		return start &&
 			new AttackPlan(gameState, config, uniqueID, {
-				"kind": "new",
+				kind: "new",
 				type,
 				data,
 				start,
-				"variation": randFloat(0.8, 1.2),
-				"canBuildUnits": hqOf(gameState).canBuildUnits,
+				variation: randFloat(0.8, 1.2),
+				canBuildUnits: hqOf(gameState).canBuildUnits,
 			});
 	}
 
@@ -1015,7 +1146,7 @@ export class AttackPlan
 		canBuildUnits: boolean,
 	): AttackPlan
 	{
-		return new AttackPlan(gameState, config, saved.properties.name, { "kind": "saved", saved, canBuildUnits });
+		return new AttackPlan(gameState, config, saved.properties.name, { kind: "saved", saved, canBuildUnits });
 	}
 
 	constructor(gameState: CommonGameState, config: Config, uniqueID: number, setup: AttackPlanSetup)
@@ -1102,7 +1233,9 @@ export class AttackPlan
 			this.unit[cat] = this.unitCollection.filter(filters.byClasses(Unit.classes));
 			this.unit[cat].registerUpdates();
 			if (this.canBuildUnits)
+			{
 				buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
+			}
 		}
 		return buildOrders;
 	}
@@ -1114,8 +1247,8 @@ export class AttackPlan
 		const queueChamp = gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority + 1);
 		const queueSiege = gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
 		return (buildOrders: AttackBuildOrder[]): AttackStage => ({
-			"state": AttackPlan.STATE_UNEXECUTED,
-			"prep": { queue, queueChamp, queueSiege, buildOrders, "siegeState": AttackPlan.SIEGE_NOT_TESTED },
+			state: AttackPlan.STATE_UNEXECUTED,
+			prep: { queue, queueChamp, queueSiege, buildOrders, siegeState: AttackPlan.SIEGE_NOT_TESTED },
 		});
 	}
 
@@ -1134,19 +1267,25 @@ export class AttackPlan
 		{
 			const queues = this.savedQueues(gameState);
 			return (buildOrders: AttackBuildOrder[]): AttackStage => ({
-				"state": prepState,
-				"prep": { ...queues, buildOrders, "siegeState": saved.properties.siegeState },
+				state: prepState,
+				prep: { ...queues, buildOrders, siegeState: saved.properties.siegeState },
 			});
 		};
 		if (state === AttackPlan.STATE_WALKING)
-			return () => savedPath ? { state, "path": savedPath } : { "state": AttackPlan.STATE_ARRIVED };
+		{
+			return () => savedPath ? { state, path: savedPath } : { state: AttackPlan.STATE_ARRIVED };
+		}
 		if (state === AttackPlan.STATE_UNEXECUTED || state === AttackPlan.STATE_COMPLETING)
+		{
 			return preparing(state);
+		}
 		if (
 			state === AttackPlan.STATE_TRANSPORTING || state === AttackPlan.STATE_ARRIVED ||
 			state === AttackPlan.STATE_ATTACKING
 		)
+		{
 			return () => ({ state });
+		}
 		aiWarn(
 			"Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
 				"\": it prepares again",
@@ -1158,16 +1297,16 @@ export class AttackPlan
 	private savedQueues(gameState: CommonGameState): Pick<AttackPreparation, "queue" | "queueChamp" | "queueSiege">
 	{
 		return {
-			"queue": requireValue(gameState.ai.queues[`plan_${this.name}`]),
-			"queueChamp": requireValue(gameState.ai.queues[`plan_${this.name}_champ`]),
-			"queueSiege": requireValue(gameState.ai.queues[`plan_${this.name}_siege`]),
+			queue: requireValue(gameState.ai.queues[`plan_${this.name}`]),
+			queueChamp: requireValue(gameState.ai.queues[`plan_${this.name}_champ`]),
+			queueSiege: requireValue(gameState.ai.queues[`plan_${this.name}_siege`]),
 		};
 	}
 
 	/** The target and its position together, when the plan has both (none before a target is chosen, or once it is lost). */
 	aim(): AttackAim | undefined
 	{
-		return this.target && this.targetPos ? { "target": this.target, "pos": this.targetPos } : undefined;
+		return this.target && this.targetPos ? { target: this.target, pos: this.targetPos } : undefined;
 	}
 
 	static PREPARATION_FAILED = 0;
@@ -1221,10 +1360,12 @@ export class AttackPlan
 	changeState<From extends AttackPlanState>(from: From, to: Exclude<AttackTransitions[From], "walking">): void
 	{
 		if (this.state !== from)
+		{
 			aiWarn(
 				"Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
 					"\", not from \"" + from + "\"",
 			);
+		}
 		this.stage = this.stageFor(to);
 	}
 
@@ -1232,11 +1373,13 @@ export class AttackPlan
 	startWalking(path: CommonPosition[]): void
 	{
 		if (this.state !== AttackPlan.STATE_COMPLETING)
+		{
 			aiWarn(
 				"Petra: attack plan " + this.name + " moved to \"walking\" from \"" + this.state +
 					"\", not from \"completing\"",
 			);
-		this.stage = { "state": AttackPlan.STATE_WALKING, path };
+		}
+		this.stage = { state: AttackPlan.STATE_WALKING, path };
 	}
 
 	isPaused(): boolean
@@ -1256,11 +1399,17 @@ export class AttackPlan
 	canStart(): boolean
 	{
 		if (!this.canBuildUnits)
+		{
 			return true;
+		}
 
 		for (const unitCat in this.unitStat)
+		{
 			if (this.unit[unitCat].length < this.unitStat[unitCat].minSize)
+			{
 				return false;
+			}
+		}
 
 		return true;
 	}
@@ -1268,10 +1417,14 @@ export class AttackPlan
 	mustStart(): boolean
 	{
 		if (this.isPaused())
+		{
 			return false;
+		}
 
 		if (!this.canBuildUnits)
+		{
 			return this.unitCollection.hasEntities();
+		}
 
 		let MaxReachedEverywhere = true;
 		let MinReachedEverywhere = true;
@@ -1279,7 +1432,9 @@ export class AttackPlan
 		{
 			const Unit = this.unitStat[unitCat];
 			if (this.unit[unitCat].length < Unit.targetSize)
+			{
 				MaxReachedEverywhere = false;
+			}
 			if (this.unit[unitCat].length < Unit.minSize)
 			{
 				MinReachedEverywhere = false;
@@ -1288,12 +1443,16 @@ export class AttackPlan
 		}
 
 		if (MaxReachedEverywhere)
+		{
 			return true;
+		}
 		if (MinReachedEverywhere)
 		{
 			const raidTarget = this.target;
 			if (this.type !== AttackPlan.TYPE_RAID || !raidTarget)
+			{
 				return false;
+			}
 			const progress = raidTarget.foundationProgress();
 			return progress !== undefined && progress > 50;
 		}
@@ -1339,7 +1498,9 @@ export class AttackPlan
 			this.unit[name].registerUpdates();
 			prep.buildOrders.push([0, Unit.classes, this.unit[name], Unit, name]);
 			if (resetQueue)
+			{
 				this.emptyQueues(prep);
+			}
 		}
 	}
 
@@ -1347,7 +1508,9 @@ export class AttackPlan
 	{
 		const stage = this.stage;
 		if (stage.state !== AttackPlan.STATE_UNEXECUTED || stage.prep.siegeState === AttackPlan.SIEGE_ADDED)
+		{
 			return false;
+		}
 		const prep = stage.prep;
 
 		const classes = [["Siege+Melee"], ["Siege+Ranged"], ["Elephant+Melee"]];
@@ -1361,22 +1524,26 @@ export class AttackPlan
 		for (let k = 0; k < classes.length; ++k)
 		{
 			if (hasTrainer[i])
+			{
 				break;
+			}
 			i = (i + 1) % classes.length;
 		}
 
 		prep.siegeState = AttackPlan.SIEGE_ADDED;
 		const targetSize = siegeSize(this.Config, this.type);
 		if (!targetSize)
+		{
 			return true;
+		}
 		// no minsize as we don't want the plan to fail at the last minute though.
 		const stat: AttackUnitStat = {
-			"priority": 1,
-			"minSize": 0,
-			"targetSize": targetSize,
-			"batchSize": Math.min(targetSize, 2),
-			"classes": classes[i],
-			"interests": [["siegeStrength", 3]],
+			priority: 1,
+			minSize: 0,
+			targetSize: targetSize,
+			batchSize: Math.min(targetSize, 2),
+			classes: classes[i],
+			interests: [["siegeStrength", 3]],
 		};
 		this.addBuildOrder(gameState, "Siege", stat, true);
 		return true;
@@ -1386,9 +1553,11 @@ export class AttackPlan
 	cannotGrow(gameState: CommonGameState): boolean
 	{
 		if (gameState.getPopulationLimit() - gameState.getPopulation() >= 5)
+		{
 			return false;
+		}
 		const buildManager = hqOf(gameState).buildManager;
-		return ["structures/{civ}/house", "structures/{civ}/apartment"].some(house =>
+		return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
 		{
 			const name = gameState.applyCiv(house);
 			return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
@@ -1404,23 +1573,33 @@ export class AttackPlan
 		{
 			const step = this.completingStep(gameState);
 			if (step !== undefined)
+			{
 				return step;
+			}
 		}
 
 		if (this.Config.debug > 3 && gameState.ai.playedTurn % 50 === 0)
+		{
 			this.debugAttack();
+		}
 
 		if (!this.prepareArmy(gameState))
+		{
 			return AttackPlan.PREPARATION_KEEP_GOING;
+		}
 
 		// the training below is a preparing plan's: one that set off has none to train with
 		const prep = this.preparation();
 		if (!prep)
+		{
 			return AttackPlan.PREPARATION_KEEP_GOING;
+		}
 
 		const step = this.trainingStep(gameState, prep);
 		if (step !== undefined)
+		{
 			return step;
+		}
 
 		// if we're here, it means we must start
 		return this.setOff(gameState);
@@ -1441,18 +1620,24 @@ export class AttackPlan
 		}
 		// check that all units have finished with their transport if needed
 		if (this.waitingForTransport())
+		{
 			return AttackPlan.PREPARATION_KEEP_GOING;
+		}
 		// bloqued units which cannot finish their order should not stop the attack
 		if (gameState.ai.elapsedTime < this.maxCompletingTime && this.hasForceOrder())
+		{
 			return AttackPlan.PREPARATION_KEEP_GOING;
+		}
 		return AttackPlan.PREPARATION_START;
 	}
 
 	/** The plan drafts its units and keeps them off disputed lands; false while it waits for its ships */
 	private prepareArmy(gameState: CommonGameState): boolean
 	{
-		if (this.type !== AttackPlan.TYPE_RAID || !this.forced) // Forced Raids have special purposes (as relic capture)
+		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)
+		{ // Forced Raids have special purposes (as relic capture)
 			this.assignUnits(gameState);
+		}
 
 		// if we need a transport, wait for some transport ships, the units
 		// drafted first: they keep at their work until the plan sets off, and
@@ -1460,18 +1645,24 @@ export class AttackPlan
 		// an attack waiting for its ships on a dry island (FINDINGS §40); the
 		// ship queue is raised meanwhile (NavalManager.shipPriority)
 		if (this.overseas && !hqOf(gameState).navalManager.fleet(this.overseas)?.transports.length)
+		{
 			return false;
+		}
 		if (
 			this.type !== AttackPlan.TYPE_RAID &&
 			hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined
 		)
+		{
 			this.reassignFastUnit(gameState); // reassign some fast units (if any) to fasten raid preparations
+		}
 		// while it prepares, the plan holds no soldier beside enemies away from its rally point
 		this.leaveDisputedLands(gameState, gameState.ai.accessibility.getAccessValue(this.rallyPoint));
 
 		// Fasten the end game.
 		if (gameState.ai.playedTurn % 5 === 0 && this.hasSiegeUnits())
+		{
 			this.fastenEndGame(gameState);
+		}
 		return true;
 	}
 
@@ -1485,7 +1676,9 @@ export class AttackPlan
 		{
 			let lengthMin = 16;
 			if (gameState.getPopulationMax() < 300)
+			{
 				lengthMin -= Math.floor(8 * (300 - gameState.getPopulationMax()) / 300);
+			}
 			if (this.canStart() || this.unitCollection.length > lengthMin)
 			{
 				this.emptyQueues(prep);
@@ -1514,11 +1707,15 @@ export class AttackPlan
 				prep.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
 				prep.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0
 			)
+			{
 				this.addSiegeUnits(gameState);
+			}
 			this.trainMoreUnits(gameState, prep);
 			// may happen if we have no more training facilities and build orders are canceled
 			if (!prep.buildOrders.length)
+			{
 				return AttackPlan.PREPARATION_FAILED; // will abort the plan
+			}
 		}
 		return AttackPlan.PREPARATION_KEEP_GOING;
 	}
@@ -1530,23 +1727,35 @@ export class AttackPlan
 
 		// Raids have their predefined target
 		if (!this.target && !this.chooseTarget(gameState))
+		{
 			return AttackPlan.PREPARATION_FAILED;
+		}
 		this.leaveDisputedLands(gameState, this.targetLand(gameState));
 		const aim = this.aim();
 		if (!this.overseas && aim)
+		{
 			this.getPathToTarget(gameState, aim);
+		}
 
 		if (this.type === AttackPlan.TYPE_RAID)
+		{
 			this.maxCompletingTime = seconds(this.forced ? 0 : gameState.ai.elapsedTime + 20);
+		}
 		else
 		{
 			if (this.type === AttackPlan.TYPE_RUSH || this.forced)
+			{
 				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 40);
+			}
 			else
+			{
 				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
+			}
 			// warn our allies so that they can help if possible
 			if (!this.requested && this.targetPlayer !== undefined)
-				postCommand({ "type": "attack-request", "source": PlayerID, "player": this.targetPlayer });
+			{
+				postCommand({ type: "attack-request", source: PlayerID, player: this.targetPlayer });
+			}
 		}
 
 		this.gatherAtRallyPoint(gameState);
@@ -1565,12 +1774,16 @@ export class AttackPlan
 		{
 			const i = playerId(iIndex);
 			if (!gameState.isPlayerEnemy(i) || hqOf(gameState).attackManager.defeated[i])
+			{
 				continue;
+			}
 			hasEnemies = true;
 			totEnemies += gameState.getEnemyUnits(i).length;
 		}
 		if (hasEnemies && this.unitCollection.length > 20 + 2 * totEnemies)
+		{
 			this.forceStart();
+		}
 	}
 
 	/** The plan sets off: its units leave bombing, return what they carry and go to the rally point, by ship if need be */
@@ -1583,7 +1796,9 @@ export class AttackPlan
 			{
 				const ent = gameState.getEntityById(entId);
 				if (!ent || ent.getMetadata(PlayerID, "plan") !== this.name)
+				{
 					continue;
+				}
 				unitIds.delete(entId);
 				ent.stopMoving();
 			}
@@ -1607,14 +1822,22 @@ export class AttackPlan
 			const carrying = ent.resourceCarrying();
 			let queued = false;
 			if (carrying && carrying.length)
+			{
 				queued = returnResources(gameState, ent);
+			}
 			const index = getLandAccess(gameState, ent);
 			if (index === undefined)
+			{
 				continue;
+			}
 			if (index === rallyIndex)
+			{
 				ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15, queued);
+			}
 			else
+			{
 				hqOf(gameState).navalManager.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
+			}
 		}
 	}
 
@@ -1624,15 +1847,21 @@ export class AttackPlan
 		// count the number of queued units too.
 		// substract priority.
 		for (const order of prep.buildOrders)
+		{
 			order[0] = order[2].length + this.queuedFor(gameState, prep, order[4]).total;
+		}
 		prep.buildOrders.sort(byTrainingAdvancement);
 
 		if (this.Config.debug > 1 && gameState.ai.playedTurn % 50 === 0)
+		{
 			this.debugBuildOrders(gameState, prep);
+		}
 
 		const firstOrder = prep.buildOrders[0];
 		if (firstOrder[0] < firstOrder[3].targetSize)
+		{
 			this.queueBuildOrder(gameState, prep, firstOrder);
+		}
 	}
 
 	/** The units of a build order in training and in the plan's three queues */
@@ -1640,7 +1869,7 @@ export class AttackPlan
 		gameState: CommonGameState,
 		prep: AttackPreparation,
 		name: string,
-	): { inTraining: number; queue1: number; queue2: number; queue3: number; total: number }
+	): { inTraining: number; queue1: number; queue2: number; queue3: number; total: number; }
 	{
 		const special = "Plan_" + this.name + "_" + name;
 		const inTraining = gameState.countOwnQueuedEntitiesWithMetadata("special", special);
@@ -1679,14 +1908,22 @@ export class AttackPlan
 		// find the actual queue we want
 		let queue = prep.queue;
 		if (firstOrder[4] === "Siege")
+		{
 			queue = prep.queueSiege;
+		}
 		else if (firstOrder[3].classes.indexOf("Hero") !== -1)
+		{
 			queue = prep.queueSiege;
+		}
 		else if (firstOrder[3].classes.indexOf("Champion") !== -1)
+		{
 			queue = prep.queueChamp;
+		}
 
 		if (queue.length() > 5)
+		{
 			return;
+		}
 		const interests = firstOrder[3].interests;
 		const template = interests === undefined ?
 			undefined :
@@ -1703,10 +1940,10 @@ export class AttackPlan
 		const specialData = "Plan_" + this.name + "_" + firstOrder[4];
 		// trained on the rally point's land where it can be (queueplanTraining's trainer choice)
 		const data: PlanMetadata = {
-			"plan": this.name,
-			"special": specialData,
-			"base": NO_BASE,
-			"index": gameState.ai.accessibility.getAccessValue(this.rallyPoint),
+			plan: this.name,
+			special: specialData,
+			base: NO_BASE,
+			index: gameState.ai.accessibility.getAccessValue(this.rallyPoint),
 		};
 		// findBestTrainableUnit names only templates that exist
 		const templateObj = requireTemplate(gameState, template);
@@ -1716,8 +1953,11 @@ export class AttackPlan
 			Worker.ROLE_ATTACK;
 		const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 		if (trainingPlan.template)
+		{
 			queue.addPlan(trainingPlan);
+		}
 		else
+		{
 			debugWarn(
 				this.Config,
 				1,
@@ -1726,6 +1966,7 @@ export class AttackPlan
 					"   build1 " + uneval(firstOrder[1]) +
 					" build3 " + uneval(firstOrder[3].interests),
 			);
+		}
 	}
 
 	assignUnits(gameState: CommonGameState): boolean
@@ -1736,26 +1977,38 @@ export class AttackPlan
 			this.isAvailableUnit(gameState, ent) && !this.besideEnemies(gameState, ent, rallyLand);
 		// If we can not build units, assign all available except those affected to allied defense to the current attack.
 		if (!this.canBuildUnits)
+		{
 			return this.enlistAll(gameState, available);
+		}
 
 		if (this.type === AttackPlan.TYPE_RAID)
+		{
 			return this.enlistRaiders(gameState, available);
+		}
 
 		// Assign all units without specific role.
 		for (const ent of gameState.getOwnEntitiesByRole(undefined, true).values())
 		{
 			if (ent.hasClasses(["!Unit", "Ship", "Support"]) || !available(ent) || ent.attackTypes() === undefined)
+			{
 				continue;
+			}
 			added = this.enlist(ent);
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
 		for (const ent of hqOf(gameState).attackManager.outOfPlan.values())
+		{
 			if (available(ent))
+			{
 				added = this.enlist(ent);
+			}
+		}
 
 		// Finally add also some workers for the higher difficulties,
 		if (this.Config.difficulty <= difficulty.EASY)
+		{
 			return added;
+		}
 		return this.draftWorkers(gameState, available) || added;
 	}
 
@@ -1764,8 +2017,12 @@ export class AttackPlan
 	{
 		let added = false;
 		for (const ent of gameState.getOwnUnits().values())
+		{
 			if (!ent.getMetadata(PlayerID, "allied") && available(ent))
+			{
 				added = this.enlist(ent);
+			}
+		}
 		return added;
 	}
 
@@ -1777,9 +2034,13 @@ export class AttackPlan
 		for (const ent of gameState.getOwnUnits().values())
 		{
 			if (!ent.hasClass("FastMoving") || !available(ent))
+			{
 				continue;
+			}
 			if (num++ < 2)
+			{
 				continue;
+			}
 			added = this.enlist(ent);
 		}
 		return added;
@@ -1809,10 +2070,14 @@ export class AttackPlan
 		for (const ent of gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).values())
 		{
 			if (!ent.hasClass("CitizenSoldier") || !available(ent))
+			{
 				continue;
+			}
 			const baseID = ent.getMetadata(PlayerID, "base");
 			if (baseID)
+			{
 				numbase[baseID] = numbase[baseID] ? ++numbase[baseID] : 1;
+			}
 			else
 			{
 				aiWarn("Petra problem ent without base ");
@@ -1820,9 +2085,13 @@ export class AttackPlan
 				continue;
 			}
 			if (num++ < keep || numbase[baseID] < 5)
+			{
 				continue;
+			}
 			if (this.type !== AttackPlan.TYPE_RUSH && ent.getMetadata(PlayerID, "subrole") !== Worker.SUBROLE_IDLE)
+			{
 				continue;
+			}
 			added = this.enlist(ent);
 		}
 		return added;
@@ -1831,15 +2100,21 @@ export class AttackPlan
 	isAvailableUnit(gameState: CommonGameState, ent: CommonEntity): boolean
 	{
 		if (!isPlaced(ent))
+		{
 			return false;
+		}
 		if (
 			ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== PLAN_RESERVE ||
 			ent.getMetadata(PlayerID, "transport") !== undefined ||
 			ent.getMetadata(PlayerID, "transporter") !== undefined
 		)
+		{
 			return false;
+		}
 		if (hqOf(gameState).victoryManager.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
+		{
 			return false;
+		}
 		return true;
 	}
 
@@ -1849,12 +2124,18 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			if (!isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined)
+			{
 				continue;
+			}
 			if (!ent.hasClasses(["FastMoving+CitizenSoldier"]))
+			{
 				continue;
+			}
 			const raid = hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID);
 			if (!raid)
+			{
 				return;
+			}
 			ent.setMetadata(PlayerID, "plan", raid.name);
 			this.unitCollection.updateEnt(ent);
 			raid.unitCollection.updateEnt(ent);
@@ -1865,20 +2146,28 @@ export class AttackPlan
 	chooseTarget(gameState: CommonGameState): boolean
 	{
 		if (!this.findTarget(gameState) || !this.target)
+		{
 			return false;
+		}
 		this.targetPos = this.target.position();
 		if (!this.targetPos)
+		{
 			return false;
+		}
 		// redefine a new rally point for this target if we have a base on the same land
 		// find a new one on the pseudo-nearest base (dist weighted by the size of the island)
 		const targetIndex = getLandAccess(gameState, this.target);
 		if (targetIndex === undefined)
+		{
 			return false;
+		}
 		const rallyIndex = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		if (targetIndex === rallyIndex)
 		{
 			if (this.overseas)
+			{
 				this.overseas = 0;
+			}
 			return true;
 		}
 		const { rallySame, rallyDiff } = nearestBaseAnchors(gameState, targetIndex, this.targetPos);
@@ -1888,7 +2177,9 @@ export class AttackPlan
 			this.overseas = 0;
 		}
 		else if (rallyDiff)
+		{
 			return this.rallyOverseas(gameState, rallyDiff, targetIndex);
+		}
 		return true;
 	}
 
@@ -1899,19 +2190,27 @@ export class AttackPlan
 		{
 			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
+			{
 				return false;
+			}
 		}
 
 		this.target = this.getNearestTarget(gameState, this.rallyPoint);
 		if (this.target)
+		{
 			return true;
+		}
 		if (this.uniqueTargetId)
+		{
 			return false;
+		}
 
 		// may-be all our previous enemey target (if not recomputed here) have been destroyed ?
 		this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 		if (this.targetPlayer !== undefined)
+		{
 			this.target = this.getNearestTarget(gameState, this.rallyPoint);
+		}
 		return !!this.target;
 	}
 
@@ -1956,21 +2255,27 @@ export class AttackPlan
 	targetOnLand(gameState: CommonGameState, land: AccessIndex): CommonEntity | undefined
 	{
 		if (this.uniqueTargetId)
+		{
 			return undefined;
-		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? []).filter(enemy =>
+		}
+		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
 			enemy.hasClass("Structure")
 		);
 		if (!buildings.length)
+		{
 			return undefined;
+		}
 		const distance = (enemy: CommonPlacedEntity): number => SquareVectorDistance(enemy.position(), this.rallyPoint);
-		const owners = new Set([...buildings].sort((a, b) => distance(a) - distance(b)).map(enemy => enemy.owner()));
+		const owners = new Set([...buildings].sort((a, b) => distance(a) - distance(b)).map((enemy) => enemy.owner()));
 		const targetPlayer = this.targetPlayer;
 		for (const owner of owners)
 		{
 			this.targetPlayer = owner;
 			const target = this.getNearestTarget(gameState, this.rallyPoint, land);
 			if (target)
+			{
 				return target;
+			}
 		}
 		this.targetPlayer = targetPlayer;
 		return undefined;
@@ -1997,8 +2302,12 @@ export class AttackPlan
 		hqOf(gameState).attackManager.splitLocalFights(gameState, this, keptLand);
 		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		for (const ent of this.unitCollection.values())
+		{
 			if (this.besideEnemies(gameState, ent, rallyLand))
+			{
 				this.removeUnit(ent, true);
+			}
+		}
 	}
 
 	/**
@@ -2024,13 +2333,17 @@ export class AttackPlan
 	{
 		const targetPlayer = this.targetPlayer;
 		if (targetPlayer === undefined)
+		{
 			return undefined;
+		}
 		this.isBlocked = false;
 		const land = sameLand && sameLand > 1 ? sameLand : false;
 
 		const targets = this.targetCandidates(gameState, targetPlayer, land);
 		if (!targets.hasEntities())
+		{
 			return undefined;
+		}
 
 		// picking the nearest target
 		let target;
@@ -2045,18 +2358,24 @@ export class AttackPlan
 			}
 		}
 		if (!target)
+		{
 			return undefined;
+		}
 
 		// Check that we can reach this target
 		target = this.checkTargetObstruction(gameState, target, position);
 
 		if (!target)
+		{
 			return undefined;
+		}
 		if (
 			this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
 			target.hasClass("Relic")
 		)
+		{
 			hqOf(gameState).victoryManager.planRelicRaid(target.id(), this.name);
+		}
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target
 		this.targetPlayer = target.owner();
@@ -2075,19 +2394,27 @@ export class AttackPlan
 			const targets = new EntityCollection(gameState.sharedScript);
 			const ent = gameState.getEntityById(this.uniqueTargetId);
 			if (ent)
+			{
 				targets.addEnt(ent);
+			}
 			return targets;
 		}
 		if (this.type === AttackPlan.TYPE_RAID)
+		{
 			return this.raidTargetFinder(gameState);
+		}
 		if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_DEFAULT)
+		{
 			return this.defaultTargetFinder(gameState, targetPlayer, land);
+		}
 		const targets = this.rushTargetFinder(gameState, targetPlayer, land);
 		// with no undefended building, an attack takes on the defended ones; Petra
 		// waited for siege engines, and on islands its armies, finding nothing,
 		// were aborted and remade every few seconds for good (FINDINGS §35)
 		if (!targets.hasEntities() && (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
+		{
 			return this.defaultTargetFinder(gameState, targetPlayer, land);
+		}
 		return targets;
 	}
 
@@ -2103,17 +2430,25 @@ export class AttackPlan
 			this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
 			(!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id()))
 		)
+		{
 			return undefined;
+		}
 		// Do not bother with some pointless targets
 		if (!this.isValidTarget(gameState, ent, land))
+		{
 			return undefined;
+		}
 		if (!isPlaced(ent))
+		{
 			return undefined;
+		}
 		const entPos = ent.position();
 		let dist = SquareVectorDistance(entPos, position);
 		// In normal attacks, disfavor fields
 		if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_RAID && ent.hasClass("Field"))
+		{
 			dist += 100000;
+		}
 		// On a naval map, a dock (the enemy's fishing and transport) or a base
 		// still being built counts as nearer: on islands what the enemy lives on
 		// is worth more than the hall of its home island, and Petra's attacks
@@ -2122,7 +2457,9 @@ export class AttackPlan
 			this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).geography.navalMap &&
 			(ent.hasClass("Dock") || ent.foundationProgress() !== undefined)
 		)
+		{
 			dist *= ECONOMIC_TARGET_WEIGHT;
+		}
 		return dist;
 	}
 
@@ -2154,7 +2491,7 @@ export class AttackPlan
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
 		{
 			for (
-				const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter(relic =>
+				const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter((relic) =>
 					relic.owner() === playerEnemy
 				).values()
 			)
@@ -2164,7 +2501,9 @@ export class AttackPlan
 		}
 		targets = targets.filter((ent: CommonEntity): boolean => this.isValidTarget(gameState, ent, sameLand));
 		if (targets.hasEntities())
+		{
 			return targets;
+		}
 
 		const validTargets = gameState.getEnemyStructures(playerEnemy).filter((ent: CommonEntity): boolean =>
 			this.isValidTarget(gameState, ent, sameLand)
@@ -2174,12 +2513,18 @@ export class AttackPlan
 			filters.byClasses(hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]),
 		);
 		if (!targets.hasEntities())
+		{
 			targets = validTargets.filter(filters.byClass("ConquestCritical"));
+		}
 		// If there's nothing, attack anything else that's less critical
 		if (!targets.hasEntities())
+		{
 			targets = validTargets.filter(filters.byClass("Town"));
+		}
 		if (!targets.hasEntities())
+		{
 			targets = validTargets.filter(filters.byClass("Village"));
+		}
 		// No buildings, attack anything conquest critical, units included.
 		// TODO Should add naval attacks against the last remaining ships.
 		if (!targets.hasEntities())
@@ -2195,9 +2540,13 @@ export class AttackPlan
 	isValidTarget(gameState: CommonGameState, ent: CommonEntity, sameLand: AccessIndex | false): boolean
 	{
 		if (!isPlaced(ent))
+		{
 			return false;
+		}
 		if (sameLand && getLandAccess(gameState, ent) !== sameLand)
+		{
 			return false;
+		}
 		return !ent.decaying() || !!ent.getDefaultArrow() ||
 			ent.isGarrisonHolder() && (ent.garrisoned() || []).length > 0;
 	}
@@ -2212,43 +2561,67 @@ export class AttackPlan
 		let targets = new EntityCollection(gameState.sharedScript);
 		let buildings;
 		if (playerEnemy !== undefined)
+		{
 			buildings = gameState.getEnemyStructures(playerEnemy).toEntityArray();
+		}
 		else
+		{
 			buildings = gameState.getEnemyStructures().toEntityArray();
+		}
 		if (!buildings.length)
+		{
 			return targets;
+		}
 
 		this.position = this.unitCollection.getCentrePosition();
 		if (!this.position)
+		{
 			this.position = this.rallyPoint;
+		}
 		const myPos = this.position;
 		if (!myPos)
+		{
 			return targets;
+		}
 
 		let target;
 		let minDist = Math.min();
 		for (const building of buildings)
 		{
 			if (building.owner() === 0)
+			{
 				continue;
+			}
 			if (building.hasDefensiveFire())
+			{
 				continue;
+			}
 			if (!this.isValidTarget(gameState, building, sameLand))
+			{
 				continue;
+			}
 			const pos = building.position();
 			if (isDefended(pos, buildings))
+			{
 				continue;
+			}
 			const dist = SquareVectorDistance(pos, myPos);
 			if (dist > minDist)
+			{
 				continue;
+			}
 			minDist = dist;
 			target = building;
 		}
 		if (target)
+		{
 			targets.addEnt(target);
+		}
 
 		if (!targets.hasEntities() && this.type === AttackPlan.TYPE_RUSH && playerEnemy)
+		{
 			targets = this.rushTargetFinder(gameState, undefined, sameLand);
+		}
 
 		return targets;
 	}
@@ -2261,7 +2634,9 @@ export class AttackPlan
 		{
 			const target = gameState.getEntityById(targetId);
 			if (target && isPlaced(target))
+			{
 				targets.addEnt(target);
+			}
 		}
 		return targets;
 	}
@@ -2278,17 +2653,23 @@ export class AttackPlan
 	): CommonEntity | undefined
 	{
 		if (getLandAccess(gameState, target) !== gameState.ai.accessibility.getAccessValue(position))
+		{
 			return target;
+		}
 
 		if (!isPlaced(target))
+		{
 			return undefined;
+		}
 		const targetPos = target.position();
-		const startPos = { "x": position[0], "y": position[1] };
-		const endPos = { "x": targetPos[0], "y": targetPos[1] };
+		const startPos = { x: position[0], y: position[1] };
+		const endPos = { x: targetPos[0], y: targetPos[1] };
 		let blocker;
 		const path = computePath(startPos, endPos, gameState.getPassabilityClassMask("default"));
 		if (!path.length)
+		{
 			return undefined;
+		}
 
 		const pathPos: CommonPosition = worldPos(path[0].x, path[0].y);
 		const dist = VectorDistance(pathPos, targetPos);
@@ -2299,10 +2680,14 @@ export class AttackPlan
 			const structPos = struct.position();
 			const shape = obstructionShape(struct);
 			if (!structPos || !shape || struct.hasClass("Field"))
+			{
 				continue;
+			}
 			// we consider that we can reach the target, but nonetheless check that we did not cross any enemy gate
 			if (dist < radius + 10 && !struct.hasClass("Gate"))
+			{
 				continue;
+			}
 			// Check that we are really blocked by this structure, i.e. advancing by 1+0.8(clearance)m
 			// in the target direction would bring us inside its obstruction.
 			const x = pathPos[0] - structPos[0] + 1.8 * (targetPos[0] - pathPos[0]) / dist;
@@ -2330,21 +2715,27 @@ export class AttackPlan
 		const startAccess = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		const endAccess = getLandAccess(gameState, target);
 		if (startAccess !== endAccess)
+		{
 			return false;
+		}
 
 		Engine.ProfileStart("AI Compute path");
-		const startPos = { "x": this.rallyPoint[0], "y": this.rallyPoint[1] };
-		const endPos = { "x": targetPos[0], "y": targetPos[1] };
+		const startPos = { x: this.rallyPoint[0], y: this.rallyPoint[1] };
+		const endPos = { x: targetPos[0], y: targetPos[1] };
 		const path = computePath(startPos, endPos, gameState.getPassabilityClassMask("large"));
 		const way: CommonPosition[] = [clone(targetPos)];
 		for (const point of path)
+		{
 			way.push(worldPos(point.x, point.y));
+		}
 		way.push(clone(this.rallyPoint));
 		way.reverse();
 		this.path = way;
 		// Change the rally point to something useful
 		if (!fixedRallyPoint)
+		{
 			this.setRallyPoint(gameState, way);
+		}
 		Engine.ProfileStop();
 
 		return true;
@@ -2356,10 +2747,14 @@ export class AttackPlan
 		for (let i = 0; i < path.length; ++i)
 		{
 			if (hqOf(gameState).geography.territoryMap.getOwner(path[i]) === PlayerID)
+			{
 				continue;
+			}
 
 			if (i === 0)
+			{
 				this.rallyPoint = path[0];
+			}
 			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, path[i - 1], 20))
 			{
 				this.rallyPoint = path[i - 2];
@@ -2387,7 +2782,9 @@ export class AttackPlan
 			(this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
 			!this.chooseTarget(gameState)
 		)
+		{
 			return false;
+		}
 		this.leaveDisputedLands(gameState, this.targetLand(gameState));
 
 		// erase our queue. This will stop any leftover unit from being trained.
@@ -2398,21 +2795,31 @@ export class AttackPlan
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_WALKING);
 			const stance = ent.isPackable() ? "standground" : "aggressive";
 			if (ent.getStance() !== stance)
+			{
 				ent.setStance(stance);
+			}
 		}
 
 		const target = this.target;
 		if (!target)
+		{
 			return false;
+		}
 		const targetPos = this.targetPos;
 		if (!targetPos)
+		{
 			return false;
+		}
 		const rallyAccess = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		const targetAccess = getLandAccess(gameState, target);
 		if (rallyAccess === undefined || targetAccess === undefined)
+		{
 			return false;
+		}
 		if (rallyAccess === targetAccess)
-			return this.walkTo(gameState, { target, "pos": targetPos });
+		{
+			return this.walkTo(gameState, { target, pos: targetPos });
+		}
 		return this.sailTo(gameState, rallyAccess, targetAccess, targetPos);
 	}
 
@@ -2420,10 +2827,14 @@ export class AttackPlan
 	private walkTo(gameState: CommonGameState, aim: AttackAim): boolean
 	{
 		if (!this.path)
+		{
 			this.getPathToTarget(gameState, aim, true);
+		}
 		const path = this.path;
 		if (!path || !path[0][0] || !path[0][1])
+		{
 			return false;
+		}
 		this.overseas = 0;
 		this.startWalking(path);
 		this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
@@ -2440,15 +2851,21 @@ export class AttackPlan
 	{
 		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
 		if (sea === undefined)
+		{
 			return false;
+		}
 		this.overseas = sea;
 		if (!this.overseas)
+		{
 			return false;
+		}
 		this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_TRANSPORTING);
 		// TODO require a global transport for the collection,
 		// and put back its state to "walking" when the transport is finished
 		for (const ent of this.unitCollection.values())
+		{
 			hqOf(gameState).navalManager.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
+		}
 		return true;
 	}
 
@@ -2456,7 +2873,9 @@ export class AttackPlan
 	update(gameState: CommonGameState, events: EngineAIEvents): number | false
 	{
 		if (!this.unitCollection.hasEntities())
+		{
 			return 0;
+		}
 
 		Engine.ProfileStart("Update Attack");
 		const remaining = this.updateTurn(gameState, events);
@@ -2469,24 +2888,34 @@ export class AttackPlan
 	{
 		this.releaseGarrisoned(gameState);
 		if (!this.unitCollection.hasEntities())
+		{
 			return 0;
+		}
 
 		this.position = this.unitCollection.getCentrePosition();
 
 		// we are transporting our units, let's wait
 		// TODO instead of state "arrived", made a state "walking" with a new path
 		if (this.state === AttackPlan.STATE_TRANSPORTING)
+		{
 			this.UpdateTransporting(gameState, events);
+		}
 
 		if (!this.position)
+		{
 			return this.unitCollection.length;
+		}
 
 		const stage = this.stage;
 		if (stage.state === AttackPlan.STATE_WALKING && !this.UpdateWalking(gameState, events, stage.path))
+		{
 			return 0;
+		}
 
 		if (this.state === AttackPlan.STATE_ARRIVED)
+		{
 			this.startAttacking(gameState, this.position);
+		}
 
 		// basic state of attacking.
 		if (this.state === AttackPlan.STATE_ATTACKING)
@@ -2494,7 +2923,9 @@ export class AttackPlan
 			// First update the target and/or its position if needed
 			const aim = this.UpdateTarget(gameState);
 			if (!aim)
+			{
 				return false;
+			}
 
 			this.updateAttacking(gameState, events, aim);
 		}
@@ -2513,11 +2944,15 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			if (isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined)
+			{
 				continue;
+			}
 			const holderId = ent.garrisonHolderID();
 			const holder = holderId === undefined ? undefined : gameState.getEntityById(holderId);
 			if (holder && !holder.hasClass("Ship"))
+			{
 				this.removeUnit(ent, true);
+			}
 		}
 	}
 
@@ -2526,13 +2961,15 @@ export class AttackPlan
 	{
 		this.changeState(AttackPlan.STATE_ARRIVED, AttackPlan.STATE_ATTACKING);
 		this.startingAttack = true;
-		this.unitCollection.forEach(ent =>
+		this.unitCollection.forEach((ent) =>
 		{
 			ent.stopMoving();
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_ATTACKING);
 		});
 		if (this.type !== AttackPlan.TYPE_RUSH)
+		{
 			return;
+		}
 		const newtarget = this.getNearestTarget(gameState, position);
 		if (newtarget)
 		{
@@ -2557,13 +2994,19 @@ export class AttackPlan
 		const unitTargets = countUnitTargets(gameState, this.unitCollection);
 		const veto: Record<string, boolean> = {};
 		for (const target in unitTargets)
+		{
 			if (unitTargets[target] > 0)
+			{
 				veto[target] = true;
+			}
+		}
 
 		const { targetClassesUnit, targetClassesSiege } = this.attackerTargetClasses(target, veto);
 
 		if (this.unitCollUpdateArray === undefined || !this.unitCollUpdateArray.length)
+		{
 			this.unitCollUpdateArray = this.unitCollection.toIdArray();
+		}
 
 		// Let's check a few units each time we update (currently 10) except when attack starts
 		const lgth = this.unitCollUpdateArray.length < 15 || this.startingAttack ? this.unitCollUpdateArray.length : 10;
@@ -2583,7 +3026,9 @@ export class AttackPlan
 		{
 			const ent = gameState.getEntityById(this.unitCollUpdateArray[check]);
 			if (!ent || !isPlaced(ent))
+			{
 				continue;
+			}
 			this.orderAttacker(gameState, ent, ctx);
 		}
 		this.unitCollUpdateArray.splice(0, lgth);
@@ -2591,7 +3036,9 @@ export class AttackPlan
 
 		// check if this enemy has resigned
 		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0)
+		{
 			this.target = undefined;
+		}
 	}
 
 	/**
@@ -2604,18 +3051,24 @@ export class AttackPlan
 		for (const evt of events.Attacked)
 		{
 			if (!this.unitCollection.hasEntId(evt.target))
+			{
 				continue;
+			}
 			const attacker = gameState.getEntityById(evt.attacker);
 			const ourUnit = gameState.getEntityById(evt.target);
 			if (!ourUnit || !isPlaced(ourUnit) || !attacker || !isPlaced(attacker))
+			{
 				continue;
+			}
 			if (!attacker.hasClass("Unit"))
 			{
 				attackedByStructure[evt.target] = true;
 				continue;
 			}
 			if (isSiegeUnit(ourUnit))
+			{
 				this.defendSiege(gameState, ourUnit, attacker, time);
+			}
 			else if (this.isBlocked && !ourUnit.hasClass("Ranged") && attacker.hasClass("Ranged"))
 			{
 				// do not react if our melee units are attacked by ranged one and we are blocked by walls
@@ -2629,10 +3082,14 @@ export class AttackPlan
 					5,
 				);
 				for (const ent of collec.values())
+				{
 					strike(gameState, ent, attacker, time);
+				}
 			}
 			else
+			{
 				this.helpAndRetaliate(gameState, ourUnit, attacker, time);
+			}
 		}
 		return attackedByStructure;
 	}
@@ -2654,8 +3111,10 @@ export class AttackPlan
 		);
 		for (const ent of collec.values())
 		{
-			if (isSiegeUnit(ent)) // needed as mauryan elephants are not filtered out
+			if (isSiegeUnit(ent))
+			{ // needed as mauryan elephants are not filtered out
 				continue;
+			}
 			strike(gameState, ent, attacker, time);
 		}
 		if (
@@ -2685,9 +3144,13 @@ export class AttackPlan
 		{
 			const shouldCapture = allowCapture(gameState, ent, attacker);
 			if (isSiegeUnit(ent) || !ent.canAttackTarget(attacker, shouldCapture))
+			{
 				continue;
+			}
 			if (busyFighting(gameState, ent, attacker))
+			{
 				continue;
+			}
 			ent.attack(attacker.id(), shouldCapture);
 			ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
 		}
@@ -2695,13 +3158,17 @@ export class AttackPlan
 		if (orderData && orderData.length && orderData[0].target)
 		{
 			if (orderData[0].target === attacker.id())
+			{
 				return;
+			}
 			const target = gameState.getEntityById(orderData[0].target);
 			if (
 				target && !target.hasClasses(["Structure", "Support"]) &&
 				(!target.hasClass("Ranged") || !attacker.hasClass("Melee"))
 			)
+			{
 				return;
+			}
 		}
 		strike(gameState, ourUnit, attacker, time);
 	}
@@ -2713,34 +3180,42 @@ export class AttackPlan
 	): Pick<AttackerContext, "targetClassesUnit" | "targetClassesSiege">
 	{
 		let targetClassesUnit;
-		let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
+		let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
 		if (this.type === AttackPlan.TYPE_RUSH)
+		{
 			targetClassesUnit = {
-				"attack": ["Unit", "Structure"],
-				"avoid": ["Palisade", "Wall", "Tower", "Fortress"],
-				"vetoEntities": veto,
+				attack: ["Unit", "Structure"],
+				avoid: ["Palisade", "Wall", "Tower", "Fortress"],
+				vetoEntities: veto,
 			};
+		}
 		else
 		{
 			if (target.hasClass("Fortress"))
-				targetClassesUnit = {
-					"attack": ["Unit", "Structure"],
-					"avoid": ["Palisade", "Wall"],
-					"vetoEntities": veto,
-				};
+			{
+				targetClassesUnit = { attack: ["Unit", "Structure"], avoid: ["Palisade", "Wall"], vetoEntities: veto };
+			}
 			else if (target.hasClasses(["Palisade", "Wall"]))
-				targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Fortress"], "vetoEntities": veto };
+			{
+				targetClassesUnit = { attack: ["Unit", "Structure"], avoid: ["Fortress"], vetoEntities: veto };
+			}
 			else
+			{
 				targetClassesUnit = {
-					"attack": ["Unit", "Structure"],
-					"avoid": ["Palisade", "Wall", "Fortress"],
-					"vetoEntities": veto,
+					attack: ["Unit", "Structure"],
+					avoid: ["Palisade", "Wall", "Fortress"],
+					vetoEntities: veto,
 				};
+			}
 		}
 		if (target.hasClass("Structure"))
-			targetClassesSiege = { "attack": ["Structure"], "avoid": [], "vetoEntities": veto };
+		{
+			targetClassesSiege = { attack: ["Structure"], avoid: [], vetoEntities: veto };
+		}
 		else
-			targetClassesSiege = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
+		{
+			targetClassesSiege = { attack: ["Unit", "Structure"], avoid: [], vetoEntities: veto };
+		}
 
 		// do not loose time destroying buildings which do not help enemy's defense and can be easily captured later
 		if (target.hasDefensiveFire())
@@ -2767,21 +3242,29 @@ export class AttackPlan
 	orderAttacker(gameState: CommonGameState, ent: CommonEntity, ctx: AttackerContext): void
 	{
 		if (!isPlaced(ent))
+		{
 			return;
+		}
 		const entPosRaw = ent.position();
 		const entPos: CommonPosition = entPosRaw;
 		const need = this.attackerNeedsOrder(gameState, ent, ctx);
 		if (need === undefined)
+		{
 			return;
+		}
 		const reach: AttackerReach = {
-			"pos": entPos,
-			"range": this.attackerReach(ent),
-			"access": getLandAccess(gameState, ent),
+			pos: entPos,
+			range: this.attackerReach(ent),
+			access: getLandAccess(gameState, ent),
 		};
 		if (isSiegeUnit(ent))
+		{
 			this.orderSiegeAttacker(gameState, ent, reach, ctx);
+		}
 		else
+		{
 			this.orderUnitAttacker(gameState, ent, reach, need, ctx);
+		}
 	}
 
 	/**
@@ -2793,23 +3276,29 @@ export class AttackPlan
 		gameState: CommonGameState,
 		ent: CommonEntity,
 		ctx: AttackerContext,
-	): { needsUpdate: boolean; maybeUpdate: boolean } | undefined
+	): { needsUpdate: boolean; maybeUpdate: boolean; } | undefined
 	{
 		const { time, unitTargets, attackedByStructure } = ctx;
 		// Do not reassign units which have reacted to an attack in that same turn
 		if (ent.getMetadata(PlayerID, "lastAttackPlanUpdateTime") === time)
+		{
 			return undefined;
+		}
 
 		let targetId;
 		const orderData = ordersOf(ent);
 		if (orderData && orderData.length && orderData[0].target)
+		{
 			targetId = orderData[0].target;
+		}
 
 		// update the order if needed
 		let needsUpdate = false;
 		let maybeUpdate = false;
 		if (ent.isIdle())
+		{
 			needsUpdate = true;
+		}
 		else if (targetId)
 		{
 			const verdict = targetVerdict(gameState, ent, targetId, unitTargets, attackedByStructure);
@@ -2821,11 +3310,15 @@ export class AttackPlan
 		if (!needsUpdate)
 		{
 			if (!maybeUpdate)
+			{
 				return undefined;
+			}
 			const deltat = isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING") ? 10 : 5;
 			const lastAttackPlanUpdateTime = ent.getMetadata(PlayerID, "lastAttackPlanUpdateTime");
 			if (lastAttackPlanUpdateTime && time - lastAttackPlanUpdateTime < deltat)
+			{
 				return undefined;
+			}
 		}
 		ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
 		return { needsUpdate, maybeUpdate };
@@ -2839,16 +3332,26 @@ export class AttackPlan
 		if (this.isBlocked)
 		{
 			if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
+			{
 				range = (ent.attackRange("Ranged") || { max: 0 }).max;
+			}
 			else if (attackTypes && attackTypes.indexOf("Melee") !== -1)
+			{
 				range = (ent.attackRange("Melee") || { max: 0 }).max;
+			}
 			else
+			{
 				range = 10;
+			}
 		}
 		else if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
+		{
 			range = 30 + (ent.attackRange("Ranged") || { max: 0 }).max;
+		}
 		else if (ent.hasClass("FastMoving"))
+		{
 			range += 30;
+		}
 		range *= range;
 		// Checking for gates if we're a siege unit.
 		return range;
@@ -2858,17 +3361,25 @@ export class AttackPlan
 	orderSiegeAttacker(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach, ctx: AttackerContext): void
 	{
 		const { targetPos, veto, enemyStructures, targetClassesSiege } = ctx;
-		const mStruct = enemyStructures.filter(enemy =>
+		const mStruct = enemyStructures.filter((enemy) =>
 		{
 			const enemyPos = enemy.position();
 			if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
+			{
 				return false;
+			}
 			if (SquareVectorDistance(enemyPos, reach.pos) > reach.range)
+			{
 				return false;
+			}
 			if (enemy.foundationProgress() === 0)
+			{
 				return false;
+			}
 			if (getLandAccess(gameState, enemy) !== reach.access)
+			{
 				return false;
+			}
 			return true;
 		}).toEntityArray();
 		if (mStruct.length)
@@ -2877,7 +3388,9 @@ export class AttackPlan
 				structureValue(structb, ent, 1000, 200) - structureValue(structa, ent, 1000, 200)
 			);
 			if (mStruct[0].hasClass("Gate"))
+			{
 				ent.attack(mStruct[0].id(), allowCapture(gameState, ent, mStruct[0]));
+			}
 			else
 			{
 				const rand = randIntExclusive(0, mStruct.length * 0.2);
@@ -2887,14 +3400,16 @@ export class AttackPlan
 		else if (!ent.hasClass("Ranged"))
 		{
 			const targetClasses = {
-				"attack": targetClassesSiege.attack,
-				"avoid": targetClassesSiege.avoid.concat("Ship"),
-				"vetoEntities": veto,
+				attack: targetClassesSiege.attack,
+				avoid: targetClassesSiege.avoid.concat("Ship"),
+				vetoEntities: veto,
 			};
 			ent.attackMove(targetPos[0], targetPos[1], targetClasses);
 		}
 		else
+		{
 			ent.attackMove(targetPos[0], targetPos[1], targetClassesSiege);
+		}
 	}
 
 	/** Another attacker's next target: an enemy unit in reach, a structure, else help the nearest comrade. */
@@ -2902,7 +3417,7 @@ export class AttackPlan
 		gameState: CommonGameState,
 		ent: CommonEntity,
 		reach: AttackerReach,
-		need: { needsUpdate: boolean; maybeUpdate: boolean },
+		need: { needsUpdate: boolean; maybeUpdate: boolean; },
 		ctx: AttackerContext,
 	): void
 	{
@@ -2915,10 +3430,14 @@ export class AttackPlan
 			{
 				let vala = unitA.hasClass("Support") ? 50 : 0;
 				if (ent.counters(unitA))
+				{
 					vala += 100;
+				}
 				let valb = unitB.hasClass("Support") ? 50 : 0;
 				if (ent.counters(unitB))
+				{
 					valb += 100;
+				}
 				const distA = unitA.getMetadata(PlayerID, "distance");
 				const distB = unitB.getMetadata(PlayerID, "distance");
 				if (distA && distB)
@@ -2927,9 +3446,13 @@ export class AttackPlan
 					valb -= distB;
 				}
 				if (veto[unitA.id()])
+				{
 					vala -= 20000;
+				}
 				if (veto[unitB.id()])
+				{
 					valb -= 20000;
+				}
 				return valb - vala;
 			});
 			const rand = randIntExclusive(0, mUnit.length * 0.1);
@@ -2938,11 +3461,17 @@ export class AttackPlan
 		// This may prove dangerous as we may be blocked by something we
 		// cannot attack. See similar behaviour at #5741.
 		else if (this.isBlocked && ent.canAttackTarget(target, false))
+		{
 			ent.attack(target.id(), false);
+		}
 		else if (SquareVectorDistance(targetPos, entPos) > 2500)
+		{
 			marchOn(ent, need.maybeUpdate, ctx);
+		}
 		else if (!this.attackStructureInReach(gameState, ent, reach, ctx) && need.needsUpdate)
+		{
 			this.helpNearestComrade(gameState, ent, entPos); // really nothing   let's try to help our nearest unit
+		}
 	}
 
 	/** The attacker goes for a structure in reach (only the target when blocked), a gate first; whether there is one */
@@ -2954,26 +3483,38 @@ export class AttackPlan
 	): boolean
 	{
 		const { target, enemyStructures } = ctx;
-		const mStruct = enemyStructures.filter(enemy =>
+		const mStruct = enemyStructures.filter((enemy) =>
 		{
 			if (this.isBlocked && enemy.id() !== target.id())
+			{
 				return false;
+			}
 			const enemyPos = enemy.position();
 			if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
+			{
 				return false;
+			}
 			if (SquareVectorDistance(enemyPos, reach.pos) > reach.range)
+			{
 				return false;
+			}
 			if (getLandAccess(gameState, enemy) !== reach.access)
+			{
 				return false;
+			}
 			return true;
 		}, this).toEntityArray();
 		if (!mStruct.length)
+		{
 			return false;
+		}
 		mStruct.sort((structa: CommonEntity, structb: CommonEntity): number =>
 			structureValue(structb, ent, 0, 100) - structureValue(structa, ent, 0, 100)
 		);
 		if (mStruct[0].hasClass("Gate"))
+		{
 			ent.attack(mStruct[0].id(), false);
+		}
 		else
 		{
 			const rand = randIntExclusive(0, mStruct.length * 0.2);
@@ -2987,27 +3528,39 @@ export class AttackPlan
 	{
 		let distmin = Math.min();
 		let attacker: CommonEntity | undefined;
-		this.unitCollection.forEach(unit =>
+		this.unitCollection.forEach((unit) =>
 		{
 			if (!isPlaced(unit))
+			{
 				return;
+			}
 			const unitPos = unit.position();
 			const orderData = ordersOf(unit);
 			if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length || !orderData[0].target)
+			{
 				return;
+			}
 			const target = gameState.getEntityById(orderData[0].target ?? -1);
 			if (!target)
+			{
 				return;
+			}
 			const dist = SquareVectorDistance(unitPos, entPos);
 			if (dist > distmin)
+			{
 				return;
+			}
 			distmin = dist;
 			if (!ent.canAttackTarget(target, allowCapture(gameState, ent, target)))
+			{
 				return;
+			}
 			attacker = target;
 		});
 		if (attacker)
+		{
 			ent.attack(attacker.id(), allowCapture(gameState, ent, attacker));
+		}
 	}
 
 	UpdateTransporting(gameState: CommonGameState, events: EngineAIEvents): void
@@ -3016,13 +3569,21 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			if (this.Config.debug > 1 && ent.getMetadata(PlayerID, "transport") !== undefined)
+			{
 				debugShade([ent.id()], [2, 2, 0]);
+			}
 			else if (this.Config.debug > 1)
+			{
 				debugShade([ent.id()], [1, 1, 1]);
+			}
 			if (!done)
+			{
 				continue;
+			}
 			if (ent.getMetadata(PlayerID, "transport") !== undefined)
+			{
 				done = false;
+			}
 		}
 
 		if (done)
@@ -3055,20 +3616,28 @@ export class AttackPlan
 		for (const evt of events.Attacked)
 		{
 			if (!this.unitCollection.hasEntId(evt.target))
+			{
 				continue;
+			}
 			const attacker = gameState.getEntityById(evt.attacker);
 			const victim = gameState.getEntityById(evt.target);
 			if (!attacker || !victim)
+			{
 				continue;
+			}
 			const attackerLand = getLandAccess(gameState, attacker);
 			const near = victim.position() ?? attacker.position();
 			for (const ent of this.unitCollection.values())
 			{
 				if (!answersBlow(gameState, ent, completing, attackerLand, near))
+				{
 					continue;
+				}
 				const shouldCapture = allowCapture(gameState, ent, attacker);
 				if (!ent.canAttackTarget(attacker, shouldCapture))
+				{
 					continue;
+				}
 				ent.attack(attacker.id(), shouldCapture);
 			}
 			break;
@@ -3080,7 +3649,9 @@ export class AttackPlan
 	{
 		const pos = this.position;
 		if (!pos)
+		{
 			return false;
+		}
 		const pos5TurnsAgo = this.position5TurnsAgo;
 		const targetPos = this.targetPos;
 		// we're marching towards the target
@@ -3096,16 +3667,22 @@ export class AttackPlan
 			pos5TurnsAgo && SquareVectorDistance(pos, pos5TurnsAgo) < 10 &&
 			path.length > 0 && gameState.ai.playedTurn % 5 === 0
 		)
+		{
 			destroyFarthestSiege(this.unitCollection, pos);
+		}
 		if (gameState.ai.playedTurn % 5 === 0)
+		{
 			this.position5TurnsAgo = clone(pos);
+		}
 
 		const lastPos = this.lastPosition;
 		if (lastPos && SquareVectorDistance(pos, lastPos) < 16 && path.length > 0)
 		{
 			const walls = this.unstick(gameState, pos, path);
 			if (walls !== undefined)
+			{
 				return walls;
+			}
 		}
 
 		// check if our units are close enough from the next waypoint.
@@ -3133,13 +3710,17 @@ export class AttackPlan
 		for (const evt of events.Attacked)
 		{
 			if (!this.unitCollection.hasEntId(evt.target))
+			{
 				continue;
+			}
 			const attacker = gameState.getEntityById(evt.attacker);
 			if (attacker && (attacker.owner() !== 0 || this.targetPlayer === 0))
 			{
 				attackedNB++;
 				if (attacker.hasClass("Unit"))
+				{
 					attackedUnitNB++;
+				}
 			}
 		}
 		return attackedNB > 1 && (attackedUnitNB > 0 || this.hasSiegeUnits()) &&
@@ -3153,12 +3734,16 @@ export class AttackPlan
 	private unstick(gameState: CommonGameState, pos: CommonPosition, path: CommonPosition[]): boolean | undefined
 	{
 		if (!path[0][0] || !path[0][1])
+		{
 			aiWarn("Start: Problem with path " + uneval(path));
+		}
 		const walls = this.facesWalls(gameState, pos);
 		if (walls !== undefined)
 		{
 			if (walls)
+			{
 				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
+			}
 			return walls;
 		}
 		// this.unitCollection.move(path[0][0], path[0][1]);
@@ -3176,7 +3761,9 @@ export class AttackPlan
 		{
 			const entPos = ent.position();
 			if (SquareVectorDistance(pos, entPos) > 800)
+			{
 				continue;
+			}
 			const enemyClass = ent.hasClass("Wall") ? "Wall" : "Palisade";
 			// there are walls, so check if we can attack
 			if (this.unitCollection.filter(filters.byCanAttackClass(enemyClass)).hasEntities())
@@ -3203,10 +3790,14 @@ export class AttackPlan
 	private walkedPath(path: CommonPosition[], pos: CommonPosition): boolean
 	{
 		if (!path.length || !(SquareVectorDistance(pos, path[0]) < 1600))
+		{
 			return false;
+		}
 		path.shift();
 		if (!path.length)
+		{
 			return true;
+		}
 		this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
 		return false;
 	}
@@ -3215,22 +3806,32 @@ export class AttackPlan
 	{
 		const pos = this.position;
 		if (!pos)
+		{
 			return undefined;
+		}
 		// First update the target position in case it's a unit (and check if it has garrisoned)
 		if (this.target && this.target.hasClass("Unit"))
+		{
 			this.followUnitTarget(gameState, this.target);
+		}
 		// Then update the target if needed:
 		if (this.targetPlayer === undefined || !gameState.isPlayerEnemy(this.targetPlayer))
 		{
 			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
+			{
 				return undefined;
+			}
 
 			if (this.target && this.target.owner() !== this.targetPlayer)
+			{
 				this.target = undefined;
+			}
 		}
-		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0) // this enemy has resigned
+		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0)
+		{ // this enemy has resigned
 			this.target = undefined;
+		}
 
 		if (!this.target || !gameState.getEntityById(this.target.id()))
 		{
@@ -3240,7 +3841,9 @@ export class AttackPlan
 				() => "Seems like our target for plan " + this.name + " has been destroyed or captured. Switching.",
 			);
 			if (!this.switchTarget(gameState, pos))
+			{
 				return undefined;
+			}
 		}
 		return this.aim();
 	}
@@ -3250,7 +3853,9 @@ export class AttackPlan
 	{
 		this.targetPos = target.position();
 		if (this.targetPos)
+		{
 			return;
+		}
 		const holder = getHolder(gameState, target);
 		if (holder && gameState.isPlayerEnemy(holder.owner()))
 		{
@@ -3258,7 +3863,9 @@ export class AttackPlan
 			this.targetPos = holder.position();
 		}
 		else
+		{
 			this.target = undefined;
+		}
 	}
 
 	/**
@@ -3272,16 +3879,22 @@ export class AttackPlan
 		if (!this.target)
 		{
 			if (this.uniqueTargetId)
+			{
 				return false;
+			}
 
 			// Check if we could help any current attack
 			if (this.helpOtherAttack(gameState, accessIndex))
+			{
 				return true;
+			}
 
 			// If not, let's look for another enemy
 			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer !== undefined)
+			{
 				this.target = this.getNearestTarget(gameState, pos, accessIndex);
+			}
 			if (!this.target)
 			{
 				debugWarn(this.Config, 1, () => "No new target found. Remaining units " + this.unitCollection.length);
@@ -3300,18 +3913,28 @@ export class AttackPlan
 		for (const attack of plansIn(attackManager.startedAttacks))
 		{
 			if (attack.name === this.name)
+			{
 				continue;
+			}
 			if (
 				!attack.target || !gameState.getEntityById(attack.target.id()) ||
 				!gameState.isPlayerEnemy(attack.target.owner())
 			)
+			{
 				continue;
+			}
 			if (accessIndex !== getLandAccess(gameState, attack.target))
+			{
 				continue;
-			if (attack.target.owner() === 0 && attack.targetPlayer !== 0) // looks like it has resigned
+			}
+			if (attack.target.owner() === 0 && attack.targetPlayer !== 0)
+			{ // looks like it has resigned
 				continue;
+			}
 			if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
+			{
 				continue;
+			}
 			this.target = attack.target;
 			this.targetPlayer = attack.targetPlayer;
 			this.targetPos = this.target.position();
@@ -3331,20 +3954,26 @@ export class AttackPlan
 			// (an army with no position is aboard ships: it gets no rallyPoint)
 			const { rallyPoint, withdrawRange } = this.isStarted() && pos ?
 				this.withdrawPoint(gameState, pos) :
-				{ "rallyPoint": undefined, "withdrawRange": WITHDRAW_RANGE };
+				{ rallyPoint: undefined, withdrawRange: WITHDRAW_RANGE };
 
 			for (const ent of this.unitCollection.values())
 			{
 				if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
+				{
 					ent.stopMoving();
+				}
 				if (rallyPoint)
+				{
 					ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, withdrawRange);
+				}
 				this.removeUnit(ent);
 			}
 		}
 
 		for (const unitCat in this.unitStat)
+		{
 			this.unit[unitCat].unregister();
+		}
 
 		this.removeQueues(gameState);
 	}
@@ -3357,7 +3986,7 @@ export class AttackPlan
 	private withdrawPoint(
 		gameState: CommonGameState,
 		pos: CommonPosition,
-	): { rallyPoint: CommonPosition | undefined; withdrawRange: number }
+	): { rallyPoint: CommonPosition | undefined; withdrawRange: number; }
 	{
 		let rallyPoint;
 		let withdrawRange = WITHDRAW_RANGE;
@@ -3373,12 +4002,18 @@ export class AttackPlan
 			const anchor = base.anchor;
 			const anchorPos = anchor ? anchor.position() : undefined;
 			if (!anchor || !anchorPos)
+			{
 				continue;
+			}
 			if (getLandAccess(gameState, anchor) !== access)
+			{
 				continue;
+			}
 			const newdist = SquareVectorDistance(pos, anchorPos);
 			if (newdist > dist)
+			{
 				continue;
+			}
 			dist = newdist;
 			rallyPoint = anchorPos;
 			withdrawRange = anchor.obstructionRadius().max + WITHDRAW_RANGE;
@@ -3391,21 +4026,31 @@ export class AttackPlan
 		if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_ATTACK)
 		{
 			if (ent.hasClass("CitizenSoldier") && ent.isGatherer())
+			{
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
+			}
 			else
+			{
 				ent.setMetadata(PlayerID, "role", undefined);
+			}
 			ent.setMetadata(PlayerID, "subrole", undefined);
 		}
 		ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 		if (update)
+		{
 			this.unitCollection.updateEnt(ent);
+		}
 	}
 
 	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		for (const evt of events.EntityRenamed)
+		{
 			if (this.target && this.target.id() === evt.entity)
+			{
 				this.onTargetRenamed(gameState, evt.newentity);
+			}
+		}
 
 		this.onTargetLost(gameState, events);
 
@@ -3416,27 +4061,37 @@ export class AttackPlan
 		// The constructor's collection is kept up to date by its registration.
 
 		if (!this.overseas || this.state !== AttackPlan.STATE_UNEXECUTED)
+		{
 			return;
+		}
 		// let's check if an enemy has built a structure at our access
 		for (const evt of events.Create)
 		{
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent && isPlaced(ent) && ent.hasClass("Structure") && gameState.isPlayerEnemy(ent.owner()))
+			{
 				this.rallyAtBaseOn(gameState, getLandAccess(gameState, ent));
+			}
 		}
 	}
 
 	/** The target captured by an ally is no more ours; a defeated target player gives way to another */
 	private onTargetLost(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		for (const evt of events.OwnershipChanged) // capture event
+		for (const evt of events.OwnershipChanged)
+		{ // capture event
 			if (this.target && this.target.id() === evt.entity && gameState.isPlayerAlly(evt.to))
+			{
 				this.target = undefined;
+			}
+		}
 
 		for (const evt of events.PlayerDefeated)
 		{
 			if (this.targetPlayer !== evt.playerId)
+			{
 				continue;
+			}
 			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			this.target = undefined;
 		}
@@ -3446,11 +4101,17 @@ export class AttackPlan
 	private onTargetRenamed(gameState: CommonGameState, newentity: EntityId): void
 	{
 		if (this.type === AttackPlan.TYPE_RAID && !this.isStarted())
+		{
 			this.target = undefined;
+		}
 		else
+		{
 			this.target = gameState.getEntityById(newentity);
+		}
 		if (this.target)
+		{
 			this.targetPos = this.target.position();
+		}
 	}
 
 	/** An enemy built on a land where we have a base: the plan gathers there, the last such base, without sailing */
@@ -3460,9 +4121,13 @@ export class AttackPlan
 		{
 			const anchorPos = base.anchor ? base.anchor.position() : undefined;
 			if (!anchorPos)
+			{
 				continue;
+			}
 			if (base.accessIndex !== access)
+			{
 				continue;
+			}
 			this.overseas = 0;
 			this.rallyPoint = anchorPos;
 		}
@@ -3471,16 +4136,24 @@ export class AttackPlan
 	waitingForTransport(): boolean
 	{
 		for (const ent of this.unitCollection.values())
+		{
 			if (ent.getMetadata(PlayerID, "transport") !== undefined)
+			{
 				return true;
+			}
+		}
 		return false;
 	}
 
 	hasSiegeUnits(): boolean
 	{
 		for (const ent of this.unitCollection.values())
+		{
 			if (isSiegeUnit(ent))
+			{
 				return true;
+			}
+		}
 		return false;
 	}
 
@@ -3489,11 +4162,17 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			if (data && Number(ent.getMetadata(PlayerID, data)) !== Number(value))
+			{
 				continue;
+			}
 			const orders = ordersOf(ent);
 			for (const order of orders)
+			{
 				if (order.force)
+				{
 					return true;
+				}
+			}
 		}
 		return false;
 	}
@@ -3507,9 +4186,13 @@ export class AttackPlan
 		// no position: no unit of the army has one (all aboard ships)
 		const pos = this.position;
 		if (!pos)
+		{
 			return NO_LAND;
+		}
 		for (const ent of this.unitCollection.filterNearest(pos, 1).values())
+		{
 			return getLandAccess(gameState, ent) ?? NO_REGION;
+		}
 
 		return NO_LAND;
 	}
@@ -3528,29 +4211,29 @@ export class AttackPlan
 	Serialize(): SerializedAttackPlan
 	{
 		const properties = {
-			"name": this.name,
-			"type": this.type,
-			"state": this.state,
-			"forced": this.forced,
-			"rallyPoint": clone(this.rallyPoint),
-			"overseas": this.overseas,
-			"paused": this.paused,
-			"maxCompletingTime": this.maxCompletingTime,
-			"neededShips": this.neededShips,
-			"unitStat": this.unitStat,
-			"siegeState": this.preparation()?.siegeState ?? AttackPlan.SIEGE_NOT_TESTED,
-			"position5TurnsAgo": this.position5TurnsAgo,
-			"lastPosition": this.lastPosition,
-			"position": this.position !== undefined ? clone(this.position) : undefined,
-			"isBlocked": this.isBlocked,
-			"targetPlayer": this.targetPlayer,
-			"target": this.target !== undefined ? this.target.id() : undefined,
-			"targetPos": this.targetPos !== undefined ? clone(this.targetPos) : undefined,
-			"uniqueTargetId": this.uniqueTargetId,
-			"path": this.path,
-			"unitCollUpdateArray": this.unitCollUpdateArray,
+			name: this.name,
+			type: this.type,
+			state: this.state,
+			forced: this.forced,
+			rallyPoint: clone(this.rallyPoint),
+			overseas: this.overseas,
+			paused: this.paused,
+			maxCompletingTime: this.maxCompletingTime,
+			neededShips: this.neededShips,
+			unitStat: this.unitStat,
+			siegeState: this.preparation()?.siegeState ?? AttackPlan.SIEGE_NOT_TESTED,
+			position5TurnsAgo: this.position5TurnsAgo,
+			lastPosition: this.lastPosition,
+			position: this.position !== undefined ? clone(this.position) : undefined,
+			isBlocked: this.isBlocked,
+			targetPlayer: this.targetPlayer,
+			target: this.target !== undefined ? this.target.id() : undefined,
+			targetPos: this.targetPos !== undefined ? clone(this.targetPos) : undefined,
+			uniqueTargetId: this.uniqueTargetId,
+			path: this.path,
+			unitCollUpdateArray: this.unitCollUpdateArray,
 		};
 
-		return { "properties": properties };
+		return { properties: properties };
 	}
 }

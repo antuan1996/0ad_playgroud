@@ -46,12 +46,16 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 			dispatchUnits(HQ, gameState);
 		}
 		else
+		{
 			buildFirstBase(HQ, gameState);
+		}
 	}
 
 	// configure our first base strategy
 	if (HQ.hasPotentialBase())
+	{
 		configFirstBase(HQ, gameState);
+	}
 
 	return true;
 }
@@ -65,7 +69,9 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
 	{
 		// do not affect merchant ship immediately to trade as they may-be useful for transport
 		if (ent.hasClasses(["Trader+!Ship"]))
+		{
 			HQ.tradeManager.assignTrader(ent);
+		}
 
 		const pos = ent.position();
 		if (!pos)
@@ -85,17 +91,23 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
 		const index = gamepos[0] + gamepos[1] * gameState.ai.accessibility.width;
 		const land = gameState.ai.accessibility.landPassMap[index];
 		if (land > 1 && !HQ.geography.landRegions[land])
+		{
 			HQ.geography.landRegions[land] = true;
+		}
 		const sea = gameState.ai.accessibility.navalPassMap[index];
 		if (sea > 1 && !HQ.geography.navalRegions[sea])
+		{
 			HQ.geography.navalRegions[sea] = true;
+		}
 
 		// if garrisoned units inside, ungarrison them except if a ship in which case we will make a transport
 		// when a construction will start (see createTransportIfNeeded)
 		if (ent.isGarrisonHolder() && ent.garrisoned().length && !ent.hasClass("Ship"))
 		{
 			for (const id of ent.garrisoned())
+			{
 				ent.unload(id);
+			}
 		}
 
 		const territorypos = HQ.geography.territoryMap.gamePosToMapPos(pos);
@@ -122,8 +134,12 @@ function structureAnalysis(HQ: Headquarters, gameState: CommonGameState): void
 	const civ = civref in HQ.Config.buildings ? civref : "default";
 	HQ.bAdvanced = [];
 	for (const building of HQ.Config.buildings[civ])
+	{
 		if (gameState.isTemplateAvailable(gameState.applyCiv(building)))
+		{
 			HQ.bAdvanced.push(gameState.applyCiv(building));
+		}
+	}
 }
 
 /**
@@ -133,37 +149,44 @@ function structureAnalysis(HQ: Headquarters, gameState: CommonGameState): void
 export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): void
 {
 	if (gameState.ai.queues.civilCentre.hasQueuedUnits())
+	{
 		return;
+	}
 	const first = firstBaseGoal(HQ, gameState);
 	if (!first || !HQ.canBuild(gameState, first.templateName))
+	{
 		return;
+	}
 
 	const startingPoint = startingPoints(gameState);
 	if (!startingPoint.length)
+	{
 		return;
+	}
 
 	let imax = 0;
 	for (let i = 1; i < startingPoint.length; ++i)
+	{
 		if (startingPoint[i].weight > startingPoint[imax].weight)
+		{
 			imax = i;
+		}
+	}
 
 	if (first.goal === "dock")
 	{
 		const sea = startingPoint[imax].sea > 1 ? startingPoint[imax].sea : undefined;
 		gameState.ai.queues.dock.addPlan(
-			new ConstructionPlan(gameState, "structures/{civ}/dock", {
-				"sea": sea,
-				"proximity": startingPoint[imax].pos,
-			}),
+			new ConstructionPlan(gameState, "structures/{civ}/dock", { sea: sea, proximity: startingPoint[imax].pos }),
 		);
 	}
 	else
 	{
 		gameState.ai.queues.civilCentre.addPlan(
 			new ConstructionPlan(gameState, "structures/{civ}/civil_centre", {
-				"base": NEW_BASE,
-				"resource": "wood",
-				"proximity": startingPoint[imax].pos,
+				base: NEW_BASE,
+				resource: "wood",
+				proximity: startingPoint[imax].pos,
 			}),
 		);
 	}
@@ -177,32 +200,48 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 function firstBaseGoal(
 	HQ: Headquarters,
 	gameState: CommonGameState,
-): { templateName: string; goal: "civil_centre" | "dock" } | undefined
+): { templateName: string; goal: "civil_centre" | "dock"; } | undefined
 {
 	const ccName = gameState.applyCiv("structures/{civ}/civil_centre");
 	if (gameState.isTemplateDisabled(ccName))
+	{
 		return undefined;
+	}
 	const cc = gameState.getTemplate(ccName);
 	if (!cc)
+	{
 		return undefined;
+	}
 	const total = gameState.getResources();
 	if (total.canAfford(new ResourcesManager(cc.cost())))
-		return { "templateName": ccName, "goal": "civil_centre" };
+	{
+		return { templateName: ccName, goal: "civil_centre" };
+	}
 	if (treasuresWillPay(gameState, cc))
+	{
 		return undefined;
+	}
 
 	// not enough resource to build a cc, try with a dock to accumulate resources if none yet
 	if (HQ.navalManager.docks.filter(filters.byClass("Dock")).hasEntities())
-		return { "templateName": ccName, "goal": "civil_centre" };
+	{
+		return { templateName: ccName, goal: "civil_centre" };
+	}
 	if (gameState.ai.queues.dock.hasQueuedUnits())
+	{
 		return undefined;
+	}
 	const dockName = gameState.applyCiv("structures/{civ}/dock");
 	if (gameState.isTemplateDisabled(dockName))
+	{
 		return undefined;
+	}
 	const dock = gameState.getTemplate(dockName);
 	if (!dock || !total.canAfford(new ResourcesManager(dock.cost())))
+	{
 		return undefined;
-	return { "templateName": dockName, "goal": "dock" };
+	}
+	return { templateName: dockName, goal: "dock" };
 }
 
 /**
@@ -215,29 +254,43 @@ function treasuresWillPay(gameState: CommonGameState, template: CommonTemplate):
 	for (const ent of gameState.getOwnUnits().values())
 	{
 		if (!isPlaced(ent))
+		{
 			continue;
+		}
 		// If we can get a treasure around, just do it
 		if (ent.isIdle())
+		{
 			gatherTreasure(gameState, ent);
+		}
 		// Then count the resources from the treasures being collected
 		const treasureId = ent.getMetadata(PlayerID, "treasure");
 		if (!treasureId)
+		{
 			continue;
+		}
 		const treasure = gameState.getEntityById(treasureId);
 		if (!treasure)
+		{
 			continue;
+		}
 		const types = treasure.treasureResources();
 		for (const type in types)
+		{
 			if (type in totalExpected)
+			{
 				totalExpected[type] += types[type];
+			}
+		}
 		// If we can collect enough resources from these treasures, wait for them.
 		if (totalExpected.canAfford(new ResourcesManager(template.cost())))
+		{
 			return true;
+		}
 	}
 	return false;
 }
 
-type StartingPoint = { pos: CommonPosition; land: AccessIndex; sea: SeaIndex; weight: number };
+type StartingPoint = { pos: CommonPosition; land: AccessIndex; sea: SeaIndex; weight: number; };
 
 /** Our workers grouped by land and sea and within 50 m, each group weighed by its workers. */
 function startingPoints(gameState: CommonGameState): StartingPoint[]
@@ -246,28 +299,38 @@ function startingPoints(gameState: CommonGameState): StartingPoint[]
 	for (const ent of gameState.getOwnUnits().values())
 	{
 		if (!ent.hasClass("Worker"))
+		{
 			continue;
+		}
 		if (isFastMoving(ent))
+		{
 			continue;
+		}
 		let pos = ent.position();
 		if (!pos)
 		{
 			const holder = getHolder(gameState, ent);
 			if (!holder || !isPlaced(holder))
+			{
 				continue;
+			}
 			pos = holder.position();
 		}
 		const gamepos = gameState.ai.accessibility.gamePosToMapPos(pos);
 		const index = gamepos[0] + gamepos[1] * gameState.ai.accessibility.width;
 		const land = gameState.ai.accessibility.landPassMap[index];
 		const sea = gameState.ai.accessibility.navalPassMap[index];
-		const point = startingPoint.find(p =>
+		const point = startingPoint.find((p) =>
 			land === p.land && sea === p.sea && SquareVectorDistance(p.pos, pos) <= 2500
 		);
 		if (point)
+		{
 			point.weight += 1;
+		}
 		else
-			startingPoint.push({ "pos": pos, "land": land, "sea": sea, "weight": 1 });
+		{
+			startingPoint.push({ pos: pos, land: land, sea: sea, weight: 1 });
+		}
 	}
 	return startingPoint;
 }
@@ -281,7 +344,9 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 {
 	const allycc = gameState.getExclusiveAllyEntities().filter(filters.byClass("CivCentre")).toEntityArray();
 	if (!allycc.length)
+	{
 		return;
+	}
 	debugWarn(
 		HQ.Config,
 		1,
@@ -292,10 +357,12 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 	let num1 = Math.floor(num / 2);
 	let num2 = num1;
 	// first pass to affect ranged infantry
-	units.filter(filters.byClasses(["Infantry+Ranged"])).forEach(ent =>
+	units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent) =>
 	{
 		if (!num || !num1)
+		{
 			return;
+		}
 		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc))
 		{
 			--num;
@@ -303,10 +370,12 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 		}
 	});
 	// second pass to affect melee infantry
-	units.filter(filters.byClasses(["Infantry+Melee"])).forEach(ent =>
+	units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent) =>
 	{
 		if (!num || !num2)
+		{
 			return;
+		}
 		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc))
 		{
 			--num;
@@ -314,12 +383,16 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 		}
 	});
 	// and now complete the affectation, including all support units
-	units.forEach(ent =>
+	units.forEach((ent) =>
 	{
 		if (!num && !ent.hasClass("Support"))
+		{
 			return;
+		}
 		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc) && !ent.hasClass("Support"))
+		{
 			--num;
+		}
 	});
 }
 
@@ -330,7 +403,9 @@ function guardAllyCentre(gameState: CommonGameState, ent: CommonEntity, allycc: 
 	for (const cc of allycc)
 	{
 		if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
+		{
 			continue;
+		}
 		const ccPos = cc.position();
 		ent.setMetadata(PlayerID, "allied", true);
 		const range = 1.5 * cc.footprintRadius();
@@ -348,7 +423,9 @@ function guardAllyCentre(gameState: CommonGameState, ent: CommonEntity, allycc: 
 export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): void
 {
 	if (!HQ.hasPotentialBase())
+	{
 		return;
+	}
 
 	HQ.firstBaseConfig = true;
 
@@ -362,16 +439,24 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		for (const land of startingLand)
 		{
 			for (const sea of gameState.ai.accessibility.regionLinks[land])
+			{
 				if (gameState.ai.HQ.geography.navalRegions[sea])
+				{
 					HQ.navalManager.updateFishingBoats(seaRegion(sea), num);
+				}
+			}
 		}
 		HQ.maxFields = 1;
 		HQ.needCorral = true;
 	}
 	else if (startingSize < 60000)
+	{
 		HQ.maxFields = 2;
+	}
 	else
+	{
 		HQ.maxFields = false;
+	}
 
 	// - count the available food resource, and react accordingly
 	let startingFood = gameState.getResources().food;
@@ -385,7 +470,9 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 			HQ.Config.Economy.popForDock = 1;
 		}
 		else
+		{
 			HQ.needFarm = true;
+		}
 	}
 	configByWood(HQ, gameState);
 	queueFirstDropsite(HQ, gameState);
@@ -396,7 +483,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		if (!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() && HQ.canBuild(gameState, template))
 		{
 			gameState.ai.queues.corral.addPlan(
-				new ConstructionPlan(gameState, template, { "base": HQ.baseManagers()[0].ID }),
+				new ConstructionPlan(gameState, template, { base: HQ.baseManagers()[0].ID }),
 			);
 		}
 	}
@@ -406,7 +493,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 function startingLandSize(
 	HQ: Headquarters,
 	gameState: CommonGameState,
-): { startingSize: number; startingLand: AccessIndex[] }
+): { startingSize: number; startingLand: AccessIndex[]; }
 {
 	let startingSize = 0;
 	const startingLand = [];
@@ -415,14 +502,16 @@ function startingLandSize(
 		for (const base of HQ.baseManagers())
 		{
 			if (!base.anchor || base.accessIndex !== +region)
+			{
 				continue;
+			}
 			startingSize += gameState.ai.accessibility.regionSize[region];
 			startingLand.push(base.accessIndex);
 			break;
 		}
 	}
 	const cell = gameState.getPassabilityMap().cellSize;
-	return { "startingSize": startingSize * cell * cell, startingLand };
+	return { startingSize: startingSize * cell * cell, startingLand };
 }
 
 /** Count the available wood: save resources when short, allow rushes only if enough (otherwise favor expansion). */
@@ -454,9 +543,13 @@ function configByWood(HQ: Headquarters, gameState: CommonGameState): void
 		if (gameState.isCeasefireActive())
 		{
 			if (gameState.ceasefireTimeRemaining > 900)
+			{
 				allowed = 0;
+			}
 			else if (gameState.ceasefireTimeRemaining > 600 && allowed > 1)
+			{
 				allowed = 1;
+			}
 		}
 		HQ.attackManager.setRushes(allowed);
 	}
@@ -466,11 +559,15 @@ function configByWood(HQ: Headquarters, gameState: CommonGameState): void
 function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
 {
 	if (gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
+	{
 		return;
+	}
 	const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
 	// templateName is only "" when quality is 0, which the > 40 check rejects.
 	if (newDP.quality <= 40 || !HQ.canBuild(gameState, newDP.templateName))
+	{
 		return;
+	}
 	// if we start with enough workers, put our available resources in this first dropsite
 	// same thing if our pop exceed the allowed one, as we will need several houses
 	const numWorkers = gameState.getOwnUnits().filter(filters.byClass("Worker")).length;
@@ -481,6 +578,6 @@ function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
 		gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 	}
 	gameState.ai.queues.dropsites.addPlan(
-		new ConstructionPlan(gameState, newDP.templateName, { "base": HQ.baseManagers()[0].ID }, newDP.pos),
+		new ConstructionPlan(gameState, newDP.templateName, { base: HQ.baseManagers()[0].ID }, newDP.pos),
 	);
 }

@@ -2,8 +2,8 @@
 
 /** The long-range path between two positions for a passability class mask, its waypoints from the end */
 export function computePath(
-	start: { x: number; y: number },
-	end: { x: number; y: number },
+	start: { x: number; y: number; },
+	end: { x: number; y: number; },
 	passClass: number,
 ): ReturnType<typeof Engine.ComputePath>
 {

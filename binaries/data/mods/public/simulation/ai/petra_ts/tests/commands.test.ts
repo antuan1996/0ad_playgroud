@@ -14,7 +14,7 @@ describe("the bot's own commands", () =>
 	it("hands the game the command as it was written", () =>
 	{
 		resetRecorder();
-		const tribute: EngineCommand = { "type": "tribute", "player": playerId(2), "amounts": { "food": 100 } };
+		const tribute: EngineCommand = { type: "tribute", player: playerId(2), amounts: { food: 100 } };
 		postCommand(tribute);
 		assert.deepEqual(commands, [tribute]);
 	});
@@ -25,7 +25,7 @@ describe("the bot's own commands", () =>
 		debugShade([entityId(1010), entityId(1011)], [2, 0, 0]);
 		assert.equal(
 			JSON.stringify(commands),
-			JSON.stringify([{ "type": "set-shading-color", "entities": [1010, 1011], "rgb": [2, 0, 0] }]),
+			JSON.stringify([{ type: "set-shading-color", entities: [1010, 1011], rgb: [2, 0, 0] }]),
 			"the same keys in the same order, as the command log records them",
 		);
 	});

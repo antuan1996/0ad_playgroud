@@ -57,17 +57,17 @@ type Vec2 = [number, number];
  * report it (`position()`) and commands take it. Branded so that a grid's
  * cell coordinates (`MapPos`) or any other pair of numbers cannot pass for one.
  */
-type WorldPos = Vec2 & { readonly __brand: "WorldPos" };
+type WorldPos = Vec2 & { readonly __brand: "WorldPos"; };
 /** [x, z] coordinates of a cell on one InfoMap's grid (`gamePosToMapPos`). */
-type MapPos = Vec2 & { readonly __brand: "MapPos" };
+type MapPos = Vec2 & { readonly __brand: "MapPos"; };
 /**
  * A land region of the accessibility analysis (`landPassMap`): units on two
  * cells with the same index can walk from one to the other. 0 is unknown, 1
  * impassable, real regions start at 2.
  */
-type AccessIndex = number & { readonly __brand: "AccessIndex" };
+type AccessIndex = number & { readonly __brand: "AccessIndex"; };
 /** A sea region (`navalPassMap`): ships on two cells with the same index can sail between them. */
-type SeaIndex = number & { readonly __brand: "SeaIndex" };
+type SeaIndex = number & { readonly __brand: "SeaIndex"; };
 /**
  * Either kind of region. Land and sea regions are numbered in one sequence
  * (`regionType` tells which a number is), and a route between two places
@@ -75,34 +75,34 @@ type SeaIndex = number & { readonly __brand: "SeaIndex" };
  */
 type RegionIndex = AccessIndex | SeaIndex;
 /** Game time in milliseconds, the engine's unit (turn lengths, timers, the shared script's clock). */
-type GameMs = number & { readonly __brand: "GameMs" };
+type GameMs = number & { readonly __brand: "GameMs"; };
 /**
  * Game time in seconds, Petra's unit: `elapsedTime` and every time or delay
  * the AI keeps. Arithmetic gives a plain number back; `seconds()`
  * (petra_ts/brands.ts) marks the result as seconds again.
  */
-type GameSeconds = number & { readonly __brand: "GameSeconds" };
+type GameSeconds = number & { readonly __brand: "GameSeconds"; };
 /**
  * The name of an entity template as the game knows it, with the
  * civilisation filled in ("structures/athen/house", not
  * "structures/{civ}/house"): what entities report and `applyCiv` returns,
  * and what a template lookup takes.
  */
-type TemplateName = string & { readonly __brand: "TemplateName" };
+type TemplateName = string & { readonly __brand: "TemplateName"; };
 /**
  * The name of a technology template ("phase_town_athen", "gather_wicker_baskets"):
  * what researchers list and the phase chain names. A template lookup by
  * this name returns a Technology, not a Template.
  */
-type TechName = string & { readonly __brand: "TechName" };
+type TechName = string & { readonly __brand: "TechName"; };
 /** A base manager's id, numbered from 1; 0 (NO_BASE) is "no base" (adapter/brands.ts). */
-type BaseId = number & { readonly __brand: "BaseId" };
+type BaseId = number & { readonly __brand: "BaseId"; };
 /** A defense army's id, numbered from 1. */
-type ArmyId = number & { readonly __brand: "ArmyId" };
+type ArmyId = number & { readonly __brand: "ArmyId"; };
 /** A transport plan's id, numbered from 1 (a plan, not the ship). */
-type TransportPlanId = number & { readonly __brand: "TransportPlanId" };
+type TransportPlanId = number & { readonly __brand: "TransportPlanId"; };
 /** An attack plan's name, numbered from 0 by the attack manager (not an entity id). */
-type AttackPlanId = number & { readonly __brand: "AttackPlanId" };
+type AttackPlanId = number & { readonly __brand: "AttackPlanId"; };
 /**
  * A unit's `plan` metadata: the attack plan it serves, or a state
  * (execution/unitPlan.ts): -1 out of any plan, free for the next attack;
@@ -118,7 +118,7 @@ type UnitPlan = AttackPlanId | -1 | -2 | -3;
  */
 type GridKind = "territory" | "passability";
 /** The index of a cell on a grid of kind G: x + z * width, in that grid's cells. */
-type CellIndex<G extends GridKind> = number & { readonly __cell: G };
+type CellIndex<G extends GridKind> = number & { readonly __cell: G; };
 /** A read-only grid of one kind of value per cell, as the accessibility's region maps. */
 interface CellGrid<T>
 {
@@ -136,7 +136,7 @@ type ResourceAmounts = Record<string, number>;
  * players, and -1 (`INVALID_PLAYER`) is returned for not-yet-owned entities.
  * The engine also exposes `INVALID_PLAYER` as a `Sim` global.
  */
-type PlayerId = number & { readonly __brand: "PlayerId" };
+type PlayerId = number & { readonly __brand: "PlayerId"; };
 /**
  * A simulation entity identifier: `0` is `INVALID_ENTITY`, `1` is
  * `SYSTEM_ENTITY` (host of system components like AIInterface, the pathfinder
@@ -144,7 +144,7 @@ type PlayerId = number & { readonly __brand: "PlayerId" };
  * also used as property names (stringified) in state maps such as
  * `entities` and `capturePoints`.
  */
-type EntityId = number & { readonly __brand: "EntityId" };
+type EntityId = number & { readonly __brand: "EntityId"; };
 
 /**
  * RGBA player colour as configured in the game settings for each player
@@ -253,7 +253,7 @@ interface EnginePlayerState
 	/** Whether this player has barter-capable markets. */
 	canBarter: boolean;
 	/** Barter rates (Barter.GetPrices) keyed by generic resource code. */
-	barterPrices: { buy: ResourceAmounts; sell: ResourceAmounts };
+	barterPrices: { buy: ResourceAmounts; sell: ResourceAmounts; };
 	/** Only present when the player entity has a StatisticsTracker. */
 	statistics?: EnginePlayerStatistics;
 }
@@ -526,7 +526,7 @@ interface EngineAIDestroyEvent extends EngineAIEvent
 interface EngineAIEvents
 {
 	/** Entity just received its first owner (AIProxy.OnOwnershipChanged). */
-	Create: Array<{ entity: EntityId }>;
+	Create: Array<{ entity: EntityId; }>;
 	Destroy: EngineAIDestroyEvent[];
 	/**
 	 * Entity damaged; the MT_Attacked payload (components/interfaces/
@@ -539,23 +539,23 @@ interface EngineAIEvents
 	TrainingStarted: EngineAITrainingStartedEvent[];
 	TrainingFinished: EngineAITrainingFinishedEvent[];
 	AIMetadata: EngineAIMetadataEvent[];
-	PlayerDefeated: Array<{ playerId: PlayerId }>;
+	PlayerDefeated: Array<{ playerId: PlayerId; }>;
 	/** Entity id changed (Foundation/Formation/Health/Promotion/Mirage/
 	 * Transform…, components/interfaces/Messages.js). */
-	EntityRenamed: Array<{ entity: EntityId; newentity: EntityId }>;
+	EntityRenamed: Array<{ entity: EntityId; newentity: EntityId; }>;
 	/**
 	 * Technology value changes per entity, sent by ModifiersManager
 	 * (SendPlayerModifierMessages) — no `player` field is ever added.
 	 */
-	ValueModification: Array<{ component: string; valueNames: string[]; entities: EntityId[] }>;
-	OwnershipChanged: Array<{ entity: EntityId; from: PlayerId; to: PlayerId }>;
+	ValueModification: Array<{ component: string; valueNames: string[]; entities: EntityId[]; }>;
+	OwnershipChanged: Array<{ entity: EntityId; from: PlayerId; to: PlayerId; }>;
 	/** A unit entered a garrison holder (AIProxy.OnGarrisonedUnitsChanged). */
-	Garrison: Array<{ entity: EntityId; holder: EntityId }>;
-	UnGarrison: Array<{ entity: EntityId; holder: EntityId }>;
+	Garrison: Array<{ entity: EntityId; holder: EntityId; }>;
+	UnGarrison: Array<{ entity: EntityId; holder: EntityId; }>;
 	TerritoriesChanged: EngineAIEvent[];
 	TerritoryDecayChanged: EngineAITerritoryDecayChangedEvent[];
 	/** Initiated by Player.Transfer (Player.js). */
-	TributeExchanged: Array<{ to: PlayerId; from: PlayerId; amounts: Record<string, number> }>;
+	TributeExchanged: Array<{ to: PlayerId; from: PlayerId; amounts: Record<string, number>; }>;
 	AttackRequest: EngineAIAttackRequestEvent[];
 	CeasefireEnded: EngineAIEvent[];
 	/** The other AI's command itself, pushed as an event (Commands.js). */
@@ -737,7 +737,7 @@ interface EngineRallyPointData
  */
 interface EngineWallSet
 {
-	templates: { tower: string; long: string; medium: string; short: string; gate: string; [key: string]: string };
+	templates: { tower: string; long: string; medium: string; short: string; gate: string; [key: string]: string; };
 	minTowerOverlap: number;
 	maxTowerOverlap: number;
 }
@@ -774,8 +774,8 @@ interface EngineCommandQueuedFormation extends EngineCommandEntityList
 
 /** Cheat command payloads are only accepted when cheats are enabled. */
 type EngineCommandCheat =
-	| { type: "cheat"; player: PlayerId; action: "addresource"; text: string; parameter: number }
-	| { type: "cheat"; player: PlayerId; action: "convertunit"; selected: EntityId[]; parameter: PlayerId }
+	| { type: "cheat"; player: PlayerId; action: "addresource"; text: string; parameter: number; }
+	| { type: "cheat"; player: PlayerId; action: "convertunit"; selected: EntityId[]; parameter: PlayerId; }
 	| {
 		type: "cheat";
 		player: PlayerId;
@@ -784,11 +784,15 @@ type EngineCommandCheat =
 		parameter: number;
 		templates: string[];
 	}
-	| { type: "cheat"; player: PlayerId; action: "killunits"; selected: EntityId[] }
-	| { type: "cheat"; player: PlayerId; action: "defeatplayer"; parameter: PlayerId }
-	| { type: "cheat"; player: PlayerId; action: "researchTechnology"; parameter: string; selected?: EntityId[] }
-	| { type: "cheat"; player: PlayerId; action: "revealmap" | "maxpopulation" | "changemaxpopulation" | "fastactions" }
-	| { type: "cheat"; player: PlayerId; action: "changephase"; parameter?: string | number; selected?: EntityId[] };
+	| { type: "cheat"; player: PlayerId; action: "killunits"; selected: EntityId[]; }
+	| { type: "cheat"; player: PlayerId; action: "defeatplayer"; parameter: PlayerId; }
+	| { type: "cheat"; player: PlayerId; action: "researchTechnology"; parameter: string; selected?: EntityId[]; }
+	| {
+		type: "cheat";
+		player: PlayerId;
+		action: "revealmap" | "maxpopulation" | "changemaxpopulation" | "fastactions";
+	}
+	| { type: "cheat"; player: PlayerId; action: "changephase"; parameter?: string | number; selected?: EntityId[]; };
 
 /**
  * Commands the simulation accepts via Engine.PostCommand, each dispatched by
@@ -810,9 +814,12 @@ type EngineCommand =
 	| EngineCommandDiplomacyRequest
 	| EngineCommandAttackRequest
 	| EngineCommandDropSiteSharing
-	| (EngineCommandQueued & { type: "walk"; x: number; z: number; formation?: string })
-	| (EngineCommandWithFormation & { type: "walk-custom"; targetPositions: Record<string, { x: number; y: number }> })
-	| (EngineCommandQueued & { type: "walk-to-range"; x: number; z: number; min: number; max: number })
+	| (EngineCommandQueued & { type: "walk"; x: number; z: number; formation?: string; })
+	| (EngineCommandWithFormation & {
+		type: "walk-custom";
+		targetPositions: Record<string, { x: number; y: number; }>;
+	})
+	| (EngineCommandQueued & { type: "walk-to-range"; x: number; z: number; min: number; max: number; })
 	| (EngineCommandWithFormation & {
 		type: "attack-walk";
 		x: number;
@@ -822,12 +829,12 @@ type EngineCommand =
 	})
 	| (EngineCommandWithFormation & {
 		type: "attack-walk-custom";
-		targetPositions: Record<string, { x: number; y: number }>;
+		targetPositions: Record<string, { x: number; y: number; }>;
 		targetClasses?: string[];
 		allowCapture?: boolean;
 	})
-	| (EngineCommandQueued & { type: "attack"; target: EntityId; allowCapture?: boolean; formation?: string })
-	| (EngineCommandQueued & { type: "attack-group"; targets: EntityId[]; allowCapture?: boolean })
+	| (EngineCommandQueued & { type: "attack"; target: EntityId; allowCapture?: boolean; formation?: string; })
+	| (EngineCommandQueued & { type: "attack-group"; targets: EntityId[]; allowCapture?: boolean; })
 	| (EngineCommandQueuedFormation & {
 		type: "patrol";
 		x: number;
@@ -835,9 +842,9 @@ type EngineCommand =
 		targetClasses?: string[];
 		allowCapture?: boolean;
 	})
-	| (EngineCommandQueued & { type: "heal"; target: EntityId; formation?: string })
-	| (EngineCommandWithFormation & { type: "repair"; target: EntityId; autocontinue?: boolean })
-	| (EngineCommandWithFormation & { type: "gather"; target: EntityId })
+	| (EngineCommandQueued & { type: "heal"; target: EntityId; formation?: string; })
+	| (EngineCommandWithFormation & { type: "repair"; target: EntityId; autocontinue?: boolean; })
+	| (EngineCommandWithFormation & { type: "gather"; target: EntityId; })
 	| (EngineCommandQueued & {
 		type: "gather-near-position";
 		x: number;
@@ -846,9 +853,9 @@ type EngineCommand =
 		resourceTemplate: string;
 		formation?: string;
 	})
-	| (EngineCommandWithFormation & { type: "returnresource"; target: EntityId })
-	| (EngineCommandEntityList & { type: "collect-treasure"; target: EntityId; queued?: boolean; formation?: string })
-	| (EngineCommandEntityList & { type: "collect-treasure-near-position"; x: number; z: number; queued?: boolean })
+	| (EngineCommandWithFormation & { type: "returnresource"; target: EntityId; })
+	| (EngineCommandEntityList & { type: "collect-treasure"; target: EntityId; queued?: boolean; formation?: string; })
+	| (EngineCommandEntityList & { type: "collect-treasure-near-position"; x: number; z: number; queued?: boolean; })
 	| (EngineCommandEntityList & {
 		type:
 			| "back-to-work"
@@ -861,17 +868,17 @@ type EngineCommand =
 			| "autoqueue-on"
 			| "autoqueue-off";
 	})
-	| (EngineCommandEntityList & { type: "stop"; queued?: boolean })
+	| (EngineCommandEntityList & { type: "stop"; queued?: boolean; })
 	| (EngineCommandQueued & {
 		type: "call-to-arms";
-		position: { x: number; z: number };
+		position: { x: number; z: number; };
 		targetClasses?: string[];
 		allowCapture?: boolean;
 		formation?: string;
 	})
-	| (EngineCommandQueued & { type: "focus-fire"; target: EntityId; formation?: string })
-	| (EngineCommandEntityList & { type: "occupy-turret"; target: EntityId; queued?: boolean })
-	| (EngineCommandQueued & { type: "garrison" | "guard"; target: EntityId; formation?: string })
+	| (EngineCommandQueued & { type: "focus-fire"; target: EntityId; formation?: string; })
+	| (EngineCommandEntityList & { type: "occupy-turret"; target: EntityId; queued?: boolean; })
+	| (EngineCommandQueued & { type: "garrison" | "guard"; target: EntityId; formation?: string; })
 	| {
 		type: "train";
 		entities: EntityId[];
@@ -880,8 +887,8 @@ type EngineCommand =
 		metadata?: Record<string, unknown>;
 		pushFront?: boolean;
 	}
-	| { type: "research"; entity: EntityId; template: string; metadata?: Record<string, unknown>; pushFront?: boolean }
-	| { type: "stop-production"; entity: EntityId; id: number }
+	| { type: "research"; entity: EntityId; template: string; metadata?: Record<string, unknown>; pushFront?: boolean; }
+	| { type: "stop-production"; entity: EntityId; id: number; }
 	| (EngineCommandQueued & {
 		type: "construct";
 		template: string;
@@ -898,7 +905,7 @@ type EngineCommand =
 	})
 	| (EngineCommandEntityList & {
 		type: "construct-wall";
-		pieces: Array<{ template: string; x: number; z: number; angle: number }>;
+		pieces: Array<{ template: string; x: number; z: number; angle: number; }>;
 		wallSet: EngineWallSet;
 		startSnappedEntity?: EntityId;
 		endSnappedEntity?: EntityId;
@@ -906,7 +913,7 @@ type EngineCommand =
 		autocontinue?: boolean;
 		queued?: boolean;
 	})
-	| { type: "delete-entities"; entities: EntityId[] }
+	| { type: "delete-entities"; entities: EntityId[]; }
 	| {
 		type: "set-rallypoint";
 		structures?: EntityId[];
@@ -915,32 +922,37 @@ type EngineCommand =
 		data?: EngineRallyPointData;
 		queued?: boolean;
 	}
-	| { type: "unset-rallypoint"; structures?: EntityId[] }
-	| { type: "resign" }
+	| { type: "unset-rallypoint"; structures?: EntityId[]; }
+	| { type: "resign"; }
 	| (EngineCommandEntityList & {
 		type: "setup-trade-route";
 		target: EntityId;
 		source: EntityId;
-		route?: Array<{ x: number; z: number }>;
+		route?: Array<{ x: number; z: number; }>;
 		queued?: boolean;
 		formation?: string;
 	})
-	| { type: "cancel-setup-trade-route"; entities: EntityId[]; target: EntityId }
-	| { type: "barter"; sell: string; buy: string; amount: number }
-	| { type: "unload"; garrisonHolder: EntityId; entities: EntityId[] }
-	| { type: "unload-template"; garrisonHolders: EntityId[]; template: string; owner: PlayerId; all: boolean }
-	| { type: "unload-all-by-owner" | "unload-all"; garrisonHolders: EntityId[] }
-	| { type: "formation"; entities: EntityId[]; formation: string; queued?: boolean; pushFront?: boolean }
-	| (EngineCommandEntityList & { type: "promote" })
-	| (EngineCommandEntityList & { type: "stance"; name: string })
-	| (EngineCommandEntityList & { type: "lock-gate"; lock: boolean })
-	| (EngineCommandEntityList & { type: "pack" | "cancel-pack"; pack: boolean; queued?: boolean; pushFront?: boolean })
-	| (EngineCommandEntityList & { type: "upgrade"; template: string })
-	| { type: "spy-request"; player: PlayerId }
-	| { type: "dialog-answer"; dialog?: string; answer?: string; tutorial?: "continue"; [key: string]: unknown }
+	| { type: "cancel-setup-trade-route"; entities: EntityId[]; target: EntityId; }
+	| { type: "barter"; sell: string; buy: string; amount: number; }
+	| { type: "unload"; garrisonHolder: EntityId; entities: EntityId[]; }
+	| { type: "unload-template"; garrisonHolders: EntityId[]; template: string; owner: PlayerId; all: boolean; }
+	| { type: "unload-all-by-owner" | "unload-all"; garrisonHolders: EntityId[]; }
+	| { type: "formation"; entities: EntityId[]; formation: string; queued?: boolean; pushFront?: boolean; }
+	| (EngineCommandEntityList & { type: "promote"; })
+	| (EngineCommandEntityList & { type: "stance"; name: string; })
+	| (EngineCommandEntityList & { type: "lock-gate"; lock: boolean; })
+	| (EngineCommandEntityList & {
+		type: "pack" | "cancel-pack";
+		pack: boolean;
+		queued?: boolean;
+		pushFront?: boolean;
+	})
+	| (EngineCommandEntityList & { type: "upgrade"; template: string; })
+	| { type: "spy-request"; player: PlayerId; }
+	| { type: "dialog-answer"; dialog?: string; answer?: string; tutorial?: "continue"; [key: string]: unknown; }
 	| EngineCommandCheat
-	| { type: "control-all"; flag: boolean }
-	| { type: "reveal-map"; enable: boolean };
+	| { type: "control-all"; flag: boolean; }
+	| { type: "reveal-map"; enable: boolean; };
 
 /** Backwards-compatible name used by existing Petra declarations. */
 type PetraEngineCommand = EngineCommand;
@@ -991,8 +1003,8 @@ declare const Engine: {
 	 * final entry neighbours the start Petra began from.
 	 */
 	ComputePath(
-		start: { x: number; y: number },
-		end: { x: number; y: number },
+		start: { x: number; y: number; },
+		end: { x: number; y: number; },
 		passabilityMask: number,
 	): EnginePathPoint[];
 	/**

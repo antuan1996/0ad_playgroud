@@ -46,7 +46,7 @@ export type SerializedQueuePlan<T extends PlanTemplate> = {
 	type: PlanName<T>;
 	ID: number;
 	metadata: PlanMetadata | undefined;
-	cost: { amounts: Record<string, number>; population: number };
+	cost: { amounts: Record<string, number>; population: number; };
 	number: number;
 };
 
@@ -76,7 +76,9 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 		this.metadata = metadata;
 
 		if (!template)
+		{
 			throw new Error("Tried to add the inexisting template " + this.type + " to Petra.");
+		}
 		this.template = template;
 		this.ID = gameState.ai.uniqueIDs.plans++;
 		this.cost = new ResourcesManager(this.template.cost());
@@ -114,7 +116,9 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 		const costs = new ResourcesManager();
 		costs.add(this.cost);
 		if (this.number !== 1)
+		{
 			costs.multiply(this.number);
+		}
 		return costs;
 	}
 

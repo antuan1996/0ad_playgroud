@@ -50,9 +50,9 @@ function makeConfig(): Config
 function bareGeography(world: CommonGameState): Geography
 {
 	return new Geography(createTerritoryMap(world), createBorderMap(world), {
-		"landRegions": {},
-		"navalRegions": {},
-		"navalMap": false,
+		landRegions: {},
+		navalRegions: {},
+		navalMap: false,
 	});
 }
 
@@ -68,7 +68,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "Config",
 			original: () => makeConfig(),
-			fromSave: data => Config.restore(fake<SerializedConfig>(data)),
+			fromSave: (data) => Config.restore(fake<SerializedConfig>(data)),
 			// `debug` is deliberately not saved, and `personality` is drawn at
 			// game start, so neither may be compared across a reload.
 			keep: ["debug"],
@@ -90,7 +90,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "BuildManager",
 			original: () => new BuildManager(),
-			fromSave: data => BuildManager.restore(fake<SerializedBuildManager>(data)),
+			fromSave: (data) => BuildManager.restore(fake<SerializedBuildManager>(data)),
 		}, makeFakeGameState().gameState);
 	});
 
@@ -99,7 +99,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "GarrisonManager",
 			original: () => new GarrisonManager(makeConfig()),
-			fromSave: data => GarrisonManager.restore(makeConfig(), fake<SerializedGarrisonManager>(data)),
+			fromSave: (data) => GarrisonManager.restore(makeConfig(), fake<SerializedGarrisonManager>(data)),
 		}, makeFakeGameState().gameState);
 	});
 
@@ -108,7 +108,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "EmergencyManager",
 			original: () => new EmergencyManager(makeConfig()),
-			fromSave: data => EmergencyManager.restore(makeConfig(), fake<SerializedEmergencyManager>(data)),
+			fromSave: (data) => EmergencyManager.restore(makeConfig(), fake<SerializedEmergencyManager>(data)),
 		}, makeFakeGameState().gameState);
 	});
 
@@ -117,7 +117,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "DiplomacyManager",
 			original: () => new DiplomacyManager(makeConfig(), false),
-			fromSave: data => DiplomacyManager.restore(makeConfig(), fake<SerializedDiplomacyManager>(data)),
+			fromSave: (data) => DiplomacyManager.restore(makeConfig(), fake<SerializedDiplomacyManager>(data)),
 		}, makeFakeGameState().gameState);
 	});
 
@@ -126,7 +126,7 @@ describe("save and reload", () =>
 		assertRoundTrip({
 			label: "VictoryManager",
 			original: () => new VictoryManager(makeConfig()),
-			fromSave: data => VictoryManager.restore(makeConfig(), fake<SerializedVictoryManager>(data)),
+			fromSave: (data) => VictoryManager.restore(makeConfig(), fake<SerializedVictoryManager>(data)),
 		}, makeFakeGameState().gameState);
 	});
 
@@ -152,7 +152,7 @@ describe("save and reload", () =>
 					bareGeography(gameState),
 					fake<SerializedTradeManager>(data),
 				),
-			notSaved: { "minimalGain": "derived from the map at construction, which a reload reads again" },
+			notSaved: { minimalGain: "derived from the map at construction, which a reload reads again" },
 		}, world);
 	});
 
@@ -181,8 +181,8 @@ describe("save and reload", () =>
 			fromSave: (data, gameState) =>
 				AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), true),
 			notSaved: {
-				"enemyLandsTurn": "a cache of enemiesByLand, counted again on the turn it is asked",
-				"enemyLands": "a cache of enemiesByLand, counted again on the turn it is asked",
+				enemyLandsTurn: "a cache of enemiesByLand, counted again on the turn it is asked",
+				enemyLands: "a cache of enemiesByLand, counted again on the turn it is asked",
 			},
 		}, world);
 	});
@@ -261,15 +261,15 @@ describe("save and reload", () =>
 			// derives all four from Config, which is saved, so a reload
 			// recomputes the same numbers.
 			notSaved: {
-				"towerLapseTime": "derived from Config.Military at construction",
-				"fortressLapseTime": "derived from Config.Military at construction",
-				"extraTowers": "derived from Config difficulty and personality at construction",
-				"extraFortresses": "derived from Config difficulty and personality at construction",
-				"canBarter": "read from the built markets at the start of each update",
-				"currentPhase": "read from the game when the headquarters is made, a reload's too",
+				towerLapseTime: "derived from Config.Military at construction",
+				fortressLapseTime: "derived from Config.Military at construction",
+				extraTowers: "derived from Config difficulty and personality at construction",
+				extraFortresses: "derived from Config difficulty and personality at construction",
+				canBarter: "read from the built markets at the start of each update",
+				currentPhase: "read from the game when the headquarters is made, a reload's too",
 			},
 			// the managers' new plans reach back for the headquarters they belong to
-			prepare: hq =>
+			prepare: (hq) =>
 			{
 				world.ai["HQ"] = hq;
 			},
@@ -287,12 +287,12 @@ describe("save and reload", () =>
 			fromSave: (data, gameState) =>
 				Headquarters.restore(makeConfig(), gameState, fake<HeadquartersSerializedData>(data)),
 			notSaved: {
-				"towerLapseTime": "derived from Config.Military at construction",
-				"fortressLapseTime": "derived from Config.Military at construction",
-				"extraTowers": "derived from Config difficulty and personality at construction",
-				"extraFortresses": "derived from Config difficulty and personality at construction",
-				"canBarter": "read from the built markets at the start of each update",
-				"currentPhase": "read from the game when the headquarters is made, a reload's too",
+				towerLapseTime: "derived from Config.Military at construction",
+				fortressLapseTime: "derived from Config.Military at construction",
+				extraTowers: "derived from Config difficulty and personality at construction",
+				extraFortresses: "derived from Config difficulty and personality at construction",
+				canBarter: "read from the built markets at the start of each update",
+				currentPhase: "read from the game when the headquarters is made, a reload's too",
 			},
 			// Regions the map reports as land and sea, a structure that
 			// decayed to gaia, a capture target with garrisoned defenders,
@@ -304,7 +304,7 @@ describe("save and reload", () =>
 				capturableTargets: new Map([[401, { strength: 3, ents: new Set([402, 403]) }]]),
 				lastFailedGather: { wood: 40, food: 12 },
 			},
-			prepare: hq =>
+			prepare: (hq) =>
 			{
 				world.ai["HQ"] = hq;
 			},

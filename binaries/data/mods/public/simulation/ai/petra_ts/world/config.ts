@@ -3,7 +3,7 @@ import * as difficultyLevel from "./difficultyLevel.ts";
 
 /** The settings a save keeps: the data fields, without the debug level. */
 export type SerializedConfig = Omit<
-	{ [K in keyof Config as Config[K] extends Function ? never : K]: Config[K] },
+	{ [K in keyof Config as Config[K] extends Function ? never : K]: Config[K]; },
 	"debug"
 >;
 
@@ -12,7 +12,7 @@ export class Config
 	behavior: string;
 	difficulty: number;
 	emergencyValues: Record<string, number> = {};
-	personalityCut: Record<string, number> = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
+	personalityCut: Record<string, number> = { weak: 0.3, medium: 0.5, strong: 0.7 };
 
 	// debug level: 0=none, 1=sanity checks, 2=debug, 3=detailed debug, -100=serializatio debug
 	debug = 0;
@@ -22,122 +22,122 @@ export class Config
 	popScaling = 1; // scale factor depending on the max population
 
 	Military: {
-		"towerLapseTime": number;
-		"fortressLapseTime": number;
-		"popForBarracks1": number;
-		"popForBarracks2": number;
-		"popForForge": number;
-		"numSentryTowers": number;
+		towerLapseTime: number;
+		fortressLapseTime: number;
+		popForBarracks1: number;
+		popForBarracks2: number;
+		popForForge: number;
+		numSentryTowers: number;
 	} = {
-		"towerLapseTime": 360, // Time to wait between building 2 towers
-		"fortressLapseTime": 390, // Time to wait between building 2 fortresses
-		"popForBarracks1": 25,
-		"popForBarracks2": 55,
-		"popForForge": 65,
-		"numSentryTowers": 1,
+		towerLapseTime: 360, // Time to wait between building 2 towers
+		fortressLapseTime: 390, // Time to wait between building 2 fortresses
+		popForBarracks1: 25,
+		popForBarracks2: 55,
+		popForForge: 65,
+		numSentryTowers: 1,
 	};
 
-	DamageTypeImportance = { "Hack": 0.075, "Pierce": 0.085, "Crush": 0.045, "Fire": 0.001 };
+	DamageTypeImportance = { Hack: 0.075, Pierce: 0.085, Crush: 0.045, Fire: 0.001 };
 
 	Economy: {
-		"popPhase2": number;
-		"workPhase3": number;
-		"workPhase4": number;
-		"popForDock": number;
-		"targetNumWorkers": number;
-		"targetNumTraders": number;
-		"targetNumFishers": number;
-		"supportRatio": number;
-		"provisionFields": number;
+		popPhase2: number;
+		workPhase3: number;
+		workPhase4: number;
+		popForDock: number;
+		targetNumWorkers: number;
+		targetNumTraders: number;
+		targetNumFishers: number;
+		supportRatio: number;
+		provisionFields: number;
 	} = {
-		"popPhase2": 150, // How many units we want before aging to phase2.
-		"workPhase3": 180, // How many workers we want before aging to phase3.
-		"workPhase4": 200, // How many workers we want before aging to phase4 or higher.
-		"popForDock": 25,
-		"targetNumWorkers": 60, // dummy, will be changed later
-		"targetNumTraders": 1, // Target number of traders
-		"targetNumFishers": 1, // Target number of fishers per sea
-		"supportRatio": 0.5, // fraction of support workers among the workforce (Petra: 0.3; FINDINGS §26)
-		"provisionFields": 2,
+		popPhase2: 150, // How many units we want before aging to phase2.
+		workPhase3: 180, // How many workers we want before aging to phase3.
+		workPhase4: 200, // How many workers we want before aging to phase4 or higher.
+		popForDock: 25,
+		targetNumWorkers: 60, // dummy, will be changed later
+		targetNumTraders: 1, // Target number of traders
+		targetNumFishers: 1, // Target number of fishers per sea
+		supportRatio: 0.5, // fraction of support workers among the workforce (Petra: 0.3; FINDINGS §26)
+		provisionFields: 2,
 	};
 
 	// Note: attack settings are set directly in attack_plan.js
 	// defense
 	Defense: {
-		"defenseRatio": Record<string, number>;
-		"armyCompactSize": number;
-		"armyBreakawaySize": number;
-		"armyMergeSize": number;
+		defenseRatio: Record<string, number>;
+		armyCompactSize: number;
+		armyBreakawaySize: number;
+		armyMergeSize: number;
 	} = {
-		"defenseRatio": { "ally": 1.4, "neutral": 1.8, "own": 2 }, // ratio of defenders/attackers.
-		"armyCompactSize": 2000, // squared. Half-diameter of an army.
-		"armyBreakawaySize": 3500, // squared.
-		"armyMergeSize": 1400, // squared.
+		defenseRatio: { ally: 1.4, neutral: 1.8, own: 2 }, // ratio of defenders/attackers.
+		armyCompactSize: 2000, // squared. Half-diameter of an army.
+		armyBreakawaySize: 3500, // squared.
+		armyMergeSize: 1400, // squared.
 	};
 
 	// Additional buildings that the AI does not yet know when to build
 	// and that it will try to build on phase 3 when enough resources.
 	buildings: Record<string, string[]> = {
-		"default": [],
-		"achae": ["structures/{civ}/tachara"],
-		"athen": ["structures/{civ}/gymnasium", "structures/{civ}/prytaneion", "structures/{civ}/theater"],
-		"brit": [],
-		"cart": [
+		default: [],
+		achae: ["structures/{civ}/tachara"],
+		athen: ["structures/{civ}/gymnasium", "structures/{civ}/prytaneion", "structures/{civ}/theater"],
+		brit: [],
+		cart: [
 			"structures/{civ}/embassy_celtic",
 			"structures/{civ}/embassy_iberian",
 			"structures/{civ}/embassy_italic",
 		],
-		"gaul": ["structures/{civ}/assembly"],
-		"han": ["structures/{civ}/academy"],
-		"iber": ["structures/{civ}/monument"],
-		"kush": [
+		gaul: ["structures/{civ}/assembly"],
+		han: ["structures/{civ}/academy"],
+		iber: ["structures/{civ}/monument"],
+		kush: [
 			"structures/{civ}/camp_blemmye",
 			"structures/{civ}/camp_noba",
 			"structures/{civ}/pyramid_large",
 			"structures/{civ}/pyramid_small",
 			"structures/{civ}/temple_amun",
 		],
-		"mace": ["structures/{civ}/theater"],
-		"maur": ["structures/{civ}/palace", "structures/{civ}/pillar_ashoka"],
-		"ptol": ["structures/{civ}/library", "structures/{civ}/theater"],
-		"rome": ["structures/{civ}/army_camp", "structures/{civ}/temple_vesta"],
-		"sele": ["structures/{civ}/theater"],
-		"spart": ["structures/{civ}/syssiton", "structures/{civ}/theater"],
+		mace: ["structures/{civ}/theater"],
+		maur: ["structures/{civ}/palace", "structures/{civ}/pillar_ashoka"],
+		ptol: ["structures/{civ}/library", "structures/{civ}/theater"],
+		rome: ["structures/{civ}/army_camp", "structures/{civ}/temple_vesta"],
+		sele: ["structures/{civ}/theater"],
+		spart: ["structures/{civ}/syssiton", "structures/{civ}/theater"],
 	};
 
 	priorities: Record<PetraRuntime.ConfiguredQueueName, number> = {
-		"villager": 650, // above the citizen soldiers: paid first, the civic centre idles less (FINDINGS §25)
-		"citizenSoldier": 600,
-		"trader": 1,
-		"healer": 20,
-		"ships": 1,
-		"house": 250,
-		"dropsites": 950,
-		"field": 480,
-		"dock": 90,
-		"corral": 1,
-		"economicBuilding": 700,
-		"militaryBuilding": 330,
-		"defenseBuilding": 70,
-		"civilCentre": 1,
-		"majorTech": 700,
-		"minorTech": 250,
-		"wonder": 1,
-		"emergency": 1000, // used only in emergency situations, should be the highest one
+		villager: 650, // above the citizen soldiers: paid first, the civic centre idles less (FINDINGS §25)
+		citizenSoldier: 600,
+		trader: 1,
+		healer: 20,
+		ships: 1,
+		house: 250,
+		dropsites: 950,
+		field: 480,
+		dock: 90,
+		corral: 1,
+		economicBuilding: 700,
+		militaryBuilding: 330,
+		defenseBuilding: 70,
+		civilCentre: 1,
+		majorTech: 700,
+		minorTech: 250,
+		wonder: 1,
+		emergency: 1000, // used only in emergency situations, should be the highest one
 	};
 
 	// Default personality (will be updated in setConfig)
-	personality: PetraRuntime.Personality = { "aggressive": 0.5, "cooperative": 0.5, "defensive": 0.5 };
+	personality: PetraRuntime.Personality = { aggressive: 0.5, cooperative: 0.5, defensive: 0.5 };
 
 	// See QueueManager.prototype.wantedGatherRates()
 	queues: Record<string, Record<string, number>> = {
-		"firstTurn": { "food": 10, "wood": 10, "default": 0 },
-		"short": { "food": 200, "wood": 200, "default": 100 },
-		"medium": { "default": 0 },
-		"long": { "default": 0 },
+		firstTurn: { food: 10, wood: 10, default: 0 },
+		short: { food: 200, wood: 200, default: 100 },
+		medium: { default: 0 },
+		long: { default: 0 },
 	};
 
-	garrisonHealthLevel: Record<string, number> = { "low": 0.4, "medium": 0.55, "high": 0.7 };
+	garrisonHealthLevel: Record<string, number> = { low: 0.4, medium: 0.55, high: 0.7 };
 
 	unusedNoAllyTechs: string[] = ["Player/sharedLos", "Market/InternationalBonus", "Player/sharedDropsites"];
 
@@ -158,19 +158,25 @@ export class Config
 	setConfig(gameState: CommonGameState): void
 	{
 		if (this.difficulty > difficultyLevel.SANDBOX)
+		{
 			this.drawPersonality();
+		}
 		// Petra usually uses the continuous values of personality.aggressive and personality.defensive
 		// to define its behavior according to personality. But when discontinuous behavior is needed,
 		// it uses the following personalityCut which should be set such that:
 		// behavior="aggressive" => personality.aggressive > personalityCut.strong &&
 		//                          personality.defensive  < personalityCut.weak
 		// and inversely for behavior="defensive"
-		this.personalityCut = { "weak": 0.3, "medium": 0.5, "strong": 0.7 };
+		this.personalityCut = { weak: 0.3, medium: 0.5, strong: 0.7 };
 
 		if (gameState.playerData.teamLocked)
+		{
 			this.personality.cooperative = Math.min(1, this.personality.cooperative + 0.30);
+		}
 		else if (gameState.getAlliedVictory())
+		{
 			this.personality.cooperative = Math.min(1, this.personality.cooperative + 0.15);
+		}
 
 		// changing settings based on difficulty or personality
 		this.Military.towerLapseTime = Math.round(
@@ -187,11 +193,17 @@ export class Config
 
 		const maxPop = gameState.getPopulationMax();
 		if (this.difficulty < difficultyLevel.EASY)
+		{
 			this.Economy.targetNumWorkers = Math.max(1, Math.min(40, maxPop));
+		}
 		else if (this.difficulty < difficultyLevel.MEDIUM)
+		{
 			this.Economy.targetNumWorkers = Math.max(1, Math.min(60, Math.floor(maxPop / 2)));
+		}
 		else
+		{
 			this.Economy.targetNumWorkers = Math.max(1, Math.min(120, Math.floor(maxPop / 3)));
+		}
 		this.Economy.targetNumTraders = 2 + this.difficulty;
 
 		if (gameState.getVictoryConditions().has("wonder"))
@@ -203,15 +215,17 @@ export class Config
 		this.scaleToPopulation(maxPop);
 
 		this.emergencyValues = {
-			"population": this.criticalPopulationFactors[this.difficulty],
-			"structures": this.criticalStructureFactors[this.difficulty],
-			"roots": this.criticalRootFactors[this.difficulty],
+			population: this.criticalPopulationFactors[this.difficulty],
+			structures: this.criticalStructureFactors[this.difficulty],
+			roots: this.criticalRootFactors[this.difficulty],
 		};
 
 		this.Cheat(gameState);
 
 		if (this.debug < 2)
+		{
 			return;
+		}
 		aiWarn(" >>>  Petra bot: personality = " + uneval(this.personality));
 	}
 
@@ -227,11 +241,11 @@ export class Config
 		// The parameter used to define the personality is basically the aggressivity or (1-defensiveness)
 		// as they are anticorrelated, although some small smearing to decorelate them will be added.
 		// And for each user choice, this parameter can vary between min and max
-		const personalityList: Record<string, { min: number; max: number }> = {
-			"random": { "min": 0, "max": 1 },
-			"defensive": { "min": 0, "max": 0.27 },
-			"balanced": { "min": 0.37, "max": 0.63 },
-			"aggressive": { "min": 0.73, "max": 1 },
+		const personalityList: Record<string, { min: number; max: number; }> = {
+			random: { min: 0, max: 1 },
+			defensive: { min: 0, max: 0.27 },
+			balanced: { min: 0.37, max: 0.63 },
+			aggressive: { min: 0.73, max: 1 },
 		};
 		const behavior = randFloat(-0.5, 0.5);
 		// make agressive and defensive quite anticorrelated (aggressive ~ 1 - defensive) but not completelety
@@ -241,9 +255,9 @@ export class Config
 		const min = personalityList[this.behavior].min;
 		const max = personalityList[this.behavior].max;
 		this.personality = {
-			"aggressive": min + aggressive * (max - min),
-			"defensive": 1 - max + defensive * (max - min),
-			"cooperative": randFloat(0, 1),
+			aggressive: min + aggressive * (max - min),
+			defensive: 1 - max + defensive * (max - min),
+			cooperative: randFloat(0, 1),
 		};
 	}
 
@@ -267,13 +281,21 @@ export class Config
 		else
 		{
 			if (this.difficulty === difficultyLevel.MEDIUM)
+			{
 				this.Military.numSentryTowers = 1;
+			}
 			else
+			{
 				this.Military.numSentryTowers = 2;
+			}
 			if (this.personality.defensive > this.personalityCut.strong)
+			{
 				++this.Military.numSentryTowers;
+			}
 			else if (this.personality.defensive < this.personalityCut.weak)
+			{
 				--this.Military.numSentryTowers;
+			}
 
 			if (this.personality.aggressive > this.personalityCut.strong)
 			{
@@ -288,7 +310,9 @@ export class Config
 	private scaleToPopulation(maxPop: number): void
 	{
 		if (maxPop < 300)
+		{
 			this.popScaling *= Math.sqrt(maxPop / 300);
+		}
 
 		this.Military.popForBarracks1 = Math.min(
 			Math.max(Math.floor(this.Military.popForBarracks1 * this.popScaling), 12),
@@ -319,7 +343,9 @@ export class Config
 		this.Economy.workPhase3 = Math.min(this.Economy.workPhase3, this.Economy.targetNumWorkers);
 		this.Economy.workPhase4 = Math.min(this.Economy.workPhase4, this.Economy.targetNumWorkers);
 		if (this.difficulty < difficultyLevel.EASY)
+		{
 			this.Economy.workPhase3 = Infinity; // prevent the phasing to city phase
+		}
 	}
 
 	Cheat(gameState: CommonGameState): void
@@ -331,9 +357,9 @@ export class Config
 		const time = [1.40, 1.25, 1.10, 1.00, 1.00, 1.00];
 		const AIDiff = Math.min(this.difficulty, rate.length - 1);
 		SimEngine.QueryInterface(Sim.SYSTEM_ENTITY, Sim.IID_ModifiersManager).AddModifiers("AI Bonus", {
-			"ResourceGatherer/BaseSpeed": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
-			"Trader/GainMultiplier": [{ "affects": ["Unit", "Structure"], "multiply": rate[AIDiff] }],
-			"Cost/BuildTime": [{ "affects": ["Unit", "Structure"], "multiply": time[AIDiff] }],
+			"ResourceGatherer/BaseSpeed": [{ affects: ["Unit", "Structure"], multiply: rate[AIDiff] }],
+			"Trader/GainMultiplier": [{ affects: ["Unit", "Structure"], multiply: rate[AIDiff] }],
+			"Cost/BuildTime": [{ affects: ["Unit", "Structure"], multiply: time[AIDiff] }],
 		}, gameState.playerData.entity);
 	}
 

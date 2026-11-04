@@ -36,7 +36,9 @@ if (import.meta.main)
 	const first = args[0];
 	const target: PetraTarget = first === "src" || first === "out" ? first : "src";
 	if (first === target)
+	{
 		args.shift();
+	}
 	process.env["PETRA_TARGET"] = target;
 
 	// Node reports V8 coverage, but rejects its flags in NODE_OPTIONS, so they
@@ -49,12 +51,16 @@ if (import.meta.main)
 			"--test-coverage-exclude=**/tests/**",
 		] :
 		[];
-	const rest = args.filter(arg => arg !== "--coverage");
-	const flags = [...coverage, ...rest.filter(arg => arg.startsWith("-"))];
-	const files = rest.filter(arg => !arg.startsWith("-")).map(file => existsSync(file) ? file : path.join(here, file));
+	const rest = args.filter((arg) => arg !== "--coverage");
+	const flags = [...coverage, ...rest.filter((arg) => arg.startsWith("-"))];
+	const files = rest.filter((arg) => !arg.startsWith("-")).map((file) =>
+		existsSync(file) ? file : path.join(here, file)
+	);
 
-	const result = spawnSync(process.execPath, testArgs(files, flags), { "stdio": "inherit", "env": process.env });
+	const result = spawnSync(process.execPath, testArgs(files, flags), { stdio: "inherit", env: process.env });
 	if (result.error)
+	{
 		throw result.error;
+	}
 	process.exit(result.status ?? 1);
 }

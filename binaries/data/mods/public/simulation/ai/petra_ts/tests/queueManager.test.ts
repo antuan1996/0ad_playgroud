@@ -47,10 +47,10 @@ function makeConfig(overrides: ConfigOverrides = {}): Config
 	const config = new Config();
 	return Object.assign(config, {
 		queues: {
-			firstTurn: { "food": 10, "default": 0 },
-			short: { "default": 100 },
-			medium: { "default": 0 },
-			long: { "default": 0 },
+			firstTurn: { food: 10, default: 0 },
+			short: { default: 100 },
+			medium: { default: 0 },
+			long: { default: 0 },
 		},
 		...overrides,
 		priorities: { ...config.priorities, ...overrides.priorities },
@@ -58,7 +58,7 @@ function makeConfig(overrides: ConfigOverrides = {}): Config
 }
 
 /** A plan as a QueueManager sees it: its cost and readiness. */
-function makePlan(overrides: Record<string, unknown> & { start?: () => void } = {}): PetraRuntime.ConcretePlan
+function makePlan(overrides: Record<string, unknown> & { start?: () => void; } = {}): PetraRuntime.ConcretePlan
 {
 	const { start = () => undefined, ...rest } = overrides;
 	return fake<PetraRuntime.ConcretePlan>({
@@ -81,7 +81,7 @@ function makePlan(overrides: Record<string, unknown> & { start?: () => void } = 
 function worldWithResources(amounts: Record<string, number> = {}): CommonGameState
 {
 	const { gameState } = makeFakeGameState();
-	override(gameState, { "getResources": () => new ResourcesManager({ ...amounts }) });
+	override(gameState, { getResources: () => new ResourcesManager({ ...amounts }) });
 	return gameState;
 }
 
@@ -94,18 +94,22 @@ function account(manager: QueueManager, queue: string): Record<string, number>
 /** A manager over the configured queues (and the attack queues named), the named ones pre-loaded with their plans. */
 function makeManager(
 	config: Config,
-	plans: { [K in PetraRuntime.QueueName]?: PetraRuntime.ConcretePlan[] } = {},
+	plans: { [K in PetraRuntime.QueueName]?: PetraRuntime.ConcretePlan[]; } = {},
 ): QueueManager
 {
 	const queues = configuredQueues();
 	for (const name in plans)
 	{
 		if (!isQueueName(config, name))
+		{
 			continue;
+		}
 		const queue = queues[name] ?? new Queue();
 		queues[name] = queue;
 		for (const plan of plans[name] ?? [])
+		{
 			queue.addPlan(plan);
+		}
 	}
 	return new QueueManager(config, queues);
 }
@@ -113,7 +117,7 @@ function makeManager(
 /** The manager's order of the named queues, the others left out. */
 function orderOf(manager: QueueManager, names: string[]): string[]
 {
-	return manager.queueArrays.map(entry => entry[0]).filter(name => names.includes(name));
+	return manager.queueArrays.map((entry) => entry[0]).filter((name) => names.includes(name));
 }
 
 describe("QueueManager", () =>
@@ -138,7 +142,9 @@ describe("QueueManager", () =>
 
 		assert.deepEqual(Object.keys(manager.accounts), Object.keys(configuredQueues()));
 		for (const name in manager.accounts)
+		{
 			assert.equal(manager.accounts[name].Serialize().amounts.food, 0, name);
+		}
 	});
 
 	it("orders its queues by priority, highest first", () =>
@@ -877,7 +883,7 @@ describe("QueueManager", () =>
 
 		assert.equal(manager.priorities.militaryBuilding, 1, "the manager repairs the priority");
 		assert.ok(
-			logs.slice(logged).some(message => message.includes("bad priorities")),
+			logs.slice(logged).some((message) => message.includes("bad priorities")),
 			"the manager asks for a report about the broken priorities",
 		);
 	});
@@ -885,13 +891,13 @@ describe("QueueManager", () =>
 	it("prints its queue overview every 50 turns at verbose log levels", () =>
 	{
 		const gameState = worldWithResources({ food: 300 });
-		override(gameState, { "getPopulation": () => 42 });
-		override(gameState, { "getOwnUnits": () => [] });
+		override(gameState, { getPopulation: () => 42 });
+		override(gameState, { getOwnUnits: () => [] });
 		gameState.ai.HQ = fake<Headquarters>({
-			"hasPotentialBase": () => true,
-			"GetWantedGatherRates": () => ({}),
-			"GetCurrentGatherRates": () => ({}),
-			"pickMostNeededResources": () => [],
+			hasPotentialBase: () => true,
+			GetWantedGatherRates: () => ({}),
+			GetCurrentGatherRates: () => ({}),
+			pickMostNeededResources: () => [],
 		});
 		gameState.ai.elapsedTime = seconds(20);
 		gameState.ai.playedTurn = 50;
@@ -902,7 +908,7 @@ describe("QueueManager", () =>
 		manager.update(gameState);
 
 		assert.ok(
-			logs.slice(logged).some(message => message.includes("---------- QUEUES")),
+			logs.slice(logged).some((message) => message.includes("---------- QUEUES")),
 			"the turn at the 50-turn mark paints the overview",
 		);
 	});
@@ -963,7 +969,7 @@ describe("QueueManager", () =>
 
 		assert.deepEqual(Object.keys(restored.queues), Object.keys(configuredQueues()), "only the queues it knows");
 		assert.equal(restored.accounts["military"], undefined);
-		assert.ok(logs.slice(logged).some(message => message.includes("queue unknown military")));
+		assert.ok(logs.slice(logged).some((message) => message.includes("queue unknown military")));
 	});
 
 	it("wants long-horizon rates for what it is not ready to start", () =>
@@ -1069,23 +1075,23 @@ describe("QueueManager", () =>
 		const { costs, floors } = manager.gatherDemand(gameState);
 
 		assert.deepEqual(costs, manager.wantedGatherRates(gameState));
-		assert.ok(Object.values(floors).every(floor => floor === 0));
+		assert.ok(Object.values(floors).every((floor) => floor === 0));
 	});
 
 	it("writes an overview of itself, its queues and its plans for the log", () =>
 	{
 		const gameState = worldWithResources({ food: 111 });
-		override(gameState, { "getPopulation": () => 42 });
+		override(gameState, { getPopulation: () => 42 });
 		// One unassigned worker: enough to be counted into the header.
 		override(gameState, {
-			"getOwnUnits": () => [{
-				"getMetadata": (_player: number, key: string) => key === "role" ? "worker" : undefined,
+			getOwnUnits: () => [{
+				getMetadata: (_player: number, key: string) => key === "role" ? "worker" : undefined,
 			}],
 		});
 		gameState.ai.HQ = fake<Headquarters>({
-			"GetWantedGatherRates": () => ({ food: 1 }),
-			"GetCurrentGatherRates": () => ({ food: 0.5 }),
-			"pickMostNeededResources": () => ["food"],
+			GetWantedGatherRates: () => ({ food: 1 }),
+			GetCurrentGatherRates: () => ({ food: 0.5 }),
+			pickMostNeededResources: () => ["food"],
 		});
 		// the other queues are momentarily empty: they still show in the overview
 		const manager = makeManager(makeConfig({ priorities: { militaryBuilding: 500 } }), {
@@ -1097,19 +1103,19 @@ describe("QueueManager", () =>
 
 		const written = logs.slice(logged);
 		assert.ok(
-			written.some(message => message.includes("---------- QUEUES ------------ with pop 42 and workers 1")),
+			written.some((message) => message.includes("---------- QUEUES ------------ with pop 42 and workers 1")),
 			"the header names the population and the free workers",
 		);
 		assert.ok(
-			written.some(message => message.includes("militaryBuilding: ( with priority 500 and accounts")),
+			written.some((message) => message.includes("militaryBuilding: ( with priority 500 and accounts")),
 			"the running queue and its priority",
 		);
-		assert.ok(written.some(message => message.includes("test_unit x3")), "the plan with its count");
-		assert.ok(written.some(message => message.includes("Accounts")), "the accounts section");
-		assert.ok(written.some(message => message.includes("Current Resources: ")), "what the world holds");
-		assert.ok(written.some(message => message.includes("Available Resources: ")), "what is unaccounted");
-		assert.ok(written.some(message => message.includes("Wanted Gather Rates: ")), "the wanted rates");
-		assert.ok(written.some(message => message.includes("Most needed resources: ")), "the needs ranking");
+		assert.ok(written.some((message) => message.includes("test_unit x3")), "the plan with its count");
+		assert.ok(written.some((message) => message.includes("Accounts")), "the accounts section");
+		assert.ok(written.some((message) => message.includes("Current Resources: ")), "what the world holds");
+		assert.ok(written.some((message) => message.includes("Available Resources: ")), "what is unaccounted");
+		assert.ok(written.some((message) => message.includes("Wanted Gather Rates: ")), "the wanted rates");
+		assert.ok(written.some((message) => message.includes("Most needed resources: ")), "the needs ranking");
 	});
 
 	it("rescale accounts that the world has spent beneath", () =>
@@ -1159,7 +1165,7 @@ describe("QueueManager", () =>
 		manager.switchResource(gameState, "food");
 
 		assert.ok(
-			logs.slice(logged).some(message =>
+			logs.slice(logged).some((message) =>
 				message.includes("switching queue food from trader to citizenSoldier in amount 100")
 			),
 			"the switch log names both queues and the exact amount",
@@ -1174,7 +1180,7 @@ describe("QueueManager", () =>
 		manager.changePriority("trader", 500);
 
 		assert.ok(
-			logs.slice(logged).some(message =>
+			logs.slice(logged).some((message) =>
 				message.includes(">>> Priority of queue trader changed from 100 to 500")
 			),
 		);
@@ -1187,7 +1193,7 @@ describe("QueueManager", () =>
 		const logged = logs.length;
 		manager.Serialize();
 
-		assert.ok(logs.slice(logged).some(message => message.includes("queueManager serialization: queue villager")));
+		assert.ok(logs.slice(logged).some((message) => message.includes("queueManager serialization: queue villager")));
 	});
 
 	// checkPausedQueues reads the workforce against a target: with the config
@@ -1207,15 +1213,15 @@ describe("QueueManager", () =>
 		): CommonGameState
 		{
 			const { gameState } = makeFakeGameState(stateOptions);
-			override(gameState, { "getResources": () => new ResourcesManager({}) });
-			gameState.ai.HQ = fake<Headquarters>({ "hasPotentialBase": () => true, ...hq });
+			override(gameState, { getResources: () => new ResourcesManager({}) });
+			gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true, ...hq });
 			gameState.countOwnEntitiesAndQueuedWithRole = () => numWorkers;
 			return gameState;
 		}
 
 		it("pauses everything but the dock and the civil centre when baseless", () =>
 		{
-			const gameState = workerWorld(100, { "hasPotentialBase": () => false });
+			const gameState = workerWorld(100, { hasPotentialBase: () => false });
 			const manager = makeManager(makeConfig(), {
 				dock: [],
 				civilCentre: [],
@@ -1291,7 +1297,7 @@ describe("QueueManager", () =>
 				plan_4: [makePlan({ type: "first" }), makePlan({ type: "second" }), makePlan({ type: "third" })],
 			});
 			const attack = manager.queues.plan_4?.plans ?? [];
-			attack.forEach(plan =>
+			attack.forEach((plan) =>
 			{
 				plan.number = 5;
 			});
@@ -1299,7 +1305,7 @@ describe("QueueManager", () =>
 			manager.checkPausedQueues(gameState);
 
 			assert.deepEqual(
-				attack.map(plan => plan.number),
+				attack.map((plan) => plan.number),
 				[1, 1, 5],
 				"the first two plans lose their batch, the third keeps it",
 			);
@@ -1322,10 +1328,10 @@ describe("QueueManager", () =>
 			// pause — unless the economy is missing it. No farm, no corral, no
 			// dock and no fishing boat stand, and the headquarters wants each.
 			const gameState = workerWorld(5, {
-				"needFarm": true,
-				"needCorral": true,
-				"needFish": true,
-				"navalManager": { "ships": { "filter": () => ({ "hasEntities": () => false }) } },
+				needFarm: true,
+				needCorral: true,
+				needFish: true,
+				navalManager: { ships: { filter: () => ({ hasEntities: () => false }) } },
 			}, { ownStructures: [] });
 			const manager = makeManager(makeConfig(), {
 				field: [],
@@ -1346,7 +1352,7 @@ describe("QueueManager", () =>
 
 		it("pauses the farm when there is one to run", () =>
 		{
-			const gameState = workerWorld(5, { "needFarm": false });
+			const gameState = workerWorld(5, { needFarm: false });
 			const manager = makeManager(makeConfig(), { field: [] });
 
 			manager.checkPausedQueues(gameState);

@@ -108,7 +108,7 @@ type UnitAIActivity = UnitAIStateName extends infer N ?
 
 export type UnitState =
 	/** The engine reported no state. */
-	| { readonly kind: "none" }
+	| { readonly kind: "none"; }
 	| {
 		readonly kind: "known";
 		readonly name: UnitAIStateName;
@@ -117,14 +117,14 @@ export type UnitState =
 		readonly activity: UnitAIActivity | undefined;
 	}
 	/** A name the state machine above does not have (a mod's UnitAI). */
-	| { readonly kind: "other"; readonly raw: string };
+	| { readonly kind: "other"; readonly raw: string; };
 
-const NONE: UnitState = { "kind": "none" };
+const NONE: UnitState = { kind: "none" };
 const ACTIVITIES = new Set<string>(UNIT_AI_STATES.map((name: UnitAIStateName): string => name.split(".")[1] ?? ""));
 const KNOWN = new Map<string, UnitState>(UNIT_AI_STATES.map((name: UnitAIStateName): [string, UnitState] =>
 {
 	const [role, activity] = name.split(".");
-	return [name, { "kind": "known", name, "role": roleOf(role), "activity": activityNamed(activity) }];
+	return [name, { kind: "known", name, role: roleOf(role), activity: activityNamed(activity) }];
 }));
 
 function roleOf(part: string): UnitAIRole
@@ -146,8 +146,10 @@ function activityNamed(part: string | undefined): UnitAIActivity | undefined
 export function parseUnitState(raw: string | undefined): UnitState
 {
 	if (raw === undefined)
+	{
 		return NONE;
-	return KNOWN.get(raw) ?? { "kind": "other", raw };
+	}
+	return KNOWN.get(raw) ?? { kind: "other", raw };
 }
 
 /** A unit's state, parsed. */

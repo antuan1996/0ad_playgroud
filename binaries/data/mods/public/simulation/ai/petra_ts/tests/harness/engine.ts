@@ -25,9 +25,9 @@ import { modsBase, modsPublic } from "./paths.ts";
 export const commands: EngineCommand[] = [];
 
 /** The recorded commands of one type, oldest first. */
-export function sent<T extends EngineCommand["type"]>(type: T): Array<Extract<EngineCommand, { type: T }>>
+export function sent<T extends EngineCommand["type"]>(type: T): Array<Extract<EngineCommand, { type: T; }>>
 {
-	return commands.filter((command): command is Extract<EngineCommand, { type: T }> => command.type === type);
+	return commands.filter((command): command is Extract<EngineCommand, { type: T; }> => command.type === type);
 }
 
 /** Everything passed to warn()/error(), oldest first. */
@@ -69,10 +69,12 @@ afterEach(() =>
 	const allowed = misplacedMovesAllowed;
 	misplacedMovesAllowed = false;
 	if (found.length && !allowed)
+	{
 		throw new Error(
 			"a plan moved from a state its caller did not expect " +
 				"(set the state the game has there, or call allowMisplacedMoves()):\n  " + found.join("\n  "),
 		);
+	}
 });
 
 /** Thrown by Engine.Exit so a test can tell "the AI gave up" from a crash. */
@@ -108,21 +110,27 @@ function makeEngine(): object
 		{
 			const file = path.join(modsPublic, vfsPath);
 			if (!existsSync(file))
+			{
 				return null;
+			}
 			return JSON.parse(readFileSync(file, "utf8"));
 		},
 		ListDirectoryFiles: (vfsDir: string, extension = "*", recurse = false) =>
 		{
 			const dir = path.join(modsPublic, vfsDir);
 			if (!existsSync(dir))
+			{
 				return [];
+			}
 			const suffix = extension.replace(/^\*/, "");
 			const out: string[] = [];
 			for (const entry of readdirSync(dir, { recursive: recurse }))
 			{
 				const name = entry.toString();
 				if (!name.endsWith(suffix))
+				{
 					continue;
+				}
 				out.push(path.posix.join(vfsDir.replace(/\/+$/, ""), name.split(path.sep).join("/")));
 			}
 			return out.sort();
@@ -133,9 +141,13 @@ function makeEngine(): object
 		get(target, property)
 		{
 			if (typeof property === "symbol" || property === "then" || property === "inspect")
+			{
 				return undefined;
+			}
 			if (property in target)
+			{
 				return target[property];
+			}
 			throw new Error(`Engine.${property} is not stubbed — add it to tests/harness/engine.ts`);
 		},
 	});
@@ -149,21 +161,35 @@ function makeEngine(): object
 function uneval(value: unknown, depth = 0): string
 {
 	if (depth > 4)
+	{
 		return "...";
+	}
 	if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean")
+	{
 		return String(value);
+	}
 	if (typeof value === "string")
+	{
 		return JSON.stringify(value);
+	}
 	if (typeof value === "function")
+	{
 		return `[function ${value.name ?? "anonymous"}]`;
+	}
 	if (value instanceof Set)
-		return `new Set([${[...value].map(item => uneval(item, depth + 1)).join(", ")}])`;
+	{
+		return `new Set([${[...value].map((item) => uneval(item, depth + 1)).join(", ")}])`;
+	}
 	if (value instanceof Map)
+	{
 		return `new Map([${
 			[...value].map(([k, v]) => `[${uneval(k, depth + 1)}, ${uneval(v, depth + 1)}]`).join(", ")
 		}])`;
+	}
 	if (Array.isArray(value))
-		return `[${value.map(item => uneval(item, depth + 1)).join(", ")}]`;
+	{
+		return `[${value.map((item) => uneval(item, depth + 1)).join(", ")}]`;
+	}
 	if (typeof value === "object")
 	{
 		const entries = Object.entries(value).map(([key, item]) => `${key}: ${uneval(item, depth + 1)}`);
@@ -181,14 +207,16 @@ function uneval(value: unknown, depth = 0): string
  * Each mod's files are loaded in name order so the set cannot silently drift
  * as the mods gain files.
  */
-function globalScriptFiles(): { dir: string; file: string }[]
+function globalScriptFiles(): { dir: string; file: string; }[]
 {
-	const out: { dir: string; file: string }[] = [];
+	const out: { dir: string; file: string; }[] = [];
 	for (const root of [modsBase, modsPublic])
 	{
 		const dir = path.join(root, "globalscripts");
-		for (const file of readdirSync(dir).filter(name => name.endsWith(".js")).sort())
+		for (const file of readdirSync(dir).filter((name) => name.endsWith(".js")).sort())
+		{
 			out.push({ dir, file });
+		}
 	}
 	return out;
 }
@@ -210,7 +238,9 @@ export function installEngineGlobals(): void
 		const text = String(message);
 		logs.push(text);
 		if (MISPLACED_MOVE.test(text))
+		{
 			misplacedMoves.push(text);
+		}
 	};
 	g["error"] = (message: unknown) =>
 	{
@@ -226,14 +256,18 @@ export function installEngineGlobals(): void
 		{
 			Object.freeze(value);
 			for (const child of Object.values(value))
+			{
 				deepfreeze(child);
+			}
 		}
 		return value;
 	};
 	// baseAI.js normally sets this on import; tests that build a game state
 	// without it still need a number rather than undefined.
 	if (g["PlayerID"] === undefined)
+	{
 		g["PlayerID"] = 1;
+	}
 
 	// Indirect eval evaluates in global scope, which is what these classic
 	// scripts expect: their top-level `function`/`var` become globals.
@@ -257,5 +291,7 @@ export function installEngineGlobals(): void
 	// common-api/resources.js does `Resources = new Resources()`, which needs
 	// the constructor above to have produced a real resource list.
 	if (typeof g["Resources"] !== "function")
+	{
 		throw new Error("globalscripts/Resources.js did not define the Resources constructor");
+	}
 }

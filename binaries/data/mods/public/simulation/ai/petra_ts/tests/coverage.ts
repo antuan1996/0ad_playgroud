@@ -74,24 +74,26 @@ interface ModuleCoverage
 interface TargetCoverage
 {
 	target: PetraTarget;
-	tests: { total: number; pass: number; fail: number };
+	tests: { total: number; pass: number; fail: number; };
 	modules: ModuleCoverage[];
 }
 
 /** Run the whole suite against one target with V8 coverage written to a fresh directory. */
-function runSuite(target: PetraTarget): { dir: string; tests: TargetCoverage["tests"] }
+function runSuite(target: PetraTarget): { dir: string; tests: TargetCoverage["tests"]; }
 {
 	const dir = mkdtempSync(path.join(os.tmpdir(), `petra-cov-${target}-`));
 	const result = spawnSync(process.execPath, testArgs(), {
-		"env": { ...process.env, "PETRA_TARGET": target, "NODE_V8_COVERAGE": dir },
-		"encoding": "utf8",
-		"maxBuffer": 256 * 1024 * 1024,
+		env: { ...process.env, PETRA_TARGET: target, NODE_V8_COVERAGE: dir },
+		encoding: "utf8",
+		maxBuffer: 256 * 1024 * 1024,
 	});
 	if (result.error)
+	{
 		throw result.error;
+	}
 	const summary = (name: string): number =>
 		Number(new RegExp(`^ℹ ${name} (\\d+)$`, "m").exec(result.stdout)?.[1] ?? NaN);
-	return { dir, "tests": { "total": summary("tests"), "pass": summary("pass"), "fail": summary("fail") } };
+	return { dir, tests: { total: summary("tests"), pass: summary("pass"), fail: summary("fail") } };
 }
 
 /**
@@ -111,7 +113,9 @@ function codeMask(source: string): Uint8Array
 		if (c === "/" && next === "/")
 		{
 			while (i < source.length && source[i] !== "\n")
+			{
 				++i;
+			}
 			continue;
 		}
 		if (c === "/" && next === "*")
@@ -136,13 +140,21 @@ function codeMask(source: string): Uint8Array
 					continue;
 				}
 				if (c === "/" && d === "[")
+				{
 					inClass = true;
+				}
 				else if (c === "/" && d === "]")
+				{
 					inClass = false;
+				}
 				else if (d === c && !inClass)
+				{
 					break;
+				}
 				else if (d === "\n" && c !== "`")
+				{
 					break;
+				}
 				++i;
 			}
 			++i;
@@ -176,14 +188,18 @@ function typeOnlyLines(lines: string[]): Set<number>
 			continue;
 		}
 		if (!/^(export\s+)?(interface|type)\s+\w/.test(text))
+		{
 			continue;
+		}
 		// to the end of the declaration: braces balanced, and a `;` or `}` closing it
 		let depth = 0;
 		for (let j = k; j < lines.length; ++j)
 		{
 			skip.add(j);
 			for (const ch of lines[j])
+			{
 				depth += ch === "{" || ch === "(" || ch === "<" ? 1 : ch === "}" || ch === ")" || ch === ">" ? -1 : 0;
+			}
 			const end = lines[j].trimEnd();
 			if (depth <= 0 && (end.endsWith(";") || end.endsWith("}")))
 			{
@@ -203,11 +219,17 @@ function scriptsFor(coverageDir: string, file: string): V8Script[]
 	for (const name of readdirSync(coverageDir))
 	{
 		if (!name.endsWith(".json"))
+		{
 			continue;
-		const data = JSON.parse(readFileSync(path.join(coverageDir, name), "utf8")) as { result: V8Script[] };
+		}
+		const data = JSON.parse(readFileSync(path.join(coverageDir, name), "utf8")) as { result: V8Script[]; };
 		for (const script of data.result)
+		{
 			if (script.url === url)
+			{
 				scripts.push(script);
+			}
+		}
 	}
 	return scripts;
 }
@@ -219,14 +241,20 @@ function characterCounts(scripts: V8Script[], length: number): Int32Array
 	for (const script of scripts)
 	{
 		const counts = new Int32Array(length);
-		const ranges = script.functions.flatMap(fn => fn.ranges).sort((a, b) =>
+		const ranges = script.functions.flatMap((fn) => fn.ranges).sort((a, b) =>
 			(b.endOffset - b.startOffset) - (a.endOffset - a.startOffset)
 		);
 		for (const range of ranges)
+		{
 			counts.fill(range.count, range.startOffset, Math.min(range.endOffset, length));
+		}
 		for (let i = 0; i < length; ++i)
+		{
 			if (counts[i] > best[i])
+			{
 				best[i] = counts[i];
+			}
+		}
 	}
 	return best;
 }
@@ -257,32 +285,48 @@ function analyseModule(coverageDir: string, file: string): ModuleCoverage
 		const start = offset;
 		offset += lines[k].length + 1;
 		if (typeOnly.has(k))
+		{
 			continue;
+		}
 		let code = "";
 		let ran = false;
 		for (let i = start; i < start + lines[k].length; ++i)
 		{
 			if (!mask[i])
+			{
 				continue;
+			}
 			code += source[i];
 			if (counts[i] > 0 && !"{}()[];,".includes(source[i]))
+			{
 				ran = true;
+			}
 		}
 		if (!isCodeText(code))
+		{
 			continue;
+		}
 		++codeLines;
 		if (ran && scripts.length)
+		{
 			++runLines;
+		}
 		else
+		{
 			missedLines.push(k + 1);
+		}
 	}
 
 	// stretches of code never run: maximal runs of zero-count code characters
 	const missedBlocks: Block[] = [];
 	const lineStarts = [0];
 	for (let i = 0; i < source.length; ++i)
+	{
 		if (source[i] === "\n")
+		{
 			lineStarts.push(i + 1);
+		}
+	}
 	const lineOf = (i: number): number =>
 	{
 		let lo = 0;
@@ -291,9 +335,13 @@ function analyseModule(coverageDir: string, file: string): ModuleCoverage
 		{
 			const mid = (lo + hi + 1) >> 1;
 			if (lineStarts[mid] <= i)
+			{
 				lo = mid;
+			}
 			else
+			{
 				hi = mid - 1;
+			}
 		}
 		return lo;
 	};
@@ -312,45 +360,53 @@ function analyseModule(coverageDir: string, file: string): ModuleCoverage
 			while (i < source.length && (!mask[i] || counts[i] === 0))
 			{
 				if (mask[i])
+				{
 					text += source[i];
+				}
 				else if (text && !text.endsWith(" "))
+				{
 					text += " ";
+				}
 				++i;
 			}
 			if (isCodeText(text))
 			{
 				const line = lineOf(start);
-				missedBlocks.push({ "line": line + 1, "column": start - lineStarts[line] + 1, "text": text.trim() });
+				missedBlocks.push({ line: line + 1, column: start - lineStarts[line] + 1, text: text.trim() });
 			}
 		}
 	}
 
 	// functions, keyed by where they start; the module's top level is not one
-	const seen = new Map<number, { name: string; count: number }>();
+	const seen = new Map<number, { name: string; count: number; }>();
 	for (const script of scripts)
+	{
 		for (const fn of script.functions)
 		{
 			const start = fn.ranges[0].startOffset;
 			if (start === 0 && fn.functionName === "")
+			{
 				continue;
+			}
 			const known = seen.get(start);
 			seen.set(start, {
-				"name": fn.functionName || `<anonymous>@${lineOf(start) + 1}`,
-				"count": Math.max(known?.count ?? 0, fn.ranges[0].count),
+				name: fn.functionName || `<anonymous>@${lineOf(start) + 1}`,
+				count: Math.max(known?.count ?? 0, fn.ranges[0].count),
 			});
 		}
+	}
 	const fns = [...seen.values()];
 
 	return {
 		module,
-		"loaded": scripts.length > 0,
+		loaded: scripts.length > 0,
 		codeLines,
 		runLines,
 		missedLines,
 		missedBlocks,
-		"functions": fns.length,
-		"runFunctions": fns.filter(f => f.count > 0).length,
-		"missedFunctions": fns.filter(f => f.count === 0).map(f => f.name),
+		functions: fns.length,
+		runFunctions: fns.filter((f) => f.count > 0).length,
+		missedFunctions: fns.filter((f) => f.count === 0).map((f) => f.name),
 	};
 }
 
@@ -360,16 +416,16 @@ function analyseTarget(target: PetraTarget): TargetCoverage
 	try
 	{
 		const { "dir": moduleDir, ext } = petraModuleDir(target);
-		const files = (readdirSync(moduleDir, { "recursive": true }) as string[]).map(name =>
+		const files = (readdirSync(moduleDir, { recursive: true }) as string[]).map((name) =>
 			name.split(path.sep).join("/")
-		).filter(name => name.endsWith(ext) && !name.endsWith(".d.ts") && !name.startsWith("tests/")).sort((a, b) =>
+		).filter((name) => name.endsWith(ext) && !name.endsWith(".d.ts") && !name.startsWith("tests/")).sort((a, b) =>
 			path.posix.basename(a).localeCompare(path.posix.basename(b))
-		).map(name => path.join(moduleDir, name));
-		return { target, tests, "modules": files.map(file => analyseModule(dir, file)) };
+		).map((name) => path.join(moduleDir, name));
+		return { target, tests, modules: files.map((file) => analyseModule(dir, file)) };
 	}
 	finally
 	{
-		rmSync(dir, { "recursive": true, "force": true });
+		rmSync(dir, { recursive: true, force: true });
 	}
 }
 
@@ -384,7 +440,9 @@ function ranges(lines: number[]): string
 	{
 		let j = k;
 		while (j + 1 < lines.length && lines[j + 1] === lines[j] + 1)
+		{
 			++j;
+		}
 		out.push(j > k ? `${lines[k]}-${lines[j]}` : `${lines[k]}`);
 		k = j;
 	}
@@ -395,13 +453,13 @@ function totals(modules: ModuleCoverage[])
 {
 	return modules.reduce(
 		(sum, m) => ({
-			"codeLines": sum.codeLines + m.codeLines,
-			"runLines": sum.runLines + m.runLines,
-			"blocks": sum.blocks + m.missedBlocks.length,
-			"functions": sum.functions + m.functions,
-			"runFunctions": sum.runFunctions + m.runFunctions,
+			codeLines: sum.codeLines + m.codeLines,
+			runLines: sum.runLines + m.runLines,
+			blocks: sum.blocks + m.missedBlocks.length,
+			functions: sum.functions + m.functions,
+			runFunctions: sum.runFunctions + m.runFunctions,
 		}),
-		{ "codeLines": 0, "runLines": 0, "blocks": 0, "functions": 0, "runFunctions": 0 },
+		{ codeLines: 0, runLines: 0, blocks: 0, functions: 0, runFunctions: 0 },
 	);
 }
 
@@ -427,13 +485,15 @@ function printTable(result: TargetCoverage): void
 				pct(t.runFunctions, t.functions)
 			}`,
 	);
-	if (result.modules.some(m => !m.loaded))
+	if (result.modules.some((m) => !m.loaded))
+	{
 		console.log("* not loaded by any test");
+	}
 }
 
 function printModule(result: TargetCoverage, name: string): void
 {
-	const m = result.modules.find(mod => mod.module === name);
+	const m = result.modules.find((mod) => mod.module === name);
 	if (!m)
 	{
 		console.error(`${result.target}: no module "${name}"`);
@@ -446,15 +506,21 @@ function printModule(result: TargetCoverage, name: string): void
 			(m.loaded ? "" : " — not loaded by any test"),
 	);
 	if (m.missedFunctions.length)
+	{
 		console.log(`functions never called: ${m.missedFunctions.join(", ")}`);
+	}
 	if (m.missedLines.length)
+	{
 		console.log(`lines never run: ${ranges(m.missedLines)}`);
+	}
 	for (const block of m.missedBlocks)
+	{
 		console.log(
 			`  ${`${block.line}:${block.column}`.padEnd(9)} ${
 				block.text.length > 100 ? block.text.slice(0, 97) + "..." : block.text
 			}`,
 		);
+	}
 }
 
 const args = process.argv.slice(2);
@@ -473,10 +539,16 @@ const results = [analyseTarget(mode)];
 const file = option("--file");
 
 if (file)
-	results.forEach(result => printModule(result, file));
+{
+	results.forEach((result) => printModule(result, file));
+}
 else
+{
 	printTable(results[0]);
+}
 
 const json = option("--json");
 if (json)
+{
 	writeFileSync(json, JSON.stringify(results, null, "\t"));
+}

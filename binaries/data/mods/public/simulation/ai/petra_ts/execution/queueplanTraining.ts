@@ -42,7 +42,9 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 	{
 		const trainers = this.getBestTrainers(gameState);
 		if (!trainers)
+		{
 			return undefined;
+		}
 		const template = this.template;
 		this.cost = new ResourcesManager(template.cost(trainers[0]), Number(template.get("Cost/Population")));
 		return () => this.start(gameState, trainers);
@@ -55,16 +57,24 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		{
 			const trainer = gameState.getEntityById(this.metadata.trainer);
 			if (trainer && isPlaced(trainer))
+			{
 				return [trainer];
+			}
 		}
 
 		let allTrainers = gameState.findTrainers(this.type);
 		if (this.metadata && this.metadata.sea)
+		{
 			allTrainers = allTrainers.filter(filters.byMetadata(PlayerID, "sea", this.metadata.sea));
+		}
 		if (this.metadata && this.metadata.base)
+		{
 			allTrainers = allTrainers.filter(filters.byMetadata(PlayerID, "base", this.metadata.base));
+		}
 		if (!allTrainers || !allTrainers.hasEntities())
+		{
 			return undefined;
+		}
 
 		// Keep only trainers with smallest cost
 		let costMin = Math.min();
@@ -73,10 +83,14 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		{
 			// a trainer is a structure: on the map
 			if (!isPlaced(ent))
+			{
 				continue;
+			}
 			const cost = this.template.costSum(ent);
 			if (cost === costMin)
+			{
 				trainers.push(ent);
+			}
 			else if (cost < costMin)
 			{
 				costMin = cost;
@@ -96,10 +110,14 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		}
 
 		if (trainers.length > 1)
+		{
 			trainers.sort(this.trainerOrder(gameState));
+		}
 
 		if (this.metadata && this.metadata.base !== undefined && this.metadata.base === 0)
+		{
 			this.metadata.base = trainers[0].getMetadata(PlayerID, "base");
+		}
 		trainers[0].train(gameState.getPlayerCiv(), this.type, this.number, this.metadata);
 
 		this.onStart(gameState);
@@ -121,15 +139,21 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		{
 			let value = ent.trainingQueueTime() ?? NaN;
 			if (ent.hasClass("Civic") && !supportUnit)
+			{
 				value += 10;
+			}
 			if (supportUnit && hq.isNearInvadingArmy(ent.position()))
+			{
 				value += 50;
+			}
 			if (wantedIndex)
 			{
 				const base = ent.getMetadata(PlayerID, "base");
 				const baseManager = base ? hq.getBaseByID(base) : undefined;
 				if (!baseManager || baseManager.accessIndex !== wantedIndex)
+				{
 					value += 30;
+				}
 			}
 			return value;
 		};
@@ -147,9 +171,13 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 				if (apop !== undefined && bpop !== undefined)
 				{
 					if (apop > bpop)
+					{
 						aa++;
+					}
 					else if (bpop > apop)
+					{
 						bb++;
+					}
 				}
 			}
 			return aa - bb;
@@ -166,19 +194,19 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		type: TemplateName;
 		ID: number;
 		metadata: PlanMetadata | undefined;
-		cost: { amounts: Record<string, number>; population: number };
+		cost: { amounts: Record<string, number>; population: number; };
 		number: number;
 		maxMerge: number;
 	}
 	{
 		return {
-			"category": "unit",
-			"type": this.type,
-			"ID": this.ID,
-			"metadata": this.metadata,
-			"cost": this.cost.Serialize(),
-			"number": this.number,
-			"maxMerge": this.maxMerge,
+			category: "unit",
+			type: this.type,
+			ID: this.ID,
+			metadata: this.metadata,
+			cost: this.cost.Serialize(),
+			number: this.number,
+			maxMerge: this.maxMerge,
 		};
 	}
 

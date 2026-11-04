@@ -5,8 +5,10 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
  * is built only then, so a costly one (an uneval of a plan) costs nothing at
  * the levels games are played at.
  */
-export function debugWarn(config: { debug: number }, level: number, message: () => string): void
+export function debugWarn(config: { debug: number; }, level: number, message: () => string): void
 {
 	if (config.debug > level)
+	{
 		aiWarn(message());
+	}
 }

@@ -48,16 +48,18 @@ function fail(message: string): never
 }
 
 /** Runs a command to completion, its output passed through; fails if it does. */
-function run(command: string, args: string[], options: { cwd?: string; input?: Buffer } = {}): Buffer
+function run(command: string, args: string[], options: { cwd?: string; input?: Buffer; } = {}): Buffer
 {
 	const result = spawnSync(command, args, {
-		"cwd": options.cwd ?? repoRoot,
-		"input": options.input,
-		"stdio": [options.input ? "pipe" : "inherit", "pipe", "inherit"],
-		"maxBuffer": 1 << 30,
+		cwd: options.cwd ?? repoRoot,
+		input: options.input,
+		stdio: [options.input ? "pipe" : "inherit", "pipe", "inherit"],
+		maxBuffer: 1 << 30,
 	});
 	if (result.status !== 0)
+	{
 		fail(`${command} ${args.join(" ")} failed (status ${result.status})`);
+	}
 	return result.stdout;
 }
 
@@ -65,11 +67,13 @@ function run(command: string, args: string[], options: { cwd?: string; input?: B
 function buildFromTag(tag: string, bot: string): void
 {
 	const commit = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${tag}^{commit}`], {
-		"cwd": repoRoot,
-		"encoding": "utf8",
+		cwd: repoRoot,
+		encoding: "utf8",
 	}).stdout.trim();
 	if (!commit)
+	{
 		fail(`no tag ${tag}: it marks the port the baseline ${bot} is built from (PLAN.md §2)`);
+	}
 	const sources = mkdtempSync(join(tmpdir(), `${bot}-`));
 	try
 	{
@@ -80,9 +84,9 @@ function buildFromTag(tag: string, bot: string): void
 			"build/petra_ts/tsconfig.json",
 			"build/petra_ts/tsconfig.build.json",
 		]);
-		run("tar", ["-x", "-C", sources], { "input": archive });
+		run("tar", ["-x", "-C", sources], { input: archive });
 		const outDir = join(aiDir, bot);
-		rmSync(outDir, { "recursive": true, "force": true });
+		rmSync(outDir, { recursive: true, force: true });
 		run(process.execPath, [
 			join(repoRoot, "node_modules/typescript/bin/tsc"),
 			"-p",
@@ -95,15 +99,15 @@ function buildFromTag(tag: string, bot: string): void
 	}
 	finally
 	{
-		rmSync(sources, { "recursive": true, "force": true });
+		rmSync(sources, { recursive: true, force: true });
 	}
 }
 
 function buildFixed(): void
 {
 	const outDir = join(aiDir, "petra_fixed");
-	rmSync(outDir, { "recursive": true, "force": true });
-	cpSync(join(aiDir, "petra"), outDir, { "recursive": true });
+	rmSync(outDir, { recursive: true, force: true });
+	cpSync(join(aiDir, "petra"), outDir, { recursive: true });
 	// The patch is against petra/: strip a/binaries/data/mods/public/simulation/ai/petra/.
 	run("git", [
 		"apply",
@@ -112,7 +116,7 @@ function buildFixed(): void
 		"build/petra_ts/upstream/petra-fixes.patch",
 	]);
 	let rewritten = 0;
-	for (const file of readdirSync(outDir).filter(name => name.endsWith(".js")))
+	for (const file of readdirSync(outDir).filter((name) => name.endsWith(".js")))
 	{
 		const path = join(outDir, file);
 		const source = readFileSync(path, "utf8");
@@ -129,8 +133,8 @@ function buildFixed(): void
 		JSON.stringify(
 			{
 				...metadata,
-				"name": "Petra fixed",
-				"description":
+				name: "Petra fixed",
+				description:
 					"Petra, the default 0 A.D. AI bot, with the fixes of build/petra_ts/upstream/petra-fixes.patch: " +
 					"the baseline Petra TS is measured against.\n\n" +
 					"The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard.",
@@ -148,27 +152,37 @@ function exportedFunction(source: string, name: string): string
 	const start = source.indexOf(`export function ${name}(`);
 	const end = source.indexOf("\n}\n", start);
 	if (start == -1 || end == -1)
+	{
 		fail(`no export function ${name} in the port`);
+	}
 	return source.slice(start, end + 3);
 }
 
 function buildHybrid(id: string, modules: string[]): void
 {
 	if (!/^petra_hybrid\w*$/.test(id))
+	{
 		fail(`a hybrid's id starts with petra_hybrid, not ${id}`);
+	}
 	const parity = join(aiDir, "petra_parity");
 	const fixed = join(aiDir, "petra_fixed");
 	for (const dir of [parity, fixed])
+	{
 		if (!readdirSync(aiDir).includes(dir.slice(aiDir.length + 1)))
+		{
 			fail(`${dir} is not built: run npm run build:petra:baselines first`);
+		}
+	}
 	const outDir = join(aiDir, id);
-	rmSync(outDir, { "recursive": true, "force": true });
-	cpSync(fixed, outDir, { "recursive": true });
+	rmSync(outDir, { recursive: true, force: true });
+	cpSync(fixed, outDir, { recursive: true });
 	for (const module of modules)
 	{
 		const file = module.endsWith(".js") ? module : `${module}.js`;
 		if (!readdirSync(parity).includes(file))
+		{
 			fail(`no module ${file} in petra_parity`);
+		}
 		cpSync(join(parity, file), join(outDir, file));
 	}
 	const helpers: [string, string[]][] = [
@@ -180,11 +194,13 @@ function buildHybrid(id: string, modules: string[]): void
 		const path = join(outDir, file);
 		const source = readFileSync(path, "utf8");
 		const port = readFileSync(join(parity, file), "utf8");
-		const missing = names.filter(name => !source.includes(`export function ${name}(`));
+		const missing = names.filter((name) => !source.includes(`export function ${name}(`));
 		if (missing.length)
-			writeFileSync(path, source + "\n" + missing.map(name => exportedFunction(port, name)).join("\n"));
+		{
+			writeFileSync(path, source + "\n" + missing.map((name) => exportedFunction(port, name)).join("\n"));
+		}
 	}
-	for (const file of readdirSync(outDir).filter(name => name.endsWith(".js")))
+	for (const file of readdirSync(outDir).filter((name) => name.endsWith(".js")))
 	{
 		const path = join(outDir, file);
 		writeFileSync(
@@ -198,8 +214,8 @@ function buildHybrid(id: string, modules: string[]): void
 		JSON.stringify(
 			{
 				...metadata,
-				"name": `Petra hybrid ${id.slice("petra_hybrid".length).replace(/^_/, "")}`.trim(),
-				"description": `petra_fixed with these modules from petra_parity: ${modules.join(", ") || "none"}.`,
+				name: `Petra hybrid ${id.slice("petra_hybrid".length).replace(/^_/, "")}`.trim(),
+				description: `petra_fixed with these modules from petra_parity: ${modules.join(", ") || "none"}.`,
 			},
 			null,
 			"\t",
@@ -211,16 +227,28 @@ const wanted = process.argv.slice(2);
 if (wanted[0] == "hybrid")
 {
 	if (!wanted[1])
+	{
 		fail("hybrid takes an id and module names");
+	}
 	buildHybrid(wanted[1], wanted.slice(2));
 	process.exit(0);
 }
 for (const name of wanted)
+{
 	if (name != "parity" && name != "prev" && name != "fixed")
+	{
 		fail(`unknown baseline ${name}: parity, prev or fixed`);
+	}
+}
 if (!wanted.length || wanted.includes("parity"))
+{
 	buildFromTag(PARITY_TAG, "petra_parity");
+}
 if (wanted.includes("prev"))
+{
 	buildFromTag(PREV_TAG, "petra_prev");
+}
 if (!wanted.length || wanted.includes("fixed"))
+{
 	buildFixed();
+}

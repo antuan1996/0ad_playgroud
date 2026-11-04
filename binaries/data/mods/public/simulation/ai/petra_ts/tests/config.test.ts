@@ -19,19 +19,19 @@ const PLAYER_ENTITY = 7;
 
 /** the game settings setConfig reads */
 function game(
-	options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[] } = {},
+	options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[]; } = {},
 ): CommonGameState
 {
 	return fake<CommonGameState>({
-		"playerData": { "teamLocked": options.teamLocked ?? false, "entity": PLAYER_ENTITY },
-		"getAlliedVictory": () => options.alliedVictory ?? false,
-		"getPopulationMax": () => options.maxPop ?? 300,
-		"getVictoryConditions": () => new Set(options.victory ?? ["conquest"]),
+		playerData: { teamLocked: options.teamLocked ?? false, entity: PLAYER_ENTITY },
+		getAlliedVictory: () => options.alliedVictory ?? false,
+		getPopulationMax: () => options.maxPop ?? 300,
+		getVictoryConditions: () => new Set(options.victory ?? ["conquest"]),
 	});
 }
 
 /** the modifiers the bonus asked the simulation for, as [name, modifiers, player entity] */
-let modifiers: Array<[string, Record<string, Array<{ affects: string[]; multiply: number }>>, number]> = [];
+let modifiers: Array<[string, Record<string, Array<{ affects: string[]; multiply: number; }>>, number]> = [];
 let realRandom: () => number;
 
 beforeEach(() =>
@@ -40,13 +40,13 @@ beforeEach(() =>
 	modifiers = [];
 	realRandom = Math.random;
 	Math.random = () => 0.5;
-	stubGlobal("Sim", { "SYSTEM_ENTITY": 1, "IID_ModifiersManager": 61 });
+	stubGlobal("Sim", { SYSTEM_ENTITY: 1, IID_ModifiersManager: 61 });
 	stubGlobal("SimEngine", {
-		"QueryInterface": (entity: number, iid: number) =>
+		QueryInterface: (entity: number, iid: number) =>
 		{
 			assert.deepEqual([entity, iid], [1, 61]);
 			return {
-				"AddModifiers": (name: string, mods: never, target: number) => modifiers.push([name, mods, target]),
+				AddModifiers: (name: string, mods: never, target: number) => modifiers.push([name, mods, target]),
 			};
 		},
 	});
@@ -107,17 +107,17 @@ describe("config: personality", () =>
 	it("locked teams make the bot much more cooperative; a shared victory a little", () =>
 	{
 		const locked = new Config(3, "balanced");
-		locked.setConfig(game({ "teamLocked": true, "alliedVictory": true }));
+		locked.setConfig(game({ teamLocked: true, alliedVictory: true }));
 		close(locked.personality.cooperative, 0.8);
 
 		const allied = new Config(3, "balanced");
-		allied.setConfig(game({ "alliedVictory": true }));
+		allied.setConfig(game({ alliedVictory: true }));
 		close(allied.personality.cooperative, 0.65);
 
 		// never over 1
 		Math.random = () => 0.9;
 		const veryCooperative = new Config(3, "balanced");
-		veryCooperative.setConfig(game({ "teamLocked": true }));
+		veryCooperative.setConfig(game({ teamLocked: true }));
 		close(veryCooperative.personality.cooperative, 1);
 	});
 
@@ -125,7 +125,7 @@ describe("config: personality", () =>
 	{
 		const sandbox = new Config(0, "aggressive");
 		sandbox.setConfig(game());
-		assert.deepEqual(sandbox.personality, { "aggressive": 0.5, "cooperative": 0.5, "defensive": 0.5 });
+		assert.deepEqual(sandbox.personality, { aggressive: 0.5, cooperative: 0.5, defensive: 0.5 });
 	});
 });
 
@@ -153,15 +153,15 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.workPhase4, 100);
 		assert.equal(config.Economy.targetNumTraders, 5);
 		assert.equal(config.popScaling, 1);
-		assert.deepEqual(config.emergencyValues, { "population": 0.6, "structures": 0.6, "roots": 0.5 });
-		assert.deepEqual(config.personalityCut, { "weak": 0.3, "medium": 0.5, "strong": 0.7 });
+		assert.deepEqual(config.emergencyValues, { population: 0.6, structures: 0.6, roots: 0.5 });
+		assert.deepEqual(config.personalityCut, { weak: 0.3, medium: 0.5, strong: 0.7 });
 		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 1, "Trader/GainMultiplier": 1, "Cost/BuildTime": 1 });
 	});
 
 	it("hard, balanced, wonder victory: two towers, and the later phases come with fewer workers", () =>
 	{
 		const config = new Config(4, "balanced");
-		config.setConfig(game({ "victory": ["conquest", "wonder"] }));
+		config.setConfig(game({ victory: ["conquest", "wonder"] }));
 
 		assert.equal(config.Military.numSentryTowers, 2);
 		assert.equal(config.Military.popForBarracks1, 25);
@@ -172,7 +172,7 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.workPhase3, 150);
 		assert.equal(config.Economy.workPhase4, 150);
 		assert.equal(config.Economy.targetNumTraders, 6);
-		assert.deepEqual(config.emergencyValues, { "population": 0.5, "structures": 0.5, "roots": 0.35 });
+		assert.deepEqual(config.emergencyValues, { population: 0.5, structures: 0.5, roots: 0.35 });
 		assert.deepEqual(bonus(), {
 			"ResourceGatherer/BaseSpeed": 1.25,
 			"Trader/GainMultiplier": 1.25,
@@ -183,7 +183,7 @@ describe("config: settings by difficulty", () =>
 	it("a big cap: workers are capped at 120, but never fewer than the town phase wants", () =>
 	{
 		const config = new Config(4, "balanced");
-		config.setConfig(game({ "maxPop": 600 }));
+		config.setConfig(game({ maxPop: 600 }));
 		// min(120, 600 / 3) = 120, raised to popPhase2 = 150; the later phases follow
 		assert.equal(config.Economy.popPhase2, 150);
 		assert.equal(config.Economy.targetNumWorkers, 150);
@@ -196,7 +196,7 @@ describe("config: settings by difficulty", () =>
 		const config = new Config(5, "defensive");
 		config.setConfig(game());
 		assert.equal(config.Military.numSentryTowers, 3);
-		assert.deepEqual(config.emergencyValues, { "population": 0.35, "structures": 0.35, "roots": 0.2 });
+		assert.deepEqual(config.emergencyValues, { population: 0.35, structures: 0.35, roots: 0.2 });
 		assert.deepEqual(bonus(), {
 			"ResourceGatherer/BaseSpeed": 1.56,
 			"Trader/GainMultiplier": 1.56,
@@ -207,7 +207,7 @@ describe("config: settings by difficulty", () =>
 	it("easy, small population cap: everything scaled down to the cap", () =>
 	{
 		const config = new Config(2, "defensive");
-		config.setConfig(game({ "maxPop": 150 }));
+		config.setConfig(game({ maxPop: 150 }));
 
 		const scaling = 0.7 * Math.sqrt(0.5);
 		close(config.popScaling, scaling);
@@ -234,7 +234,7 @@ describe("config: settings by difficulty", () =>
 	it("very easy: never leaves the town phase, and an undefended bot builds no tower", () =>
 	{
 		const config = new Config(1, "aggressive");
-		config.setConfig(game({ "maxPop": 300 }));
+		config.setConfig(game({ maxPop: 300 }));
 
 		assert.equal(config.popScaling, 0.5);
 		assert.equal(config.Economy.supportRatio, 0.5);
@@ -245,7 +245,7 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.targetNumWorkers, 75);
 		assert.equal(config.Economy.workPhase3, Infinity);
 		assert.equal(config.Economy.targetNumTraders, 2); // round(3 * 0.5)
-		assert.deepEqual(config.emergencyValues, { "population": 0.8, "structures": 0.8, "roots": 0.8 });
+		assert.deepEqual(config.emergencyValues, { population: 0.8, structures: 0.8, roots: 0.8 });
 		assert.deepEqual(bonus(), {
 			"ResourceGatherer/BaseSpeed": 0.56,
 			"Trader/GainMultiplier": 0.56,
@@ -263,7 +263,7 @@ describe("config: settings by difficulty", () =>
 	it("sandbox: the slowest bonus, and a single worker on a one-person cap", () =>
 	{
 		const config = new Config(0);
-		config.setConfig(game({ "maxPop": 1 }));
+		config.setConfig(game({ maxPop: 1 }));
 		// every threshold capped by the cap itself (popPhase2 = floor(1 / 2) = 0); one worker still
 		assert.equal(config.Economy.popPhase2, 0);
 		assert.equal(config.Economy.targetNumWorkers, 1);
@@ -280,11 +280,11 @@ describe("config: settings by difficulty", () =>
 		const config = new Config(3, "balanced");
 		config.debug = 2;
 		config.setConfig(game());
-		assert.ok(logs.some(line => line.includes("Petra bot: personality")));
+		assert.ok(logs.some((line) => line.includes("Petra bot: personality")));
 
 		resetRecorder();
 		const quiet = new Config(3, "balanced");
 		quiet.setConfig(game());
-		assert.ok(!logs.some(line => line.includes("Petra bot: personality")));
+		assert.ok(!logs.some((line) => line.includes("Petra bot: personality")));
 	});
 });

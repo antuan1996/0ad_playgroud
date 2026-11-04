@@ -31,7 +31,7 @@ function builderUnit(id: number, buildables: string[] | undefined, methods: Meth
 		// as the common-api Entity.buildableEntities (entity.js 339) expands
 		// Builder/Entities/_string: {civ} becomes the player's civ, and no
 		// Builder/Entities tag leaves the list empty
-		buildableEntities: (civ: string) => (buildables ?? []).map(name => name.replace("{civ}", civ)),
+		buildableEntities: (civ: string) => (buildables ?? []).map((name) => name.replace("{civ}", civ)),
 		isOwn: (player: number) => player === PLAYER,
 		...methods,
 	});
@@ -41,7 +41,7 @@ function builderUnit(id: number, buildables: string[] | undefined, methods: Meth
 function structure(id: number, buildables?: string[]): CommonEntity
 {
 	return makeEntity({ id, owner: PLAYER, position: [40, 41], classes: ["Structure", "House"] }, {
-		buildableEntities: (civ: string) => (buildables ?? []).map(name => name.replace("{civ}", civ)),
+		buildableEntities: (civ: string) => (buildables ?? []).map((name) => name.replace("{civ}", civ)),
 	});
 }
 
@@ -49,17 +49,17 @@ function structure(id: number, buildables?: string[]): CommonEntity
 function registerTemplates(world: World): void
 {
 	world.templates["structures/athen/house"] = makeTemplate("structures/athen/house", {
-		"classes": ["Structure", "House", "Economic"],
+		classes: ["Structure", "House", "Economic"],
 	});
 	world.templates["structures/athen/storehouse"] = makeTemplate("structures/athen/storehouse", {
-		"classes": ["Structure", "Storehouse", "Economic"],
+		classes: ["Structure", "Storehouse", "Economic"],
 	});
 	world.templates["structures/athen/defense_tower"] = makeTemplate("structures/athen/defense_tower", {
-		"classes": ["Structure", "Tower", "Defensive"],
+		classes: ["Structure", "Tower", "Defensive"],
 	});
 	world.templates["structures/athen/stable"] = makeTemplate("structures/athen/stable", {
-		"classes": ["Structure", "Stable"],
-		"available": false,
+		classes: ["Structure", "Stable"],
+		available: false,
 	});
 }
 
@@ -114,7 +114,7 @@ describe("the book over one turn's events", () =>
 		const mgr = BuildManager.start(world.gameState);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
-		mgr.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(3001) }] }));
+		mgr.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(3001) }] }));
 
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
 	});
@@ -127,7 +127,7 @@ describe("the book over one turn's events", () =>
 
 		mgr.checkEvents(
 			world.gameState,
-			eventsWith({ "Create": [{ "entity": entityId(3001) }], "Destroy": [{ "entity": entityId(3001) }] }),
+			eventsWith({ Create: [{ entity: entityId(3001) }], Destroy: [{ entity: entityId(3001) }] }),
 		);
 
 		assert.equal(mgr.builders.size, 0, "the birth that was undone leaves no entry");
@@ -140,7 +140,7 @@ describe("the book over one turn's events", () =>
 		world.addEntity(builderUnit(3002, ["structures/{civ}/house"]));
 		const mgr = BuildManager.start(world.gameState);
 
-		mgr.checkEvents(world.gameState, eventsWith({ "Destroy": [{ "entity": entityId(3001) }] }));
+		mgr.checkEvents(world.gameState, eventsWith({ Destroy: [{ entity: entityId(3001) }] }));
 
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3002]);
 		// the storehouse entry had only this builder: the removal splices his
@@ -159,7 +159,7 @@ describe("the book over one turn's events", () =>
 
 		mgr.checkEvents(
 			world.gameState,
-			eventsWith({ "OwnershipChanged": [{ "entity": entityId(3001), "from": ENEMY, "to": PLAYER }] }),
+			eventsWith({ OwnershipChanged: [{ entity: entityId(3001), from: ENEMY, to: PLAYER }] }),
 		);
 
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
@@ -175,7 +175,7 @@ describe("the book over one turn's events", () =>
 
 		mgr.checkEvents(
 			world.gameState,
-			eventsWith({ "OwnershipChanged": [{ "entity": entityId(3001), "from": PLAYER, "to": ENEMY }] }),
+			eventsWith({ OwnershipChanged: [{ entity: entityId(3001), from: PLAYER, to: ENEMY }] }),
 		);
 
 		// the storehouse entry stands untouched; the captured builder's id is
@@ -202,10 +202,10 @@ describe("the book over one turn's events", () =>
 		mgr.checkEvents(
 			world.gameState,
 			eventsWith({
-				"ValueModification": [{
-					"entities": [entityId(3002)],
-					"component": "Builder",
-					"valueNames": ["Builder/Entities/_string"],
+				ValueModification: [{
+					entities: [entityId(3002)],
+					component: "Builder",
+					valueNames: ["Builder/Entities/_string"],
 				}],
 			}),
 		);
@@ -226,11 +226,11 @@ describe("the book over one turn's events", () =>
 			eventsWith({
 				// the wrong component, and the right one touched on a value the
 				// builder lists do not start with
-				"ValueModification": [{
-					"entities": [entityId(3001)],
-					"component": "Aura",
-					"valueNames": ["Builder/Ratio"],
-				}, { "entities": [entityId(3001)], "component": "Builder", "valueNames": ["Armour/Hack"] }],
+				ValueModification: [{ entities: [entityId(3001)], component: "Aura", valueNames: ["Builder/Ratio"] }, {
+					entities: [entityId(3001)],
+					component: "Builder",
+					valueNames: ["Armour/Hack"],
+				}],
 			}),
 		);
 
@@ -253,7 +253,7 @@ describe("what a project needs in the book", () =>
 		// the game disables the tower per civ
 		world.gameState.isTemplateDisabled = (name: string) => name === "structures/athen/defense_tower";
 
-		const every = mgr.findStructuresByFilter(world.gameState, { "func": () => true, "dynamicProperties": [] });
+		const every = mgr.findStructuresByFilter(world.gameState, { func: () => true, dynamicProperties: [] });
 
 		assert.deepEqual(
 			every,
@@ -324,10 +324,11 @@ describe("the parking lot: unbuildables and their waits", () =>
 
 		mgr.setUnbuildable(world.gameState, "structures/athen/house");
 
-		assert.deepEqual([...mgr.unbuildables.entries()], [["structures/athen/house", {
-			"reason": "room",
-			"time": 190,
-		}]], "the wait runs from the turn's own time, 90 seconds as the default names");
+		assert.deepEqual(
+			[...mgr.unbuildables.entries()],
+			[["structures/athen/house", { reason: "room", time: 190 }]],
+			"the wait runs from the turn's own time, 90 seconds as the default names",
+		);
 		assert.equal(mgr.isUnbuildable(world.gameState, "structures/athen/house"), true);
 	});
 
@@ -356,13 +357,13 @@ describe("the parking lot: unbuildables and their waits", () =>
 		mgr.setUnbuildable(world.gameState, "structures/athen/house", 30, "nobuilder");
 		assert.deepEqual(
 			mgr.unbuildables.get("structures/athen/house"),
-			{ "reason": "room", "time": 190 },
+			{ reason: "room", time: 190 },
 			"the shorter hold loses, reasons kept with it",
 		);
 
 		// then a longer hold over the row takes both the time and the reason
 		mgr.setUnbuildable(world.gameState, "structures/athen/house", 100, "limit");
-		assert.deepEqual(mgr.unbuildables.get("structures/athen/house"), { "reason": "limit", "time": 260 });
+		assert.deepEqual(mgr.unbuildables.get("structures/athen/house"), { reason: "limit", time: 260 });
 	});
 
 	it("setBuildable clears the hold", () =>
@@ -417,6 +418,6 @@ describe("the parking lot: unbuildables and their waits", () =>
 		assert.equal(restored.hasBuilder(templateName("structures/athen/house")), true);
 		const bookedIds = saved.builders.get(templateName("structures/athen/house"));
 		assert.deepEqual(bookedIds, [3001]);
-		assert.deepEqual(restored.unbuildables.get("structures/athen/fortress"), { "reason": "limit", "time": 190 });
+		assert.deepEqual(restored.unbuildables.get("structures/athen/fortress"), { reason: "limit", time: 190 });
 	});
 });

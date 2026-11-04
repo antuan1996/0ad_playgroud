@@ -17,7 +17,7 @@ import { isPlaced } from "../adapter/placed.ts";
 import { createBorderMap, createTerritoryMap, type TerritoryMap } from "./mapModule.ts";
 
 /** The land and sea regions we use, and whether the map has a sea worth a navy. */
-type MapRegions = { landRegions: Record<number, boolean>; navalRegions: Record<number, boolean>; navalMap: boolean };
+type MapRegions = { landRegions: Record<number, boolean>; navalRegions: Record<number, boolean>; navalMap: boolean; };
 
 export class Geography
 {
@@ -68,7 +68,9 @@ export function seaBetween(
 {
 	const path = gameState.ai.accessibility.getTrajectToIndex(index1, index2);
 	if (path && path.length === 3 && gameState.ai.accessibility.regionType[path[1]] === "water")
+	{
 		return seaRegion(path[1]);
+	}
 
 	if (debug > 1)
 	{
@@ -80,7 +82,7 @@ export function seaBetween(
 }
 
 /** The sizes a region must pass, in passability cells (cellArea: the area of one). */
-type RegionSizes = { minLand: number; minWater: number; cellArea: number };
+type RegionSizes = { minLand: number; minWater: number; cellArea: number; };
 /** Where we stand, the sizes and the debug level, as the regions are classed. */
 type RegionAnalysis = {
 	landIndex: AccessIndex | undefined;
@@ -90,7 +92,9 @@ type RegionAnalysis = {
 };
 
 /** Where we stand: the land of a civic centre, else of a unit or trainer, else the sea one of them is on. */
-function homeRegions(gameState: CommonGameState): { landIndex: AccessIndex | undefined; seaIndex: SeaIndex | undefined }
+function homeRegions(
+	gameState: CommonGameState,
+): { landIndex: AccessIndex | undefined; seaIndex: SeaIndex | undefined; }
 {
 	const accessibility = gameState.ai.accessibility;
 	let landIndex;
@@ -111,7 +115,9 @@ function homeRegions(gameState: CommonGameState): { landIndex: AccessIndex | und
 		for (const ent of gameState.getOwnEntities().values())
 		{
 			if (!isPlaced(ent) || !ent.hasClass("Unit") && !ent.trainableEntities(civ))
+			{
 				continue;
+			}
 			const land = accessibility.getAccessValue(ent.position());
 			if (land > 1)
 			{
@@ -120,7 +126,9 @@ function homeRegions(gameState: CommonGameState): { landIndex: AccessIndex | und
 			}
 			const sea = accessibility.getAccessValue(ent.position(), true);
 			if (!seaIndex && sea > 1)
+			{
 				seaIndex = sea;
+			}
 		}
 	}
 	return { landIndex, seaIndex };
@@ -140,32 +148,40 @@ function analyseRegions(gameState: CommonGameState, debug: number): MapRegions |
 		return undefined;
 	}
 
-	const regions: MapRegions = { "landRegions": {}, "navalRegions": {}, "navalMap": false };
+	const regions: MapRegions = { landRegions: {}, navalRegions: {}, navalMap: false };
 	const accessibility = gameState.ai.accessibility;
 	const passabilityMap = gameState.getPassabilityMap();
 	const totalSize = passabilityMap.width * passabilityMap.width;
 	const sizes: RegionSizes = {
-		"minLand": Math.floor(0.1 * totalSize),
-		"minWater": Math.floor(0.2 * totalSize),
-		"cellArea": passabilityMap.cellSize * passabilityMap.cellSize,
+		minLand: Math.floor(0.1 * totalSize),
+		minWater: Math.floor(0.2 * totalSize),
+		cellArea: passabilityMap.cellSize * passabilityMap.cellSize,
 	};
 	for (let i = 0; i < accessibility.regionSize.length; ++i)
 	{
 		if (landIndex && i === landIndex)
+		{
 			regions.landRegions[i] = true;
+		}
 		else if (accessibility.regionType[i] === "land" && sizes.cellArea * accessibility.regionSize[i] > 320)
+		{
 			addLandOverseas(gameState, regions, landRegion(i), { ...home, sizes, debug });
+		}
 		else if (accessibility.regionType[i] === "water" && accessibility.regionSize[i] > sizes.minWater)
 		{
 			regions.navalMap = true;
 			regions.navalRegions[i] = true;
 		}
 		else if (accessibility.regionType[i] === "water" && sizes.cellArea * accessibility.regionSize[i] > 3600)
+		{
 			regions.navalRegions[i] = true;
+		}
 	}
 
 	if (debug >= 3)
+	{
 		warnRegions(gameState, regions, sizes.cellArea);
+	}
 	return regions;
 }
 
@@ -194,7 +210,9 @@ function addLandOverseas(
 		return;
 	}
 	if (seaIndex === undefined)
+	{
 		return;
+	}
 	const traject = accessibility.getTrajectToIndex(seaIndex, land);
 	if (traject && traject.length === 2)
 	{

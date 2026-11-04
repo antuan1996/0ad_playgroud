@@ -31,21 +31,21 @@ const FEMALE = "units/athen/support_female_citizen";
 function seat(options: Partial<HqWorldOptions> = {})
 {
 	const world = makeHqWorld(options);
-	const hq = seatHQ(world, { "stubs": doorManagers });
+	const hq = seatHQ(world, { stubs: doorManagers });
 	// the engine hands template leaves over as strings (parsed XML)
 	world.templates[SPEARMAN] = fake<CommonTemplate>({
 		...makeTemplate(SPEARMAN, {
-			"classes": ["Unit", "Infantry", "Soldier"],
-			"getPaths": { "Cost": { "Population": "1" } },
+			classes: ["Unit", "Infantry", "Soldier"],
+			getPaths: { Cost: { Population: "1" } },
 		}),
 		// a building's batch-time bonus makes a unit cheaper there, as Template.cost(trainer) reckons it
-		"cost": (trainer?: CommonEntity) => ({ "food": trainer?.hasClass("Barracks") ? 40 : 50, "wood": 50 }),
-		"costSum": (trainer?: CommonEntity) => trainer?.hasClass("Barracks") ? 90 : 100,
+		cost: (trainer?: CommonEntity) => ({ food: trainer?.hasClass("Barracks") ? 40 : 50, wood: 50 }),
+		costSum: (trainer?: CommonEntity) => trainer?.hasClass("Barracks") ? 90 : 100,
 	});
 	world.templates[FEMALE] = makeTemplate(FEMALE, {
-		"classes": ["Unit", "Support", "Worker"],
-		"cost": { "food": 50 },
-		"getPaths": { "Cost": { "Population": "1" } },
+		classes: ["Unit", "Support", "Worker"],
+		cost: { food: 50 },
+		getPaths: { Cost: { Population: "1" } },
 	});
 	return { world, hq };
 }
@@ -56,25 +56,24 @@ function trainer(
 	id: number,
 	classes: string[],
 	trainables: string[],
-	options: { position?: [number, number]; queueTime?: number; metadata?: Record<string, unknown> } = {},
+	options: { position?: [number, number]; queueTime?: number; metadata?: Record<string, unknown>; } = {},
 )
 {
 	const orders: unknown[][] = [];
 	const ent = world.addEntity(
-		makeHqEntity({
-			id,
-			"owner": PLAYER,
-			"position": options.position ?? [80, 80],
-			"classes": ["Structure", ...classes],
-		}, {
-			"trainingQueue": () => [],
-			"trainableEntities": () => trainables,
-			"trainingQueueTime": () => options.queueTime ?? 0,
-			"train": (civ: string, type: string, count: number, metadata: unknown) =>
-				orders.push([civ, type, count, metadata]),
-			"research": (type: string) => orders.push(["research", type]),
-			"stopAllProduction": (ratio: number) => orders.push(["stop", ratio]),
-		}, options.metadata ?? {}),
+		makeHqEntity(
+			{ id, owner: PLAYER, position: options.position ?? [80, 80], classes: ["Structure", ...classes] },
+			{
+				trainingQueue: () => [],
+				trainableEntities: () => trainables,
+				trainingQueueTime: () => options.queueTime ?? 0,
+				train: (civ: string, type: string, count: number, metadata: unknown) =>
+					orders.push([civ, type, count, metadata]),
+				research: (type: string) => orders.push(["research", type]),
+				stopAllProduction: (ratio: number) => orders.push(["stop", ratio]),
+			},
+			options.metadata ?? {},
+		),
 	);
 	return { ent, orders };
 }
@@ -84,7 +83,7 @@ describe("a batch of units: TrainingPlan", () =>
 	it("costs the unit's price per head and its population, read from the template", () =>
 	{
 		const { world } = seat();
-		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "role": "worker" }, 3, 4);
+		const plan = new TrainingPlan(world.gameState, SPEARMAN, { role: "worker" }, 3, 4);
 		assert.deepEqual([plan.cost.food, plan.cost.wood, plan.cost.population], [50, 50, 1]);
 		assert.equal(typeof plan.cost.population, "number", "the template's string is read as a number");
 		assert.equal(plan.number, 3);
@@ -104,32 +103,32 @@ describe("a batch of units: TrainingPlan", () =>
 		trainer(world, 301, ["Barracks"], [SPEARMAN]);
 		assert.ok(plan.canStart(world.gameState));
 		assert.equal(plan.cost.food, 40, "at the barracks' price");
-		assert.deepEqual(plan.getBestTrainers(world.gameState)?.map(e => e.id()), [301]);
+		assert.deepEqual(plan.getBestTrainers(world.gameState)?.map((e) => e.id()), [301]);
 	});
 
 	it("keeps to the named building, the plan's sea and the plan's town", () =>
 	{
 		const { world } = seat();
-		trainer(world, 300, ["Barracks"], [SPEARMAN], { "metadata": { "base": 2 } });
-		trainer(world, 301, ["Barracks"], [SPEARMAN], { "metadata": { "base": 3, "sea": 5 } });
+		trainer(world, 300, ["Barracks"], [SPEARMAN], { metadata: { base: 2 } });
+		trainer(world, 301, ["Barracks"], [SPEARMAN], { metadata: { base: 3, sea: 5 } });
 		const ids = (metadata: Record<string, unknown>) =>
-			new TrainingPlan(world.gameState, SPEARMAN, metadata).getBestTrainers(world.gameState)?.map(e => e.id());
+			new TrainingPlan(world.gameState, SPEARMAN, metadata).getBestTrainers(world.gameState)?.map((e) => e.id());
 
-		assert.deepEqual(ids({ "trainer": 301 }), [301]);
-		assert.deepEqual(ids({ "trainer": 999 }), [300, 301], "a named building gone: any will do");
-		assert.deepEqual(ids({ "sea": 5 }), [301]);
-		assert.deepEqual(ids({ "base": 2 }), [300]);
-		assert.equal(ids({ "base": 7 }), undefined);
+		assert.deepEqual(ids({ trainer: 301 }), [301]);
+		assert.deepEqual(ids({ trainer: 999 }), [300, 301], "a named building gone: any will do");
+		assert.deepEqual(ids({ sea: 5 }), [301]);
+		assert.deepEqual(ids({ base: 2 }), [300]);
+		assert.equal(ids({ base: 7 }), undefined);
 	});
 
 	it("starts at its building, telling the game the batch, and drops the building's name from the units' orders", () =>
 	{
 		const { world } = seat();
-		const barracks = trainer(world, 301, ["Barracks"], [SPEARMAN], { "metadata": { "base": 2 } });
+		const barracks = trainer(world, 301, ["Barracks"], [SPEARMAN], { metadata: { base: 2 } });
 		const plan = new TrainingPlan(world.gameState, SPEARMAN, {
-			"trainer": entityId(301),
-			"role": "worker",
-			"base": NO_BASE,
+			trainer: entityId(301),
+			role: "worker",
+			base: NO_BASE,
 		}, 5);
 		const start = requireValue(plan.canStart(world.gameState));
 
@@ -137,7 +136,7 @@ describe("a batch of units: TrainingPlan", () =>
 
 		assert.deepEqual(
 			barracks.orders,
-			[["athen", SPEARMAN, 5, { "role": "worker", "base": 2 }]],
+			[["athen", SPEARMAN, 5, { role: "worker", base: 2 }]],
 			"a plan for no town in particular takes its building's town",
 		);
 	});
@@ -145,12 +144,12 @@ describe("a batch of units: TrainingPlan", () =>
 	it("among several buildings, prefers a short queue, a barracks over the town centre for soldiers", () =>
 	{
 		const { world } = seat();
-		const cc = trainer(world, 300, ["CivCentre", "Civic"], [SPEARMAN], { "queueTime": 5 });
-		const busy = trainer(world, 301, ["Barracks"], [SPEARMAN], { "queueTime": 20 });
-		const idle = trainer(world, 302, ["Barracks"], [SPEARMAN], { "queueTime": 12 });
+		const cc = trainer(world, 300, ["CivCentre", "Civic"], [SPEARMAN], { queueTime: 5 });
+		const busy = trainer(world, 301, ["Barracks"], [SPEARMAN], { queueTime: 20 });
+		const idle = trainer(world, 302, ["Barracks"], [SPEARMAN], { queueTime: 12 });
 		const plan = new TrainingPlan(world.gameState, SPEARMAN);
 		// every building at the same price for this test
-		override(plan.template, { "costSum": () => 100 });
+		override(plan.template, { costSum: () => 100 });
 		const start = requireValue(plan.canStart(world.gameState));
 
 		start();
@@ -165,9 +164,9 @@ describe("a batch of units: TrainingPlan", () =>
 	it("keeps support units away from an invading army", () =>
 	{
 		const { world, hq } = seat();
-		hq.defenseManager.armies.push(fake<DefenseArmy>({ "foePosition": [80, 80] }));
-		const threatened = trainer(world, 300, ["CivCentre", "Civic"], [FEMALE], { "position": [80, 80] });
-		const safe = trainer(world, 301, ["CivCentre", "Civic"], [FEMALE], { "position": [280, 280], "queueTime": 30 });
+		hq.defenseManager.armies.push(fake<DefenseArmy>({ foePosition: [80, 80] }));
+		const threatened = trainer(world, 300, ["CivCentre", "Civic"], [FEMALE], { position: [80, 80] });
+		const safe = trainer(world, 301, ["CivCentre", "Civic"], [FEMALE], { position: [280, 280], queueTime: 30 });
 		const plan = new TrainingPlan(world.gameState, FEMALE);
 		const start = requireValue(plan.canStart(world.gameState));
 
@@ -184,24 +183,21 @@ describe("a batch of units: TrainingPlan", () =>
 		const islandCC = world.addEntity(
 			makeHqEntity(
 				{
-					"id": 290,
-					"owner": PLAYER,
-					"position": [280, 280],
-					"classes": ["Structure", "CivCentre"],
-					"templateName": "structures/athen/civil_centre",
+					id: 290,
+					owner: PLAYER,
+					position: [280, 280],
+					classes: ["Structure", "CivCentre"],
+					templateName: "structures/athen/civil_centre",
 				},
 				{},
-				{ "access": 3 },
+				{ access: 3 },
 			),
 		);
 		const island = hq.basesManager.createBase(world.gameState, islandCC, "anchored");
-		const away = trainer(world, 300, ["Barracks"], [SPEARMAN], { "metadata": { "base": island.ID } });
+		const away = trainer(world, 300, ["Barracks"], [SPEARMAN], { metadata: { base: island.ID } });
 		const noTown = trainer(world, 301, ["Barracks"], [SPEARMAN]);
-		const home = trainer(world, 302, ["Barracks"], [SPEARMAN], {
-			"metadata": { "base": town.ID },
-			"queueTime": 20,
-		});
-		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "index": town.accessIndex, "role": "worker" });
+		const home = trainer(world, 302, ["Barracks"], [SPEARMAN], { metadata: { base: town.ID }, queueTime: 20 });
+		const plan = new TrainingPlan(world.gameState, SPEARMAN, { index: town.accessIndex, role: "worker" });
 		const start = requireValue(plan.canStart(world.gameState));
 
 		start();
@@ -216,7 +212,7 @@ describe("a batch of units: TrainingPlan", () =>
 	it("is saved and loaded whole", () =>
 	{
 		const { world } = seat();
-		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "role": "worker" }, 2, 3);
+		const plan = new TrainingPlan(world.gameState, SPEARMAN, { role: "worker" }, 2, 3);
 		const saved = JSON.parse(JSON.stringify(plan.Serialize()));
 		const loaded = TrainingPlan.restore(world.gameState, saved);
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
@@ -232,14 +228,14 @@ describe("a technology: ResearchPlan", () =>
 	{
 		const s = seat(options);
 		s.world.templates[TECH] = fake<CommonTemplate>({
-			"researchTime": 40,
-			"cost": () => ({ "wood": 200, "metal": 100 }),
-			"costSum": () => 300,
+			researchTime: 40,
+			cost: () => ({ wood: 200, metal: 100 }),
+			costSum: () => 300,
 		});
 		const gs = s.world.gameState;
 		gs.findResearchers = () =>
 			s.world.gameState.getOwnStructures().filter((e: CommonEntity) =>
-				researchers.some(r => r.ent.id() === e.id())
+				researchers.some((r) => r.ent.id() === e.id())
 			);
 		gs.isResearched = () => false;
 		return { ...s, researchers };
@@ -261,8 +257,8 @@ describe("a technology: ResearchPlan", () =>
 	it("is researched at the building with the shortest queue; a rushed tech clears that queue first", () =>
 	{
 		const s = lab();
-		const busy = trainer(s.world, 300, ["Storehouse"], [], { "queueTime": 30 });
-		const free = trainer(s.world, 301, ["Storehouse"], [], { "queueTime": 2 });
+		const busy = trainer(s.world, 300, ["Storehouse"], [], { queueTime: 30 });
+		const free = trainer(s.world, 301, ["Storehouse"], [], { queueTime: 2 });
 		s.researchers.push(busy, free);
 		const plan = new ResearchPlan(s.world.gameState, TECH, true);
 		const start = requireValue(plan.canStart(s.world.gameState));
@@ -275,11 +271,11 @@ describe("a technology: ResearchPlan", () =>
 
 	it("starting a phase tells the office the phase is coming; a reset queue gets its priority back", () =>
 	{
-		const s = lab({ "phaseName": "phase_town_generic" });
+		const s = lab({ phaseName: "phase_town_generic" });
 		s.world.templates["phase_town_generic"] = fake<CommonTemplate>({
-			"researchTime": 60,
-			"cost": () => ({ "food": 500 }),
-			"costSum": () => 500,
+			researchTime: 60,
+			cost: () => ({ food: 500 }),
+			costSum: () => 500,
 		});
 		s.researchers.push(trainer(s.world, 300, ["CivCentre"], []));
 		const phasedUp: number[] = [];
@@ -301,7 +297,7 @@ describe("a technology: ResearchPlan", () =>
 
 	it("a tech already researched, or being researched, is no longer wanted", () =>
 	{
-		const s = lab({ "researching": [TECH] });
+		const s = lab({ researching: [TECH] });
 		const plan = new ResearchPlan(s.world.gameState, TECH);
 		assert.equal(plan.isInvalid(s.world.gameState), true);
 

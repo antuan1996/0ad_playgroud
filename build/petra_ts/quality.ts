@@ -90,7 +90,7 @@ export interface SourceMetrics
 	module: ModuleMetrics;
 }
 
-export const THRESHOLDS = { "lines": 80, "cyclomatic": 15, "cognitive": 25, "depth": 4, "params": 5 } as const;
+export const THRESHOLDS = { lines: 80, cyclomatic: 15, cognitive: 25, depth: 4, params: 5 } as const;
 
 type FunctionNode =
 	| ts.FunctionDeclaration
@@ -125,9 +125,13 @@ function lineOf(source: ts.SourceFile, pos: number): number
 function propertyName(name: ts.PropertyName | ts.BindingName | undefined, source: ts.SourceFile): string | undefined
 {
 	if (!name)
+	{
 		return undefined;
+	}
 	if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name))
+	{
 		return name.text;
+	}
 	return name.getText(source);
 }
 
@@ -140,21 +144,31 @@ function functionName(node: FunctionNode, source: ts.SourceFile, outer: string |
 		undefined;
 	let own: string | undefined;
 	if (ts.isConstructorDeclaration(node))
+	{
 		own = "constructor";
+	}
 	else if (
 		ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
 		ts.isSetAccessorDeclaration(node) || ts.isFunctionExpression(node)
 	)
+	{
 		own = propertyName(node.name, source);
+	}
 	if (
 		!own && parent &&
 		(ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isPropertyAssignment(parent))
 	)
+	{
 		own = propertyName(parent.name, source);
+	}
 	if (owner)
+	{
 		return `${owner}.${own ?? "(anonymous)"}`;
+	}
 	if (own)
+	{
 		return outer ? `${outer} > ${own}` : own;
+	}
 	const kind = ts.isArrowFunction(node) ? "arrow" : "function";
 	return `${outer ?? "(module)"} > ${kind}@${lineOf(source, node.getStart(source))}`;
 }
@@ -163,7 +177,9 @@ function skipParentheses(node: ts.Node): ts.Node
 {
 	let current = node.parent;
 	while (current && ts.isParenthesizedExpression(current))
+	{
 		current = current.parent;
+	}
 	return current;
 }
 
@@ -178,7 +194,9 @@ function measureFunction(node: FunctionNode, source: ts.SourceFile, name: string
 	function visit(current: ts.Node, nesting: number): void
 	{
 		if (current !== node && isFunctionNode(current))
+		{
 			return;
+		}
 		if (ts.isIfStatement(current))
 		{
 			const elseIf = ts.isIfStatement(current.parent) && current.parent.elseStatement === current;
@@ -192,7 +210,9 @@ function measureFunction(node: FunctionNode, source: ts.SourceFile, name: string
 			if (otherwise)
 			{
 				if (ts.isIfStatement(otherwise))
+				{
 					visit(otherwise, nesting);
+				}
 				else
 				{
 					cognitive += 1;
@@ -218,42 +238,56 @@ function measureFunction(node: FunctionNode, source: ts.SourceFile, name: string
 		)
 		{
 			if (!ts.isSwitchStatement(current))
+			{
 				cyclomatic += 1;
+			}
 			cognitive += 1 + nesting;
 			depth = Math.max(depth, nesting + 1);
-			ts.forEachChild(current, child => nested(child, nesting));
+			ts.forEachChild(current, (child) => nested(child, nesting));
 			return;
 		}
 		if (ts.isCaseClause(current))
+		{
 			cyclomatic += 1;
+		}
 		if (ts.isBinaryExpression(current) && LOGICAL.has(current.operatorToken.kind))
 		{
 			cyclomatic += 1;
 			const outer = skipParentheses(current);
 			// a run of like operators costs 1, where it starts
 			if (!(outer && ts.isBinaryExpression(outer) && outer.operatorToken.kind === current.operatorToken.kind))
+			{
 				cognitive += 1;
+			}
 		}
 		if ((ts.isBreakStatement(current) || ts.isContinueStatement(current)) && current.label)
+		{
 			cognitive += 1;
-		ts.forEachChild(current, child => visit(child, nesting));
+		}
+		ts.forEachChild(current, (child) => visit(child, nesting));
 	}
 	if (node.body)
+	{
 		visit(node.body, 0);
+	}
 	for (const parameter of node.parameters)
+	{
 		if (parameter.initializer)
+		{
 			visit(parameter.initializer, 0);
+		}
+	}
 
 	const start = lineOf(source, node.getStart(source));
 	return {
-		"file": source.fileName,
+		file: source.fileName,
 		name,
-		"line": start,
-		"lines": lineOf(source, node.getEnd()) - start + 1,
+		line: start,
+		lines: lineOf(source, node.getEnd()) - start + 1,
 		cyclomatic,
 		cognitive,
 		depth,
-		"params": node.parameters.length,
+		params: node.parameters.length,
 	};
 }
 
@@ -269,11 +303,15 @@ function codeLines(text: string): number
 			kind === ts.SyntaxKind.WhitespaceTrivia || kind === ts.SyntaxKind.NewLineTrivia ||
 			kind === ts.SyntaxKind.SingleLineCommentTrivia || kind === ts.SyntaxKind.MultiLineCommentTrivia
 		)
+		{
 			continue;
+		}
 		const first = lineOf(source, scanner.getTokenStart());
 		const last = lineOf(source, scanner.getTokenEnd());
 		for (let line = first; line <= last; ++line)
+		{
 			lines.add(line);
+		}
 	}
 	return lines.size;
 }
@@ -292,7 +330,7 @@ export function measureSource(file: string, text: string): SourceMetrics
 		{
 			const name = functionName(node, source, outer);
 			functions.push(measureFunction(node, source, name));
-			ts.forEachChild(node, child => visit(child, name));
+			ts.forEachChild(node, (child) => visit(child, name));
 			return;
 		}
 		if (ts.isClassDeclaration(node) || ts.isClassExpression(node))
@@ -300,35 +338,35 @@ export function measureSource(file: string, text: string): SourceMetrics
 			const start = lineOf(source, node.getStart(source));
 			classes.push({
 				file,
-				"name": node.name?.text ?? "(class)",
-				"line": start,
-				"lines": lineOf(source, node.getEnd()) - start + 1,
-				"methods": node.members.filter(m =>
+				name: node.name?.text ?? "(class)",
+				line: start,
+				lines: lineOf(source, node.getEnd()) - start + 1,
+				methods: node.members.filter((m) =>
 					ts.isMethodDeclaration(m) || ts.isConstructorDeclaration(m) ||
 					ts.isGetAccessorDeclaration(m) || ts.isSetAccessorDeclaration(m)
 				).length,
-				"fields": node.members.filter(m =>
+				fields: node.members.filter((m) =>
 					ts.isPropertyDeclaration(m)
 				).length,
 			});
 		}
-		ts.forEachChild(node, child => visit(child, outer));
+		ts.forEachChild(node, (child) => visit(child, outer));
 	}
 	visit(source, undefined);
 
 	return {
 		functions,
 		classes,
-		"module": {
+		module: {
 			file,
-			"codeLines": codeLines(text),
-			"functions": functions.length,
-			"classes": classes.length,
-			"cyclomatic": functions.reduce((sum, f) => sum + f.cyclomatic, 0),
-			"cognitive": functions.reduce((sum, f) => sum + f.cognitive, 0),
-			"maxCyclomatic": Math.max(0, ...functions.map(f => f.cyclomatic)),
-			"maxCognitive": Math.max(0, ...functions.map(f => f.cognitive)),
-			"duplicatedLines": 0,
+			codeLines: codeLines(text),
+			functions: functions.length,
+			classes: classes.length,
+			cyclomatic: functions.reduce((sum, f) => sum + f.cyclomatic, 0),
+			cognitive: functions.reduce((sum, f) => sum + f.cognitive, 0),
+			maxCyclomatic: Math.max(0, ...functions.map((f) => f.cyclomatic)),
+			maxCognitive: Math.max(0, ...functions.map((f) => f.cognitive)),
+			duplicatedLines: 0,
 		},
 	};
 }
@@ -367,30 +405,34 @@ interface TokenisedSource
 function tokenise(file: string, text: string, renamed: boolean, ids: Map<string, number>): TokenisedSource
 {
 	const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-	const skipped: Array<[number, number]> = source.statements.filter(s =>
+	const skipped: Array<[number, number]> = source.statements.filter((s) =>
 		ts.isImportDeclaration(s) || ts.isImportEqualsDeclaration(s)
-	).map(s => [s.getStart(source), s.getEnd()]);
+	).map((s) => [s.getStart(source), s.getEnd()]);
 	const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
 	const tokens: Token[] = [];
 	for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan())
 	{
 		const start = scanner.getTokenStart();
 		if (skipped.some(([from, to]) => start >= from && start < to))
+		{
 			continue;
+		}
 		let key = scanner.getTokenText();
 		if (
 			renamed &&
 			(kind === ts.SyntaxKind.Identifier || kind === ts.SyntaxKind.StringLiteral ||
 				kind === ts.SyntaxKind.NumericLiteral || kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral)
 		)
+		{
 			key = `<${kind}>`;
+		}
 		let id = ids.get(key);
 		if (id === undefined)
 		{
 			id = ids.size;
 			ids.set(key, id);
 		}
-		tokens.push({ id, start, "end": scanner.getTokenEnd() });
+		tokens.push({ id, start, end: scanner.getTokenEnd() });
 	}
 	return { file, source, tokens };
 }
@@ -403,41 +445,53 @@ function windowHashes(tokens: Token[], size: number): number[]
 {
 	const hashes: number[] = [];
 	if (tokens.length < size)
+	{
 		return hashes;
+	}
 	let power = 1;
 	for (let i = 1; i < size; ++i)
+	{
 		power = power * HASH_BASE % HASH_MOD;
+	}
 	let hash = 0;
 	for (let i = 0; i < tokens.length; ++i)
 	{
 		if (i >= size)
+		{
 			hash = (hash - (tokens[i - size].id + 1) * power % HASH_MOD + HASH_MOD) % HASH_MOD;
+		}
 		hash = (hash * HASH_BASE + tokens[i].id + 1) % HASH_MOD;
 		if (i >= size - 1)
+		{
 			hashes.push(hash);
+		}
 	}
 	return hashes;
 }
 
 /** Copies of code: runs of at least minTokens tokens, over minLines lines, that occur twice or more, each run once. */
 export function findClones(
-	sources: Array<{ file: string; text: string }>,
+	sources: Array<{ file: string; text: string; }>,
 	minTokens: number,
 	minLines: number,
 	renamed = false,
 ): Clone[]
 {
 	const ids = new Map<string, number>();
-	const tokenised = sources.map(s => tokenise(s.file, s.text, renamed, ids));
+	const tokenised = sources.map((s) => tokenise(s.file, s.text, renamed, ids));
 	const buckets = new Map<number, Array<[number, number]>>();
 	tokenised.forEach((t, fileIndex) =>
 		windowHashes(t.tokens, minTokens).forEach((hash, position) =>
 		{
 			const bucket = buckets.get(hash);
 			if (bucket)
+			{
 				bucket.push([fileIndex, position]);
+			}
 			else
+			{
 				buckets.set(hash, [[fileIndex, position]]);
+			}
 		})
 	);
 
@@ -449,7 +503,9 @@ export function findClones(
 	{
 		let root = key;
 		while (parent.get(root) !== root)
+		{
 			root = parent.get(root) ?? root;
+		}
 		parent.set(key, root);
 		return root;
 	};
@@ -462,7 +518,9 @@ export function findClones(
 	{
 		// a pattern repeated very often (a run of closing brackets) is no copy of code
 		if (bucket.length < 2 || bucket.length > 40)
+		{
 			continue;
+		}
 		for (let i = 0; i < bucket.length; ++i)
 		{
 			for (let j = i + 1; j < bucket.length; ++j)
@@ -471,20 +529,30 @@ export function findClones(
 				const [fb, pb] = bucket[j];
 				// only where the two copies start to agree, so each clone is found once
 				if (same(fa, pa - 1, fb, pb - 1))
+				{
 					continue;
+				}
 				let length = 0;
 				while (same(fa, pa + length, fb, pb + length))
+				{
 					++length;
+				}
 				if (length < minTokens)
+				{
 					continue; // a hash collision
+				}
 				if (fa === fb && pb < pa + length)
+				{
 					continue; // a copy overlapping itself
+				}
 				const a = `${fa}:${pa}`;
 				const b = `${fb}:${pb}`;
 				for (const [key, at] of [[a, [fa, pa]], [b, [fb, pb]]] as const)
 				{
 					if (!parent.has(key))
+					{
 						parent.set(key, key);
+					}
 					starts.set(key, [at[0], at[1]]);
 				}
 				const ra = find(a);
@@ -501,9 +569,13 @@ export function findClones(
 		const root = find(key);
 		const members = components.get(root);
 		if (members)
+		{
 			members.push(key);
+		}
 		else
+		{
 			components.set(root, [key]);
+		}
 	}
 	const clones: Clone[] = [];
 	for (const [root, members] of components)
@@ -514,14 +586,16 @@ export function findClones(
 			const [f, p] = starts.get(key) ?? [0, 0];
 			const t = tokenised[f];
 			return {
-				"file": t.file,
-				"startLine": lineOf(t.source, t.tokens[p].start),
-				"endLine": lineOf(t.source, t.tokens[p + length - 1].end),
+				file: t.file,
+				startLine: lineOf(t.source, t.tokens[p].start),
+				endLine: lineOf(t.source, t.tokens[p + length - 1].end),
 			};
 		}).sort((x, y) => x.file.localeCompare(y.file) || x.startLine - y.startLine);
-		const lines = Math.min(...copies.map(c => c.endLine - c.startLine + 1));
+		const lines = Math.min(...copies.map((c) => c.endLine - c.startLine + 1));
 		if (lines >= minLines)
-			clones.push({ "tokens": length, lines, copies });
+		{
+			clones.push({ tokens: length, lines, copies });
+		}
 	}
 	clones.sort((x, y) =>
 		y.tokens * y.copies.length - x.tokens * x.copies.length ||
@@ -532,8 +606,12 @@ export function findClones(
 	const inside = (c: CloneSide, d: CloneSide): boolean =>
 		c.file === d.file && c.startLine >= d.startLine && c.endLine <= d.endLine;
 	for (const clone of clones)
-		if (!kept.some(k => clone.copies.every(c => k.copies.some(d => inside(c, d)))))
+	{
+		if (!kept.some((k) => clone.copies.every((c) => k.copies.some((d) => inside(c, d)))))
+		{
 			kept.push(clone);
+		}
+	}
 	return kept;
 }
 
@@ -547,9 +625,13 @@ export function duplicatedLinesByFile(clones: Clone[]): Map<string, number>
 		{
 			let set = lines.get(side.file);
 			if (!set)
+			{
 				lines.set(side.file, set = new Set());
+			}
 			for (let line = side.startLine; line <= side.endLine; ++line)
+			{
 				set.add(line);
+			}
 		}
 	}
 	return new Map([...lines].map(([file, set]) => [file, set.size]));
@@ -564,22 +646,28 @@ function sourceFiles(dir: string, withTests: boolean): string[]
 		if (statSync(path).isDirectory())
 		{
 			if (entry === "tests" && !withTests)
+			{
 				continue;
+			}
 			if (entry === "node_modules")
+			{
 				continue;
+			}
 			files.push(...sourceFiles(path, withTests));
 		}
 		else if (entry.endsWith(".ts") && !entry.endsWith(".d.ts"))
+		{
 			files.push(path);
+		}
 	}
 	return files;
 }
 
 function table(header: string[], rows: Array<Array<string | number>>, right: number[] = []): string
 {
-	const cells = [header, ...rows.map(r => r.map(String))];
-	const widths = header.map((_, c) => Math.max(...cells.map(r => r[c].length)));
-	return cells.map(r =>
+	const cells = [header, ...rows.map((r) => r.map(String))];
+	const widths = header.map((_, c) => Math.max(...cells.map((r) => r[c].length)));
+	return cells.map((r) =>
 		r.map((cell, c) => right.includes(c) ? cell.padStart(widths[c]) : cell.padEnd(widths[c])).join("  ").trimEnd()
 	).join("\n");
 }
@@ -601,21 +689,23 @@ function main(args: string[]): void
 	const json = option(args, "--json");
 
 	const files = sourceFiles(portDir, args.includes("--tests"));
-	const sources = files.map(path => ({ "file": relative(portDir, path), "text": readFileSync(path, "utf8") }));
-	const measured = sources.map(s => measureSource(s.file, s.text));
+	const sources = files.map((path) => ({ file: relative(portDir, path), text: readFileSync(path, "utf8") }));
+	const measured = sources.map((s) => measureSource(s.file, s.text));
 	const clones = findClones(sources, minTokens, minLines, args.includes("--renamed"));
 	const duplicated = duplicatedLinesByFile(clones);
 	for (const m of measured)
+	{
 		m.module.duplicatedLines = duplicated.get(m.module.file) ?? 0;
+	}
 
 	const selected = (file: string): boolean => !only || file.includes(only);
-	const modules = measured.map(m => m.module).filter(m => selected(m.file));
-	const functions = measured.flatMap(m => m.functions).filter(f => selected(f.file));
-	const classes = measured.flatMap(m => m.classes).filter(c => selected(c.file));
-	const shownClones = clones.filter(c => c.copies.some(copy => selected(copy.file)));
+	const modules = measured.map((m) => m.module).filter((m) => selected(m.file));
+	const functions = measured.flatMap((m) => m.functions).filter((f) => selected(f.file));
+	const classes = measured.flatMap((m) => m.classes).filter((c) => selected(c.file));
+	const shownClones = clones.filter((c) => c.copies.some((copy) => selected(copy.file)));
 
 	const over = (f: FunctionMetrics): string[] =>
-		(Object.keys(THRESHOLDS) as Array<keyof typeof THRESHOLDS>).filter(key => f[key] > THRESHOLDS[key]);
+		(Object.keys(THRESHOLDS) as Array<keyof typeof THRESHOLDS>).filter((key) => f[key] > THRESHOLDS[key]);
 	const totalLines = modules.reduce((sum, m) => sum + m.codeLines, 0);
 	const totalDuplicated = modules.reduce((sum, m) => sum + m.duplicatedLines, 0);
 	const percent = (part: number, whole: number): string => whole ? `${(100 * part / whole).toFixed(1)}%` : "-";
@@ -626,10 +716,9 @@ function main(args: string[]): void
 	);
 	console.log(
 		`functions over the thresholds (${Object.entries(THRESHOLDS).map(([k, v]) => `${k} ${v}`).join(", ")}): ` +
-			`${functions.filter(f => over(f).length).length}; ` +
-			Object.keys(THRESHOLDS).map(key => `${key} ${functions.filter(f => over(f).includes(key)).length}`).join(
-				", ",
-			),
+			`${functions.filter((f) => over(f).length).length}; ` +
+			Object.keys(THRESHOLDS).map((key) => `${key} ${functions.filter((f) => over(f).includes(key)).length}`)
+				.join(", "),
 	);
 	console.log(
 		`duplicated: ${totalDuplicated} lines (${
@@ -644,20 +733,20 @@ function main(args: string[]): void
 	console.log(
 		table(
 			["module", "lines", "funcs", "classes", "cyclo", "cogn", "max cyclo", "max cogn", "over", "dup lines"],
-			[...modules].sort((x, y) => y.cognitive - x.cognitive).slice(0, top).map(
-				m => [
-					m.file,
-					m.codeLines,
-					m.functions,
-					m.classes,
-					m.cyclomatic,
-					m.cognitive,
-					m.maxCyclomatic,
-					m.maxCognitive,
-					functions.filter(f => f.file === m.file && over(f).length).length,
-					m.duplicatedLines,
-				]
-			),
+			[...modules].sort((x, y) => y.cognitive - x.cognitive).slice(0, top).map((
+				m,
+			) => [
+				m.file,
+				m.codeLines,
+				m.functions,
+				m.classes,
+				m.cyclomatic,
+				m.cognitive,
+				m.maxCyclomatic,
+				m.maxCognitive,
+				functions.filter((f) => f.file === m.file && over(f).length).length,
+				m.duplicatedLines,
+			]),
 			[1, 2, 3, 4, 5, 6, 7, 8, 9],
 		),
 	);
@@ -666,18 +755,18 @@ function main(args: string[]): void
 	console.log(
 		table(
 			["function", "where", "lines", "cyclo", "cogn", "depth", "params", "over"],
-			[...functions].sort((x, y) => y.cognitive - x.cognitive || y.cyclomatic - x.cyclomatic).slice(0, top).map(
-				f => [
-					f.name,
-					`${f.file}:${f.line}`,
-					f.lines,
-					f.cyclomatic,
-					f.cognitive,
-					f.depth,
-					f.params,
-					over(f).join(","),
-				]
-			),
+			[...functions].sort((x, y) => y.cognitive - x.cognitive || y.cyclomatic - x.cyclomatic).slice(0, top).map((
+				f,
+			) => [
+				f.name,
+				`${f.file}:${f.line}`,
+				f.lines,
+				f.cyclomatic,
+				f.cognitive,
+				f.depth,
+				f.params,
+				over(f).join(","),
+			]),
 			[2, 3, 4, 5, 6],
 		),
 	);
@@ -686,9 +775,9 @@ function main(args: string[]): void
 	console.log(
 		table(
 			["function", "where", "lines", "cyclo", "cogn"],
-			[...functions].sort((x, y) => y.lines - x.lines).slice(0, top).map(
-				f => [f.name, `${f.file}:${f.line}`, f.lines, f.cyclomatic, f.cognitive]
-			),
+			[...functions].sort((x, y) => y.lines - x.lines).slice(0, top).map((
+				f,
+			) => [f.name, `${f.file}:${f.line}`, f.lines, f.cyclomatic, f.cognitive]),
 			[2, 3, 4],
 		),
 	);
@@ -697,9 +786,9 @@ function main(args: string[]): void
 	console.log(
 		table(
 			["class", "where", "lines", "methods", "fields"],
-			[...classes].sort((x, y) => y.lines - x.lines).slice(0, top).map(
-				c => [c.name, `${c.file}:${c.line}`, c.lines, c.methods, c.fields]
-			),
+			[...classes].sort((x, y) => y.lines - x.lines).slice(0, top).map((
+				c,
+			) => [c.name, `${c.file}:${c.line}`, c.lines, c.methods, c.fields]),
 			[2, 3, 4],
 		),
 	);
@@ -708,19 +797,23 @@ function main(args: string[]): void
 	console.log(
 		table(
 			["tokens", "lines", "copies", "where"],
-			shownClones.slice(0, top).map(c => [
+			shownClones.slice(0, top).map((c) => [
 				c.tokens,
 				c.lines,
 				c.copies.length,
-				c.copies.map(copy => `${copy.file}:${copy.startLine}-${copy.endLine}`).join("  "),
+				c.copies.map((copy) => `${copy.file}:${copy.startLine}-${copy.endLine}`).join("  "),
 			]),
 			[0, 1, 2],
 		),
 	);
 
 	if (json)
-		writeFileSync(json, JSON.stringify({ modules, functions, classes, "clones": shownClones }, null, "\t") + "\n");
+	{
+		writeFileSync(json, JSON.stringify({ modules, functions, classes, clones: shownClones }, null, "\t") + "\n");
+	}
 }
 
 if (import.meta.filename === resolve(process.argv[1] ?? ""))
+{
 	main(process.argv.slice(2));
+}

@@ -21,7 +21,9 @@ export function dropsiteVerdict(type: string, gathering: number, carrying: numbe
 {
 	const total = gathering + carrying;
 	if (total <= 60 || total <= 150 && type === "wood")
+	{
 		return "wait";
+	}
 	return carrying / total > WALKING ? "closer" : "fine";
 }
 

@@ -54,9 +54,13 @@ const SHORE_ISLAND = 124; // first island cell past the shallows
 function landOf(px: number, island: boolean): number
 {
 	if (px < SEA_START)
+	{
 		return WEST;
+	}
 	if (island && px >= ISLAND_START)
+	{
 		return ISLAND;
+	}
 	return 1;
 }
 
@@ -78,7 +82,7 @@ export interface NavalWorld
  * so the ships and docks of the opening can be placed first.
  */
 export function navalWorld(
-	options: { island?: boolean; worldOptions?: Partial<HqWorldOptions>; stubs?: string[] } = {},
+	options: { island?: boolean; worldOptions?: Partial<HqWorldOptions>; stubs?: string[]; } = {},
 ): NavalWorld
 {
 	const island = options.island ?? true;
@@ -87,32 +91,35 @@ export function navalWorld(
 	const land = (px: number) => landOf(px, island);
 	const sea = (px: number) => seaOf(px, island);
 	const world = makeHqWorld({
-		"landPassMap": land,
-		"passabilityData": (px: number) =>
-			sea(px) > 1 && land(px) > 1 ? passShore : land(px) > 1 ? passLand : passWater,
-		"regionTypes": { [WEST]: "land", [ISLAND]: "land", [SEA]: "water" },
-		"regionLinks": { [WEST]: [SEA], [ISLAND]: [SEA], [SEA]: [WEST, ISLAND] },
-		"trajectories": { "2,3": [WEST, SEA, ISLAND], "3,2": [ISLAND, SEA, WEST] },
+		landPassMap: land,
+		passabilityData: (px: number) => sea(px) > 1 && land(px) > 1 ? passShore : land(px) > 1 ? passLand : passWater,
+		regionTypes: { [WEST]: "land", [ISLAND]: "land", [SEA]: "water" },
+		regionLinks: { [WEST]: [SEA], [ISLAND]: [SEA], [SEA]: [WEST, ISLAND] },
+		trajectories: { "2,3": [WEST, SEA, ISLAND], "3,2": [ISLAND, SEA, WEST] },
 		...options.worldOptions,
 	});
 
 	const naval = new Uint8Array(WIDTH * WIDTH);
 	for (let k = 0; k < naval.length; ++k)
+	{
 		naval[k] = sea(k % WIDTH);
+	}
 	layNavalPassMap(world, naval);
 	const access = world.ai.accessibility;
 	Object.assign(world.ai.accessibility, {
-		"height": WIDTH,
+		height: WIDTH,
 		// map units per passability cell, as the accessibility map's cellSize
-		"cellSize": 2,
+		cellSize: 2,
 		// the engine's per-region sizes: an array indexed by region
-		"regionSize": [0, 0, 20000, 20000, 0, 20000],
+		regionSize: [0, 0, 20000, 20000, 0, 20000],
 		// as Accessibility.getAccessValue: the land (or, onWater, the sea) region under a position
-		"getAccessValue": (pos: [number, number], onWater?: boolean) =>
+		getAccessValue: (pos: [number, number], onWater?: boolean) =>
 		{
 			const [px, pz] = access.gamePosToMapPos(worldPos(pos[0], pos[1]));
 			if (px < 0 || px >= WIDTH || pz < 0 || pz >= WIDTH)
+			{
 				return 0;
+			}
 			return onWater ? naval[px + pz * WIDTH] : world.map.landPassMap[px + pz * WIDTH];
 		},
 	});
@@ -140,19 +147,25 @@ export function navalWorld(
 		{
 			setMetadata(player, key, value);
 			for (const collection of registered)
-				if (collection.dynamicProperties().some(p => p === "metadata" || p === "metadata." + key))
+			{
+				if (collection.dynamicProperties().some((p) => p === "metadata" || p === "metadata." + key))
+				{
 					collection.updateEnt(ent);
+				}
+			}
 		};
 		for (const collection of registered)
+		{
 			collection.updateEnt(ent);
+		}
 		return ent;
 	};
 
 	const hq = seatHQ(world, {
 		stubs,
-		"landRegions": { [WEST]: true, [ISLAND]: true },
-		"navalMap": true,
-		"navalRegions": { [SEA]: true },
+		landRegions: { [WEST]: true, [ISLAND]: true },
+		navalMap: true,
+		navalRegions: { [SEA]: true },
 	});
 	hq.updateTerritories(world.gameState);
 	return { world, hq };
@@ -186,40 +199,40 @@ export function ship(
 )
 {
 	const state: ShipState = {
-		"pos": position,
-		"garrisoned": [],
-		"moves": [],
-		"moveApart": [],
-		"unloaded": [],
-		"stance": "aggressive",
-		"aiState": "INDIVIDUAL.IDLE",
-		"idle": true,
+		pos: position,
+		garrisoned: [],
+		moves: [],
+		moveApart: [],
+		unloaded: [],
+		stance: "aggressive",
+		aiState: "INDIVIDUAL.IDLE",
+		idle: true,
 	};
 	const ent = world.addEntity(
 		makeHqEntity({
 			id,
-			"owner": options.owner ?? PLAYER,
+			owner: options.owner ?? PLAYER,
 			position,
-			"classes": options.classes ?? ["Unit", "Ship", "Warship"],
-			"templateName": "units/athen/ship_bireme",
+			classes: options.classes ?? ["Unit", "Ship", "Warship"],
+			templateName: "units/athen/ship_bireme",
 		}, {
-			"position": () => state.pos ? [...state.pos] : undefined,
-			"garrisonMax": () => options.capacity ?? 20,
-			"garrisoned": () => state.garrisoned,
-			"isGarrisonHolder": () => true,
-			"canGarrison": () => false,
-			"move": (x: number, z: number) => state.moves.push([x, z]),
-			"moveApart": (pos: [number, number]) => state.moveApart.push(pos),
-			"setStance": (stance: string) =>
+			position: () => state.pos ? [...state.pos] : undefined,
+			garrisonMax: () => options.capacity ?? 20,
+			garrisoned: () => state.garrisoned,
+			isGarrisonHolder: () => true,
+			canGarrison: () => false,
+			move: (x: number, z: number) => state.moves.push([x, z]),
+			moveApart: (pos: [number, number]) => state.moveApart.push(pos),
+			setStance: (stance: string) =>
 			{
 				state.stance = stance;
 			},
-			"getStance": () => state.stance,
+			getStance: () => state.stance,
 			// as the template's UnitAI/DefaultStance
-			"get": (path: string) => path === "UnitAI/DefaultStance" ? "aggressive" : undefined,
-			"unload": (entId: number) => state.unloaded.push(entId),
-			"unitAIState": () => state.aiState,
-			"isIdle": () => state.idle,
+			get: (path: string) => path === "UnitAI/DefaultStance" ? "aggressive" : undefined,
+			unload: (entId: number) => state.unloaded.push(entId),
+			unitAIState: () => state.aiState,
+			isIdle: () => state.idle,
 			...options.methods,
 		}, options.metadata ?? {}),
 	);
@@ -245,24 +258,24 @@ export function soldier(
 	methods: Methods = {},
 )
 {
-	const state: UnitState = { "pos": position, "garrisons": [], "ranges": [], "stops": 0, "destroyed": false };
+	const state: UnitState = { pos: position, garrisons: [], ranges: [], stops: 0, destroyed: false };
 	const ent = world.addEntity(
 		makeHqEntity({
 			id,
-			"owner": PLAYER,
+			owner: PLAYER,
 			position,
-			"classes": ["Unit", "Infantry", "Soldier", "Melee"],
-			"templateName": "units/athen/infantry_spearman_b",
+			classes: ["Unit", "Infantry", "Soldier", "Melee"],
+			templateName: "units/athen/infantry_spearman_b",
 		}, {
-			"position": () => state.pos ? [...state.pos] : undefined,
-			"canGarrison": () => true,
-			"garrison": (target: CommonEntity, queued?: boolean) => state.garrisons.push([target.id(), queued]),
-			"moveToRange": (x: number, z: number, min: number, max: number) => state.ranges.push([x, z, min, max]),
-			"stopMoving": () =>
+			position: () => state.pos ? [...state.pos] : undefined,
+			canGarrison: () => true,
+			garrison: (target: CommonEntity, queued?: boolean) => state.garrisons.push([target.id(), queued]),
+			moveToRange: (x: number, z: number, min: number, max: number) => state.ranges.push([x, z, min, max]),
+			stopMoving: () =>
 			{
 				++state.stops;
 			},
-			"destroy": () =>
+			destroy: () =>
 			{
 				state.destroyed = true;
 			},
@@ -273,7 +286,7 @@ export function soldier(
 }
 
 /** the engine garrisons the soldier in the ship: it leaves the map */
-export function board(unit: { ent: CommonEntity; state: UnitState }, carrier: { state: ShipState }): void
+export function board(unit: { ent: CommonEntity; state: UnitState; }, carrier: { state: ShipState; }): void
 {
 	unit.state.pos = undefined;
 	carrier.state.garrisoned.push(unit.ent.id());
@@ -281,13 +294,13 @@ export function board(unit: { ent: CommonEntity; state: UnitState }, carrier: { 
 
 /** the engine unloads the soldier from the ship onto the given spot */
 export function disembark(
-	unit: { ent: CommonEntity; state: UnitState },
-	carrier: { state: ShipState },
+	unit: { ent: CommonEntity; state: UnitState; },
+	carrier: { state: ShipState; },
 	at: [number, number],
 ): void
 {
 	unit.state.pos = at;
-	carrier.state.garrisoned = carrier.state.garrisoned.filter(id => id !== unit.ent.id());
+	carrier.state.garrisoned = carrier.state.garrisoned.filter((id) => id !== unit.ent.id());
 }
 
 export type { Headquarters, HqWorld };

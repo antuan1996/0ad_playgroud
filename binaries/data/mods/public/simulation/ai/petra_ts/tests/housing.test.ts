@@ -40,9 +40,9 @@ describe("housing", () =>
 
 	it("puts the house queue just above the training queues when slots run short", () =>
 	{
-		assert.equal(urgentHousePriority({ "house": 250, "villager": 650, "citizenSoldier": 600 }), 651);
+		assert.equal(urgentHousePriority({ house: 250, villager: 650, citizenSoldier: 600 }), 651);
 		assert.equal(
-			urgentHousePriority({ "house": 400, "villager": 300, "citizenSoldier": 600 }),
+			urgentHousePriority({ house: 400, villager: 300, citizenSoldier: 600 }),
 			800,
 			"Petra's double, when higher",
 		);

@@ -21,11 +21,13 @@ export function censusOf(gameState: CommonGameState): Census
 {
 	let coming = 0;
 	for (const ent of gameState.getOwnFoundations().values())
+	{
 		coming += getBuiltEntity(gameState, ent).getPopulationBonus();
+	}
 	return {
-		"population": gameState.getPopulation(),
-		"limit": gameState.getPopulationLimit(),
-		"max": gameState.getPopulationMax(),
+		population: gameState.getPopulation(),
+		limit: gameState.getPopulationLimit(),
+		max: gameState.getPopulationMax(),
 		coming,
 	};
 }

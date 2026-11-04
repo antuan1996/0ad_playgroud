@@ -42,8 +42,10 @@ export function readTimes(dir: string): TimeSample[]
 {
 	const file = join(dir, "aitimes.txt");
 	if (!existsSync(file))
+	{
 		return [];
-	return readFileSync(file, "utf8").split("\n").filter(Boolean).map(line =>
+	}
+	return readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) =>
 	{
 		const [computation, player, microseconds] = line.split(" ").map(Number);
 		return { computation, player, microseconds };
@@ -54,7 +56,9 @@ export function readTimes(dir: string): TimeSample[]
 export function percentile(sorted: number[], q: number): number
 {
 	if (!sorted.length)
+	{
 		return NaN;
+	}
 	return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))];
 }
 
@@ -74,13 +78,13 @@ export function stats(milliseconds: number[]): TimeStats
 {
 	const sorted = [...milliseconds].sort((a, b) => a - b);
 	return {
-		"turns": sorted.length,
-		"mean": sorted.reduce((sum, x) => sum + x, 0) / (sorted.length || 1),
-		"p50": percentile(sorted, 0.5),
-		"p90": percentile(sorted, 0.9),
-		"p99": percentile(sorted, 0.99),
-		"p999": percentile(sorted, 0.999),
-		"max": sorted[sorted.length - 1] ?? NaN,
+		turns: sorted.length,
+		mean: sorted.reduce((sum, x) => sum + x, 0) / (sorted.length || 1),
+		p50: percentile(sorted, 0.5),
+		p90: percentile(sorted, 0.9),
+		p99: percentile(sorted, 0.99),
+		p999: percentile(sorted, 0.999),
+		max: sorted[sorted.length - 1] ?? NaN,
 	};
 }
 
@@ -88,7 +92,7 @@ export function stats(milliseconds: number[]): TimeStats
 export function series(
 	samples: TimeSample[],
 	runs: number[],
-): { byPlayer: Map<number, number[]>; turn: number[]; minute: number[] }
+): { byPlayer: Map<number, number[]>; turn: number[]; minute: number[]; }
 {
 	const byPlayer = new Map<number, number[]>();
 	const turnTotal = new Map<string, number>();
@@ -101,7 +105,7 @@ export function series(
 		turnTotal.set(key, (turnTotal.get(key) ?? 0) + ms);
 		turnMinute.set(key, sample.computation * TURN_MS / 60000);
 	});
-	return { byPlayer, "turn": [...turnTotal.values()], "minute": [...turnMinute.values()] };
+	return { byPlayer, turn: [...turnTotal.values()], minute: [...turnMinute.values()] };
 }
 
 const fmt = (x: number): string => Number.isFinite(x) ? x.toFixed(2).padStart(8) : "       -";
@@ -123,7 +127,9 @@ export function summarise(dirs: string[]): string
 		}
 	});
 	if (!samples.length)
+	{
 		return "no aitimes.txt (record the match with match.sh -P)";
+	}
 	const { byPlayer, turn, minute } = series(samples, runs);
 	const out = [
 		`AI script time per turn, milliseconds (${dirs.length} match${dirs.length > 1 ? "es" : ""})`,
@@ -132,7 +138,9 @@ export function summarise(dirs: string[]): string
 		} ${"p99.9".padStart(8)} ${"max".padStart(8)}`,
 	];
 	for (const [player, ms] of [...byPlayer].sort((a, b) => a[0] - b[0]))
+	{
 		out.push(row(player == 0 ? "shared component" : `player ${player}`, stats(ms)));
+	}
 	out.push(row("whole turn", stats(turn)));
 	out.push(`whole turn by game time:`);
 	const windows = new Map<number, number[]>();
@@ -142,34 +150,44 @@ export function summarise(dirs: string[]): string
 		(windows.get(window) ?? windows.set(window, []).get(window))?.push(ms);
 	});
 	for (const [window, ms] of [...windows].sort((a, b) => a[0] - b[0]))
+	{
 		out.push(row(`  ${window * WINDOW_MINUTES}-${(window + 1) * WINDOW_MINUTES} min`, stats(ms)));
+	}
 	return out.join("\n");
 }
 
 /** Each bot's script time per turn over a batch, and blue's figures over red's. */
 export function compareBots(batchDir: string): string
 {
-	const rows: Array<{ game: number; blue: string; red: string; swapped: boolean; outcome: string }> = readFileSync(
+	const rows: Array<{ game: number; blue: string; red: string; swapped: boolean; outcome: string; }> = readFileSync(
 		join(batchDir, "results.jsonl"),
 		"utf8",
-	).split("\n").filter(Boolean).map(line => JSON.parse(line));
+	).split("\n").filter(Boolean).map((line) => JSON.parse(line));
 	const byBot = new Map<string, number[]>();
 	let games = 0;
 	for (const row of rows)
 	{
 		const times = readTimes(join(batchDir, "games", String(row.game).padStart(4, "0")));
 		if (!times.length || row.outcome == "failed")
+		{
 			continue;
+		}
 		++games;
 		const botOf = (player: number): string =>
 			(player == 1) != row.swapped ? `${row.blue} (blue)` : `${row.red} (red)`;
 		for (const sample of times)
+		{
 			if (sample.player != 0)
+			{
 				(byBot.get(botOf(sample.player)) ?? byBot.set(botOf(sample.player), []).get(botOf(sample.player)))
 					?.push(sample.microseconds / 1000);
+			}
+		}
 	}
 	if (byBot.size != 2)
+	{
 		return `need two bots with times, found ${byBot.size} (play the batch with -- -P)`;
+	}
 	const [[nameA, msA], [nameB, msB]] = [...byBot].sort((a, b) =>
 		a[0].endsWith("(blue)") ? -1 : b[0].endsWith("(blue)") ? 1 : 0
 	);

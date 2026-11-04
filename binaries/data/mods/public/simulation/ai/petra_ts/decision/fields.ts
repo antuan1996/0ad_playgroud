@@ -36,14 +36,22 @@ type FieldDecision = "first" | "more" | "enough" | "full";
 export function nextField(census: Readonly<FieldCensus>): FieldDecision
 {
 	if (census.fields + census.queued === 0)
+	{
 		return census.berries < 600 || census.fieldsFirst ? "first" : "enough";
+	}
 	if (census.maxFields && census.fields + census.queued >= census.maxFields)
+	{
 		return "full";
+	}
 	let goal = census.provision;
 	if (census.saving || census.berries > 300 || census.fields > 5)
+	{
 		goal = Math.max(goal - 1, 1);
+	}
 	// while the berries bring in less than a field, one more field at a time
 	if (census.fieldsFirst)
+	{
 		++goal;
+	}
 	return census.foundations + census.queued < goal ? "more" : "enough";
 }

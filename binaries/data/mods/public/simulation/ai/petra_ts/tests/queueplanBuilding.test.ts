@@ -42,14 +42,14 @@ import * as mapMask from "../world/mapMask.ts";
 function seat(worldOptions: Partial<HqWorldOptions> = {})
 {
 	const world = makeHqWorld(worldOptions);
-	const hq = seatHQ(world, { "stubs": doorManagers });
+	const hq = seatHQ(world, { stubs: doorManagers });
 	hq.updateTerritories(world.gameState);
 	// as GameState.findBuilder (common-api gamestate.js 846): the first unit of
 	// ours whose buildable list holds the card
-	(world.gameState as unknown as { findBuilder(t: string): unknown }).findBuilder = (template: string) =>
-		[...world.ents.values()].find(e =>
+	(world.gameState as unknown as { findBuilder(t: string): unknown; }).findBuilder = (template: string) =>
+		[...world.ents.values()].find((e) =>
 			e.owner() === PLAYER && e.hasClass("Unit") &&
-			((e as unknown as { buildableEntities(civ: string): string[] | undefined }).buildableEntities("athen") ??
+			((e as unknown as { buildableEntities(civ: string): string[] | undefined; }).buildableEntities("athen") ??
 				[]).includes(template)
 		);
 	return { world, hq };
@@ -62,10 +62,10 @@ function card(world: HqWorld, name: string, detail: Parameters<typeof structureT
 	// a common-api Template also answers its own name (and keeps it raw, as
 	// _templateName, which the original reads) and its generic name
 	world.templates[full] = fake<CommonTemplate>({
-		...structureTemplate(full, { "classes": ["Structure"], ...detail }),
-		"templateName": () => full,
-		"_templateName": full,
-		"genericName": () => name,
+		...structureTemplate(full, { classes: ["Structure"], ...detail }),
+		templateName: () => full,
+		_templateName: full,
+		genericName: () => name,
 	});
 	return full;
 }
@@ -74,9 +74,9 @@ function card(world: HqWorld, name: string, detail: Parameters<typeof structureT
 function builder(world: HqWorld, hq: Headquarters, buildable: string[], laid: unknown[][] = [])
 {
 	const ent = world.addEntity(
-		makeHqEntity({ "id": 9001, "owner": PLAYER, "position": [30, 30], "classes": ["Unit", "Support", "Worker"] }, {
-			"buildableEntities": () => buildable,
-			"construct": (...args: unknown[]) => laid.push(args),
+		makeHqEntity({ id: 9001, owner: PLAYER, position: [30, 30], classes: ["Unit", "Support", "Worker"] }, {
+			buildableEntities: () => buildable,
+			construct: (...args: unknown[]) => laid.push(args),
 		}),
 	);
 	hq.buildManager = BuildManager.start(world.gameState);
@@ -94,7 +94,7 @@ function structure(
 )
 {
 	return world.addEntity(
-		makeHqEntity({ id, "owner": PLAYER, position, "classes": ["Structure", ...classes], templateName }, methods),
+		makeHqEntity({ id, owner: PLAYER, position, classes: ["Structure", ...classes], templateName }, methods),
 	);
 }
 
@@ -107,7 +107,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 	it("waits while another building already started this turn", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
 		hq.turnCache.buildingBuilt = true;
 
@@ -117,7 +117,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 	it("waits while the civ cannot build the card", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"], "available": false });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"], available: false });
 		builder(world, hq, [barracks]);
 
 		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), undefined);
@@ -125,8 +125,8 @@ describe("a building plan asked whether it may start: canStart", () =>
 
 	it("waits while the town does not need the house yet", () =>
 	{
-		const { world, hq } = seat({ "population": 20, "populationLimit": 40 });
-		const house = card(world, "house", { "classes": ["Structure", "House"] });
+		const { world, hq } = seat({ population: 20, populationLimit: 40 });
+		const house = card(world, "house", { classes: ["Structure", "House"] });
 		builder(world, hq, [house]);
 		const plan = new ConstructionPlan(world.gameState, house);
 		plan.goRequirement = "houseNeeded";
@@ -137,7 +137,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 	it("waits while no builder of ours knows the card, and starts once one does", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		hq.buildManager = BuildManager.start(world.gameState);
 		const plan = new ConstructionPlan(world.gameState, barracks);
 		assert.ok(!plan.canStart(world.gameState), "no builder yet");
@@ -153,7 +153,7 @@ describe("a house plan asked whether the town needs it: isGo", () =>
 	function town(population: number, populationLimit: number, populationMax = 300)
 	{
 		const s = seat({ population, populationLimit, populationMax });
-		const house = card(s.world, "house", { "classes": ["Structure", "House", "Village"], "popBonus": 10 });
+		const house = card(s.world, "house", { classes: ["Structure", "House", "Village"], popBonus: 10 });
 		builder(s.world, s.hq, [house]);
 		const plan = new ConstructionPlan(s.world.gameState, house);
 		plan.goRequirement = "houseNeeded";
@@ -163,14 +163,14 @@ describe("a house plan asked whether the town needs it: isGo", () =>
 	it("any plan without a house requirement is always wanted", () =>
 	{
 		const { world } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		assert.equal(new ConstructionPlan(world.gameState, barracks).isGo(world.gameState), true);
 	});
 
 	it("a town that can build no house waits", () =>
 	{
-		const { world } = seat({ "population": 20, "populationLimit": 25 });
-		const plan = new ConstructionPlan(world.gameState, card(world, "house", { "classes": ["Structure", "House"] }));
+		const { world } = seat({ population: 20, populationLimit: 25 });
+		const plan = new ConstructionPlan(world.gameState, card(world, "house", { classes: ["Structure", "House"] }));
 		plan.goRequirement = "houseNeeded";
 
 		assert.equal(plan.isGo(world.gameState), false, "no builder knows a house or an apartment");
@@ -194,12 +194,12 @@ describe("a house plan asked whether the town needs it: isGo", () =>
 		const { world, plan, house } = town(20, 25);
 		world.addEntity(
 			makeHqEntity({
-				"id": 9101,
-				"owner": PLAYER,
-				"position": [80, 80],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|" + house,
-			}, { "foundationProgress": () => 0.2 }),
+				id: 9101,
+				owner: PLAYER,
+				position: [80, 80],
+				classes: ["Structure", "House"],
+				templateName: "foundation|" + house,
+			}, { foundationProgress: () => 0.2 }),
 		);
 
 		assert.equal(plan.isGo(world.gameState), false, "5 free plus the rising house's 10");
@@ -230,7 +230,7 @@ describe("a building plan laying its foundation: start", () =>
 	it("lays the foundation where the town has room, and books the turn", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		const { laid } = builder(world, hq, [barracks]);
 		const plan = new ConstructionPlan(world.gameState, barracks);
 
@@ -243,7 +243,7 @@ describe("a building plan laying its foundation: start", () =>
 		assert.equal(angle, 3 * Math.PI / 4);
 		assert.deepEqual(
 			metadata,
-			{ "base": hq.baseAtIndex(territoryCellAt([x, z])), "access": 2 },
+			{ base: hq.baseAtIndex(territoryCellAt([x, z])), access: 2 },
 			"the foundation answers to the town it stands in, on its land",
 		);
 		assert.equal(hq.turnCache.buildingBuilt, true, "no other building starts this turn");
@@ -252,19 +252,19 @@ describe("a building plan laying its foundation: start", () =>
 	it("keeps the town the plan was made for", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		const { laid } = builder(world, hq, [barracks]);
-		const plan = new ConstructionPlan(world.gameState, barracks, { "base": baseId(2), "special": "keep" });
+		const plan = new ConstructionPlan(world.gameState, barracks, { base: baseId(2), special: "keep" });
 
 		plan.start(world.gameState);
 
-		assert.deepEqual(laid[0][4], { "base": baseId(2), "special": "keep", "access": 2 });
+		assert.deepEqual(laid[0][4], { base: baseId(2), special: "keep", access: 2 });
 	});
 
 	it("does nothing when no unit of ours can lay it", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		new ConstructionPlan(world.gameState, barracks).start(world.gameState);
@@ -276,10 +276,7 @@ describe("a building plan laying its foundation: start", () =>
 	{
 		const { world, hq } = seat();
 		// wider than the whole town
-		const wonder = card(world, "wonder", {
-			"classes": ["Structure", "Wonder"],
-			"obstruction": { "min": 300, "max": 400 },
-		});
+		const wonder = card(world, "wonder", { classes: ["Structure", "Wonder"], obstruction: { min: 300, max: 400 } });
 		const { laid } = builder(world, hq, [wonder]);
 
 		new ConstructionPlan(world.gameState, wonder).start(world.gameState);
@@ -291,7 +288,7 @@ describe("a building plan laying its foundation: start", () =>
 	it("gives a queue its priority back once the building it waited for starts", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
 		const queueManager = world.ai.queueManager;
 		const usual = queueManager.priorities.villager;
@@ -308,11 +305,11 @@ describe("a building plan laying its foundation: start", () =>
 	it("drops a second market that a market built since has made pointless", () =>
 	{
 		const { world, hq } = seat();
-		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
+		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
 		const { laid } = builder(world, hq, [market]);
 		structure(world, 9201, [200, 200], ["Trade", "Market"]);
 		hq.tradeManager.isNewMarketWorth = () => false;
-		const plan = new ConstructionPlan(world.gameState, market, { "expectedGain": 12 });
+		const plan = new ConstructionPlan(world.gameState, market, { expectedGain: 12 });
 
 		plan.start(world.gameState);
 
@@ -323,11 +320,11 @@ describe("a building plan laying its foundation: start", () =>
 	it("builds a first market without second-guessing its gain", () =>
 	{
 		const { world, hq } = seat();
-		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
+		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
 		const { laid } = builder(world, hq, [market]);
 		hq.tradeManager.isNewMarketWorth = () => false;
 
-		new ConstructionPlan(world.gameState, market, { "expectedGain": 12 }).start(world.gameState);
+		new ConstructionPlan(world.gameState, market, { expectedGain: 12 }).start(world.gameState);
 
 		assert.equal(laid.length, 1);
 	});
@@ -335,10 +332,10 @@ describe("a building plan laying its foundation: start", () =>
 	it("asks the fleet for a passage when the building stands near a far landing", () =>
 	{
 		const { world, hq } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
 
-		new ConstructionPlan(world.gameState, barracks, { "proximity": worldPos(300, 300) }).start(world.gameState);
+		new ConstructionPlan(world.gameState, barracks, { proximity: worldPos(300, 300) }).start(world.gameState);
 
 		assert.ok(doorCalls(hq.navalManager).some(([m]) => m === "createTransportIfNeeded"));
 	});
@@ -350,17 +347,22 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const store = card(world, "storehouse", {
-			"classes": ["Structure", "Storehouse"],
-			"dropsiteTypes": ["wood", "stone", "metal"],
+			classes: ["Structure", "Storehouse"],
+			dropsiteTypes: ["wood", "stone", "metal"],
 		});
 		builder(world, hq, [store]);
 		const wood = world.gameState.sharedScript.resourceMaps.wood.map;
 		for (const dx of [-8, 0, 8])
+		{
 			for (const dz of [-8, 0, 8])
+			{
 				wood[territoryCellAt([200 + dx, 200 + dz])] = 100;
+			}
+		}
 
-		const pos = new ConstructionPlan(world.gameState, store, { "base": baseId(2), "type": "wood" })
-			.findGoodPosition(world.gameState);
+		const pos = new ConstructionPlan(world.gameState, store, { base: baseId(2), type: "wood" }).findGoodPosition(
+			world.gameState,
+		);
 
 		assert.ok(distance(pos, [200, 200]) < 40, `by the trees, got ${JSON.stringify(pos)}`);
 		assert.equal(pos && pos.base, 2);
@@ -369,21 +371,21 @@ describe("where the special buildings go: findGoodPosition", () =>
 	it("a civic centre goes where the office claims new ground, for no town yet", () =>
 	{
 		const { world, hq } = seat();
-		const cc = card(world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
+		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
 		hq.findStrategicCCLocation = () => worldPos(120, 240);
 
 		assert.deepEqual(new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState), {
-			"x": 120,
-			"z": 240,
-			"angle": 3 * Math.PI / 4,
-			"base": 0,
+			x: 120,
+			z: 240,
+			angle: 3 * Math.PI / 4,
+			base: 0,
 		});
 	});
 
 	it("a civic centre for a resource goes where the office finds that resource", () =>
 	{
 		const { world, hq } = seat();
-		const cc = card(world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
+		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
 		const asked: unknown[] = [];
 		hq.findEconomicCCLocation = (_g: unknown, _t: unknown, resource: unknown, options: EconomicCCOptions = {}) =>
 		{
@@ -391,17 +393,17 @@ describe("where the special buildings go: findGoodPosition", () =>
 			return worldPos(250, 60);
 		};
 
-		const pos = new ConstructionPlan(world.gameState, cc, { "resource": "stone", "proximity": worldPos(240, 70) })
+		const pos = new ConstructionPlan(world.gameState, cc, { resource: "stone", proximity: worldPos(240, 70) })
 			.findGoodPosition(world.gameState);
 
 		assert.deepEqual(asked, [["stone", [240, 70]]]);
-		assert.deepEqual(pos, { "x": 250, "z": 60, "angle": 3 * Math.PI / 4, "base": 0 });
+		assert.deepEqual(pos, { x: 250, z: 60, angle: 3 * Math.PI / 4, base: 0 });
 	});
 
 	it("a civic centre with no ground left, and no dock to reach more, is not placed", () =>
 	{
 		const { world, hq } = seat();
-		const cc = card(world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
+		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
 		hq.findStrategicCCLocation = () => undefined;
 
 		assert.equal(new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState), false);
@@ -410,21 +412,21 @@ describe("where the special buildings go: findGoodPosition", () =>
 	it("a tower goes where the office wants it defended, for the town there", () =>
 	{
 		const { world, hq } = seat();
-		const tower = card(world, "defense_tower", { "classes": ["Structure", "Tower"] });
+		const tower = card(world, "defense_tower", { classes: ["Structure", "Tower"] });
 		hq.findDefensiveLocation = () => [96, 160, baseId(2)];
 
 		assert.deepEqual(new ConstructionPlan(world.gameState, tower).findGoodPosition(world.gameState), {
-			"x": 96,
-			"z": 160,
-			"angle": 3 * Math.PI / 4,
-			"base": 2,
+			x: 96,
+			z: 160,
+			angle: 3 * Math.PI / 4,
+			base: 2,
 		});
 	});
 
 	it("a tower with nowhere worth defending is not placed", () =>
 	{
 		const { world, hq } = seat();
-		const tower = card(world, "defense_tower", { "classes": ["Structure", "Tower"] });
+		const tower = card(world, "defense_tower", { classes: ["Structure", "Tower"] });
 		hq.findDefensiveLocation = () => undefined;
 
 		assert.equal(new ConstructionPlan(world.gameState, tower).findGoodPosition(world.gameState), false);
@@ -433,7 +435,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	it("a first fortress with nowhere to defend still goes up inside the town", () =>
 	{
 		const { world, hq } = seat();
-		const fortress = card(world, "fortress", { "classes": ["Structure", "Fortress"] });
+		const fortress = card(world, "fortress", { classes: ["Structure", "Fortress"] });
 		hq.findDefensiveLocation = () => undefined;
 
 		const pos = new ConstructionPlan(world.gameState, fortress).findGoodPosition(world.gameState);
@@ -450,23 +452,18 @@ describe("where the special buildings go: findGoodPosition", () =>
 	it("a market goes where the office expects the best trade, remembering the gain", () =>
 	{
 		const { world, hq } = seat();
-		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
+		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
 		hq.findMarketLocation = () => [280, 40, baseId(2), 17];
 		const plan = new ConstructionPlan(world.gameState, market);
 
-		assert.deepEqual(plan.findGoodPosition(world.gameState), {
-			"x": 280,
-			"z": 40,
-			"angle": 3 * Math.PI / 4,
-			"base": 2,
-		});
+		assert.deepEqual(plan.findGoodPosition(world.gameState), { x: 280, z: 40, angle: 3 * Math.PI / 4, base: 2 });
 		assert.equal(plan.metadata?.expectedGain, 17);
 	});
 
 	it("a market with no trade spot found is not placed, and one outside every town goes inside one", () =>
 	{
 		const { world, hq } = seat();
-		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
+		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
 		hq.findMarketLocation = () => false;
 		assert.equal(new ConstructionPlan(world.gameState, market).findGoodPosition(world.gameState), false);
 
@@ -484,20 +481,24 @@ describe("where the special buildings go: findGoodPosition", () =>
  */
 function colonyBoard()
 {
-	const s = seat({ "territoryOwner": (ix: number) => ix < MAP_CELLS / 2 ? PLAYER : 0 });
+	const s = seat({ territoryOwner: (ix: number) => ix < MAP_CELLS / 2 ? PLAYER : 0 });
 	const cc = s.world.addEntity(
 		makeHqEntity({
-			"id": 9501,
-			"owner": PLAYER,
-			"position": [260, 260],
-			"classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre",
+			id: 9501,
+			owner: PLAYER,
+			position: [260, 260],
+			classes: ["Structure", "CivCentre"],
+			templateName: "structures/athen/civil_centre",
 		}),
 	);
 	const colony = s.hq.basesManager.createBase(s.world.gameState, cc, BaseManager.STATE_WITH_ANCHOR);
 	for (let ix = 28; ix < MAP_CELLS; ++ix)
+	{
 		for (let iz = 28; iz < MAP_CELLS; ++iz)
+		{
 			s.world.map.setTerritoryOwner(ix, iz, PLAYER);
+		}
+	}
 	s.hq.updateTerritories(s.world.gameState);
 	return { ...s, colony };
 }
@@ -507,7 +508,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a building with a wanted spot goes as near it as there is room", () =>
 	{
 		const { world } = seat();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks, undefined, worldPos(200, 120)).findGoodPosition(
 			world.gameState,
@@ -520,7 +521,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world } = seat();
 		structure(world, 9401, [200, 200], ["House"]);
-		const house = card(world, "house", { "classes": ["Structure", "House"] });
+		const house = card(world, "house", { classes: ["Structure", "House"] });
 
 		const pos = new ConstructionPlan(world.gameState, house).findGoodPosition(world.gameState);
 
@@ -531,10 +532,10 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world } = seat();
 		structure(world, 9411, [220, 100], ["Farmstead"], {
-			"resourceDropsiteTypes": () => ["food"],
-			"isResourceDropsite": (r?: string) => !r || r === "food",
+			resourceDropsiteTypes: () => ["food"],
+			isResourceDropsite: (r?: string) => !r || r === "food",
 		});
-		const field = card(world, "field", { "classes": ["Structure", "Field"] });
+		const field = card(world, "field", { classes: ["Structure", "Field"] });
 
 		const pos = new ConstructionPlan(world.gameState, field).findGoodPosition(world.gameState);
 
@@ -547,12 +548,13 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		const wood = world.gameState.sharedScript.resourceMaps.wood.map;
 		// woods cover the whole west half, where it would otherwise stand
 		for (let j = 0; j < wood.length; ++j)
+		{
 			if (j % MAP_CELLS < MAP_CELLS / 2)
+			{
 				wood[j] = 300;
-		const farmstead = card(world, "farmstead", {
-			"classes": ["Structure", "Farmstead"],
-			"dropsiteTypes": ["food"],
-		});
+			}
+		}
+		const farmstead = card(world, "farmstead", { classes: ["Structure", "Farmstead"], dropsiteTypes: ["food"] });
 
 		const pos = new ConstructionPlan(world.gameState, farmstead).findGoodPosition(world.gameState);
 
@@ -562,9 +564,9 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a building for one town is placed inside that town", () =>
 	{
 		const { world, hq, colony } = colonyBoard();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
-		const pos = new ConstructionPlan(world.gameState, barracks, { "base": colony.ID }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, barracks, { base: colony.ID }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -575,9 +577,9 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a building with a favoured town goes there when it can", () =>
 	{
 		const { world, hq, colony } = colonyBoard();
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
-		const pos = new ConstructionPlan(world.gameState, barracks, { "favoredBase": colony.ID }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, barracks, { favoredBase: colony.ID }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -588,9 +590,9 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world, hq, colony } = colonyBoard();
 		hq.findBestBaseForMilitary = () => colony.ID;
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
-		const pos = new ConstructionPlan(world.gameState, barracks, { "militaryBase": true }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, barracks, { militaryBase: true }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -600,11 +602,11 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a market is pushed to the town's border, to stretch the trade route", () =>
 	{
 		// past the first phase, where other buildings keep off the border
-		const { world, hq } = seat({ "phase": 2 });
-		const market = card(world, "market", { "classes": ["Structure", "Trade", "Market"] });
+		const { world, hq } = seat({ phase: 2 });
+		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
 		hq.findMarketLocation = () => [280, 40, NO_BASE, 17];
 
-		const pos = new ConstructionPlan(world.gameState, market, { "base": baseId(2) }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, market, { base: baseId(2) }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -613,8 +615,8 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 
 	it("past the first phase, a building with no arrows keeps off the town's border", () =>
 	{
-		const { world, hq } = seat({ "phase": 2 });
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		const { world, hq } = seat({ phase: 2 });
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks).findGoodPosition(world.gameState);
 
@@ -628,8 +630,8 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const foe: [number, number] = [60, 20];
-		hq.defenseManager.armies.push(fake<DefenseArmy>({ "foePosition": foe }));
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		hq.defenseManager.armies.push(fake<DefenseArmy>({ foePosition: foe }));
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks).findGoodPosition(world.gameState);
 
@@ -640,10 +642,10 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const foe: [number, number] = [60, 20];
-		hq.defenseManager.armies.push(fake<DefenseArmy>({ "foePosition": foe }));
-		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
+		hq.defenseManager.armies.push(fake<DefenseArmy>({ foePosition: foe }));
+		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
-		const pos = new ConstructionPlan(world.gameState, barracks, { "base": baseId(2) }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, barracks, { base: baseId(2) }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -654,12 +656,12 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		const { world } = seat();
 		structure(world, 9421, [20, 20], ["Farmstead"], {
-			"resourceDropsiteTypes": () => ["food"],
-			"isResourceDropsite": (r?: string) => !r || r === "food",
+			resourceDropsiteTypes: () => ["food"],
+			isResourceDropsite: (r?: string) => !r || r === "food",
 		});
-		const temple = card(world, "temple", { "classes": ["Structure", "Temple"] });
+		const temple = card(world, "temple", { classes: ["Structure", "Temple"] });
 
-		const pos = new ConstructionPlan(world.gameState, temple, { "base": baseId(2) }).findGoodPosition(
+		const pos = new ConstructionPlan(world.gameState, temple, { base: baseId(2) }).findGoodPosition(
 			world.gameState,
 		);
 
@@ -672,7 +674,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		const { world, hq } = seat();
 		structure(world, 9431, [60, 60], ["House"]);
 		// the game's fortress template carries the GarrisonFortress class
-		const fortress = card(world, "fortress", { "classes": ["Structure", "Fortress", "GarrisonFortress"] });
+		const fortress = card(world, "fortress", { classes: ["Structure", "Fortress", "GarrisonFortress"] });
 		hq.findDefensiveLocation = () => undefined;
 
 		const pos = new ConstructionPlan(world.gameState, fortress).findGoodPosition(world.gameState);
@@ -684,11 +686,8 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	{
 		// only a strip 16 m wide is buildable: no room for the extra space a
 		// first house looks for, room enough for the house itself
-		const { world } = seat({ "passabilityData": (px: number) => px >= 20 && px < 28 ? passLand : passWater });
-		const house = card(world, "house", {
-			"classes": ["Structure", "House"],
-			"obstruction": { "min": 2, "max": 4 },
-		});
+		const { world } = seat({ passabilityData: (px: number) => px >= 20 && px < 28 ? passLand : passWater });
+		const house = card(world, "house", { classes: ["Structure", "House"], obstruction: { min: 2, max: 4 } });
 
 		const pos = new ConstructionPlan(world.gameState, house).findGoodPosition(world.gameState);
 
@@ -703,22 +702,22 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
  * clear, as the engine leaves it for land and shallows near a shore. `island`
  * adds a second land (region 3) east of x = 240, across the sea.
  */
-function coast(options: { island?: boolean; phase?: number; territoryOwner?: (ix: number, iz: number) => number } = {})
+function coast(options: { island?: boolean; phase?: number; territoryOwner?: (ix: number, iz: number) => number; } = {})
 {
 	const islandAt = options.island ? 120 : Infinity; // passability cells: x = 240
 	const landOf = (px: number): number => px < 80 ? 2 : px >= islandAt ? 3 : 0;
 	const s = seat({
-		"phase": options.phase ?? 2,
-		"territoryOwner": options.territoryOwner,
-		"landPassMap": landOf,
-		"passabilityData": (px: number) =>
+		phase: options.phase ?? 2,
+		territoryOwner: options.territoryOwner,
+		landPassMap: landOf,
+		passabilityData: (px: number) =>
 			px >= 72 && px < 88 || px >= islandAt - 8 && px < islandAt + 8 ?
 				passShore :
 				landOf(px) >= 2 ?
 				passLand :
 				passWater,
-		"regionTypes": { 2: "land", 3: "land", 5: "water" },
-		"trajectories": { "2,3": [2, 5, 3], "3,2": [3, 5, 2] },
+		regionTypes: { 2: "land", 3: "land", 5: "water" },
+		trajectories: { "2,3": [2, 5, 3], "3,2": [3, 5, 2] },
 	});
 	const width = MAP_CELLS * PASS_RATIO;
 	const naval = new Uint8Array(width * width);
@@ -728,24 +727,24 @@ function coast(options: { island?: boolean; phase?: number; territoryOwner?: (ix
 		naval[k] = landOf(px) < 2 ? 5 : 0;
 	}
 	layNavalPassMap(s.world, naval);
-	Object.assign(s.world.ai.accessibility, { "height": width, "regionSize": { 2: 20000, 3: 6000, 5: 20000 } });
+	Object.assign(s.world.ai.accessibility, { height: width, regionSize: { 2: 20000, 3: 6000, 5: 20000 } });
 	s.hq.landRegions = options.island ? { 2: true, 3: true } : { 2: true };
 	s.hq.navalMap = true;
 	const dock = card(s.world, "dock", {
-		"classes": ["Structure", "Dock"],
-		"placement": "shore",
-		"territories": ["own", "ally", "neutral"],
-		"dropsiteTypes": ["food", "wood", "stone", "metal"],
-		"obstruction": { "min": 9, "max": 12.7 },
-		"getPaths": { "Footprint": { "Square": { "@width": "18", "@depth": "18" } } },
+		classes: ["Structure", "Dock"],
+		placement: "shore",
+		territories: ["own", "ally", "neutral"],
+		dropsiteTypes: ["food", "wood", "stone", "metal"],
+		obstruction: { min: 9, max: 12.7 },
+		getPaths: { Footprint: { Square: { "@width": "18", "@depth": "18" } } },
 	});
 	return { ...s, dock };
 }
 
 /** a dock plan as the naval manager queues one: for a land of ours, on a sea */
 const navalDock = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
-	"land": { 2: true },
-	"sea": 5,
+	land: { 2: true },
+	sea: 5,
 	...extra,
 });
 
@@ -773,18 +772,18 @@ describe("where a dock goes: findDockPosition", () =>
 
 		// the shift goes to the cell size (8) in steps of 2, both ways
 		assert.equal(laid.length, 9);
-		assert.ok(laid.every(args => (args[4] as { access: number }).access === 2), "the dock answers to our land");
+		assert.ok(laid.every((args) => (args[4] as { access: number; }).access === 2), "the dock answers to our land");
 	});
 
 	it("a land with no coast gets no dock", () =>
 	{
 		const { world } = seat();
 		const dock = card(world, "dock", {
-			"classes": ["Structure", "Dock"],
-			"placement": "shore",
-			"territories": ["own", "ally", "neutral"],
-			"obstruction": { "min": 9, "max": 12.7 },
-			"getPaths": { "Footprint": { "Square": { "@width": "18", "@depth": "18" } } },
+			classes: ["Structure", "Dock"],
+			placement: "shore",
+			territories: ["own", "ally", "neutral"],
+			obstruction: { min: 9, max: 12.7 },
+			getPaths: { Footprint: { Square: { "@width": "18", "@depth": "18" } } },
 		});
 
 		assert.equal(new ConstructionPlan(world.gameState, dock, navalDock()).findGoodPosition(world.gameState), false);
@@ -793,14 +792,14 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a dock waits for a coast within reach of our frontier", () =>
 	{
 		// our ground stops at x = 40, 120 m short of the coast
-		const far = coast({ "territoryOwner": (ix: number) => ix < 5 ? PLAYER : 0 });
+		const far = coast({ territoryOwner: (ix: number) => ix < 5 ? PLAYER : 0 });
 		assert.equal(
 			new ConstructionPlan(far.world.gameState, far.dock, navalDock()).findGoodPosition(far.world.gameState),
 			false,
 		);
 
 		// our ground stops at x = 120, 40 m short of it
-		const near = coast({ "territoryOwner": (ix: number) => ix < 15 ? PLAYER : 0 });
+		const near = coast({ territoryOwner: (ix: number) => ix < 15 ? PLAYER : 0 });
 		assert.ok(
 			new ConstructionPlan(near.world.gameState, near.dock, navalDock()).findGoodPosition(near.world.gameState),
 		);
@@ -811,8 +810,12 @@ describe("where a dock goes: findDockPosition", () =>
 		const { world, dock } = coast();
 		const wood = world.gameState.sharedScript.resourceMaps.wood.map;
 		for (let ix = 16; ix < 20; ++ix)
+		{
 			for (let iz = 30; iz < 34; ++iz)
+			{
 				wood[ix + iz * MAP_CELLS] = 200;
+			}
+		}
 
 		const pos = new ConstructionPlan(world.gameState, dock, navalDock()).findGoodPosition(world.gameState);
 
@@ -827,11 +830,13 @@ describe("where a dock goes: findDockPosition", () =>
 			// the sea is only 24 m wide: land again from x = 184
 			const width = MAP_CELLS * PASS_RATIO;
 			for (let k = 0; k < s.world.map.landPassMap.length; ++k)
+			{
 				if (k % width >= 92)
 				{
 					s.world.map.landPassMap[k] = 3;
 					s.world.map.navalPassMap[k] = 0;
 				}
+			}
 			return s;
 		};
 		const early = inlet(1);
@@ -852,11 +857,9 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a dock for a given sea is not put on another", () =>
 	{
 		const { world, dock } = coast();
-		assert.ok(
-			new ConstructionPlan(world.gameState, dock, navalDock({ "sea": 5 })).findGoodPosition(world.gameState),
-		);
+		assert.ok(new ConstructionPlan(world.gameState, dock, navalDock({ sea: 5 })).findGoodPosition(world.gameState));
 		assert.equal(
-			new ConstructionPlan(world.gameState, dock, navalDock({ "sea": 6 })).findGoodPosition(world.gameState),
+			new ConstructionPlan(world.gameState, dock, navalDock({ sea: 6 })).findGoodPosition(world.gameState),
 			false,
 		);
 	});
@@ -865,16 +868,12 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a first dock with no ships yet goes as near the landing point as it can", () =>
 	{
 		const { world, dock } = coast();
-		override(world.ai.accessibility, { "getAccessValue": (p: [number, number]) => p[0] < 160 ? 2 : 0 });
+		override(world.ai.accessibility, { getAccessValue: (p: [number, number]) => p[0] < 160 ? 2 : 0 });
 
-		const north = new ConstructionPlan(world.gameState, dock, {
-			"sea": seaRegion(5),
-			"proximity": worldPos(100, 280),
-		}).findGoodPosition(world.gameState);
-		const south = new ConstructionPlan(world.gameState, dock, {
-			"sea": seaRegion(5),
-			"proximity": worldPos(100, 40),
-		}).findGoodPosition(world.gameState);
+		const north = new ConstructionPlan(world.gameState, dock, { sea: seaRegion(5), proximity: worldPos(100, 280) })
+			.findGoodPosition(world.gameState);
+		const south = new ConstructionPlan(world.gameState, dock, { sea: seaRegion(5), proximity: worldPos(100, 40) })
+			.findGoodPosition(world.gameState);
 
 		// (the map's edge costs a little, so neither reaches the corner itself)
 		assert.ok(north && south && north.z - south.z > 120, `${JSON.stringify(north)} vs ${JSON.stringify(south)}`);
@@ -883,11 +882,11 @@ describe("where a dock goes: findDockPosition", () =>
 	it("a first dock is not put on a land too small to settle", () =>
 	{
 		const { world, dock } = coast();
-		override(world.ai.accessibility, { "getAccessValue": (p: [number, number]) => p[0] < 160 ? 2 : 0 });
+		override(world.ai.accessibility, { getAccessValue: (p: [number, number]) => p[0] < 160 ? 2 : 0 });
 		world.ai.accessibility.regionSize[2] = 3000;
 
 		assert.equal(
-			new ConstructionPlan(world.gameState, dock, { "sea": seaRegion(5), "proximity": worldPos(100, 280) })
+			new ConstructionPlan(world.gameState, dock, { sea: seaRegion(5), proximity: worldPos(100, 280) })
 				.findGoodPosition(world.gameState),
 			false,
 		);
@@ -898,10 +897,10 @@ describe("where a dock goes: findDockPosition", () =>
 		const { world, dock } = coast();
 		// an enemy tower covering the whole coast
 		world.addEntity(
-			makeHqEntity({ "id": 9601, "owner": ENEMY, "position": [200, 160], "classes": ["Structure", "Tower"] }, {
-				"attackRange": () => ({ "max": 400 }),
-				"attackTypes": () => ["Ranged"],
-				"hasDefensiveFire": () => true,
+			makeHqEntity({ id: 9601, owner: ENEMY, position: [200, 160], classes: ["Structure", "Tower"] }, {
+				attackRange: () => ({ max: 400 }),
+				attackTypes: () => ["Ranged"],
+				hasDefensiveFire: () => true,
 			}),
 		);
 
@@ -982,19 +981,21 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	 */
 	function islandWorld(withDock = true)
 	{
-		const s = coast({ "island": true, "territoryOwner": (ix: number) => ix < 28 ? PLAYER : 0 });
+		const s = coast({ island: true, territoryOwner: (ix: number) => ix < 28 ? PLAYER : 0 });
 		Object.assign(s.world.ai.accessibility, {
 			// the engine's per-region sizes, an array indexed by region
-			"regionSize": [0, 0, 20000, 6000, 0, 20000],
+			regionSize: [0, 0, 20000, 6000, 0, 20000],
 		});
 		s.world.gameState.sharedScript.playersData ??= [];
 		if (withDock)
+		{
 			structure(s.world, 9701, [160, 160], ["Dock"], {}, "structures/athen/dock").setMetadata(
 				PLAYER,
 				"sea",
 				seaRegion(5),
 			);
-		const cc = card(s.world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
+		}
+		const cc = card(s.world, "civil_centre", { classes: ["Structure", "CivCentre"] });
 		s.hq.findStrategicCCLocation = () => undefined;
 		const { laid } = builder(s.world, s.hq, [s.dock]);
 		return { ...s, cc, laid };
@@ -1003,7 +1004,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	it("lays a dock on the island's shore, and keeps the civic-centre plan as it was", () =>
 	{
 		const { world, cc, dock, laid } = islandWorld();
-		const plan = new ConstructionPlan(world.gameState, cc, { "special": "expansion" });
+		const plan = new ConstructionPlan(world.gameState, cc, { special: "expansion" });
 
 		assert.equal(plan.findGoodPosition(world.gameState), false, "the civic centre itself waits");
 
@@ -1016,7 +1017,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 			assert.equal(metadata.oversea, true);
 		}
 		assert.equal(plan.template.templateName(), cc);
-		assert.deepEqual(plan.metadata, { "special": "expansion" });
+		assert.deepEqual(plan.metadata, { special: "expansion" });
 	});
 
 	it("sends no dock oversea before the town has a dock of its own", () =>
@@ -1032,14 +1033,14 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 		world.addEntity(
 			makeHqEntity(
 				{
-					"id": 9711,
-					"owner": ENEMY,
-					"position": [290, 160],
-					"classes": ["Structure", "CivCentre"],
-					"templateName": "structures/athen/civil_centre",
+					id: 9711,
+					owner: ENEMY,
+					position: [290, 160],
+					classes: ["Structure", "CivCentre"],
+					templateName: "structures/athen/civil_centre",
 				},
 				{},
-				{ "access": 3 },
+				{ access: 3 },
 			),
 		);
 
@@ -1072,14 +1073,14 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 		world.addEntity(
 			makeHqEntity(
 				{
-					"id": 9741,
-					"owner": 3,
-					"position": [290, 160],
-					"classes": ["Structure", "CivCentre"],
-					"templateName": "structures/athen/civil_centre",
+					id: 9741,
+					owner: 3,
+					position: [290, 160],
+					classes: ["Structure", "CivCentre"],
+					templateName: "structures/athen/civil_centre",
 				},
 				{},
-				{ "access": 3 },
+				{ access: 3 },
 			),
 		);
 
@@ -1095,14 +1096,14 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 		world.addEntity(
 			makeHqEntity(
 				{
-					"id": 9731,
-					"owner": ENEMY,
-					"position": [130, 310],
-					"classes": ["Structure", "CivCentre"],
-					"templateName": "structures/athen/civil_centre",
+					id: 9731,
+					owner: ENEMY,
+					position: [130, 310],
+					classes: ["Structure", "CivCentre"],
+					templateName: "structures/athen/civil_centre",
 				},
 				{},
-				{ "access": 2 },
+				{ access: 2 },
 			),
 		);
 
@@ -1122,12 +1123,12 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 	{
 		const { world, cc, laid } = islandWorld();
 		world.removeEntity(9001); // the builder dies; the registry has not heard yet
-		const plan = new ConstructionPlan(world.gameState, cc, { "special": "expansion" });
+		const plan = new ConstructionPlan(world.gameState, cc, { special: "expansion" });
 
 		assert.equal(plan.findGoodPosition(world.gameState), false);
 
 		assert.deepEqual(laid, []);
 		assert.equal(plan.template.templateName(), cc);
-		assert.deepEqual(plan.metadata, { "special": "expansion" });
+		assert.deepEqual(plan.metadata, { special: "expansion" });
 	});
 });

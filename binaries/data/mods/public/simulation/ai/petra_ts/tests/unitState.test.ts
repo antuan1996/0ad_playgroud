@@ -14,7 +14,7 @@ import { modsPublic } from "./harness/paths.ts";
 
 import * as states from "../adapter/unitState.ts";
 
-const unit = (state: string | undefined): CommonEntity => fake<CommonEntity>({ "unitAIState": () => state });
+const unit = (state: string | undefined): CommonEntity => fake<CommonEntity>({ unitAIState: () => state });
 
 /** Every state of UnitAI's state machine, read from the game's own UnitAI.js and FSM.js. */
 function gameUnitAIStates(): string[]
@@ -22,16 +22,16 @@ function gameUnitAIStates(): string[]
 	// JavaScript's own globals pass through; the game's (Engine, IID_*, ...) are stubs
 	const builtins = new Set<string | symbol>(Object.getOwnPropertyNames(vm.runInNewContext("globalThis")));
 	const stub: unknown = new Proxy(function()
-	{}, { "get": () => stub, "apply": () => stub, "construct": () => stub as object });
+	{}, { get: () => stub, apply: () => stub, construct: () => stub as object });
 	const sandbox = new Proxy<Record<string | symbol, unknown>>({}, {
-		"has": () => true,
-		"get": (target, key) =>
+		has: () => true,
+		get: (target, key) =>
 			key in target ?
 				target[key] :
 				builtins.has(key) ?
 				(globalThis as Record<string | symbol, unknown>)[key] :
 				stub,
-		"set": (target, key, value) =>
+		set: (target, key, value) =>
 		{
 			target[key] = value;
 			return true;
@@ -65,16 +65,16 @@ describe("what a unit is doing: parsing its state", () =>
 	it("reads a state into who the unit acts as and what it does", () =>
 	{
 		assert.deepEqual(states.parseUnitState("INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"), {
-			"kind": "known",
-			"name": "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-			"role": "INDIVIDUAL",
-			"activity": "GATHER",
+			kind: "known",
+			name: "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
+			role: "INDIVIDUAL",
+			activity: "GATHER",
 		});
 		assert.deepEqual(states.parseUnitState("FORMATIONMEMBER.WALKING"), {
-			"kind": "known",
-			"name": "FORMATIONMEMBER.WALKING",
-			"role": "FORMATIONMEMBER",
-			"activity": "WALKING",
+			kind: "known",
+			name: "FORMATIONMEMBER.WALKING",
+			role: "FORMATIONMEMBER",
+			activity: "WALKING",
 		});
 	});
 
@@ -85,7 +85,7 @@ describe("what a unit is doing: parsing its state", () =>
 
 	it("takes no state as a case of its own, not an error", () =>
 	{
-		assert.deepEqual(states.parseUnitState(undefined), { "kind": "none" });
+		assert.deepEqual(states.parseUnitState(undefined), { kind: "none" });
 		assert.equal(states.hasActivity(unit(undefined), "COMBAT"), false);
 		assert.equal(states.isInState(unit(undefined), "INDIVIDUAL.IDLE"), false);
 	});
@@ -93,7 +93,7 @@ describe("what a unit is doing: parsing its state", () =>
 	it("keeps a state its list does not have, with its own activity", () =>
 	{
 		const modded = states.parseUnitState("INDIVIDUAL.DANCE.SPINNING");
-		assert.deepEqual(modded, { "kind": "other", "raw": "INDIVIDUAL.DANCE.SPINNING" });
+		assert.deepEqual(modded, { kind: "other", raw: "INDIVIDUAL.DANCE.SPINNING" });
 		assert.equal(states.activityOf(modded), "DANCE");
 	});
 
@@ -112,7 +112,7 @@ describe("what a unit is doing: parsing its state", () =>
 		logs.length = 0;
 		assert.throws(() => states.requiredActivityIs(unit(undefined), "FLEEING"));
 		assert.throws(() => states.requiredStateWithin(unit(undefined), "INDIVIDUAL.COLLECTTREASURE"));
-		assert.ok(logs.some(entry => entry.includes("required value")), "it said what was missing");
+		assert.ok(logs.some((entry) => entry.includes("required value")), "it said what was missing");
 		assert.equal(states.requiredActivityIs(unit("INDIVIDUAL.FLEEING"), "FLEEING"), true);
 	});
 });

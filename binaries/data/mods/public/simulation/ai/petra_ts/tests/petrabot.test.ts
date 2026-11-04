@@ -26,7 +26,7 @@ interface Game
 	/** the shared script the engine hands every AI each turn */
 	shared: CommonSharedScript;
 	/** the game time, in milliseconds */
-	time: { value: number };
+	time: { value: number; };
 	/** advance one simulation turn of 200 ms, with the given events */
 	turn(bot: PetraBot, events?: Partial<EngineAIEvents>): void;
 }
@@ -40,10 +40,8 @@ beforeEach(() =>
 	modifiers = [];
 	realRandom = Math.random;
 	Math.random = () => 0.5;
-	stubGlobal("Sim", { "SYSTEM_ENTITY": 1, "IID_ModifiersManager": 61 });
-	stubGlobal("SimEngine", {
-		"QueryInterface": () => ({ "AddModifiers": (...args: unknown[]) => modifiers.push(args) }),
-	});
+	stubGlobal("Sim", { SYSTEM_ENTITY: 1, IID_ModifiersManager: 61 });
+	stubGlobal("SimEngine", { QueryInterface: () => ({ AddModifiers: (...args: unknown[]) => modifiers.push(args) }) });
 });
 
 afterEach(() =>
@@ -55,9 +53,9 @@ afterEach(() =>
 /** A game of two players, at its first turn. */
 function game(options: HqWorldOptions = {}): Game
 {
-	const world = makeHqWorld({ "stock": { "food": 300, "wood": 300, "stone": 300, "metal": 300 }, ...options });
+	const world = makeHqWorld({ stock: { food: 300, wood: 300, stone: 300, metal: 300 }, ...options });
 	setPlayers(world, [{}, {}, {}]);
-	const time = { "value": 0 };
+	const time = { value: 0 };
 	const gs = world.gameState as unknown as Record<string, unknown>;
 	world.gameState.playerData.state = "active";
 	gs.getTimeElapsed = () => time.value;
@@ -65,13 +63,13 @@ function game(options: HqWorldOptions = {}): Game
 	gs.findAvailableTech = () => [];
 	// as GameState.countOwnEntitiesAndQueuedWithRole: our units of the role (nothing is in training here)
 	gs.countOwnEntitiesAndQueuedWithRole = (role: string) =>
-		[...world.ents.values()].filter(e => e.owner() === PLAYER && e.getMetadata(PLAYER, "role") === role).length;
+		[...world.ents.values()].filter((e) => e.owner() === PLAYER && e.getMetadata(PLAYER, "role") === role).length;
 	const shared = fake<CommonSharedScript>({
-		"territoryMap": world.ai.territoryMap,
-		"accessibility": world.ai.accessibility,
-		"gameState": { [PLAYER]: world.gameState },
-		"timeElapsed": 0,
-		"events": emptyEvents(),
+		territoryMap: world.ai.territoryMap,
+		accessibility: world.ai.accessibility,
+		gameState: { [PLAYER]: world.gameState },
+		timeElapsed: 0,
+		events: emptyEvents(),
 	});
 	return {
 		world,
@@ -89,13 +87,13 @@ function game(options: HqWorldOptions = {}): Game
 /** A bot of the given behavior for our player, initialised on the game. */
 function startBot(g: Game, behavior = "balanced"): PetraBot
 {
-	const bot = new PetraBot({ "player": PLAYER, "difficulty": 3, behavior });
+	const bot = new PetraBot({ player: PLAYER, difficulty: 3, behavior });
 	bot.Init(PLAYER, g.shared);
 	return bot;
 }
 
 /** the event the engine sends when a player changes its diplomacy towards us */
-const diplomacyChanged: Partial<EngineAIEvents> = { "DiplomacyChanged": [{ "player": ENEMY, "otherPlayer": PLAYER }] };
+const diplomacyChanged: Partial<EngineAIEvents> = { DiplomacyChanged: [{ player: ENEMY, otherPlayer: PLAYER }] };
 
 describe("the bot at game start", () =>
 {
@@ -116,13 +114,15 @@ describe("the bot at game start", () =>
 	it("on a map it cannot read, it never plays", () =>
 	{
 		// nothing of the map is passable, not even under the civil centre
-		const g = game({ "accessibilityFallback": 0 });
+		const g = game({ accessibilityFallback: 0 });
 		const bot = startBot(g);
 		assert.equal(bot.canPlay, false);
-		assert.ok(logs.some(line => line.includes("does not know how to interpret this map")));
+		assert.ok(logs.some((line) => line.includes("does not know how to interpret this map")));
 
 		for (let i = 0; i < 20; ++i)
+		{
 			g.turn(bot, diplomacyChanged);
+		}
 		// the headquarters never looked at the events
 		assert.deepEqual(g.world.diplomacyResets, []);
 	});
@@ -140,7 +140,9 @@ describe("the bot's turns", () =>
 			const before = bot.playedTurn;
 			g.turn(bot);
 			if (bot.playedTurn > before)
+			{
 				played.push(t);
+			}
 		}
 		// player 1: (turn + 1) % 8 == 5
 		assert.deepEqual(played, [0, 4, 12, 20]);
@@ -163,7 +165,9 @@ describe("the bot's turns", () =>
 		assert.equal(g.world.diplomacyResets.length, 1);
 
 		for (let t = 5; t <= 12; ++t)
+		{
 			g.turn(bot);
+		}
 		// handled once: the turn-12 update saw no event
 		assert.equal(g.world.diplomacyResets.length, 1);
 	});
@@ -175,7 +179,9 @@ describe("the bot's turns", () =>
 		g.turn(bot);
 		g.world.gameState.playerData.state = "defeated";
 		for (let t = 1; t < 10; ++t)
+		{
 			g.turn(bot, diplomacyChanged);
+		}
 		assert.equal(bot.turn, 1);
 		assert.equal(bot.playedTurn, 1);
 		assert.deepEqual(g.world.diplomacyResets, []);
@@ -189,7 +195,9 @@ describe("saving and loading", () =>
 	{
 		const bot = startBot(g);
 		for (let t = 0; t < 6; ++t)
+		{
 			g.turn(bot);
+		}
 		g.turn(bot, diplomacyChanged); // turn 6: kept for turn 12
 		return bot;
 	}
@@ -198,7 +206,7 @@ describe("saving and loading", () =>
 	{
 		const g = game();
 		const saved = playedBot(g).Serialize();
-		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
+		const loaded = new PetraBot({ player: PLAYER, difficulty: 3, behavior: "balanced" });
 		loaded.Deserialize(saved, g.shared);
 		assert.equal(loaded.Serialize(), saved);
 	});
@@ -210,7 +218,7 @@ describe("saving and loading", () =>
 		const saved = bot.Serialize();
 		const personality = { ...bot.Config.personality };
 
-		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
+		const loaded = new PetraBot({ player: PLAYER, difficulty: 3, behavior: "balanced" });
 		loaded.Deserialize(saved, g.shared);
 		// a different draw would show if the personality were drawn again
 		Math.random = () => 0.9;
@@ -224,7 +232,9 @@ describe("saving and loading", () =>
 		assert.deepEqual(g.world.diplomacyResets, []);
 
 		for (let t = 8; t <= 12; ++t)
+		{
 			g.turn(loaded);
+		}
 		assert.equal(g.world.diplomacyResets.length, 1);
 	});
 
@@ -233,13 +243,13 @@ describe("saving and loading", () =>
 		const g = game();
 		const saved = playedBot(g).Serialize();
 		assert.equal(saved.saveVersion, SAVE_VERSION, "a save says its version");
-		g.shared["_entityMetadata"] = { [PLAYER]: { 1000: { "base": 7 } } };
+		g.shared["_entityMetadata"] = { [PLAYER]: { 1000: { base: 7 } } };
 
 		logs.length = 0;
-		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
-		loaded.Deserialize({ ...saved, "saveVersion": 0 }, g.shared);
+		const loaded = new PetraBot({ player: PLAYER, difficulty: 3, behavior: "balanced" });
+		loaded.Deserialize({ ...saved, saveVersion: 0 }, g.shared);
 		assert.ok(
-			logs.some(entry => entry.includes("version 0") && entry.includes("starts afresh")),
+			logs.some((entry) => entry.includes("version 0") && entry.includes("starts afresh")),
 			"the refusal is said",
 		);
 		assert.deepEqual(g.shared["_entityMetadata"][PLAYER], {}, "the old notes on our units are dropped");
@@ -253,12 +263,12 @@ describe("saving and loading", () =>
 	{
 		const g = game();
 		const saved = playedBot(g).Serialize();
-		const loaded = new PetraBot({ "player": PLAYER, "difficulty": 3, "behavior": "balanced" });
+		const loaded = new PetraBot({ player: PLAYER, difficulty: 3, behavior: "balanced" });
 		loaded.Deserialize(saved, g.shared);
 		g.turn(loaded); // turn 7: off turn, nothing played
 
 		const again = loaded.Serialize();
 		assert.equal(again.turn, saved.turn + 1);
-		assert.deepEqual({ ...again, "turn": saved.turn, "elapsedTime": saved.elapsedTime }, saved);
+		assert.deepEqual({ ...again, turn: saved.turn, elapsedTime: saved.elapsedTime }, saved);
 	});
 });

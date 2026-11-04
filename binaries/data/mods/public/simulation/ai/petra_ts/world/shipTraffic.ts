@@ -38,7 +38,9 @@ export class ShipTraffic
 		const x = Math.floor(pos[0] / TRAFFIC_CELL);
 		const z = Math.floor(pos[1] / TRAFFIC_CELL);
 		if (x < 0 || z < 0 || x >= this.width || z >= this.height)
+		{
 			return undefined;
+		}
 		return x + z * this.width;
 	}
 
@@ -49,18 +51,26 @@ export class ShipTraffic
 		const dt = this.lastSample === undefined ? 0 : now - this.lastSample;
 		this.lastSample = now;
 		if (dt <= 0)
+		{
 			return;
+		}
 		const fade = Math.pow(0.5, dt / TRAFFIC_HALF_LIFE);
 		for (let i = 0; i < this.cells.length; ++i)
+		{
 			this.cells[i] *= fade;
+		}
 		for (const ship of gameState.getEnemyUnits().values())
 		{
 			if (!ship.hasClass("Ship") || ship.owner() === GAIA)
+			{
 				continue;
+			}
 			const pos = ship.position();
 			const cell = pos && this.cellAt(pos);
 			if (cell === undefined)
+			{
 				continue;
+			}
 			const weight = ship.hasClass("FishingBoat") ? FISHING_WEIGHT : ship.hasClass("Trader") ? TRADER_WEIGHT : 1;
 			this.cells[cell] += weight * dt;
 		}
@@ -79,33 +89,39 @@ export class ShipTraffic
 		const range2 = range * range;
 		let total = 0;
 		for (let z = Math.max(0, cz - reach); z <= Math.min(this.height - 1, cz + reach); ++z)
+		{
 			for (let x = Math.max(0, cx - reach); x <= Math.min(this.width - 1, cx + reach); ++x)
 			{
 				const value = this.cells[x + z * this.width];
 				if (!value)
+				{
 					continue;
+				}
 				const px = (x + 0.5) * TRAFFIC_CELL;
 				const pz = (z + 0.5) * TRAFFIC_CELL;
 				if ((px - pos[0]) ** 2 + (pz - pos[1]) ** 2 > range2)
+				{
 					continue;
-				const isCovered = covered.some(c => (px - c[0]) ** 2 + (pz - c[1]) ** 2 <= range2);
+				}
+				const isCovered = covered.some((c) => (px - c[0]) ** 2 + (pz - c[1]) ** 2 <= range2);
 				total += isCovered ? value * coveredWeight : value;
 			}
+		}
 		return total;
 	}
 
 	/** The busiest cells, for the bot's state dump: [x, z, ship-seconds] of the `count` highest. */
 	busiest(count: number): Array<[number, number, number]>
 	{
-		const order = [...this.cells.keys()].filter(i => this.cells[i] >= 1).sort((a, b) =>
+		const order = [...this.cells.keys()].filter((i) => this.cells[i] >= 1).sort((a, b) =>
 			this.cells[b] - this.cells[a]
 		);
-		return order.slice(0, count).map(
-			i => [
-				(i % this.width + 0.5) * TRAFFIC_CELL,
-				(Math.floor(i / this.width) + 0.5) * TRAFFIC_CELL,
-				Math.round(this.cells[i]),
-			]
-		);
+		return order.slice(0, count).map((
+			i,
+		) => [
+			(i % this.width + 0.5) * TRAFFIC_CELL,
+			(Math.floor(i / this.width) + 0.5) * TRAFFIC_CELL,
+			Math.round(this.cells[i]),
+		]);
 	}
 }

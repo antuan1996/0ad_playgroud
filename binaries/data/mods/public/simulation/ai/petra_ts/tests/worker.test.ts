@@ -63,17 +63,17 @@ function hand(
 )
 {
 	const ent = world.addEntity(
-		makeHqEntity({ id, "owner": PLAYER, position, "classes": ["Unit", "Infantry", "CitizenSoldier", "Worker"] }, {
-			"isIdle": () => true,
-			"unitAIState": () => "INDIVIDUAL.IDLE",
-			"unitAIOrderData": () => [],
-			"canGather": () => true,
-			"isGatherer": () => true,
-			"isBuilder": () => true,
-			"stopMoving": () => undefined,
-			"canAttackClass": () => false,
-			"resourceCarrying": () => [],
-			"resourceGatherRates": () => ({
+		makeHqEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "CitizenSoldier", "Worker"] }, {
+			isIdle: () => true,
+			unitAIState: () => "INDIVIDUAL.IDLE",
+			unitAIOrderData: () => [],
+			canGather: () => true,
+			isGatherer: () => true,
+			isBuilder: () => true,
+			stopMoving: () => undefined,
+			canAttackClass: () => false,
+			resourceCarrying: () => [],
+			resourceGatherRates: () => ({
 				"food.fruit": 1,
 				"food.meat": 1,
 				"food.grain": 1,
@@ -104,21 +104,17 @@ function rider(
 )
 {
 	const ent = world.addEntity(
-		makeHqEntity(
-			{ id, "owner": PLAYER, position, "classes": ["Unit", "Cavalry", "FastMoving", "CitizenSoldier"] },
-			{
-				"isIdle": () => true,
-				"unitAIState": () => "INDIVIDUAL.IDLE",
-				"unitAIOrderData": () => [],
-				"isGatherer": () => true,
-				"isBuilder": () => false,
-				"canAttackClass": () => true,
-				"resourceCarrying": () => [],
-				"resourceGatherRates": () => ({ "food.meat": 1 }),
-				...methods,
-			},
-			{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_HUNTER, ...metadata },
-		),
+		makeHqEntity({ id, owner: PLAYER, position, classes: ["Unit", "Cavalry", "FastMoving", "CitizenSoldier"] }, {
+			isIdle: () => true,
+			unitAIState: () => "INDIVIDUAL.IDLE",
+			unitAIOrderData: () => [],
+			isGatherer: () => true,
+			isBuilder: () => false,
+			canAttackClass: () => true,
+			resourceCarrying: () => [],
+			resourceGatherRates: () => ({ "food.meat": 1 }),
+			...methods,
+		}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_HUNTER, ...metadata }),
 	);
 	host.assignEntity(world.gameState, ent);
 	return ent;
@@ -136,9 +132,9 @@ function rawSupply(
 {
 	return world.addEntity(
 		makeGaiaSupply({ id, position, generic, specific }, {
-			"get": (path: string) => path === "ResourceSupply/Type" ? generic + "." + specific : undefined,
-			"resourceSupplyNumGatherers": () => 0,
-			"maxGatherers": () => 8,
+			get: (path: string) => path === "ResourceSupply/Type" ? generic + "." + specific : undefined,
+			resourceSupplyNumGatherers: () => 0,
+			maxGatherers: () => 8,
 			...methods,
 		}),
 	);
@@ -149,14 +145,14 @@ function storehouse(world: HqWorld, id: number, position: [number, number], type
 {
 	return world.addEntity(
 		makeHqEntity({
-			"id": id,
-			"owner": PLAYER,
-			"position": position,
-			"classes": ["Structure", "Storehouse"],
-			"templateName": "structures/athen/storehouse",
+			id: id,
+			owner: PLAYER,
+			position: position,
+			classes: ["Structure", "Storehouse"],
+			templateName: "structures/athen/storehouse",
 		}, {
-			"resourceDropsiteTypes": () => types,
-			"isResourceDropsite": (resource?: string) => !resource || types.includes(resource),
+			resourceDropsiteTypes: () => types,
+			isResourceDropsite: (resource?: string) => !resource || types.includes(resource),
 		}),
 	);
 }
@@ -164,7 +160,7 @@ function storehouse(world: HqWorld, id: number, position: [number, number], type
 /** the ids a town's book holds in the given band, for a clear assertion */
 function booked(base: BaseManager, resource: string, band: "nearby" | "medium" | "faraway"): number[]
 {
-	return base.dropsiteSupplies[resource][band].map(r => r.id);
+	return base.dropsiteSupplies[resource][band].map((r) => r.id);
 }
 
 describe("a worker at the scaffolding: startBuilding and retryWorking", () =>
@@ -185,12 +181,12 @@ describe("a worker at the scaffolding: startBuilding and retryWorking", () =>
 		const { world, base, worker } = seat();
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6011,
-				"owner": PLAYER,
-				"position": [240, 240],
-				"classes": ["Structure", "Storehouse"],
-				"templateName": "foundation|structures/athen/storehouse",
-			}, { "foundationProgress": () => 0.4, "needsRepair": () => true }),
+				id: 6011,
+				owner: PLAYER,
+				position: [240, 240],
+				classes: ["Structure", "Storehouse"],
+				templateName: "foundation|structures/athen/storehouse",
+			}, { foundationProgress: () => 0.4, needsRepair: () => true }),
 		);
 		world.accessAt.set("240,240", 3);
 		// the town stays on land 2
@@ -206,16 +202,16 @@ describe("a worker at the scaffolding: startBuilding and retryWorking", () =>
 		const { world, base, worker } = seat();
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6021,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|structures/athen/house",
-			}, { "foundationProgress": () => 0.3, "needsRepair": () => true }),
+				id: 6021,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "House"],
+				templateName: "foundation|structures/athen/house",
+			}, { foundationProgress: () => 0.3, needsRepair: () => true }),
 		);
 		const repaired: unknown[] = [];
 		const ent = hand(world, base, 6022, { "target-foundation": 6021 }, {
-			"repair": (target: unknown, auto: boolean) => repaired.push([target, auto]),
+			repair: (target: unknown, auto: boolean) => repaired.push([target, auto]),
 		});
 		const work = prime(worker, ent);
 
@@ -234,7 +230,7 @@ describe("a worker picking its crop: startGathering", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6033, { "gather-type": "wood" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -247,15 +243,12 @@ describe("a worker picking its crop: startGathering", () =>
 	it("a supply already stripped bare is passed over for the next tree", () =>
 	{
 		const { world, base, worker } = seat();
-		rawSupply(world, 6041, [30, 30], "wood", "tree", {
-			"resourceSupplyAmount": () => 0,
-			"resourceSupplyMax": () => 0,
-		});
+		rawSupply(world, 6041, [30, 30], "wood", "tree", { resourceSupplyAmount: () => 0, resourceSupplyMax: () => 0 });
 		rawSupply(world, 6042, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6043, { "gather-type": "wood" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -291,19 +284,19 @@ describe("a worker at the fields: gatherNearestField and buildAnyField", () =>
 	{
 		return world.addEntity(
 			makeHqEntity({
-				"id": id,
-				"owner": PLAYER,
-				"position": position,
-				"classes": ["Structure", "Field"],
-				"templateName": "structures/athen/field",
+				id: id,
+				owner: PLAYER,
+				position: position,
+				classes: ["Structure", "Field"],
+				templateName: "structures/athen/field",
 			}, {
-				"get": (path: string) => path === "ResourceSupply/Type" ? "food.grain" : undefined,
-				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-				"resourceSupplyNumGatherers": () => numGatherers,
-				"resourceSupplyAmount": () => 1000,
-				"getDiminishingReturns": () => diminishing,
-				"maxGatherers": () => 8,
-			}, { "base": baseID }),
+				get: (path: string) => path === "ResourceSupply/Type" ? "food.grain" : undefined,
+				resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+				resourceSupplyNumGatherers: () => numGatherers,
+				resourceSupplyAmount: () => 1000,
+				getDiminishingReturns: () => diminishing,
+				maxGatherers: () => 8,
+			}, { base: baseID }),
 		);
 	}
 
@@ -327,7 +320,7 @@ describe("a worker at the fields: gatherNearestField and buildAnyField", () =>
 	it("a hand who cannot build leaves the field-foundations alone", () =>
 	{
 		const { world, base, worker } = seat();
-		const ent = hand(world, base, 6071, { "gather-type": "food" }, { "isBuilder": () => false });
+		const ent = hand(world, base, 6071, { "gather-type": "food" }, { isBuilder: () => false });
 		const work = prime(worker, ent);
 
 		assert.equal(work.buildAnyField(world.gameState, base.ID), false);
@@ -337,20 +330,20 @@ describe("a worker at the fields: gatherNearestField and buildAnyField", () =>
 	{
 		const { world, base, worker } = seat();
 		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
-			"classes": ["Structure", "Field"],
-			"maxGatherers": 8,
+			classes: ["Structure", "Field"],
+			maxGatherers: 8,
 		});
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6081,
-				"owner": PLAYER,
-				"position": [44, 44],
-				"classes": ["Structure", "Field"],
-				"templateName": "foundation|structures/athen/field",
+				id: 6081,
+				owner: PLAYER,
+				position: [44, 44],
+				classes: ["Structure", "Field"],
+				templateName: "foundation|structures/athen/field",
 			}, {
-				"foundationProgress": () => 0.3,
-				"getBuildersNb": () => 0,
-			}, { "base": base.ID }),
+				foundationProgress: () => 0.3,
+				getBuildersNb: () => 0,
+			}, { base: base.ID }),
 		);
 		const ent = hand(world, base, 6082, { "gather-type": "food" });
 		const work = prime(worker, ent);
@@ -368,16 +361,14 @@ describe("a worker elephant moving aside: moveToGatherer", () =>
 	it("a dropsite-bearer follows the nearest gatherer so its crop can be dropped", () =>
 	{
 		const { world, base, worker } = seat();
-		const gatherer = hand(world, base, 6091, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
+		const gatherer = hand(world, base, 6091, { "gather-type": "wood" }, { isIdle: () => false }, [50, 50]);
 		// the mobile dropsite the elephant carries
 		const moved: number[] = [];
 		const bearer = world.addEntity(
-			makeHqEntity({
-				"id": 6092,
-				"owner": PLAYER,
-				"position": [20, 20],
-				"classes": ["Unit", "Support", "Elephant"],
-			}, { "resourceDropsiteTypes": () => ["wood", "food"], "move": (x: number) => moved.push(x) }),
+			makeHqEntity({ id: 6092, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Elephant"] }, {
+				resourceDropsiteTypes: () => ["wood", "food"],
+				move: (x: number) => moved.push(x),
+			}),
 		);
 
 		worker.moveToGatherer(world.gameState, bearer, true);
@@ -394,15 +385,15 @@ describe("a worker after the herds: startHunting", () =>
 	{
 		return world.addEntity(
 			makeGaiaSupply({
-				"id": id,
-				"position": position,
-				"generic": "food",
-				"specific": "meat",
-				"classes": domestic ? ["Animal", "Domestic"] : ["Animal"],
+				id: id,
+				position: position,
+				generic: "food",
+				specific: "meat",
+				classes: domestic ? ["Animal", "Domestic"] : ["Animal"],
 			}, {
-				"get": (path: string) => path === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (path: string) => path === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 	}
@@ -423,7 +414,7 @@ describe("a worker after the herds: startHunting", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6112, { "gather-type": "food" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -440,7 +431,7 @@ describe("a worker after the herds: startHunting", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6122, { "gather-type": "food" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -454,7 +445,7 @@ describe("a worker after the herds: startHunting", () =>
 		const deer = animal(world, 6131, [40, 40], false);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = rider(world, base, 6132, {}, { "gather": (target: CommonEntity) => gathered.push(target.id()) });
+		const ent = rider(world, base, 6132, {}, { gather: (target: CommonEntity) => gathered.push(target.id()) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState), true);
@@ -468,7 +459,7 @@ describe("a worker after the herds: startHunting", () =>
 		const cow = animal(world, 6141, [40, 40], true);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = rider(world, base, 6142, {}, { "gather": (target: CommonEntity) => gathered.push(target.id()) });
+		const ent = rider(world, base, 6142, {}, { gather: (target: CommonEntity) => gathered.push(target.id()) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState, worldPos(45, 45)), true, "there is game around");
@@ -485,7 +476,7 @@ describe("a worker after the herds: startHunting", () =>
 		world.map.setTerritoryOwner(5, 5, ENEMY);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6152, { "gather-type": "food" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -499,11 +490,11 @@ function secondTown(world: HqWorld, hq: Headquarters, id: number, position: [num
 {
 	const cc = world.addEntity(
 		makeHqEntity({
-			"id": id,
-			"owner": PLAYER,
-			"position": position,
-			"classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre",
+			id: id,
+			owner: PLAYER,
+			position: position,
+			classes: ["Structure", "CivCentre"],
+			templateName: "structures/athen/civil_centre",
 		}),
 	);
 	const town = hq.basesManager.createBase(world.gameState, cc, BaseManager.STATE_WITH_ANCHOR);
@@ -524,7 +515,7 @@ describe("a worker roaming further afield: startGathering beyond its own town", 
 		colony.assignEntity(world.gameState, store);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6204, { "gather-type": "wood" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -538,24 +529,24 @@ describe("a worker roaming further afield: startGathering beyond its own town", 
 	{
 		const { world, base, worker } = seat();
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
-			"classes": ["Structure", "Storehouse"],
-			"dropsiteTypes": ["wood"],
+			classes: ["Structure", "Storehouse"],
+			dropsiteTypes: ["wood"],
 		});
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6211,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "Storehouse"],
-				"templateName": "foundation|structures/athen/storehouse",
+				id: 6211,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "Storehouse"],
+				templateName: "foundation|structures/athen/storehouse",
 			}, {
-				"foundationProgress": () => 0.3,
-				"needsRepair": () => true,
-			}, { "base": base.ID }),
+				foundationProgress: () => 0.3,
+				needsRepair: () => true,
+			}, { base: base.ID }),
 		);
 		const repaired: number[] = [];
 		const ent = hand(world, base, 6212, { "gather-type": "wood" }, {
-			"repair": (target: CommonEntity) => repaired.push(target.id()),
+			repair: (target: CommonEntity) => repaired.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -573,7 +564,7 @@ describe("a worker roaming further afield: startGathering beyond its own town", 
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6222, { "gather-type": "wood" }, {
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -606,8 +597,8 @@ describe("a worker through its turn: update", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6242, { "gather-type": "wood", "subrole": Worker.SUBROLE_GATHERER }, {
-			"isIdle": () => true,
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+			isIdle: () => true,
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 
 		worker.update(world.gameState, ent);
@@ -622,15 +613,15 @@ describe("a worker through its turn: update", () =>
 		const { world, base, worker } = seat();
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6251,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|structures/athen/house",
-			}, { "foundationProgress": () => 0.3, "needsRepair": () => true }),
+				id: 6251,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "House"],
+				templateName: "foundation|structures/athen/house",
+			}, { foundationProgress: () => 0.3, needsRepair: () => true }),
 		);
 		const ent = hand(world, base, 6252, { "subrole": Worker.SUBROLE_BUILDER, "target-foundation": 6251 }, {
-			"unitAIState": () => "INDIVIDUAL.REPAIR.APPROACHING",
+			unitAIState: () => "INDIVIDUAL.REPAIR.APPROACHING",
 		});
 
 		worker.update(world.gameState, ent);
@@ -645,15 +636,15 @@ describe("a worker through its turn: update", () =>
 		const { world, base, worker } = seat();
 		const cow = world.addEntity(
 			makeGaiaSupply({
-				"id": 6261,
-				"position": [40, 40],
-				"generic": "food",
-				"specific": "meat",
-				"classes": ["Animal", "Domestic"],
+				id: 6261,
+				position: [40, 40],
+				generic: "food",
+				specific: "meat",
+				classes: ["Animal", "Domestic"],
 			}, {
-				"get": (path: string) => path === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (path: string) => path === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		bookCentreSupplies(world, base);
@@ -669,9 +660,9 @@ describe("a worker through its turn: update", () =>
 	{
 		const { world, hq, base, worker } = seat();
 		const scuttled: number[] = [];
-		const ent = hand(world, base, 6271, { "subrole": Worker.SUBROLE_FISHER }, {
-			"isIdle": () => true,
-			"destroy": () => scuttled.push(1),
+		const ent = hand(world, base, 6271, { subrole: Worker.SUBROLE_FISHER }, {
+			isIdle: () => true,
+			destroy: () => scuttled.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -687,7 +678,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 	it("a hand with no order at hand is not stuck", () =>
 	{
 		const { world, base, worker } = seat();
-		const ent = hand(world, base, 6301, { "subrole": Worker.SUBROLE_GATHERER }, { "unitAIOrderData": () => [] });
+		const ent = hand(world, base, 6301, { subrole: Worker.SUBROLE_GATHERER }, { unitAIOrderData: () => [] });
 		const work = prime(worker, ent);
 
 		assert.equal(work.isInaccessibleSupply(world.gameState), false);
@@ -696,7 +687,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 	it("a hand whose crop has vanished is stuck", () =>
 	{
 		const { world, base, worker } = seat();
-		const ent = hand(world, base, 6311, {}, { "unitAIOrderData": () => orders({ "target": entityId(9999) }) });
+		const ent = hand(world, base, 6311, {}, { unitAIOrderData: () => orders({ target: entityId(9999) }) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.isInaccessibleSupply(world.gameState), true);
@@ -707,7 +698,7 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		const { world, base, worker } = seat();
 		const store = storehouse(world, 6321, [40, 40]);
 		base.assignEntity(world.gameState, store);
-		const ent = hand(world, base, 6322, {}, { "unitAIOrderData": () => orders({ "target": entityId(6321) }) });
+		const ent = hand(world, base, 6322, {}, { unitAIOrderData: () => orders({ target: entityId(6321) }) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.isInaccessibleSupply(world.gameState), false);
@@ -718,9 +709,9 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		const { world, base, worker } = seat();
 		const tree = rawSupply(world, 6331, [30, 30], "wood", "tree");
 		let carrying = 0;
-		const ent = hand(world, base, 6332, { "subrole": Worker.SUBROLE_GATHERER }, {
-			"unitAIOrderData": () => orders({ "target": entityId(6331) }),
-			"resourceCarrying": () => carrying > 0 ? [{ "type": "wood", "amount": carrying }] : [],
+		const ent = hand(world, base, 6332, { subrole: Worker.SUBROLE_GATHERER }, {
+			unitAIOrderData: () => orders({ target: entityId(6331) }),
+			resourceCarrying: () => carrying > 0 ? [{ type: "wood", amount: carrying }] : [],
 		});
 		const work = prime(worker, ent);
 
@@ -735,9 +726,9 @@ describe("a worker stuck on the way: isInaccessibleSupply", () =>
 		const { world, base, worker } = seat();
 		const tree = rawSupply(world, 6341, [30, 30], "wood", "tree");
 		const gathered: number[] = [];
-		const ent = hand(world, base, 6342, { "subrole": Worker.SUBROLE_GATHERER }, {
-			"unitAIOrderData": () => orders({ "target": entityId(6341) }),
-			"gather": (target: CommonEntity) => gathered.push(target.id()),
+		const ent = hand(world, base, 6342, { subrole: Worker.SUBROLE_GATHERER }, {
+			unitAIOrderData: () => orders({ target: entityId(6341) }),
+			gather: (target: CommonEntity) => gathered.push(target.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -760,32 +751,32 @@ describe("a fisher on the shoals: startFishing", () =>
 		world: HqWorld,
 		base: BaseManager,
 		seaIndex: number,
-	): { dock: CommonEntity; fish: CommonEntity }
+	): { dock: CommonEntity; fish: CommonEntity; }
 	{
 		const dock = world.addEntity(
 			makeHqEntity({
-				"id": 6401,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Dock"],
-				"templateName": "structures/athen/dock",
+				id: 6401,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Dock"],
+				templateName: "structures/athen/dock",
 			}, {
-				"resourceDropsiteTypes": () => ["food"],
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-			}, { "sea": seaIndex }),
+				resourceDropsiteTypes: () => ["food"],
+				isResourceDropsite: (r?: string) => !r || r === "food",
+			}, { sea: seaIndex }),
 		);
 		base.assignEntity(world.gameState, dock);
 		const fish = world.addEntity(
 			makeGaiaSupply({
-				"id": 6402,
-				"position": [60, 60],
-				"generic": "food",
-				"specific": "fish",
-				"classes": ["SeaCreature"],
+				id: 6402,
+				position: [60, 60],
+				generic: "food",
+				specific: "fish",
+				classes: ["SeaCreature"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		return { dock, fish };
@@ -799,15 +790,10 @@ describe("a fisher on the shoals: startFishing", () =>
 		const { fish } = fishingGround(world, base, 5);
 		const gathered: number[] = [];
 		const ent = world.addEntity(
-			makeHqEntity({
-				"id": 6403,
-				"owner": PLAYER,
-				"position": [60, 60],
-				"classes": ["Unit", "Ship", "FishingBoat"],
-			}, {
-				"resourceGatherRates": () => ({ "food.fish": 1 }),
-				"gather": (t: CommonEntity) => gathered.push(t.id()),
-			}, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 }),
+			makeHqEntity({ id: 6403, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
+				resourceGatherRates: () => ({ "food.fish": 1 }),
+				gather: (t: CommonEntity) => gathered.push(t.id()),
+			}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 		);
 		base.assignEntity(world.gameState, ent);
 		const work = prime(worker, ent);
@@ -825,11 +811,9 @@ describe("a fisher on the shoals: startFishing", () =>
 		fishingGround(world, base, 5);
 		// the fisher's nets do not suit this shoal's kind
 		const ent = world.addEntity(
-			makeHqEntity(
-				{ "id": 6413, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship", "FishingBoat"] },
-				{ "resourceGatherRates": () => ({ "food.meat": 1 }) },
-				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 },
-			),
+			makeHqEntity({ id: 6413, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
+				resourceGatherRates: () => ({ "food.meat": 1 }),
+			}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 		);
 		base.assignEntity(world.gameState, ent);
 		const work = prime(worker, ent);
@@ -859,14 +843,14 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 	{
 		const { world, base, worker } = seat();
 		const bare = rawSupply(world, 6551, [30, 30], "wood", "tree", {
-			"resourceSupplyAmount": () => 10,
-			"resourceSupplyNumGatherers": () => 2,
+			resourceSupplyAmount: () => 10,
+			resourceSupplyNumGatherers: () => 2,
 		});
 		rawSupply(world, 6552, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6553, { "gather-type": "wood" }, {
-			"gather": (t: CommonEntity) => gathered.push(t.id()),
+			gather: (t: CommonEntity) => gathered.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -882,7 +866,7 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6532, { "gather-type": "wood" }, {
-			"gather": (t: CommonEntity) => gathered.push(t.id()),
+			gather: (t: CommonEntity) => gathered.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -896,23 +880,23 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 		const { world, base, worker } = seat();
 		world.addEntity(
 			makeHqEntity({
-				"id": 6511,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Field"],
-				"templateName": "structures/athen/field",
+				id: 6511,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Field"],
+				templateName: "structures/athen/field",
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
-				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-				"resourceSupplyNumGatherers": () => 0,
-				"resourceSupplyAmount": () => 1000,
-				"getDiminishingReturns": () => 1,
-				"maxGatherers": () => 8,
-			}, { "base": base.ID }),
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+				resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+				resourceSupplyNumGatherers: () => 0,
+				resourceSupplyAmount: () => 1000,
+				getDiminishingReturns: () => 1,
+				maxGatherers: () => 8,
+			}, { base: base.ID }),
 		);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6512, { "gather-type": "food" }, {
-			"gather": (t: CommonEntity) => gathered.push(t.id()),
+			gather: (t: CommonEntity) => gathered.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -926,16 +910,16 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 		const { world, base, worker } = seat();
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6561,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|structures/athen/house",
-			}, { "foundationProgress": () => 0.3, "needsRepair": () => true }),
+				id: 6561,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "House"],
+				templateName: "foundation|structures/athen/house",
+			}, { foundationProgress: () => 0.3, needsRepair: () => true }),
 		);
 		const repaired: number[] = [];
 		const ent = hand(world, base, 6562, { "target-foundation": 6561 }, {
-			"repair": (t: CommonEntity) => repaired.push(t.id()),
+			repair: (t: CommonEntity) => repaired.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -955,8 +939,8 @@ describe("a worker through its turn, continued: update", () =>
 		const gathered: number[] = [];
 		// no subrole: as after a transport or a garrison stint
 		const ent = hand(world, base, 6572, { "gather-type": undefined }, {
-			"isIdle": () => true,
-			"gather": (t: CommonEntity) => gathered.push(t.id()),
+			isIdle: () => true,
+			gather: (t: CommonEntity) => gathered.push(t.id()),
 		});
 		ent.setMetadata(PlayerID, "subrole", undefined);
 
@@ -972,9 +956,9 @@ describe("a worker through its turn, continued: update", () =>
 		bookCentreSupplies(world, base);
 		const returned: number[] = [];
 		const ent = hand(world, base, 6581, { "gather-type": "wood", "subrole": Worker.SUBROLE_GATHERER }, {
-			"isIdle": () => true,
-			"resourceCarrying": () => [{ "type": "food", "amount": 10 }],
-			"returnResources": (d: CommonEntity) => returned.push(d.id()),
+			isIdle: () => true,
+			resourceCarrying: () => [{ type: "food", amount: 10 }],
+			returnResources: (d: CommonEntity) => returned.push(d.id()),
 		});
 
 		worker.update(world.gameState, ent);
@@ -992,7 +976,7 @@ describe("a worker returning to its trade: retryWorking", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6612, { "gather-type": "wood" }, {
-			"gather": (t: CommonEntity) => gathered.push(t.id()),
+			gather: (t: CommonEntity) => gathered.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -1006,15 +990,15 @@ describe("a worker returning to its trade: retryWorking", () =>
 		const { world, base, worker } = seat();
 		const cow = world.addEntity(
 			makeGaiaSupply({
-				"id": 6621,
-				"position": [40, 40],
-				"generic": "food",
-				"specific": "meat",
-				"classes": ["Animal", "Domestic"],
+				id: 6621,
+				position: [40, 40],
+				generic: "food",
+				specific: "meat",
+				classes: ["Animal", "Domestic"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		bookCentreSupplies(world, base);
@@ -1033,35 +1017,33 @@ describe("a worker returning to its trade: retryWorking", () =>
 		hq.navalManager.canFishSafely = () => true;
 		world.addEntity(
 			makeHqEntity({
-				"id": 6631,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Dock"],
-				"templateName": "structures/athen/dock",
+				id: 6631,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Dock"],
+				templateName: "structures/athen/dock",
 			}, {
-				"resourceDropsiteTypes": () => ["food"],
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-			}, { "sea": 5 }),
+				resourceDropsiteTypes: () => ["food"],
+				isResourceDropsite: (r?: string) => !r || r === "food",
+			}, { sea: 5 }),
 		);
 		world.addEntity(
 			makeGaiaSupply({
-				"id": 6632,
-				"position": [60, 60],
-				"generic": "food",
-				"specific": "fish",
-				"classes": ["SeaCreature"],
+				id: 6632,
+				position: [60, 60],
+				generic: "food",
+				specific: "fish",
+				classes: ["SeaCreature"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		const ent = world.addEntity(
-			makeHqEntity(
-				{ "id": 6633, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship", "FishingBoat"] },
-				{ "resourceGatherRates": () => ({ "food.fish": 1 }) },
-				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 },
-			),
+			makeHqEntity({ id: 6633, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
+				resourceGatherRates: () => ({ "food.fish": 1 }),
+			}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 		);
 		base.assignEntity(world.gameState, ent);
 		const work = prime(worker, ent);
@@ -1075,8 +1057,8 @@ describe("a worker and the far side of the water", () =>
 {
 	it("a woodcutter books a passage when the only wood is across the water", () =>
 	{
-		const { world, hq, base, worker } = seat({ "landPassMap": (px: number) => px >= 80 ? 3 : 2 }, {
-			"landRegions": { 2: true, 3: true },
+		const { world, hq, base, worker } = seat({ landPassMap: (px: number) => px >= 80 ? 3 : 2 }, {
+			landRegions: { 2: true, 3: true },
 		});
 		world.accessAt.set("240,240", 3);
 		world.accessAt.set("230,230", 3);
@@ -1099,25 +1081,25 @@ describe("a worker and the far side of the water", () =>
 	{
 		const { world, base, worker } = seat();
 		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
-			"classes": ["Structure", "Field"],
-			"maxGatherers": 8,
+			classes: ["Structure", "Field"],
+			maxGatherers: 8,
 		});
 		const rising = world.addEntity(
 			makeHqEntity({
-				"id": 6651,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "Field"],
-				"templateName": "foundation|structures/athen/field",
+				id: 6651,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "Field"],
+				templateName: "foundation|structures/athen/field",
 			}, {
-				"foundationProgress": () => 0.3,
-				"getBuildersNb": () => 0,
-				"needsRepair": () => true,
-			}, { "base": base.ID }),
+				foundationProgress: () => 0.3,
+				getBuildersNb: () => 0,
+				needsRepair: () => true,
+			}, { base: base.ID }),
 		);
 		const repaired: number[] = [];
 		const ent = hand(world, base, 6652, { "gather-type": "food" }, {
-			"repair": (t: CommonEntity) => repaired.push(t.id()),
+			repair: (t: CommonEntity) => repaired.push(t.id()),
 		});
 		const work = prime(worker, ent);
 
@@ -1137,9 +1119,9 @@ function boardingPlan(
 ): TransportPlan
 {
 	return fake<TransportPlan>({
-		"state": TransportPlan.BOARDING,
-		"endIndex": endIndex,
-		"removeUnit": (_gs: unknown, ent: CommonEntity) =>
+		state: TransportPlan.BOARDING,
+		endIndex: endIndex,
+		removeUnit: (_gs: unknown, ent: CommonEntity) =>
 		{
 			removed.push(ent.id());
 			onRemove(ent);
@@ -1150,7 +1132,7 @@ function boardingPlan(
 /** the board split by water: land 2 to the west, land 3 east of x = 160 */
 function islandSeat()
 {
-	const s = seat({ "landPassMap": (px: number) => px >= 80 ? 3 : 2 }, { "landRegions": { 2: true, 3: true } });
+	const s = seat({ landPassMap: (px: number) => px >= 80 ? 3 : 2 }, { landRegions: { 2: true, 3: true } });
 	s.world.accessAt.set("240,240", 3);
 	return s;
 }
@@ -1180,12 +1162,12 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		const { world, hq, base, worker } = seat();
 		world.addEntity(
 			makeHqEntity({
-				"id": 6711,
-				"owner": PLAYER,
-				"position": [240, 240],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|structures/athen/house",
-			}, { "foundationProgress": () => 0.2, "needsRepair": () => true }),
+				id: 6711,
+				owner: PLAYER,
+				position: [240, 240],
+				classes: ["Structure", "House"],
+				templateName: "foundation|structures/athen/house",
+			}, { foundationProgress: () => 0.2, needsRepair: () => true }),
 		);
 		const removed: number[] = [];
 		hq.navalManager.getPlan = () => boardingPlan(3, removed);
@@ -1207,14 +1189,14 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		world.addEntity(
 			makeHqEntity(
 				{
-					"id": 6721,
-					"owner": PLAYER,
-					"position": [240, 240],
-					"classes": ["Structure", "Storehouse"],
-					"templateName": "structures/athen/storehouse",
+					id: 6721,
+					owner: PLAYER,
+					position: [240, 240],
+					classes: ["Structure", "Storehouse"],
+					templateName: "structures/athen/storehouse",
 				},
-				{ "resourceDropsiteTypes": () => ["wood"] },
-				{ "access": 3 },
+				{ resourceDropsiteTypes: () => ["wood"] },
+				{ access: 3 },
 			),
 		);
 		const removed: number[] = [];
@@ -1231,12 +1213,9 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		const { world, hq, base, worker } = seat();
 		world.accessAt.set("240,240", 3);
 		world.addEntity(
-			makeHqEntity({
-				"id": 6731,
-				"owner": PLAYER,
-				"position": [240, 240],
-				"classes": ["Unit", "Support", "Elephant"],
-			}, { "resourceDropsiteTypes": () => ["wood", "food"] }),
+			makeHqEntity({ id: 6731, owner: PLAYER, position: [240, 240], classes: ["Unit", "Support", "Elephant"] }, {
+				resourceDropsiteTypes: () => ["wood", "food"],
+			}),
 		);
 		const removed: number[] = [];
 		hq.navalManager.getPlan = () => boardingPlan(3, removed);
@@ -1252,15 +1231,15 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		const { world, hq, base, worker } = seat();
 		const cow = world.addEntity(
 			makeGaiaSupply({
-				"id": 6741,
-				"position": [40, 40],
-				"generic": "food",
-				"specific": "meat",
-				"classes": ["Animal", "Domestic"],
+				id: 6741,
+				position: [40, 40],
+				generic: "food",
+				specific: "meat",
+				classes: ["Animal", "Domestic"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		bookCentreSupplies(world, base);
@@ -1268,7 +1247,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		hq.navalManager.getPlan = () =>
 			boardingPlan(3, removed, (e: CommonEntity) => e.setMetadata(PlayerID, "transport", undefined));
 		// a hunter carries no gather-type: the quay check reads it as food
-		const ent = rider(world, base, 6742, { "transport": 42 });
+		const ent = rider(world, base, 6742, { transport: 42 });
 
 		worker.update(world.gameState, ent);
 
@@ -1303,10 +1282,10 @@ describe("a worker on the approach: update while walking to its crop", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6802, { "gather-type": "wood" }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(9999) }),
-			"gather": ids(gathered),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(9999) }),
+			gather: ids(gathered),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1319,10 +1298,10 @@ describe("a worker on the approach: update while walking to its crop", () =>
 		const { world, base, worker } = seat();
 		const stopped: number[] = [];
 		const ent = hand(world, base, 6811, { "gather-type": "wood" }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(9999) }),
-			"stopMoving": () => stopped.push(1),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(9999) }),
+			stopMoving: () => stopped.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1335,11 +1314,11 @@ describe("a worker on the approach: update while walking to its crop", () =>
 	function chaser(world: HqWorld, base: BaseManager, id: number, target: number, sink: number[], stops: number[])
 	{
 		return rider(world, base, id, {}, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(target) }),
-			"gather": ids(sink),
-			"stopMoving": () => stops.push(1),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(target) }),
+			gather: ids(sink),
+			stopMoving: () => stops.push(1),
 		});
 	}
 
@@ -1347,15 +1326,15 @@ describe("a worker on the approach: update while walking to its crop", () =>
 	{
 		return world.addEntity(
 			makeGaiaSupply({
-				"id": id,
-				"position": position,
-				"generic": "food",
-				"specific": "meat",
-				"classes": ["Animal", "Domestic"],
+				id: id,
+				position: position,
+				generic: "food",
+				specific: "meat",
+				classes: ["Animal", "Domestic"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 	}
@@ -1437,9 +1416,9 @@ describe("a worker on the approach: update while walking to its crop", () =>
 	{
 		const { world, base, worker } = seat();
 		// a hunter the office sent walking to another town's grounds (update's hunter search)
-		const ent = rider(world, base, 6861, { "approachingTarget": 77, "alreadyTried": 77 }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.WALKING",
+		const ent = rider(world, base, 6861, { approachingTarget: 77, alreadyTried: 77 }, {
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.WALKING",
 		});
 
 		worker.update(world.gameState, ent);
@@ -1455,10 +1434,9 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 	function soldier(world: HqWorld, id: number, position: [number, number])
 	{
 		return world.addEntity(
-			makeHqEntity(
-				{ "id": id, "owner": ENEMY, "position": position, "classes": ["Unit", "Infantry", "Ranged"] },
-				{ "resourceSupplyType": () => undefined },
-			),
+			makeHqEntity({ id: id, owner: ENEMY, position: position, classes: ["Unit", "Infantry", "Ranged"] }, {
+				resourceSupplyType: () => undefined,
+			}),
 		);
 	}
 
@@ -1469,56 +1447,51 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		hq.navalManager.canFishSafely = () => true;
 		world.addEntity(
 			makeHqEntity({
-				"id": 6901,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Dock"],
-				"templateName": "structures/athen/dock",
+				id: 6901,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Dock"],
+				templateName: "structures/athen/dock",
 			}, {
-				"resourceDropsiteTypes": () => ["food"],
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-			}, { "sea": 5 }),
+				resourceDropsiteTypes: () => ["food"],
+				isResourceDropsite: (r?: string) => !r || r === "food",
+			}, { sea: 5 }),
 		);
 		world.addEntity(
 			makeGaiaSupply({
-				"id": 6902,
-				"position": [60, 60],
-				"generic": "food",
-				"specific": "fish",
-				"classes": ["SeaCreature"],
+				id: 6902,
+				position: [60, 60],
+				generic: "food",
+				specific: "fish",
+				classes: ["SeaCreature"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		// the whale UnitAI's harpoon went after (the fishing boat's Attack is restricted to SeaCreature)
 		world.addEntity(
 			makeGaiaSupply({
-				"id": 6904,
-				"position": [90, 90],
-				"generic": "food",
-				"specific": "fish",
-				"classes": ["SeaCreature", "Animal"],
+				id: 6904,
+				position: [90, 90],
+				generic: "food",
+				specific: "fish",
+				classes: ["SeaCreature", "Animal"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		const gathered: number[] = [];
 		const ent = world.addEntity(
-			makeHqEntity({
-				"id": 6903,
-				"owner": PLAYER,
-				"position": [60, 60],
-				"classes": ["Unit", "Ship", "FishingBoat"],
-			}, {
-				"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-				"unitAIOrderData": () => orders({ "target": entityId(6904) }),
-				"resourceGatherRates": () => ({ "food.fish": 1 }),
-				"gather": ids(gathered),
-			}, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 }),
+			makeHqEntity({ id: 6903, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
+				unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+				unitAIOrderData: () => orders({ target: entityId(6904) }),
+				resourceGatherRates: () => ({ "food.fish": 1 }),
+				gather: ids(gathered),
+			}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 		);
 		base.assignEntity(world.gameState, ent);
 
@@ -1536,10 +1509,10 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 6913, { "gather-type": "wood" }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(6911) }),
-			"gather": ids(gathered),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(6911) }),
+			gather: ids(gathered),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1554,19 +1527,19 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		soldier(world, 6921, [240, 240]);
 		world.addEntity(
 			makeHqEntity({
-				"id": 6922,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "House"],
-				"templateName": "foundation|structures/athen/house",
-			}, { "foundationProgress": () => 0.3, "needsRepair": () => true }),
+				id: 6922,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "House"],
+				templateName: "foundation|structures/athen/house",
+			}, { foundationProgress: () => 0.3, needsRepair: () => true }),
 		);
 		const repaired: number[] = [];
 		const ent = hand(world, base, 6923, { "subrole": Worker.SUBROLE_BUILDER, "target-foundation": 6922 }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(6921) }),
-			"repair": ids(repaired),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(6921) }),
+			repair: ids(repaired),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1580,11 +1553,11 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		world.accessAt.set("240,240", 3);
 		soldier(world, 6931, [240, 240]);
 		const stops: number[] = [];
-		const ent = hand(world, base, 6932, { "subrole": Worker.SUBROLE_IDLE }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(6931) }),
-			"stopMoving": () => stops.push(1),
+		const ent = hand(world, base, 6932, { subrole: Worker.SUBROLE_IDLE }, {
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(6931) }),
+			stopMoving: () => stops.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1599,11 +1572,11 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		soldier(world, 6941, [240, 240]);
 		const stops: number[] = [];
 		// as DefenseArmy.addOwn enlists a worker: plan -3, subrole defender
-		const ent = hand(world, base, 6942, { "subrole": "defender", "PartOfArmy": 3, "plan": -3 }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(6941) }),
-			"stopMoving": () => stops.push(1),
+		const ent = hand(world, base, 6942, { subrole: "defender", PartOfArmy: 3, plan: -3 }, {
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(6941) }),
+			stopMoving: () => stops.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1616,26 +1589,26 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 		const { world, base, worker } = seat();
 		// a full-strength tower: regenerating, every capture point its owner's
 		world.addEntity(
-			makeHqEntity({ "id": 6951, "owner": ENEMY, "position": [70, 70], "classes": ["Structure", "Tower"] }, {
-				"isCapturable": () => true,
-				"isInvulnerable": () => false,
-				"decaying": () => false,
-				"defaultRegenRate": () => 2,
-				"isGarrisonHolder": () => false,
-				"healthLevel": () => 1,
-				"capturePoints": () => [0, 0, 2500],
-				"hasDefensiveFire": () => true,
+			makeHqEntity({ id: 6951, owner: ENEMY, position: [70, 70], classes: ["Structure", "Tower"] }, {
+				isCapturable: () => true,
+				isInvulnerable: () => false,
+				decaying: () => false,
+				defaultRegenRate: () => 2,
+				isGarrisonHolder: () => false,
+				healthLevel: () => 1,
+				capturePoints: () => [0, 0, 2500],
+				hasDefensiveFire: () => true,
 			}),
 		);
 		const attacks: unknown[] = [];
-		const ent = hand(world, base, 6952, { "subrole": Worker.SUBROLE_GATHERER }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => orders({ "target": entityId(6951), "attackType": "Capture" }),
-			"canCapture": () => true,
-			"captureStrength": () => 2.5,
-			"get": () => undefined,
-			"attack": (id: number, capture: boolean) => attacks.push([id, capture]),
+		const ent = hand(world, base, 6952, { subrole: Worker.SUBROLE_GATHERER }, {
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => orders({ target: entityId(6951), attackType: "Capture" }),
+			canCapture: () => true,
+			captureStrength: () => 2.5,
+			get: () => undefined,
+			attack: (id: number, capture: boolean) => attacks.push([id, capture]),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1646,13 +1619,13 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 	it("a capture fight against gaia's building is left to UnitAI", () =>
 	{
 		const { world, base, worker } = seat();
-		world.addEntity(makeHqEntity({ "id": 6961, "owner": 0, "position": [70, 70], "classes": ["Structure"] }));
+		world.addEntity(makeHqEntity({ id: 6961, owner: 0, position: [70, 70], classes: ["Structure"] }));
 		const attacks: unknown[] = [];
-		const ent = hand(world, base, 6962, { "subrole": Worker.SUBROLE_GATHERER }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => orders({ "target": entityId(6961), "attackType": "Capture" }),
-			"attack": (id: number, capture: boolean) => attacks.push([id, capture]),
+		const ent = hand(world, base, 6962, { subrole: Worker.SUBROLE_GATHERER }, {
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+			unitAIOrderData: () => orders({ target: entityId(6961), attackType: "Capture" }),
+			attack: (id: number, capture: boolean) => attacks.push([id, capture]),
 		});
 
 		worker.update(world.gameState, ent);
@@ -1677,10 +1650,10 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 	)
 	{
 		return hand(world, base, id, { "gather-type": gatherType, "supply": noted }, {
-			"isIdle": () => false,
-			"unitAIState": () => state,
-			"unitAIOrderData": () => orders({ "target": entityId(target) }),
-			"gather": ids(sink),
+			isIdle: () => false,
+			unitAIState: () => state,
+			unitAIOrderData: () => orders({ target: entityId(target) }),
+			gather: ids(sink),
 			...extra,
 		});
 	}
@@ -1689,8 +1662,8 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 	{
 		const { world, base, worker } = seat();
 		rawSupply(world, 7001, [30, 30], "wood", "tree", {
-			"resourceSupplyAmount": () => 50,
-			"resourceSupplyNumGatherers": () => 2,
+			resourceSupplyAmount: () => 50,
+			resourceSupplyNumGatherers: () => 2,
 		});
 		rawSupply(world, 7002, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
@@ -1769,18 +1742,18 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 		// a dropsite holds no supply: the common-api answers undefined (entity.js)
 		world.addEntity(
 			makeHqEntity({
-				"id": 7051,
-				"owner": PLAYER,
-				"position": [170, 170],
-				"classes": ["Structure", "Storehouse"],
-				"templateName": "structures/athen/storehouse",
+				id: 7051,
+				owner: PLAYER,
+				position: [170, 170],
+				classes: ["Structure", "Storehouse"],
+				templateName: "structures/athen/storehouse",
 			}, {
-				"resourceDropsiteTypes": () => ["wood"],
-				"isResourceDropsite": (r?: string) => !r || r === "wood",
-				"resourceSupplyType": () => undefined,
-				"resourceSupplyNumGatherers": () => undefined,
-				"resourceSupplyAmount": () => undefined,
-			}, { "access": 3 }),
+				resourceDropsiteTypes: () => ["wood"],
+				isResourceDropsite: (r?: string) => !r || r === "wood",
+				resourceSupplyType: () => undefined,
+				resourceSupplyNumGatherers: () => undefined,
+				resourceSupplyAmount: () => undefined,
+			}, { access: 3 }),
 		);
 		const returned: number[] = [];
 		const gathered: number[] = [];
@@ -1796,9 +1769,9 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 			"wood",
 			gathered,
 			"INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-			{ "resourceCarrying": () => [{ "type": "wood", "amount": 10 }], "returnResources": ids(returned) },
+			{ resourceCarrying: () => [{ type: "wood", amount: 10 }], returnResources: ids(returned) },
 		);
-		override(ent, { "position": () => [150, 150] });
+		override(ent, { position: () => [150, 150] });
 
 		worker.update(world.gameState, ent);
 
@@ -1864,8 +1837,8 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 	{
 		const { world, hq, base, worker } = seat();
 		rawSupply(world, 7081, [30, 30], "wood", "tree", {
-			"resourceSupplyNumGatherers": () => 8,
-			"maxGatherers": () => 8,
+			resourceSupplyNumGatherers: () => 8,
+			maxGatherers: () => 8,
 		});
 		bookCentreSupplies(world, base);
 		world.gameState.ai.playedTurn = 1;
@@ -1879,7 +1852,7 @@ describe("a gatherer at work: update checks what UnitAI chose", () =>
 			"wood",
 			gathered,
 			"INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-			{ "resourceCarrying": () => [{ "type": "wood", "amount": 10 }] },
+			{ resourceCarrying: () => [{ type: "wood", amount: 10 }] },
 		);
 
 		worker.update(world.gameState, ent);
@@ -1897,19 +1870,19 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 	{
 		return world.addEntity(
 			makeHqEntity({
-				"id": id,
-				"owner": PLAYER,
-				"position": position,
-				"classes": ["Structure", "Field"],
-				"templateName": "structures/athen/field",
+				id: id,
+				owner: PLAYER,
+				position: position,
+				classes: ["Structure", "Field"],
+				templateName: "structures/athen/field",
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
-				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-				"resourceSupplyNumGatherers": () => 0,
-				"resourceSupplyAmount": () => 1000,
-				"getDiminishingReturns": () => 1,
-				"maxGatherers": () => 8,
-			}, access === undefined ? { "base": baseID } : { "base": baseID, "access": access }),
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+				resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+				resourceSupplyNumGatherers: () => 0,
+				resourceSupplyAmount: () => 1000,
+				getDiminishingReturns: () => 1,
+				maxGatherers: () => 8,
+			}, access === undefined ? { base: baseID } : { base: baseID, access: access }),
 		);
 	}
 
@@ -1917,21 +1890,21 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 	function fieldFoundation(world: HqWorld, id: number, position: [number, number], baseID: number, access?: number)
 	{
 		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
-			"classes": ["Structure", "Field"],
-			"maxGatherers": 8,
+			classes: ["Structure", "Field"],
+			maxGatherers: 8,
 		});
 		return world.addEntity(
 			makeHqEntity({
-				"id": id,
-				"owner": PLAYER,
-				"position": position,
-				"classes": ["Structure", "Field"],
-				"templateName": "foundation|structures/athen/field",
+				id: id,
+				owner: PLAYER,
+				position: position,
+				classes: ["Structure", "Field"],
+				templateName: "foundation|structures/athen/field",
 			}, {
-				"foundationProgress": () => 0.3,
-				"getBuildersNb": () => 0,
-				"needsRepair": () => true,
-			}, access === undefined ? { "base": baseID } : { "base": baseID, "access": access }),
+				foundationProgress: () => 0.3,
+				getBuildersNb: () => 0,
+				needsRepair: () => true,
+			}, access === undefined ? { base: baseID } : { base: baseID, access: access }),
 		);
 	}
 
@@ -1941,7 +1914,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const colony = secondTown(world, hq, 7101, [240, 240]);
 		field(world, 7102, [230, 230], colony.ID);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7103, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7103, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), true);
@@ -1955,7 +1928,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const colony = secondTown(world, hq, 7111, [240, 240]);
 		fieldFoundation(world, 7112, [230, 230], colony.ID);
 		const repaired: number[] = [];
-		const ent = hand(world, base, 7113, { "gather-type": "food" }, { "repair": ids(repaired) });
+		const ent = hand(world, base, 7113, { "gather-type": "food" }, { repair: ids(repaired) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), true);
@@ -1970,7 +1943,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		rawSupply(world, 7122, [230, 110], "wood", "tree");
 		colony.assignEntity(world.gameState, storehouse(world, 7123, [230, 230]));
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7124, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7124, { "gather-type": "wood" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.deepEqual(booked(colony, "wood", "medium"), [7122], "the stand is mid-range for the colony");
@@ -1986,7 +1959,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		rawSupply(world, 7132, [10, 300], "wood", "tree");
 		colony.assignEntity(world.gameState, storehouse(world, 7133, [230, 230]));
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7134, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7134, { "gather-type": "wood" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.deepEqual(booked(colony, "wood", "faraway"), [7132], "the stand is far for the colony");
@@ -1999,23 +1972,23 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 	{
 		const { world, base, worker } = seat();
 		world.templates["structures/athen/farmstead"] = structureTemplate("structures/athen/farmstead", {
-			"classes": ["Structure", "Farmstead"],
-			"dropsiteTypes": ["food"],
+			classes: ["Structure", "Farmstead"],
+			dropsiteTypes: ["food"],
 		});
 		world.addEntity(
 			makeHqEntity({
-				"id": 7141,
-				"owner": PLAYER,
-				"position": [40, 40],
-				"classes": ["Structure", "Farmstead"],
-				"templateName": "foundation|structures/athen/farmstead",
+				id: 7141,
+				owner: PLAYER,
+				position: [40, 40],
+				classes: ["Structure", "Farmstead"],
+				templateName: "foundation|structures/athen/farmstead",
 			}, {
-				"foundationProgress": () => 0.3,
-				"needsRepair": () => true,
-			}, { "base": base.ID }),
+				foundationProgress: () => 0.3,
+				needsRepair: () => true,
+			}, { base: base.ID }),
 		);
 		const repaired: number[] = [];
-		const ent = hand(world, base, 7142, { "gather-type": "wood" }, { "repair": ids(repaired) });
+		const ent = hand(world, base, 7142, { "gather-type": "wood" }, { repair: ids(repaired) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), false);
@@ -2025,16 +1998,16 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 	it("a hungry hand on a map without fields or corrals may roam to the far berries", () =>
 	{
 		const { world, base, worker } = seat({
-			"disabledTemplates": ["structures/athen/field", "structures/athen/corral"],
+			disabledTemplates: ["structures/athen/field", "structures/athen/corral"],
 		});
 		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
-			"classes": ["Structure", "Field"],
-			"maxGatherers": 8,
+			classes: ["Structure", "Field"],
+			maxGatherers: 8,
 		});
 		rawSupply(world, 7151, [260, 10], "food", "fruit");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7152, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7152, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), true);
@@ -2048,7 +2021,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		bookCentreSupplies(world, base);
 		hq.turnCache.allowDistantFood = false;
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7162, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7162, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), false);
@@ -2128,20 +2101,20 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const { world, hq, base, worker } = islandSeat();
 		const island = secondTown(world, hq, 7210, [240, 240]);
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
-			"classes": ["Structure", "Storehouse"],
-			"dropsiteTypes": ["wood"],
+			classes: ["Structure", "Storehouse"],
+			dropsiteTypes: ["wood"],
 		});
 		world.addEntity(
 			makeHqEntity({
-				"id": 7211,
-				"owner": PLAYER,
-				"position": [230, 230],
-				"classes": ["Structure", "Storehouse"],
-				"templateName": "foundation|structures/athen/storehouse",
+				id: 7211,
+				owner: PLAYER,
+				position: [230, 230],
+				classes: ["Structure", "Storehouse"],
+				templateName: "foundation|structures/athen/storehouse",
 			}, {
-				"foundationProgress": () => 0.3,
-				"needsRepair": () => true,
-			}, { "base": island.ID, "access": 3 }),
+				foundationProgress: () => 0.3,
+				needsRepair: () => true,
+			}, { base: island.ID, access: 3 }),
 		);
 		const passages: unknown[] = [];
 		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
@@ -2160,20 +2133,20 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const { world, hq, base, worker } = islandSeat();
 		const island = secondTown(world, hq, 7220, [240, 240]);
 		world.templates["structures/athen/farmstead"] = structureTemplate("structures/athen/farmstead", {
-			"classes": ["Structure", "Farmstead"],
-			"dropsiteTypes": ["food"],
+			classes: ["Structure", "Farmstead"],
+			dropsiteTypes: ["food"],
 		});
 		world.addEntity(
 			makeHqEntity({
-				"id": 7221,
-				"owner": PLAYER,
-				"position": [230, 230],
-				"classes": ["Structure", "Farmstead"],
-				"templateName": "foundation|structures/athen/farmstead",
+				id: 7221,
+				owner: PLAYER,
+				position: [230, 230],
+				classes: ["Structure", "Farmstead"],
+				templateName: "foundation|structures/athen/farmstead",
 			}, {
-				"foundationProgress": () => 0.3,
-				"needsRepair": () => true,
-			}, { "base": island.ID, "access": 3 }),
+				foundationProgress: () => 0.3,
+				needsRepair: () => true,
+			}, { base: island.ID, access: 3 }),
 		);
 		const passages: unknown[] = [];
 		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
@@ -2191,7 +2164,7 @@ describe("a worker's smaller judgements", () =>
 	it("an idle hand has no trade to return to", () =>
 	{
 		const { world, base, worker } = seat();
-		const ent = hand(world, base, 7301, { "subrole": Worker.SUBROLE_IDLE });
+		const ent = hand(world, base, 7301, { subrole: Worker.SUBROLE_IDLE });
 		const work = prime(worker, ent);
 
 		assert.equal(work.retryWorking(world.gameState, Worker.SUBROLE_IDLE), false);
@@ -2202,15 +2175,15 @@ describe("a worker's smaller judgements", () =>
 		const { world, base, worker } = seat();
 		world.addEntity(
 			makeGaiaSupply({
-				"id": 7311,
-				"position": [200, 200],
-				"generic": "food",
-				"specific": "meat",
-				"classes": ["Animal", "Domestic"],
+				id: 7311,
+				position: [200, 200],
+				generic: "food",
+				specific: "meat",
+				classes: ["Animal", "Domestic"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		bookCentreSupplies(world, base);
@@ -2226,27 +2199,23 @@ describe("a worker's smaller judgements", () =>
 		hq.navalManager.getFishSea = () => 6;
 		world.addEntity(
 			makeGaiaSupply({
-				"id": 7321,
-				"position": [60, 60],
-				"generic": "food",
-				"specific": "fish",
-				"classes": ["SeaCreature"],
+				id: 7321,
+				position: [60, 60],
+				generic: "food",
+				specific: "fish",
+				classes: ["SeaCreature"],
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-				"resourceSupplyNumGatherers": () => 0,
-				"maxGatherers": () => 8,
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+				resourceSupplyNumGatherers: () => 0,
+				maxGatherers: () => 8,
 			}),
 		);
 		const scuttled: number[] = [];
 		const ent = world.addEntity(
-			makeHqEntity(
-				{ "id": 7322, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship", "FishingBoat"] },
-				{
-					"resourceGatherRates": () => ({ "food.fish": 1 }),
-					"destroy": () => scuttled.push(1),
-				},
-				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 },
-			),
+			makeHqEntity({ id: 7322, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
+				resourceGatherRates: () => ({ "food.fish": 1 }),
+				destroy: () => scuttled.push(1),
+			}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 		);
 		base.assignEntity(world.gameState, ent);
 		const work = prime(worker, ent);
@@ -2262,30 +2231,30 @@ describe("a worker's smaller judgements", () =>
 		const { world, base, worker } = seat();
 		world.addEntity(
 			makeHqEntity({
-				"id": 7331,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Field"],
-				"templateName": "structures/athen/field",
+				id: 7331,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Field"],
+				templateName: "structures/athen/field",
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
-				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-				"resourceSupplyNumGatherers": () => 2,
-				"resourceSupplyAmount": () => 1000,
-				"getDiminishingReturns": () => 0.5,
-				"maxGatherers": () => 8,
-			}, { "base": base.ID }),
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+				resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+				resourceSupplyNumGatherers: () => 2,
+				resourceSupplyAmount: () => 1000,
+				getDiminishingReturns: () => 0.5,
+				maxGatherers: () => 8,
+			}, { base: base.ID }),
 		);
 		world.addEntity(
 			makeHqEntity({
-				"id": 7332,
-				"owner": PLAYER,
-				"position": [44, 44],
-				"classes": ["Structure", "Field"],
-				"templateName": "foundation|structures/athen/field",
+				id: 7332,
+				owner: PLAYER,
+				position: [44, 44],
+				classes: ["Structure", "Field"],
+				templateName: "foundation|structures/athen/field",
 			}, {
-				"foundationProgress": () => 0.3,
-			}, { "base": base.ID }),
+				foundationProgress: () => 0.3,
+			}, { base: base.ID }),
 		);
 		const ent = hand(world, base, 7333, { "gather-type": "food" });
 		const work = prime(worker, ent);
@@ -2299,16 +2268,14 @@ describe("a worker's smaller judgements", () =>
 	it("a dropsite-bearer does not follow gatherers who are idle or waiting for a boat", () =>
 	{
 		const { world, base, worker } = seat();
-		hand(world, base, 7341, { "gather-type": "wood" }, { "isIdle": () => true }, [50, 50]);
-		hand(world, base, 7342, { "gather-type": "wood", "transport": 4 }, { "isIdle": () => false }, [70, 70]);
+		hand(world, base, 7341, { "gather-type": "wood" }, { isIdle: () => true }, [50, 50]);
+		hand(world, base, 7342, { "gather-type": "wood", "transport": 4 }, { isIdle: () => false }, [70, 70]);
 		const moved: number[] = [];
 		const bearer = world.addEntity(
-			makeHqEntity({
-				"id": 7343,
-				"owner": PLAYER,
-				"position": [20, 20],
-				"classes": ["Unit", "Support", "Elephant"],
-			}, { "resourceDropsiteTypes": () => ["wood"], "move": (x: number) => moved.push(x) }),
+			makeHqEntity({ id: 7343, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Elephant"] }, {
+				resourceDropsiteTypes: () => ["wood"],
+				move: (x: number) => moved.push(x),
+			}),
 		);
 
 		worker.moveToGatherer(world.gameState, bearer, true);
@@ -2325,7 +2292,7 @@ describe("a worker's smaller judgements", () =>
 	{
 		const { world, base, worker } = seat();
 		rawSupply(world, 7351, [30, 30], "wood", "tree");
-		const ent = hand(world, base, 7352, {}, { "unitAIOrderData": () => orders({ "target": entityId(7351) }) });
+		const ent = hand(world, base, 7352, {}, { unitAIOrderData: () => orders({ target: entityId(7351) }) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.isInaccessibleSupply(world.gameState), false);
@@ -2346,10 +2313,10 @@ function herd(
 )
 {
 	return world.addEntity(
-		makeGaiaSupply({ id, position, "generic": "food", "specific": "meat", classes }, {
-			"get": (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
-			"resourceSupplyNumGatherers": () => 0,
-			"maxGatherers": () => 8,
+		makeGaiaSupply({ id, position, generic: "food", specific: "meat", classes }, {
+			get: (p: string) => p === "ResourceSupply/Type" ? "food.meat" : undefined,
+			resourceSupplyNumGatherers: () => 0,
+			maxGatherers: () => 8,
 			...methods,
 		}),
 	);
@@ -2365,10 +2332,10 @@ function shoal(
 )
 {
 	return world.addEntity(
-		makeGaiaSupply({ id, position, "generic": "food", "specific": "fish", "classes": ["SeaCreature"], amount }, {
-			"get": (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
-			"resourceSupplyNumGatherers": () => 0,
-			"maxGatherers": () => 8,
+		makeGaiaSupply({ id, position, generic: "food", specific: "fish", classes: ["SeaCreature"], amount }, {
+			get: (p: string) => p === "ResourceSupply/Type" ? "food.fish" : undefined,
+			resourceSupplyNumGatherers: () => 0,
+			maxGatherers: () => 8,
 			...methods,
 		}),
 	);
@@ -2385,15 +2352,11 @@ function dock(
 )
 {
 	return world.addEntity(
-		makeHqEntity(
-			{ id, owner, position, "classes": ["Structure", "Dock"], "templateName": "structures/athen/dock" },
-			{
-				"resourceDropsiteTypes": () => ["food"],
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-				...methods,
-			},
-			{ "sea": sea },
-		),
+		makeHqEntity({ id, owner, position, classes: ["Structure", "Dock"], templateName: "structures/athen/dock" }, {
+			resourceDropsiteTypes: () => ["food"],
+			isResourceDropsite: (r?: string) => !r || r === "food",
+			...methods,
+		}, { sea: sea }),
 	);
 }
 
@@ -2407,10 +2370,10 @@ function boat(
 )
 {
 	const ent = world.addEntity(
-		makeHqEntity({ id, "owner": PLAYER, position, "classes": ["Unit", "Ship", "FishingBoat"] }, {
-			"resourceGatherRates": () => ({ "food.fish": 1 }),
+		makeHqEntity({ id, owner: PLAYER, position, classes: ["Unit", "Ship", "FishingBoat"] }, {
+			resourceGatherRates: () => ({ "food.fish": 1 }),
 			...methods,
-		}, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_FISHER, "sea": 5 }),
+		}, { role: Worker.ROLE_WORKER, subrole: Worker.SUBROLE_FISHER, sea: 5 }),
 	);
 	host.assignEntity(world.gameState, ent);
 	return ent;
@@ -2449,9 +2412,9 @@ function scaffold(
 )
 {
 	return world.addEntity(
-		makeHqEntity({ id, "owner": PLAYER, position, classes, templateName }, {
-			"foundationProgress": () => 0.3,
-			"needsRepair": () => true,
+		makeHqEntity({ id, owner: PLAYER, position, classes, templateName }, {
+			foundationProgress: () => 0.3,
+			needsRepair: () => true,
 		}, metadata),
 	);
 }
@@ -2470,9 +2433,9 @@ describe("a builder through its turn: update", () =>
 	)
 	{
 		return hand(world, base, id, { "subrole": Worker.SUBROLE_BUILDER, "target-foundation": foundation }, {
-			"isIdle": () => state === "INDIVIDUAL.IDLE",
-			"unitAIState": () => state,
-			"unitAIOrderData": () => orderTarget === undefined ? [] : orders({ "target": entityId(orderTarget) }),
+			isIdle: () => state === "INDIVIDUAL.IDLE",
+			unitAIState: () => state,
+			unitAIOrderData: () => orderTarget === undefined ? [] : orders({ target: entityId(orderTarget) }),
 			...methods,
 		});
 	}
@@ -2495,17 +2458,10 @@ describe("a builder through its turn: update", () =>
 	{
 		const { world, base, worker } = seat();
 		scaffold(world, 7411, [40, 40]);
-		scaffold(
-			world,
-			7412,
-			[48, 40],
-			{ "base": base.ID },
-			["Structure", "Field"],
-			"foundation|structures/athen/field",
-		);
+		scaffold(world, 7412, [48, 40], { base: base.ID }, ["Structure", "Field"], "foundation|structures/athen/field");
 		const stops: number[] = [];
 		const ent = builder(world, base, 7413, 7411, "INDIVIDUAL.REPAIR.REPAIRING", 7412, {
-			"stopMoving": () => stops.push(1),
+			stopMoving: () => stops.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2525,7 +2481,7 @@ describe("a builder through its turn: update", () =>
 		const stops: number[] = [];
 		// the foundation 7421 is gone; UnitAI still walks to it
 		const ent = builder(world, base, 7422, 7421, "INDIVIDUAL.REPAIR.APPROACHING", 7421, {
-			"stopMoving": () => stops.push(1),
+			stopMoving: () => stops.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2551,20 +2507,20 @@ describe("a builder through its turn: update", () =>
 	{
 		const { world, base, worker } = seat();
 		storehouse(world, 7441, [40, 40]);
-		hand(world, base, 7442, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
+		hand(world, base, 7442, { "gather-type": "wood" }, { isIdle: () => false }, [50, 50]);
 		const moved: Array<[number, number]> = [];
 		// the worker elephant: Support, Builder, Elephant, a dropsite for every resource
 		const elephant = world.addEntity(
 			makeHqEntity({
-				"id": 7443,
-				"owner": PLAYER,
-				"position": [20, 20],
-				"classes": ["Unit", "Support", "Builder", "Elephant"],
+				id: 7443,
+				owner: PLAYER,
+				position: [20, 20],
+				classes: ["Unit", "Support", "Builder", "Elephant"],
 			}, {
-				"isIdle": () => true,
-				"unitAIState": () => "INDIVIDUAL.IDLE",
-				"resourceDropsiteTypes": () => ["food", "wood", "stone", "metal"],
-				"move": (x: number, z: number) => moved.push([x, z]),
+				isIdle: () => true,
+				unitAIState: () => "INDIVIDUAL.IDLE",
+				resourceDropsiteTypes: () => ["food", "wood", "stone", "metal"],
+				move: (x: number, z: number) => moved.push([x, z]),
 			}, { "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_BUILDER, "target-foundation": 7441 }),
 		);
 		base.assignEntity(world.gameState, elephant);
@@ -2581,7 +2537,7 @@ describe("a builder through its turn: update", () =>
 		const rising = scaffold(world, 7451, [40, 40]);
 		const repaired: unknown[] = [];
 		const ent = builder(world, base, 7452, 7451, "INDIVIDUAL.IDLE", undefined, {
-			"repair": (t: unknown, auto: boolean, queued: boolean) => repaired.push([t, auto, queued]),
+			repair: (t: unknown, auto: boolean, queued: boolean) => repaired.push([t, auto, queued]),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2597,9 +2553,9 @@ describe("a builder through its turn: update", () =>
 		const returned: number[] = [];
 		const repaired: unknown[] = [];
 		const ent = builder(world, base, 7462, 7461, "INDIVIDUAL.IDLE", undefined, {
-			"resourceCarrying": () => [{ "type": "wood", "amount": 10 }],
-			"returnResources": ids(returned),
-			"repair": (t: CommonEntity, auto: boolean, queued: boolean) => repaired.push([t.id(), queued]),
+			resourceCarrying: () => [{ type: "wood", amount: 10 }],
+			returnResources: ids(returned),
+			repair: (t: CommonEntity, auto: boolean, queued: boolean) => repaired.push([t.id(), queued]),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2618,12 +2574,12 @@ describe("a builder through its turn: update", () =>
 		const returned: number[] = [];
 		const repaired: number[] = [];
 		const ent = builder(world, base, 7466, 7465, "INDIVIDUAL.RETURNRESOURCE.APPROACHING", undefined, {
-			"isIdle": () => false,
+			isIdle: () => false,
 			// UnitAI's queue: the drop at the centre, then the building
-			"unitAIOrderData": () => orders({ "target": entityId(1000) }, { "target": entityId(7465) }),
-			"resourceCarrying": () => [{ "type": "wood", "amount": 10 }],
-			"returnResources": ids(returned),
-			"repair": (t: CommonEntity) => repaired.push(t.id()),
+			unitAIOrderData: () => orders({ target: entityId(1000) }, { target: entityId(7465) }),
+			resourceCarrying: () => [{ type: "wood", amount: 10 }],
+			returnResources: ids(returned),
+			repair: (t: CommonEntity) => repaired.push(t.id()),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2635,7 +2591,7 @@ describe("a builder through its turn: update", () =>
 	it("an idle builder whose foundation is across the water books a passage", () =>
 	{
 		const { world, hq, base, worker } = islandSeat();
-		scaffold(world, 7471, [240, 240], { "access": 3 });
+		scaffold(world, 7471, [240, 240], { access: 3 });
 		const passages: unknown[] = [];
 		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = builder(world, base, 7472, 7471, "INDIVIDUAL.IDLE");
@@ -2664,9 +2620,7 @@ describe("a hunter and a fisher through their turn: update", () =>
 		herd(world, 7511, [40, 40]);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = rider(world, base, 7512, { "lastHuntSearch": world.ai.elapsedTime - 5 }, {
-			"gather": ids(gathered),
-		});
+		const ent = rider(world, base, 7512, { lastHuntSearch: world.ai.elapsedTime - 5 }, { gather: ids(gathered) });
 
 		worker.update(world.gameState, ent);
 
@@ -2683,10 +2637,10 @@ describe("a hunter and a fisher through their turn: update", () =>
 		world.map.setTerritoryOwner(12, 7, ENEMY);
 		const gathered: number[] = [];
 		const ent = rider(world, base, 7523, {}, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.GATHERING",
-			"unitAIOrderData": () => orders({ "target": entityId(7521) }),
-			"gather": ids(gathered),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.GATHERING",
+			unitAIOrderData: () => orders({ target: entityId(7521) }),
+			gather: ids(gathered),
 		}, [100, 60]);
 
 		worker.update(world.gameState, ent);
@@ -2701,11 +2655,11 @@ describe("a hunter and a fisher through their turn: update", () =>
 		storehouse(world, 7531, [170, 170], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		const returned: number[] = [];
 		const ent = rider(world, base, 7532, {}, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(7531) }),
-			"resourceCarrying": () => [{ "type": "food", "amount": 20 }],
-			"returnResources": ids(returned),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(7531) }),
+			resourceCarrying: () => [{ type: "food", amount: 20 }],
+			returnResources: ids(returned),
 		}, [150, 150]);
 
 		worker.update(world.gameState, ent);
@@ -2723,10 +2677,10 @@ describe("a hunter and a fisher through their turn: update", () =>
 		world.map.setTerritoryOwner(12, 12, ENEMY);
 		const gathered: number[] = [];
 		const ent = boat(world, base, 7543, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.GATHERING",
-			"unitAIOrderData": () => orders({ "target": entityId(7542) }),
-			"gather": ids(gathered),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.GATHERING",
+			unitAIOrderData: () => orders({ target: entityId(7542) }),
+			gather: ids(gathered),
 		}, [100, 100]);
 
 		worker.update(world.gameState, ent);
@@ -2740,9 +2694,7 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 	/** a treasure on the map, with the office's list refreshed as its updates keep it */
 	function treasure(world: HqWorld, hq: Headquarters, id: number, position: [number, number])
 	{
-		world.addEntity(
-			makeHqEntity({ id, "owner": 0, position, "classes": ["Treasure"] }, { "isTreasure": () => true }),
-		);
+		world.addEntity(makeHqEntity({ id, owner: 0, position, classes: ["Treasure"] }, { isTreasure: () => true }));
 		// Headquarters.init filters the world's entities by isTreasure, and the
 		// collection's updates add the ones found later
 		hq.treasures = world.gameState.getEntities().filter((e): e is CommonPlacedEntity =>
@@ -2759,9 +2711,9 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 		const collected: number[] = [];
 		const gathered: number[] = [];
 		const ent = hand(world, base, 7603, { "gather-type": "wood" }, {
-			"isTreasureCollector": () => true,
-			"collectTreasure": ids(collected),
-			"gather": ids(gathered),
+			isTreasureCollector: () => true,
+			collectTreasure: ids(collected),
+			gather: ids(gathered),
 		});
 		const work = prime(worker, ent);
 
@@ -2779,9 +2731,9 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 		const collected: number[] = [];
 		const gathered: number[] = [];
 		const ent = rider(world, base, 7613, {}, {
-			"isTreasureCollector": () => true,
-			"collectTreasure": ids(collected),
-			"gather": ids(gathered),
+			isTreasureCollector: () => true,
+			collectTreasure: ids(collected),
+			gather: ids(gathered),
 		});
 
 		worker.update(world.gameState, ent);
@@ -2797,22 +2749,22 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 		bookCentreSupplies(world, base);
 		world.addEntity(
 			makeHqEntity({
-				"id": 7622,
-				"owner": PLAYER,
-				"position": [30, 30],
-				"classes": ["Structure", "Field"],
-				"templateName": "structures/athen/field",
+				id: 7622,
+				owner: PLAYER,
+				position: [30, 30],
+				classes: ["Structure", "Field"],
+				templateName: "structures/athen/field",
 			}, {
-				"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
-				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-				"resourceSupplyNumGatherers": () => 0,
-				"resourceSupplyAmount": () => 1000,
-				"getDiminishingReturns": () => 1,
-				"maxGatherers": () => 8,
-			}, { "base": base.ID }),
+				get: (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+				resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+				resourceSupplyNumGatherers: () => 0,
+				resourceSupplyAmount: () => 1000,
+				getDiminishingReturns: () => 1,
+				maxGatherers: () => 8,
+			}, { base: base.ID }),
 		);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7623, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7623, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), true);
@@ -2833,7 +2785,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		rawSupply(world, 7702, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7703, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7703, { "gather-type": "wood" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		work.startGathering(world.gameState);
@@ -2844,11 +2796,11 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	it("a woodcutter passes over a tree with all the hands it can take", () =>
 	{
 		const { world, base, worker } = seat();
-		rawSupply(world, 7705, [30, 30], "wood", "tree", { "resourceSupplyNumGatherers": () => 8 });
+		rawSupply(world, 7705, [30, 30], "wood", "tree", { resourceSupplyNumGatherers: () => 8 });
 		rawSupply(world, 7706, [34, 30], "wood", "tree");
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7707, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7707, { "gather-type": "wood" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		work.startGathering(world.gameState);
@@ -2864,7 +2816,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		bookCentreSupplies(world, base);
 		world.map.setTerritoryOwner(5, 1, ENEMY);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7713, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7713, { "gather-type": "wood" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		work.startGathering(world.gameState);
@@ -2879,7 +2831,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		herd(world, 7722, [44, 40]);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7723, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7723, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState), true);
@@ -2889,12 +2841,12 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	it("a hungry hand passes over a full carcass and a picked-clean one for fresh cattle", () =>
 	{
 		const { world, base, worker } = seat();
-		herd(world, 7731, [40, 40], { "resourceSupplyNumGatherers": () => 8 });
-		herd(world, 7732, [42, 40], { "resourceSupplyNumGatherers": () => 1, "resourceSupplyAmount": () => 40 });
+		herd(world, 7731, [40, 40], { resourceSupplyNumGatherers: () => 8 });
+		herd(world, 7732, [42, 40], { resourceSupplyNumGatherers: () => 1, resourceSupplyAmount: () => 40 });
 		herd(world, 7733, [44, 40]);
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7734, { "gather-type": "food" }, { "gather": ids(gathered) });
+		const ent = hand(world, base, 7734, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState), true);
@@ -2921,7 +2873,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		bookCentreSupplies(world, base);
 		storehouse(world, 7753, [95, 95], ["food"]);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 7754, { "gather-type": "food" }, { "gather": ids(gathered) }, [50, 50]);
+		const ent = hand(world, base, 7754, { "gather-type": "food" }, { gather: ids(gathered) }, [50, 50]);
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState), true);
@@ -2938,7 +2890,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		assert.equal(onFoot.startHunting(world.gameState), false, "about 270 m on foot is too far");
 
 		const gathered: number[] = [];
-		const horse = rider(world, base, 7764, {}, { "gather": ids(gathered) });
+		const horse = rider(world, base, 7764, {}, { gather: ids(gathered) });
 		const mounted = prime(worker, horse);
 		assert.equal(mounted.startHunting(world.gameState), true);
 		assert.deepEqual(gathered, [7761]);
@@ -2949,7 +2901,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		const { world, base, worker } = seat();
 		ally(world, 3);
 		world.map.setTerritoryOwner(5, 5, 3);
-		herd(world, 7771, [40, 40], { "owner": () => 3 });
+		herd(world, 7771, [40, 40], { owner: () => 3 });
 		bookCentreSupplies(world, base);
 		const ent = hand(world, base, 7772, { "gather-type": "food" });
 		const work = prime(worker, ent);
@@ -2964,11 +2916,11 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 			makeHqEntity(
 				{
 					id,
-					"owner": PLAYER,
-					"position": [60, 60],
-					"classes": ["Unit", "Infantry", "Ranged", "CitizenSoldier", "Worker"],
+					owner: PLAYER,
+					position: [60, 60],
+					classes: ["Unit", "Infantry", "Ranged", "CitizenSoldier", "Worker"],
 				},
-				{ "resourceGatherRates": () => ({ "food.meat": 1 }), "gather": ids(sink) },
+				{ resourceGatherRates: () => ({ "food.meat": 1 }), gather: ids(sink) },
 				{ "role": Worker.ROLE_WORKER, "subrole": Worker.SUBROLE_GATHERER, "gather-type": "food" },
 			),
 		);
@@ -3007,18 +2959,18 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 			world.addEntity(
 				makeHqEntity({
 					id,
-					"owner": PLAYER,
+					owner: PLAYER,
 					position,
-					"classes": ["Structure", "Field"],
-					"templateName": "structures/athen/field",
+					classes: ["Structure", "Field"],
+					templateName: "structures/athen/field",
 				}, {
-					"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
-					"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
-					"resourceSupplyNumGatherers": () => numGatherers,
-					"resourceSupplyAmount": () => 1000,
-					"getDiminishingReturns": () => 1,
-					"maxGatherers": () => 8,
-				}, { "base": base.ID }),
+					get: (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+					resourceSupplyType: () => ({ generic: "food", specific: "grain" }),
+					resourceSupplyNumGatherers: () => numGatherers,
+					resourceSupplyAmount: () => 1000,
+					getDiminishingReturns: () => 1,
+					maxGatherers: () => 8,
+				}, { base: base.ID }),
 			);
 		fieldOf(7801, [50, 50], 8);
 		fieldOf(7802, [30, 30], 0);
@@ -3040,12 +2992,12 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		const { world, hq, base, worker } = seat();
 		hq.navalManager.getFishSea = () => 5;
 		hq.navalManager.canFishSafely = (_g: unknown, e: CommonEntity) => e.id() !== 7813;
-		shoal(world, 7811, [40, 60], { "resourceSupplyNumGatherers": () => 8 });
-		shoal(world, 7812, [50, 60], { "resourceSupplyNumGatherers": () => 1 }, 40);
+		shoal(world, 7811, [40, 60], { resourceSupplyNumGatherers: () => 8 });
+		shoal(world, 7812, [50, 60], { resourceSupplyNumGatherers: () => 1 }, 40);
 		shoal(world, 7813, [60, 60]);
 		shoal(world, 7814, [70, 60]);
 		const gathered: number[] = [];
-		const ent = boat(world, base, 7815, { "gather": ids(gathered) });
+		const ent = boat(world, base, 7815, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startFishing(world.gameState), true);
@@ -3057,19 +3009,19 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		const { world, hq, base, worker } = seat();
 		const colony = secondTown(world, hq, 7821, [240, 240]);
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
-			"classes": ["Structure", "Storehouse"],
-			"dropsiteTypes": ["wood"],
+			classes: ["Structure", "Storehouse"],
+			dropsiteTypes: ["wood"],
 		});
 		scaffold(
 			world,
 			7822,
 			[230, 230],
-			{ "base": colony.ID },
+			{ base: colony.ID },
 			["Structure", "Storehouse"],
 			"foundation|structures/athen/storehouse",
 		);
 		const repaired: number[] = [];
-		const ent = hand(world, base, 7823, { "gather-type": "wood" }, { "repair": ids(repaired) });
+		const ent = hand(world, base, 7823, { "gather-type": "wood" }, { repair: ids(repaired) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startGathering(world.gameState), true);
@@ -3091,9 +3043,9 @@ describe("a worker of a town in trouble: update", () =>
 		const returned: number[] = [];
 		const gathered: number[] = [];
 		const ent = hand(world, base, 7903, { "gather-type": "wood" }, {
-			"resourceCarrying": () => [{ "type": "food", "amount": 10 }],
-			"returnResources": ids(returned),
-			"gather": ids(gathered),
+			resourceCarrying: () => [{ type: "food", amount: 10 }],
+			returnResources: ids(returned),
+			gather: ids(gathered),
 		});
 
 		worker.update(world.gameState, ent);
@@ -3109,7 +3061,7 @@ describe("a worker of a town in trouble: update", () =>
 		bookCentreSupplies(world, base);
 		const baseless = hq.basesManager.baselessBase();
 		const gathered: number[] = [];
-		const ent = hand(world, baseless, 7912, { "gather-type": "wood" }, { "gather": ids(gathered) });
+		const ent = hand(world, baseless, 7912, { "gather-type": "wood" }, { gather: ids(gathered) });
 
 		baseless.workerObject.update(world.gameState, ent);
 
@@ -3132,10 +3084,10 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 		bookCentreSupplies(world, base);
 		const gathered: number[] = [];
 		const ent = hand(world, base, 8003, { "gather-type": "wood" }, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.GATHER.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(8001) }),
-			"gather": ids(gathered),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.GATHER.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(8001) }),
+			gather: ids(gathered),
 		});
 
 		worker.update(world.gameState, ent);
@@ -3150,8 +3102,8 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 		tree.setMetadata(PlayerID, "inaccessibleTime", seconds(world.ai.elapsedTime + 300));
 		let carrying = 0;
 		const ent = hand(world, base, 8012, {}, {
-			"unitAIOrderData": () => orders({ "target": entityId(8011) }),
-			"resourceCarrying": () => carrying ? [{ "type": "wood", "amount": carrying }] : [],
+			unitAIOrderData: () => orders({ target: entityId(8011) }),
+			resourceCarrying: () => carrying ? [{ type: "wood", amount: carrying }] : [],
 		});
 		const work = prime(worker, ent);
 
@@ -3165,8 +3117,8 @@ describe("a worker's memory of unreachable crops: isInaccessibleSupply", () =>
 	{
 		const { world, base, worker } = seat();
 		rawSupply(world, 8021, [30, 30], "wood", "tree");
-		const ent = hand(world, base, 8022, { "alreadyTried": 8099 }, {
-			"unitAIOrderData": () => orders({ "target": entityId(8021) }),
+		const ent = hand(world, base, 8022, { alreadyTried: 8099 }, {
+			unitAIOrderData: () => orders({ target: entityId(8021) }),
 		});
 		const work = prime(worker, ent);
 
@@ -3181,22 +3133,21 @@ describe("a worker elephant following the gatherers: moveToGatherer", () =>
 	function elephant(world: HqWorld, id: number, metadata: Record<string, unknown>, moved: number[])
 	{
 		return world.addEntity(
-			makeHqEntity({
-				id,
-				"owner": PLAYER,
-				"position": [20, 20],
-				"classes": ["Unit", "Support", "Builder", "Elephant"],
-			}, {
-				"resourceDropsiteTypes": () => ["food", "wood", "stone", "metal"],
-				"move": (x: number) => moved.push(x),
-			}, metadata),
+			makeHqEntity(
+				{ id, owner: PLAYER, position: [20, 20], classes: ["Unit", "Support", "Builder", "Elephant"] },
+				{
+					resourceDropsiteTypes: () => ["food", "wood", "stone", "metal"],
+					move: (x: number) => moved.push(x),
+				},
+				metadata,
+			),
 		);
 	}
 
 	it("an elephant at work on a foundation stays there", () =>
 	{
 		const { world, base, worker } = seat();
-		hand(world, base, 8101, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
+		hand(world, base, 8101, { "gather-type": "wood" }, { isIdle: () => false }, [50, 50]);
 		const moved: number[] = [];
 
 		worker.moveToGatherer(world.gameState, elephant(world, 8102, { "target-foundation": 8199 }, moved), true);
@@ -3207,13 +3158,13 @@ describe("a worker elephant following the gatherers: moveToGatherer", () =>
 	it("an elephant that moved moments ago waits before following again", () =>
 	{
 		const { world, base, worker } = seat();
-		hand(world, base, 8111, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
+		hand(world, base, 8111, { "gather-type": "wood" }, { isIdle: () => false }, [50, 50]);
 		const moved: number[] = [];
 
 		// the town's turn asks without forcing it (baseManager.update)
 		worker.moveToGatherer(
 			world.gameState,
-			elephant(world, 8112, { "nextMoveToGatherer": world.ai.elapsedTime + 4 }, moved),
+			elephant(world, 8112, { nextMoveToGatherer: world.ai.elapsedTime + 4 }, moved),
 			false,
 		);
 
@@ -3223,8 +3174,8 @@ describe("a worker elephant following the gatherers: moveToGatherer", () =>
 	it("an elephant follows the nearer of two gatherers", () =>
 	{
 		const { world, base, worker } = seat();
-		hand(world, base, 8121, { "gather-type": "wood" }, { "isIdle": () => false }, [50, 50]);
-		hand(world, base, 8122, { "gather-type": "stone" }, { "isIdle": () => false }, [150, 150]);
+		hand(world, base, 8121, { "gather-type": "wood" }, { isIdle: () => false }, [50, 50]);
+		hand(world, base, 8122, { "gather-type": "stone" }, { isIdle: () => false }, [150, 150]);
 		const moved: number[] = [];
 
 		worker.moveToGatherer(world.gameState, elephant(world, 8123, {}, moved), false);
@@ -3243,21 +3194,18 @@ describe("allies' dropsites, when shared", () =>
 		herd(world, 8201, [200, 200]);
 		// our worker elephant aboard a ship (no position) counts for nothing
 		world.addEntity(
-			makeHqEntity({
-				"id": 8202,
-				"owner": PLAYER,
-				"position": undefined,
-				"classes": ["Unit", "Support", "Elephant"],
-			}, { "isResourceDropsite": (r?: string) => !r || r === "food" }),
+			makeHqEntity({ id: 8202, owner: PLAYER, position: undefined, classes: ["Unit", "Support", "Elephant"] }, {
+				isResourceDropsite: (r?: string) => !r || r === "food",
+			}),
 		);
 		world.addEntity(
-			makeHqEntity({ "id": 8203, "owner": 3, "position": [210, 210], "classes": ["Structure", "Farmstead"] }, {
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-				"isSharedDropsite": () => true,
+			makeHqEntity({ id: 8203, owner: 3, position: [210, 210], classes: ["Structure", "Farmstead"] }, {
+				isResourceDropsite: (r?: string) => !r || r === "food",
+				isSharedDropsite: () => true,
 			}),
 		);
 		const gathered: number[] = [];
-		const ent = hand(world, base, 8204, { "gather-type": "food" }, { "gather": ids(gathered) }, [190, 190]);
+		const ent = hand(world, base, 8204, { "gather-type": "food" }, { gather: ids(gathered) }, [190, 190]);
 		const work = prime(worker, ent);
 
 		assert.equal(work.startHunting(world.gameState), true);
@@ -3271,9 +3219,9 @@ describe("allies' dropsites, when shared", () =>
 		shareDropsites(world);
 		herd(world, 8211, [200, 200]);
 		world.addEntity(
-			makeHqEntity({ "id": 8212, "owner": 3, "position": [210, 210], "classes": ["Structure", "Farmstead"] }, {
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-				"isSharedDropsite": () => false,
+			makeHqEntity({ id: 8212, owner: 3, position: [210, 210], classes: ["Structure", "Farmstead"] }, {
+				isResourceDropsite: (r?: string) => !r || r === "food",
+				isSharedDropsite: () => false,
 			}),
 		);
 		const ent = hand(world, base, 8213, { "gather-type": "food" }, {}, [190, 190]);
@@ -3306,23 +3254,23 @@ describe("allies' dropsites, when shared", () =>
 		// ours across the water, and an ally's it does not share, count for nothing
 		storehouse(world, 8232, [245, 245], ["food"]).setMetadata(PlayerID, "access", landRegion(3));
 		world.addEntity(
-			makeHqEntity({ "id": 8233, "owner": 4, "position": [240, 240], "classes": ["Structure", "Farmstead"] }, {
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-				"isSharedDropsite": () => false,
+			makeHqEntity({ id: 8233, owner: 4, position: [240, 240], classes: ["Structure", "Farmstead"] }, {
+				isResourceDropsite: (r?: string) => !r || r === "food",
+				isSharedDropsite: () => false,
 			}),
 		);
 		world.addEntity(
-			makeHqEntity({ "id": 8234, "owner": 4, "position": [255, 255], "classes": ["Structure", "Farmstead"] }, {
-				"isResourceDropsite": (r?: string) => !r || r === "food",
-				"isSharedDropsite": () => true,
+			makeHqEntity({ id: 8234, owner: 4, position: [255, 255], classes: ["Structure", "Farmstead"] }, {
+				isResourceDropsite: (r?: string) => !r || r === "food",
+				isSharedDropsite: () => true,
 			}),
 		);
 		const stops: number[] = [];
 		const ent = rider(world, base, 8235, {}, {
-			"isIdle": () => false,
-			"unitAIState": () => "INDIVIDUAL.COMBAT.APPROACHING",
-			"unitAIOrderData": () => orders({ "target": entityId(8231) }),
-			"stopMoving": () => stops.push(1),
+			isIdle: () => false,
+			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
+			unitAIOrderData: () => orders({ target: entityId(8231) }),
+			stopMoving: () => stops.push(1),
 		});
 
 		worker.update(world.gameState, ent);
@@ -3339,9 +3287,9 @@ describe("allies' dropsites, when shared", () =>
 		shareDropsites(world);
 		shoal(world, 8241, [60, 200]);
 		shoal(world, 8242, [200, 60]);
-		dock(world, 8243, [60, 210], 5, playerId(3), { "isSharedDropsite": () => true });
+		dock(world, 8243, [60, 210], 5, playerId(3), { isSharedDropsite: () => true });
 		const gathered: number[] = [];
-		const ent = boat(world, base, 8244, { "gather": ids(gathered) });
+		const ent = boat(world, base, 8244, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startFishing(world.gameState), true);
@@ -3360,9 +3308,9 @@ describe("allies' dropsites, when shared", () =>
 		dock(world, 8253, [210, 60], 5);
 		// beside the second shoal: our dock on another sea, and an ally's it does not share
 		dock(world, 8254, [60, 210], 6);
-		dock(world, 8255, [70, 210], 5, playerId(3), { "isSharedDropsite": () => false });
+		dock(world, 8255, [70, 210], 5, playerId(3), { isSharedDropsite: () => false });
 		const gathered: number[] = [];
-		const ent = boat(world, base, 8256, { "gather": ids(gathered) });
+		const ent = boat(world, base, 8256, { gather: ids(gathered) });
 		const work = prime(worker, ent);
 
 		assert.equal(work.startFishing(world.gameState), true);

@@ -26,24 +26,28 @@ export function getMaxStrength(
 {
 	let strength = 0;
 	const attackTypes = ent.attackTypes();
-	const weights = {
-		"importance": DamageTypeImportance,
-		"count": Object.keys(DamageTypeImportance).length,
-		debugLevel,
-	};
+	const weights = { importance: DamageTypeImportance, count: Object.keys(DamageTypeImportance).length, debugLevel };
 	if (!attackTypes)
+	{
 		return strength;
+	}
 
 	for (const type of attackTypes)
+	{
 		if (type !== "Slaughter")
+		{
 			strength = addAttackStrength(strength, ent, type, weights, againstClass);
+		}
+	}
 
 	const resistanceStrength = ent.resistanceStrengths();
 
 	if (resistanceStrength && resistanceStrength.Damage)
 	{
 		for (const str in resistanceStrength.Damage)
+		{
 			strength = addDamageStrength(strength, weights, str, +resistanceStrength.Damage[str], "resistanceStrength");
+		}
 	}
 
 	// ToDo: Add support for StatusEffects and Capture.
@@ -64,11 +68,15 @@ interface DamageWeights
 function addDamageStrength(strength: number, weights: DamageWeights, str: string, val: number, what: string): number
 {
 	if (weights.importance[str])
+	{
 		return strength + weights.importance[str] * val / weights.count;
+	}
 	if (weights.debugLevel > 0)
+	{
 		aiWarn(
 			"Petra: " + str + " unknown " + what + " in getMaxStrength " + "(please add " + str + "  to config.js).",
 		);
+	}
 	return strength;
 }
 
@@ -86,13 +94,17 @@ function addAttackStrength(
 	{
 		let val = attackStrength[str];
 		if (againstClass)
+		{
 			val *= ent.getMultiplierAgainst(type, againstClass) ?? NaN;
+		}
 		strength = addDamageStrength(strength, weights, str, val, "attackStrength");
 	}
 
 	const attackRange = ent.attackRange(type);
 	if (attackRange)
+	{
 		strength += attackRange.max * 0.0125;
+	}
 
 	const attackTimes = ent.attackTimes(type);
 	for (const str in attackTimes)
@@ -128,7 +140,9 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 		{
 			const holder = getHolder(gameState, ent);
 			if (holder)
+			{
 				return getLandAccess(gameState, holder);
+			}
 
 			aiWarn("Petra error: entity without position, but not garrisoned");
 			dumpEntity(ent);
@@ -155,7 +169,9 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 				const pos: CommonPosition = worldPos(entPos[0] - d * sina, entPos[1] - d * cosa);
 				access = gameState.ai.accessibility.getAccessValue(pos);
 				if (access > 1)
+				{
 					break;
+				}
 			}
 		}
 		ent.setMetadata(PlayerID, "access", access);
@@ -184,7 +200,9 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): Sea
 				const pos: CommonPosition = worldPos(entPos[0] + d * sina, entPos[1] + d * cosa);
 				sea = gameState.ai.accessibility.getAccessValue(pos, true);
 				if (sea > 1)
+				{
 					break;
+				}
 			}
 		}
 		ent.setMetadata(PlayerID, "sea", sea);
@@ -272,19 +290,27 @@ export function requireValue<T>(value: T | null | undefined): T
 export function allowCapture(gameState: CommonGameState, ent: CommonEntity, target: CommonEntity): boolean
 {
 	if (!target.isCapturable() || !ent.canCapture(target))
+	{
 		return false;
+	}
 	if (target.isInvulnerable())
+	{
 		return true;
+	}
 	// always try to recapture capture points from an allied, except if it's decaying
 	if (gameState.isPlayerAlly(target.owner()))
+	{
 		return !target.decaying();
+	}
 
 	const antiCapture = antiCaptureOf(gameState, target);
 	const capture = jointCaptureStrength(gameState, ent, target) * (1 / (0.1 + 0.9 * target.healthLevel()));
 	const capturePoints = target.capturePoints();
 	const sumCapturePoints = capturePoints ? capturePoints.reduce((a: number, b: number): number => a + b) : 0;
 	if (target.hasDefensiveFire() && target.isGarrisonHolder() && target.garrisoned())
+	{
 		return capture > antiCapture + sumCapturePoints / 50;
+	}
 	return capture > antiCapture + sumCapturePoints / 80;
 }
 
@@ -296,11 +322,15 @@ function antiCaptureOf(gameState: CommonGameState, target: CommonEntity): number
 	{
 		const garrisonRegenRate = target.garrisonRegenRate();
 		for (const garrisonedEntity of target.garrisoned())
+		{
 			antiCapture += garrisonRegenRate * (gameState.getEntityById(garrisonedEntity)?.captureStrength() || 0);
+		}
 	}
 
 	if (target.decaying())
+	{
 		antiCapture -= target.territoryDecayRate();
+	}
 	return antiCapture;
 }
 
@@ -313,7 +343,7 @@ function jointCaptureStrength(gameState: CommonGameState, ent: CommonEntity, tar
 	if (!capturable)
 	{
 		capture = (ent.captureStrength() ?? NaN) * getAttackBonus(ent, target, "Capture");
-		capturableTargets.set(target.id(), { "strength": capture, "ents": new Set([ent.id()]) });
+		capturableTargets.set(target.id(), { strength: capture, ents: new Set([ent.id()]) });
 	}
 	else
 	{
@@ -333,9 +363,13 @@ export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: st
 	for (const bonus of attackBonuses(ent, type))
 	{
 		if (bonus.Civ && bonus.Civ !== target.civ())
+		{
 			continue;
+		}
 		if (!bonus.Classes || target.hasClasses(bonus.Classes))
+		{
 			attackBonus *= bonus.Multiplier;
+		}
 	}
 	return attackBonus;
 }
@@ -345,7 +379,9 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 {
 	const carrying = ent.resourceCarrying();
 	if (!carrying || !carrying.length || !isPlaced(ent))
+	{
 		return false;
+	}
 
 	const resource = carrying[0].type;
 
@@ -358,22 +394,32 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 	for (const dropsite of dropsiteCollection.values())
 	{
 		if (!isPlaced(dropsite))
+		{
 			continue;
+		}
 		const owner = dropsite.owner();
 		// owner !== PlayerID can only happen when hasSharedDropsites === true, so no need to test it again
 		if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
+		{
 			continue;
+		}
 		if (getLandAccess(gameState, dropsite) !== access)
+		{
 			continue;
+		}
 		const dist = SquareVectorDistance(ent.position(), dropsite.position());
 		if (dist > distmin)
+		{
 			continue;
+		}
 		distmin = dist;
 		closestDropsite = dropsite;
 	}
 
 	if (!closestDropsite)
+	{
 		return false;
+	}
 	ent.returnResources(closestDropsite);
 	return true;
 }
@@ -390,7 +436,9 @@ export function getHolder(gameState: CommonGameState, ent: CommonEntity): Common
 	for (const holder of gameState.getEntities().values())
 	{
 		if (holder.isGarrisonHolder() && holder.garrisoned().indexOf(ent.id()) !== -1)
+		{
 			return holder;
+		}
 	}
 	return undefined;
 }
@@ -400,7 +448,9 @@ export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): C
 {
 	// a foundation's template is "foundation|" + the template it builds
 	if (ent.foundationProgress() !== undefined)
+	{
 		return requireValue(gameState.getBuiltTemplate(ent.templateName()));
+	}
 
 	return ent;
 }
@@ -418,7 +468,9 @@ export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonPlaced
 			buildTerritories &&
 			(!buildTerritories.length || buildTerritories.length === 1 && buildTerritories[0] === "own")
 		)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -441,7 +493,9 @@ export function isLineInsideEnemyTerritory(
 		const pos: CommonPosition = worldPos(pos1[0] + i * stepx, pos1[1] + i * stepy);
 		const owner = gameState.ai.HQ.geography.territoryMap.getOwner(pos);
 		if (owner && gameState.isPlayerEnemy(owner))
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -453,11 +507,17 @@ export function gatherTreasure(
 ): boolean
 {
 	if (!gameState.ai.HQ.treasures.hasEntities())
+	{
 		return false;
+	}
 	if (!ent || !isPlaced(ent))
+	{
 		return false;
+	}
 	if (!ent.isTreasureCollector())
+	{
 		return false;
+	}
 	let treasureFound;
 	let distmin = Math.min();
 	const access = water ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
@@ -465,12 +525,16 @@ export function gatherTreasure(
 	{
 		const dist = treasureDistance(gameState, ent, treasure, access, water);
 		if (dist === undefined || dist > distmin)
+		{
 			continue;
+		}
 		distmin = dist;
 		treasureFound = treasure;
 	}
 	if (!treasureFound)
+	{
 		return false;
+	}
 	treasureFound.setMetadata(PlayerID, "lastGathered", gameState.ai.elapsedTime);
 	ent.collectTreasure(treasureFound);
 	ent.setMetadata(PlayerID, "treasure", treasureFound.id());
@@ -489,24 +553,36 @@ function treasureDistance(
 	// let some time for the previous gatherer to reach the treasure before trying again
 	const lastGathered = treasure.getMetadata(PlayerID, "lastGathered");
 	if (lastGathered && gameState.ai.elapsedTime - lastGathered < 20)
+	{
 		return undefined;
+	}
 	if (!water && access !== getLandAccess(gameState, treasure))
+	{
 		return undefined;
+	}
 	if (water && access !== getSeaAccess(gameState, treasure))
+	{
 		return undefined;
+	}
 	const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(treasure.position());
 	if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
+	{
 		return undefined;
+	}
 	const dist = SquareVectorDistance(ent.position(), treasure.position());
-	if (dist > 120000 || territoryOwner !== PlayerID && dist > 14000) // AI has no LOS, so restrict it a bit
+	if (dist > 120000 || territoryOwner !== PlayerID && dist > 14000)
+	{ // AI has no LOS, so restrict it a bit
 		return undefined;
+	}
 	return dist;
 }
 
 export function dumpEntity(ent: CommonEntity | undefined): void
 {
 	if (!ent)
+	{
 		return;
+	}
 	aiWarn(
 		" >>> id " + ent.id() + " name " + ent.genericName() + " pos " + ent.position() + " state " + ent.unitAIState(),
 	);

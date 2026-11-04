@@ -9,7 +9,7 @@ import { PAYBACK_HORIZON, incomeGain, paybackSeconds } from "./economyScore.ts";
  * undefined if not, else whether it is urgent (the cheap gather rates).
  */
 function wantedModification(
-	modifications: Array<{ value: string }>,
+	modifications: Array<{ value: string; }>,
 	cheap: boolean,
 	naval: boolean,
 ): boolean | undefined
@@ -21,12 +21,16 @@ function wantedModification(
 			naval && value === "ResourceGatherer/Rates/food.fish" || value === "ResourceGatherer/Rates/food.fruit" ||
 			value === "ResourceGatherer/Rates/wood.tree"
 		)
+		{
 			return cheap;
+		}
 		if (
 			value === "ResourceGatherer/Rates/food.grain" || value.startsWith("ResourceGatherer/Capacities") ||
 			value === "Attack/Ranged/MaxRange"
 		)
+		{
 			return false;
+		}
 	}
 	return undefined;
 }
@@ -40,7 +44,9 @@ function tooDearForWorkers(
 {
 	let costMax = 0;
 	for (const res in cost)
+	{
 		costMax = Math.max(costMax, Math.max(cost[res] - (available ? available[res] : 0), 0));
+	}
 	return 10 * numWorkers < costMax;
 }
 
@@ -62,15 +68,21 @@ export class ResearchManager
 	checkPhase(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.majorTech.hasQueuedUnits())
+		{
 			return;
+		}
 		// Don't try to phase up if already trying to gather resources for a civil-centre or wonder
 		if (queues.civilCentre.hasQueuedUnits() || queues.wonder.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const currentPhaseIndex = gameState.currentPhase();
 		const nextPhaseName = gameState.getPhaseName(currentPhaseIndex + 1);
 		if (!nextPhaseName)
+		{
 			return;
+		}
 
 		// a town whose land has run dry of wood asks for the town phase at once,
 		// while its stock still pays the phase and the market after it: waiting
@@ -95,17 +107,23 @@ export class ResearchManager
 	researchPopulationBonus(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.minorTech.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const techs = gameState.findAvailableTech();
 		for (const tech of techs)
 		{
 			const modifications = tech[1].modifications();
 			if (!modifications)
+			{
 				continue;
+			}
 			// TODO may-be loop on all modifs and check if the effect if positive ?
 			if (modifications[0].value !== "Population/Bonus")
+			{
 				continue;
+			}
 			queues.minorTech.addPlan(new ResearchPlan(gameState, tech[0]));
 			break;
 		}
@@ -114,7 +132,9 @@ export class ResearchManager
 	researchTradeBonus(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.minorTech.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const techs = gameState.findAvailableTech();
 		for (const tech of techs)
@@ -122,12 +142,18 @@ export class ResearchManager
 			const modifications = tech[1].modifications();
 			const affects = tech[1].affects();
 			if (!modifications || !affects)
+			{
 				continue;
+			}
 			if (affects.indexOf("Trader") === -1)
+			{
 				continue;
+			}
 			// TODO may-be loop on all modifs and check if the effect if positive ?
 			if (modifications[0].value !== "UnitMotion/WalkSpeed" && modifications[0].value !== "Trader/GainMultiplier")
+			{
 				continue;
+			}
 			queues.minorTech.addPlan(new ResearchPlan(gameState, tech[0]));
 			break;
 		}
@@ -137,7 +163,7 @@ export class ResearchManager
 	researchWantedTechs(
 		gameState: CommonGameState,
 		techs: Array<[TechName, CommonTechnology]>,
-	): { name: TechName; increasePriority: boolean } | undefined
+	): { name: TechName; increasePriority: boolean; } | undefined
 	{
 		const phase1 = gameState.currentPhase() === 1;
 		const available = phase1 ? gameState.ai.queueManager.getAvailableResources(gameState) : null;
@@ -145,27 +171,37 @@ export class ResearchManager
 		for (const tech of techs)
 		{
 			if (tech[0].indexOf("unlock_champion") === 0)
-				return { "name": tech[0], "increasePriority": true };
+			{
+				return { name: tech[0], increasePriority: true };
+			}
 			if (tech[0] === "traditional_army_sele" || tech[0] === "reformed_army_sele")
 			{
 				const selected = pickRandom([techName("traditional_army_sele"), techName("reformed_army_sele")]);
 				if (selected !== undefined)
-					return { "name": selected, "increasePriority": true };
+				{
+					return { name: selected, increasePriority: true };
+				}
 			}
 
 			const modifications = tech[1].modifications();
 			if (!modifications)
+			{
 				continue;
+			}
 			const cost = tech[1].cost();
 			if (phase1 && tooDearForWorkers(cost, available, numWorkers))
+			{
 				continue;
+			}
 			const increasePriority = wantedModification(
 				modifications,
 				this.CostSum(cost) < 400,
 				gameState.ai.HQ.geography.navalMap,
 			);
 			if (increasePriority !== undefined)
-				return { "name": tech[0], increasePriority };
+			{
+				return { name: tech[0], increasePriority };
+			}
 		}
 		return undefined;
 	}
@@ -183,11 +219,15 @@ export class ResearchManager
 		{
 			const modifications = tech.modifications();
 			if (!modifications)
+			{
 				continue;
+			}
 			const cost = tech.cost();
 			let costSum = 0;
 			for (const res in cost)
+			{
 				costSum += cost[res];
+			}
 			const payback = paybackSeconds(costSum, tech.researchTime(), incomeGain(economy, modifications));
 			if (payback < bestPayback)
 			{
@@ -202,7 +242,7 @@ export class ResearchManager
 	researchPreferredTechs(
 		gameState: CommonGameState,
 		techs: Array<[TechName, CommonTechnology]>,
-	): { name: TechName; increasePriority: boolean } | undefined
+	): { name: TechName; increasePriority: boolean; } | undefined
 	{
 		const phase2 = gameState.currentPhase() === 2;
 		const available = phase2 ? gameState.ai.queueManager.getAvailableResources(gameState) : null;
@@ -211,10 +251,14 @@ export class ResearchManager
 		{
 			const modifications = tech[1].modifications();
 			if (!modifications)
+			{
 				continue;
+			}
 			const cost = tech[1].cost();
 			if (phase2 && tooDearForWorkers(cost, available, numWorkers))
+			{
 				continue;
+			}
 			const cheap = this.CostSum(cost) < 400;
 			for (const modification of modifications)
 			{
@@ -223,9 +267,13 @@ export class ResearchManager
 					value === "ResourceGatherer/Rates/stone.rock" || value === "ResourceGatherer/Rates/metal.ore" ||
 					value === "BuildingAI/DefaultArrowCount"
 				)
-					return { "name": tech[0], "increasePriority": cheap };
+				{
+					return { name: tech[0], increasePriority: cheap };
+				}
 				if (value === "Health/RegenRate" || value === "Health/IdleRegenRate")
-					return { "name": tech[0], "increasePriority": false };
+				{
+					return { name: tech[0], increasePriority: false };
+				}
 			}
 		}
 		return undefined;
@@ -234,7 +282,9 @@ export class ResearchManager
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.majorTech.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const techs = gameState.findAvailableTech();
 
@@ -252,7 +302,9 @@ export class ResearchManager
 			return;
 		}
 		if (queues.minorTech.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const wanted = this.researchWantedTechs(gameState, techs);
 		if (wanted)
@@ -262,7 +314,9 @@ export class ResearchManager
 		}
 
 		if (gameState.currentPhase() < 2)
+		{
 			return;
+		}
 
 		const preferred = this.researchPreferredTechs(gameState, techs);
 		if (preferred)
@@ -272,16 +326,22 @@ export class ResearchManager
 		}
 
 		if (gameState.currentPhase() < 3)
+		{
 			return;
+		}
 
 		this.dropUnusedTechs(gameState, techs);
 		if (!techs.length)
+		{
 			return;
+		}
 
 		// randomly pick one. No worries about pairs in that case.
 		const pickedTech = pickRandom(techs);
 		if (!pickedTech)
+		{
 			return;
+		}
 		queues.minorTech.addPlan(new ResearchPlan(gameState, pickedTech[0]));
 	}
 
@@ -289,7 +349,7 @@ export class ResearchManager
 	private queueTech(
 		gameState: CommonGameState,
 		queues: PetraRuntime.QueueCollection,
-		choice: { name: TechName; increasePriority: boolean },
+		choice: { name: TechName; increasePriority: boolean; },
 	): void
 	{
 		if (!choice.increasePriority)
@@ -335,9 +395,13 @@ export class ResearchManager
 	{
 		let costSum = 0;
 		if (cost === undefined)
+		{
 			return costSum;
+		}
 		for (const res in cost)
+		{
 			costSum += cost[res];
+		}
 		return costSum;
 	}
 

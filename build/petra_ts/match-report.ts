@@ -58,7 +58,9 @@ if (!dir || nameArgs.length < 4 || nameArgs.length % 2)
 }
 const names = new Map<number, string>();
 for (let i = 0; i < nameArgs.length; i += 2)
+{
 	names.set(Number(nameArgs[i]), nameArgs[i + 1]);
+}
 const log = readFileSync(join(dir, "game.log"), "utf8");
 const lines = log.split("\n");
 
@@ -71,16 +73,22 @@ const players: PlayerStatistics[] = [];
 for (let i = 0; i < lines.length; ++i)
 {
 	if (lines[i] != "{")
+	{
 		continue;
+	}
 	const end = lines.indexOf("}", i);
 	if (end == -1)
+	{
 		break;
+	}
 	players.push(JSON.parse(lines.slice(i, end + 1).join("\n")));
 	i = end;
 }
 players.sort((a, b) => a.playerID - b.playerID);
 if (players.length)
+{
 	writeFileSync(join(dir, "statistics.json"), JSON.stringify(players, null, "\t") + "\n");
+}
 
 // MatchEnd.js prints the game time of each win and defeat. Failing those (the
 // window was closed first), the non-visual engine prints "Turn N (length in
@@ -90,15 +98,21 @@ let decided: number | undefined;
 const reasons = new Map<number, string>();
 for (const match of log.matchAll(/^MATCHEND (.*)$/gm))
 {
-	const end: { time: number; players?: number[]; reason?: string } = JSON.parse(match[1]);
+	const end: { time: number; players?: number[]; reason?: string; } = JSON.parse(match[1]);
 	decided = Math.max(decided ?? 0, end.time);
 	for (const player of end.players ?? [])
+	{
 		if (end.reason)
+		{
 			reasons.set(player, end.reason);
+		}
+	}
 }
 let played = 0;
 for (const match of log.matchAll(/^Turn \d+ \((\d+)\)\.\.\.$/gm))
+{
 	played += Number(match[1]);
+}
 const clock = (ms: number): string =>
 	`${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
@@ -113,18 +127,24 @@ if (commands && existsSync(commands))
 		settings.Landscape,
 	]].filter(([, value]) => value !== undefined).map(([name, value]) => `${name} ${value}`);
 	if (picked.length)
+	{
 		console.log(`picked by the game setup: ${picked.join(", ")}`);
+	}
 }
 
 if (decided !== undefined)
+{
 	console.log(`decided at ${clock(decided)} game time`);
+}
 else if (played)
+{
 	console.log(`played ${clock(played)} game time`);
+}
 
 if (players.length)
 {
 	console.log(
-		"result: " + players.map(p =>
+		"result: " + players.map((p) =>
 			`${botName(p.playerID)} ${p.playerState}` + (reasons.has(p.playerID) ? ` (${reasons.get(p.playerID)})` : "")
 		).join(", "),
 	);
@@ -143,13 +163,11 @@ if (players.length)
 	};
 	const resources = ["food", "wood", "stone", "metal"];
 	const rows: Row[] = [
-		["state", p => p.playerState],
+		["state", (p) => p.playerState],
 		["units trained", count("unitsTrained", "Unit")],
-		[
-			"  of which soldiers",
-			p => count("unitsTrained", "Infantry")(p) + count("unitsTrained", "Cavalry")(p) +
-				count("unitsTrained", "Champion")(p),
-		],
+		["  of which soldiers", (p) =>
+			count("unitsTrained", "Infantry")(p) + count("unitsTrained", "Cavalry")(p) +
+			count("unitsTrained", "Champion")(p)],
 		["units lost", count("unitsLost", "Unit")],
 		["enemy units killed", count("enemyUnitsKilled", "Unit")],
 		["buildings constructed", count("buildingsConstructed", "Structure")],
@@ -157,23 +175,28 @@ if (players.length)
 		["enemy buildings destroyed", count("enemyBuildingsDestroyed", "Structure")],
 		["enemy buildings captured", count("buildingsCaptured", "Structure")],
 		...resources.map((type): Row => [`${type} gathered`, count("resourcesGathered", type)]),
-		["resources used", p => resources.reduce((sum, type) => sum + count("resourcesUsed", type)(p), 0)],
+		["resources used", (p) =>
+			resources.reduce((sum, type) => sum + count("resourcesUsed", type)(p), 0)],
 		["loot collected", value("lootCollected")],
 		["map explored %", value("percentMapExplored")],
 		["peak map controlled %", value("peakPercentMapControlled")],
 	];
-	const header = ["", ...players.map(p => name(p.playerID))];
-	const table = [header, ...rows.map(([label, cell]) => [label, ...players.map(p => String(cell(p)))])];
-	const widths = header.map((_, column) => Math.max(...table.map(row => row[column].length)));
+	const header = ["", ...players.map((p) => name(p.playerID))];
+	const table = [header, ...rows.map(([label, cell]) => [label, ...players.map((p) => String(cell(p)))])];
+	const widths = header.map((_, column) => Math.max(...table.map((row) => row[column].length)));
 	for (const row of table)
+	{
 		console.log(
 			"  " + row.map((cell, column) =>
 				column ? cell.padStart(widths[column] + 2) : cell.padEnd(widths[column])
 			).join("").trimEnd(),
 		);
+	}
 }
 else
+{
 	console.log("result: undecided (the game was closed before one bot defeated the others)");
+}
 
 // Errors and warnings, each distinct line once, most frequent first.
 const levelCounts = new Map<string, number>();
@@ -181,16 +204,24 @@ for (const level of ["ERROR", "WARNING"])
 {
 	const counts = new Map<string, number>();
 	for (const line of lines)
+	{
 		if (line.includes(level))
+		{
 			counts.set(line, (counts.get(line) ?? 0) + 1);
+		}
+	}
 	const count = [...counts.values()].reduce((sum, n) => sum + n, 0);
 	levelCounts.set(level, count);
 	console.log(`lines with ${level} in game.log: ${count}${count ? `, ${counts.size} distinct:` : ""}`);
 	const listed = [...counts].sort((a, b) => b[1] - a[1]);
 	for (const [line, n] of listed.slice(0, 10))
+	{
 		console.log(`  ${n}x ${line.length > 200 ? line.slice(0, 200) + "..." : line}`);
+	}
 	if (listed.length > 10)
+	{
 		console.log(`  ... and ${listed.length - 10} more`);
+	}
 }
 
 console.log(`replay: ${replay ?? "none written"}`);
@@ -208,26 +239,26 @@ const resourceTypes = ["food", "wood", "stone", "metal"];
 const result: MatchResult = {
 	decided,
 	played,
-	"players": players.map(p => ({
-		"id": p.playerID,
-		"name": name(p.playerID),
-		"state": p.playerState,
-		"reason": reasons.get(p.playerID),
-		"statistics": {
-			"unitsTrained": sum(p.statistics.unitsTrained, ["Unit"]),
-			"unitsLost": sum(p.statistics.unitsLost, ["Unit"]),
-			"unitsLostValue": sum(p.statistics.unitsLostValue),
-			"enemyUnitsKilled": sum(p.statistics.enemyUnitsKilled, ["Unit"]),
-			"enemyUnitsKilledValue": sum(p.statistics.enemyUnitsKilledValue),
-			"buildingsLost": sum(p.statistics.buildingsLost, ["Structure"]),
-			"enemyBuildingsDestroyed": sum(p.statistics.enemyBuildingsDestroyed, ["Structure"]),
-			"resourcesGathered": sum(p.statistics.resourcesGathered, resourceTypes),
-			"resourcesUsed": sum(p.statistics.resourcesUsed, resourceTypes),
-			"peakPercentMapControlled": sum(p.statistics.peakPercentMapControlled),
+	players: players.map((p) => ({
+		id: p.playerID,
+		name: name(p.playerID),
+		state: p.playerState,
+		reason: reasons.get(p.playerID),
+		statistics: {
+			unitsTrained: sum(p.statistics.unitsTrained, ["Unit"]),
+			unitsLost: sum(p.statistics.unitsLost, ["Unit"]),
+			unitsLostValue: sum(p.statistics.unitsLostValue),
+			enemyUnitsKilled: sum(p.statistics.enemyUnitsKilled, ["Unit"]),
+			enemyUnitsKilledValue: sum(p.statistics.enemyUnitsKilledValue),
+			buildingsLost: sum(p.statistics.buildingsLost, ["Structure"]),
+			enemyBuildingsDestroyed: sum(p.statistics.enemyBuildingsDestroyed, ["Structure"]),
+			resourcesGathered: sum(p.statistics.resourcesGathered, resourceTypes),
+			resourcesUsed: sum(p.statistics.resourcesUsed, resourceTypes),
+			peakPercentMapControlled: sum(p.statistics.peakPercentMapControlled),
 		},
 	})),
-	"errors": levelCounts.get("ERROR") ?? 0,
-	"warnings": levelCounts.get("WARNING") ?? 0,
+	errors: levelCounts.get("ERROR") ?? 0,
+	warnings: levelCounts.get("WARNING") ?? 0,
 	fingerprint,
 };
 writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, "\t") + "\n");

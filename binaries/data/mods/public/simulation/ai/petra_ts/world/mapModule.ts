@@ -13,20 +13,22 @@ const TERRITORY_PLAYER_MASK = 0x1F;
 const TERRITORY_BLINKING_MASK = 0x40;
 
 /** Where a template may be built: its placement and the territories it allows (the defaults with none). */
-type BuildRules = { placementType: string; own: boolean; ally: boolean; neutral: boolean; enemy: boolean };
+type BuildRules = { placementType: string; own: boolean; ally: boolean; neutral: boolean; enemy: boolean; };
 
 function buildRules(template: CommonTemplate | undefined): BuildRules
 {
 	if (!template)
-		return { "placementType": "land", "own": true, "ally": true, "neutral": true, "enemy": false };
+	{
+		return { placementType: "land", own: true, ally: true, neutral: true, enemy: false };
+	}
 	// as in the original: a template without BuildRestrictions answers
 	// undefined, which allows no territory at all
 	return {
-		"placementType": template.buildPlacementType() ?? "land",
-		"own": template.hasBuildTerritory("own") === true,
-		"ally": template.hasBuildTerritory("ally") === true,
-		"neutral": template.hasBuildTerritory("neutral") === true,
-		"enemy": template.hasBuildTerritory("enemy") === true,
+		placementType: template.buildPlacementType() ?? "land",
+		own: template.hasBuildTerritory("own") === true,
+		ally: template.hasBuildTerritory("ally") === true,
+		neutral: template.hasBuildTerritory("neutral") === true,
+		enemy: template.hasBuildTerritory("enemy") === true,
 	};
 }
 
@@ -37,11 +39,17 @@ function territoryAllows(gameState: CommonGameState, rules: BuildRules, cell: nu
 	const tilePlayer = playerId(territoryMap.data[cell] & TERRITORY_PLAYER_MASK);
 	const isConnected = (territoryMap.data[cell] & TERRITORY_BLINKING_MASK) === 0;
 	if (tilePlayer === PlayerID)
+	{
 		return rules.own && (rules.neutral || isConnected);
+	}
 	if (gameState.isPlayerMutualAlly(tilePlayer))
+	{
 		return rules.ally && (rules.neutral || isConnected);
+	}
 	if (tilePlayer === 0)
+	{
 		return rules.neutral;
+	}
 	return rules.enemy;
 }
 
@@ -64,7 +72,9 @@ export function createObstructionMap(
 	for (let k = 0; k < territoryMap.data.length; ++k)
 	{
 		if (!territoryAllows(gameState, rules, k))
+		{
 			continue;
+		}
 		const x = ratio * (k % territoryMap.width);
 		const y = ratio * Math.floor(k / territoryMap.width);
 		for (let ix = 0; ix < ratio; ++ix)
@@ -73,9 +83,13 @@ export function createObstructionMap(
 			{
 				const i = x + ix + (y + iy) * passabilityMap.width;
 				if (!shore && accessIndex && accessIndex !== passMap[i])
+				{
 					continue;
+				}
 				if (!(passabilityMap.data[i] & obstructionMask))
+				{
 					obstructionTiles[i] = 255;
+				}
 			}
 		}
 	}
@@ -83,7 +97,9 @@ export function createObstructionMap(
 	const map = new InfoMap(gameState.sharedScript, "passability", obstructionTiles);
 	map.setMaxVal(255);
 	if (template)
+	{
 		keepMinDistance(gameState, map, template);
+	}
 	return map;
 }
 
@@ -92,10 +108,14 @@ function keepMinDistance(gameState: CommonGameState, map: InfoMap, template: Com
 {
 	const distance = template.buildDistance();
 	if (!distance)
+	{
 		return;
+	}
 	let minDist = distance.MinDistance ? +distance.MinDistance : 0;
 	if (!minDist)
+	{
 		return;
+	}
 	// a distance requirement is template data, so a template was necessarily passed
 	minDist -= requireValue(template.obstructionRadius()).min;
 	const fromClass = distance.FromClass;
@@ -182,13 +202,17 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	{
 		const j = cellIndex(map, jIndex);
 		if (!nearEdge(j))
+		{
 			continue;
+		}
 		// outside, unless one of its passability cells is open: then border
 		map.map[j] = mapMask.outside;
 		for (const k of getMapIndices(j, map, passabilityMap))
 		{
 			if (passabilityMap.data[k] & obstructionMask)
+			{
 				continue;
+			}
 			map.map[j] = mapMask.border;
 			break;
 		}
@@ -203,19 +227,27 @@ export function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 {
 	const width = map.width;
 	const cell = map.cellSize;
-	gameState.getEntities().forEach(ent =>
+	gameState.getEntities().forEach((ent) =>
 	{
 		if (!isPlaced(ent))
+		{
 			return;
+		}
 		const pos = ent.position();
 		const x = Math.round(pos[0] / cell);
 		const z = Math.round(pos[1] / cell);
 		const id = x + width * z;
 		if (map.map[id] === 1)
+		{
 			debugShade([ent.id()], [2, 0, 0]);
+		}
 		else if (map.map[id] === 2)
+		{
 			debugShade([ent.id()], [0, 2, 0]);
+		}
 		else if (map.map[id] === 3)
+		{
 			debugShade([ent.id()], [0, 0, 2]);
+		}
 	});
 }

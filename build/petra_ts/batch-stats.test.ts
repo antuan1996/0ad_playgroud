@@ -43,21 +43,21 @@ function game(
 ): BatchRow
 {
 	return {
-		"game": index,
-		"map": "random/mainland",
-		"mapSeed": seed,
-		"aiSeed": seed,
-		"blue": "petra_parity",
-		"red": "petra_fixed",
+		game: index,
+		map: "random/mainland",
+		mapSeed: seed,
+		aiSeed: seed,
+		blue: "petra_parity",
+		red: "petra_fixed",
 		swapped,
 		outcome,
-		"reason": outcome == "draw" ? "time limit" : "last player alive",
-		"decided": 30 * 60000,
+		reason: outcome == "draw" ? "time limit" : "last player alive",
+		decided: 30 * 60000,
 		fingerprint,
-		"errors": 0,
-		"warnings": 0,
-		"wall": 60,
-		"worker": 0,
+		errors: 0,
+		warnings: 0,
+		wall: 60,
+		worker: 0,
 	};
 }
 

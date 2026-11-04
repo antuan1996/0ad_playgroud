@@ -28,14 +28,18 @@ function sea(land: (x: number, y: number) => boolean = () => false): Accessibili
 	const width = 60;
 	const navalPassMap = new Uint16Array(width * width);
 	for (let y = 0; y < width; ++y)
+	{
 		for (let x = 0; x < width; ++x)
+		{
 			navalPassMap[x + y * width] = land(x, y) ? 1 : SEA;
+		}
+	}
 	return fake<Accessibility>({
-		"width": width,
-		"height": width,
-		"cellSize": CELL,
+		width: width,
+		height: width,
+		cellSize: CELL,
 		navalPassMap,
-		"gamePosToMapPos": (pos: [number, number]) => [Math.floor(pos[0] / CELL), Math.floor(pos[1] / CELL)],
+		gamePosToMapPos: (pos: [number, number]) => [Math.floor(pos[0] / CELL), Math.floor(pos[1] / CELL)],
 	});
 }
 
@@ -52,36 +56,42 @@ describe("seaRoute", () =>
 		assert.ok(route.length <= MAX_WAYPOINTS);
 		assert.deepEqual(route.at(-1), [230, 120], "the last waypoint is the landing point");
 		for (const point of route)
+		{
 			assert.equal(access.navalPassMap[Math.floor(point[0] / CELL) + Math.floor(point[1] / CELL) * 60], SEA);
+		}
 	});
 
 	it("goes round a tower beside the straight way, out of its reach", () =>
 	{
-		const tower: Shooter = { "pos": worldPos(120, 110), "range": 40 };
+		const tower: Shooter = { pos: worldPos(120, 110), range: 40 };
 		const route = seaRoute(sea(), SEA, worldPos(10, 120), worldPos(230, 120), [tower]);
 
 		assert.ok(route);
 		for (const point of route.slice(0, -1))
+		{
 			assert.ok(dist(point, tower.pos) > tower.range + DANGER_MARGIN - CELL, `waypoint ${point} keeps clear`);
+		}
 		assert.ok(
-			route.some(point => Math.abs(point[1] - 110) > tower.range + DANGER_MARGIN),
+			route.some((point) => Math.abs(point[1] - 110) > tower.range + DANGER_MARGIN),
 			"it swings wide of the tower, on one side or the other",
 		);
 	});
 
 	it("keeps its margin from a swordsman waiting on the shore", () =>
 	{
-		const swordsman: Shooter = { "pos": worldPos(120, 128), "range": 0 };
+		const swordsman: Shooter = { pos: worldPos(120, 128), range: 0 };
 		const route = seaRoute(sea(), SEA, worldPos(10, 120), worldPos(230, 120), [swordsman]);
 
 		assert.ok(route);
 		for (const point of route.slice(0, -1))
+		{
 			assert.ok(dist(point, swordsman.pos) > DANGER_MARGIN - CELL, `waypoint ${point} keeps clear`);
+		}
 	});
 
 	it("still reaches a landing point under fire", () =>
 	{
-		const fort: Shooter = { "pos": worldPos(225, 120), "range": 60 };
+		const fort: Shooter = { pos: worldPos(225, 120), range: 60 };
 		const route = seaRoute(sea(), SEA, worldPos(10, 120), worldPos(230, 120), [fort]);
 
 		assert.deepEqual(route?.at(-1), [230, 120]);
@@ -102,10 +112,7 @@ describe("seaRoute", () =>
 		const from = worldPos(40, 120);
 		const to = worldPos(200, 120);
 		// two towers on the island's west shore and south: the straight way passes within their reach
-		const towers: Shooter[] = [{ "pos": worldPos(100, 80), "range": 40 }, {
-			"pos": worldPos(100, 160),
-			"range": 40,
-		}];
+		const towers: Shooter[] = [{ pos: worldPos(100, 80), range: 40 }, { pos: worldPos(100, 160), range: 40 }];
 		const route = seaRoute(access, SEA, from, worldPos(200, 230), towers);
 		assert.ok(route);
 		assert.ok(route.length <= MAX_WAYPOINTS);
@@ -130,7 +137,7 @@ describe("seaRoute", () =>
 
 	it("finds no route from or to a point off its sea, or across land", () =>
 	{
-		const island = sea(x => x === 30); // a wall of land down the middle
+		const island = sea((x) => x === 30); // a wall of land down the middle
 		assert.equal(seaRoute(island, SEA, worldPos(10, 120), worldPos(230, 120), []), undefined, "no way across");
 		assert.equal(seaRoute(island, SEA, worldPos(122, 120), worldPos(230, 120), []), undefined, "starting on land");
 		assert.equal(
@@ -146,52 +153,52 @@ describe("shootersOf", () =>
 	it("counts the enemy buildings with defensive fire, the archers by their range and the swordsmen at 0, not houses, traders or gaia", () =>
 	{
 		const tower = makeEntity({ id: 1, owner: 2, position: [10, 10], classes: ["Structure", "Tower"] }, {
-			"hasDefensiveFire": () => true,
-			"attackRange": () => ({ "max": 72, "min": 0 }),
+			hasDefensiveFire: () => true,
+			attackRange: () => ({ max: 72, min: 0 }),
 		});
 		const house = makeEntity({ id: 2, owner: 2, position: [20, 20], classes: ["Structure", "House"] }, {
-			"hasDefensiveFire": () => false,
+			hasDefensiveFire: () => false,
 		});
 		const archer = makeEntity({ id: 3, owner: 2, position: [30, 30], classes: ["Unit", "Ranged"] }, {
-			"attackTypes": () => ["Ranged"],
-			"attackRange": () => ({ "max": 60, "min": 0 }),
+			attackTypes: () => ["Ranged"],
+			attackRange: () => ({ max: 60, min: 0 }),
 		});
 		const swordsman = makeEntity({ id: 4, owner: 2, position: [40, 40], classes: ["Unit", "Melee"] }, {
-			"attackTypes": () => ["Melee"],
+			attackTypes: () => ["Melee"],
 		});
 		const wolf = makeEntity({ id: 5, owner: 0, position: [50, 50], classes: ["Unit", "Animal"] });
 		const trader = makeEntity({ id: 8, owner: 2, position: [80, 80], classes: ["Unit", "Trader"] }, {
-			"attackTypes": () => undefined,
+			attackTypes: () => undefined,
 		});
 		// a slinger and a sentry post whose templates name no range: a tower's reach
 		const slinger = makeEntity({ id: 7, owner: 2, position: [70, 70], classes: ["Unit", "Ranged"] }, {
-			"attackTypes": () => ["Ranged"],
-			"attackRange": () => undefined,
+			attackTypes: () => ["Ranged"],
+			attackRange: () => undefined,
 		});
 		const sentry = makeEntity({ id: 6, owner: 2, position: [60, 60], classes: ["Structure", "Tower"] }, {
-			"hasDefensiveFire": () => true,
-			"attackRange": () => undefined,
+			hasDefensiveFire: () => true,
+			attackRange: () => undefined,
 		});
 		const gameState = fake<CommonGameState>({
-			"getEnemyEntities": () => ({
-				"values": () => [tower, house, archer, swordsman, wolf, sentry, slinger, trader].values(),
+			getEnemyEntities: () => ({
+				values: () => [tower, house, archer, swordsman, wolf, sentry, slinger, trader].values(),
 			}),
 		});
 
 		assert.deepEqual(shootersOf(gameState), [
-			{ "pos": [10, 10], "range": 72 },
-			{ "pos": [30, 30], "range": 60 },
-			{ "pos": [40, 40], "range": 0 },
-			{ "pos": [60, 60], "range": 60 },
-			{ "pos": [70, 70], "range": 60 },
+			{ pos: [10, 10], range: 72 },
+			{ pos: [30, 30], range: 60 },
+			{ pos: [40, 40], range: 0 },
+			{ pos: [60, 60], range: 60 },
+			{ pos: [70, 70], range: 60 },
 		]);
 	});
 });
 
 describe("threats in reach", () =>
 {
-	const archer: Shooter = { "pos": worldPos(100, 100), "range": 40 };
-	const swordsman: Shooter = { "pos": worldPos(200, 100), "range": 0 };
+	const archer: Shooter = { pos: worldPos(100, 100), range: 40 };
+	const swordsman: Shooter = { pos: worldPos(200, 100), range: 0 };
 
 	it("of a point: within a shooter's range and the margin", () =>
 	{

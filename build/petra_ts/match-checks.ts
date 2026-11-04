@@ -111,15 +111,15 @@ export const limits = {
 
 function readLines(dir: string, file: string): string[]
 {
-	return readFileSync(join(dir, file), "utf8").split("\n").filter(line => line.length);
+	return readFileSync(join(dir, file), "utf8").split("\n").filter((line) => line.length);
 }
 
 function parseCommand(line: string): Command
 {
 	const [time, player] = line.split(" ", 2);
 	const json = line.slice(time.length + player.length + 2);
-	const command: { type: string; template?: string } = JSON.parse(json);
-	return { "time": Number(time), "player": Number(player), json, "type": command.type, "template": command.template };
+	const command: { type: string; template?: string; } = JSON.parse(json);
+	return { time: Number(time), player: Number(player), json, type: command.type, template: command.template };
 }
 
 const minuteOf = (ms: number): number => Math.floor(ms / 60000);
@@ -128,20 +128,20 @@ export function checkMatch(dir: string): Check[]
 {
 	const report = readFileSync(join(dir, "match.txt"), "utf8");
 	const players: PlayerStatistics[] = JSON.parse(readFileSync(join(dir, "statistics.json"), "utf8"));
-	const timeline: Snapshot[] = readLines(dir, "timeline.txt").map(line => JSON.parse(line));
+	const timeline: Snapshot[] = readLines(dir, "timeline.txt").map((line) => JSON.parse(line));
 	const commands = readLines(dir, "commands.txt").map(parseCommand);
-	const notices: Notice[] = readLines(dir, "notices.txt").map(line => JSON.parse(line));
-	const ids = players.map(p => p.playerID);
-	const winner = players.find(p => p.playerState == "won")?.playerID;
+	const notices: Notice[] = readLines(dir, "notices.txt").map((line) => JSON.parse(line));
+	const ids = players.map((p) => p.playerID);
+	const winner = players.find((p) => p.playerState == "won")?.playerID;
 	const decidedAt = /^decided at (\d+):(\d+) game time$/m.exec(report);
 	const decidedMinute = decidedAt ? Number(decidedAt[1]) : Infinity;
-	const snapshots = (player: number): Snapshot[] => timeline.filter(t => t.player == player);
-	const issued = (player: number): Command[] => commands.filter(c => c.player == player);
+	const snapshots = (player: number): Snapshot[] => timeline.filter((t) => t.player == player);
+	const issued = (player: number): Command[] => commands.filter((c) => c.player == player);
 
 	const checks: Check[] = [];
 	const check = (name: string, problems: string[], fine: string): void =>
 	{
-		checks.push({ name, "ok": !problems.length, "detail": problems.length ? problems.join("; ") : fine });
+		checks.push({ name, ok: !problems.length, detail: problems.length ? problems.join("; ") : fine });
 	};
 
 	// The outcome.
@@ -168,7 +168,7 @@ export function checkMatch(dir: string): Check[]
 
 	// Phases, from the timeline (snapshots every two minutes).
 	const reached = (player: number, phase: string): number | undefined =>
-		snapshots(player).find(t => t.phase.split(",").includes(phase))?.minute;
+		snapshots(player).find((t) => t.phase.split(",").includes(phase))?.minute;
 	const winnerTown = winner === undefined ? undefined : reached(winner, "phase_town");
 	check(
 		"the winner reaches town phase",
@@ -187,7 +187,7 @@ export function checkMatch(dir: string): Check[]
 		const counts = p.statistics[key];
 		return typeof counts == "object" ? counts[type] ?? 0 : 0;
 	};
-	const winnerStats = players.find(p => p.playerID == winner);
+	const winnerStats = players.find((p) => p.playerID == winner);
 	const metal = winnerStats ? statistic(winnerStats, "resourcesGathered", "metal") : 0;
 	check(
 		"the winner mines metal",
@@ -209,26 +209,36 @@ export function checkMatch(dir: string): Check[]
 			const walkers = t.unitAI?.WALKING ?? 0;
 			walkingSince = walkers >= limits.walkingUnits ? walkingSince + 1 : 0;
 			if (walkingSince == limits.walkingSnapshots)
+			{
 				walking.push(
 					`player ${player}: ${walkers} units walking at minute ${t.minute}, ` +
 						`at least ${limits.walkingUnits} for ${limits.walkingSnapshots} snapshots`,
 				);
+			}
 			const women = t.classes.Support ?? 0;
 			const idleWomen = t.idle?.Support ?? 0;
 			const idleNow = idleWomen > Math.max(limits.idleSupport, limits.idleSupportShare * women);
 			if (idleNow && idleBefore)
+			{
 				idle.push(
 					`player ${player} at minute ${t.minute}: ${idleWomen} of ${women} women idle, as two minutes before`,
 				);
+			}
 			idleBefore = idleNow;
 			for (const [type, amount] of Object.entries(t.resources))
+			{
 				if (amount > limits.stockpile && t.pop < limits.stockpileBelowPop)
+				{
 					stock.push(`player ${player} at minute ${t.minute}: ${amount} ${type} at population ${t.pop}`);
+				}
+			}
 		}
-		const pop = (minute: number): number | undefined => snapshots(player).find(t => t.minute == minute)?.pop;
+		const pop = (minute: number): number | undefined => snapshots(player).find((t) => t.minute == minute)?.pop;
 		const [start, later] = [pop(1), pop(9)];
 		if (start === undefined || later === undefined || later < limits.earlyGrowth * start)
+		{
 			growth.push(`player ${player}: population ${start} at minute 1, ${later} at minute 9`);
+		}
 	}
 	check(
 		"no march goes on for good",
@@ -258,15 +268,19 @@ export function checkMatch(dir: string): Check[]
 		const own = issued(player);
 		const perMinute = new Map<number, Command[]>();
 		for (const command of own)
+		{
 			perMinute.set(minuteOf(command.time), [...perMinute.get(minuteOf(command.time)) ?? [], command]);
+		}
 
 		// Silence while the player still has houses or a centre, until the game is decided.
 		let quiet = 0;
 		for (let minute = 0; minute < decidedMinute; ++minute)
 		{
-			const snapshot = snapshots(player).filter(t => t.minute <= minute).at(-1);
+			const snapshot = snapshots(player).filter((t) => t.minute <= minute).at(-1);
 			if (snapshot && !snapshot.popLimit)
+			{
 				break;
+			}
 			if (snapshot && snapshot.pop < limits.silentPopulation)
 			{
 				quiet = 0;
@@ -274,7 +288,9 @@ export function checkMatch(dir: string): Check[]
 			}
 			quiet = perMinute.has(minute) ? 0 : quiet + 1;
 			if (quiet == limits.silentMinutes)
+			{
 				silent.push(`player ${player}: no command in minutes ${minute - quiet + 1}-${minute}`);
+			}
 		}
 
 		// The same command in many turns: a decision that never takes. Repeats
@@ -285,14 +301,19 @@ export function checkMatch(dir: string): Check[]
 		{
 			const turns = turnsOf.get(command.json) ?? [];
 			if (turns.at(-1) !== command.time)
+			{
 				turns.push(command.time);
+			}
 			turnsOf.set(command.json, turns);
 		}
 		for (const [json, turns] of turnsOf)
+		{
 			for (let first = 0, last = 0; last < turns.length; ++last)
 			{
 				while (turns[last] - turns[first] > limits.repeatWindow)
+				{
 					++first;
+				}
 				if (last - first + 1 > limits.repeatedTurns)
 				{
 					repeated.push(
@@ -303,43 +324,60 @@ export function checkMatch(dir: string): Check[]
 					break;
 				}
 			}
+		}
 
 		const perTurn = new Map<number, number>();
 		for (const command of own)
+		{
 			perTurn.set(command.time, (perTurn.get(command.time) ?? 0) + 1);
+		}
 		for (const [time, count] of perTurn)
+		{
 			if (count > limits.commandsPerTurn)
+			{
 				floods.push(`player ${player}: ${count} commands at ${(time / 60000).toFixed(1)} min`);
+			}
+		}
 
 		// Productions cancelled in bulk while there is room to train.
 		for (const [minute, list] of perMinute)
 		{
-			const cancels = list.filter(c => c.type == "stop-production").length;
-			const snapshot = snapshots(player).filter(t => t.minute <= minute).at(-1);
+			const cancels = list.filter((c) => c.type == "stop-production").length;
+			const snapshot = snapshots(player).filter((t) => t.minute <= minute).at(-1);
 			if (cancels > limits.cancelsPerMinute && snapshot && snapshot.pop < snapshot.popLimit - limits.capMargin)
+			{
 				churn.push(
 					`player ${player} in minute ${minute}: ${cancels} productions cancelled at population ${snapshot.pop} of ${snapshot.popLimit}`,
 				);
+			}
 		}
 
 		// A phase is had soon after it is ordered.
 		for (const phase of ["phase_town", "phase_city"])
 		{
-			const order = own.find(c => c.type == "research" && c.template?.startsWith(phase));
+			const order = own.find((c) => c.type == "research" && c.template?.startsWith(phase));
 			const had = reached(player, phase);
 			if (order && had === undefined && minuteOf(order.time) + limits.phaseResearchMinutes < decidedMinute)
+			{
 				phasing.push(
 					`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, never had`,
 				);
+			}
 			else if (order && had !== undefined && had > minuteOf(order.time) + limits.phaseResearchMinutes)
+			{
 				phasing.push(
 					`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, had at ${had}`,
 				);
+			}
 			else if (!order && had !== undefined)
+			{
 				phasing.push(`player ${player}: ${phase} had at minute ${had} but never ordered`);
+			}
 		}
-		if (player == winner && !own.some(c => c.type == "research" && c.template?.startsWith("phase_town")))
+		if (player == winner && !own.some((c) => c.type == "research" && c.template?.startsWith("phase_town")))
+		{
 			phasing.push(`player ${player}, the winner, never ordered town phase`);
+		}
 	}
 	check(
 		"no side falls silent",
@@ -366,12 +404,14 @@ export function checkMatch(dir: string): Check[]
 	const refused: string[] = [];
 	for (const player of ids)
 	{
-		const own = notices.filter(n => n.type == "text" && n.players.length == 1 && n.players[0] == player);
+		const own = notices.filter((n) => n.type == "text" && n.players.length == 1 && n.players[0] == player);
 		if (own.length > limits.refusals)
 		{
 			const kinds = new Map<string, number>();
 			for (const n of own)
+			{
 				kinds.set(n.message ?? "", (kinds.get(n.message ?? "") ?? 0) + 1);
+			}
 			const top = [...kinds].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${n}x ${m}`).join(", ");
 			refused.push(`player ${player}: ${own.length} orders refused (${top})`);
 		}
@@ -391,6 +431,8 @@ if (import.meta.url == pathToFileURL(process.argv[1]).href)
 	}
 	const checks = checkMatch(dir);
 	for (const { name, ok, detail } of checks)
+	{
 		console.log(`${ok ? "ok  " : "FAIL"} ${name}: ${detail}`);
-	process.exit(checks.every(c => c.ok) ? 0 : 1);
+	}
+	process.exit(checks.every((c) => c.ok) ? 0 : 1);
 }

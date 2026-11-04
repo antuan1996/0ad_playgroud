@@ -43,7 +43,9 @@ function sortedQueues(
 	{
 		const priorityDifference = priorities[b] - priorities[a];
 		if (priorityDifference !== 0)
+		{
 			return priorityDifference;
+		}
 		return a < b ? -1 : 1;
 	});
 }
@@ -61,24 +63,24 @@ export function isQueueName(config: Config, name: string): name is PetraRuntime.
 export function configuredQueues(): PetraRuntime.QueueCollection
 {
 	return {
-		"villager": new Queue(),
-		"citizenSoldier": new Queue(),
-		"trader": new Queue(),
-		"healer": new Queue(),
-		"ships": new Queue(),
-		"house": new Queue(),
-		"dropsites": new Queue(),
-		"field": new Queue(),
-		"dock": new Queue(),
-		"corral": new Queue(),
-		"economicBuilding": new Queue(),
-		"militaryBuilding": new Queue(),
-		"defenseBuilding": new Queue(),
-		"civilCentre": new Queue(),
-		"majorTech": new Queue(),
-		"minorTech": new Queue(),
-		"wonder": new Queue(),
-		"emergency": new Queue(),
+		villager: new Queue(),
+		citizenSoldier: new Queue(),
+		trader: new Queue(),
+		healer: new Queue(),
+		ships: new Queue(),
+		house: new Queue(),
+		dropsites: new Queue(),
+		field: new Queue(),
+		dock: new Queue(),
+		corral: new Queue(),
+		economicBuilding: new Queue(),
+		militaryBuilding: new Queue(),
+		defenseBuilding: new Queue(),
+		civilCentre: new Queue(),
+		majorTech: new Queue(),
+		minorTech: new Queue(),
+		wonder: new Queue(),
+		emergency: new Queue(),
 	};
 }
 
@@ -94,15 +96,19 @@ function* queueEntries(queues: PetraRuntime.QueueCollection): Generator<[PetraRu
 	for (const name in queues)
 	{
 		if (!holdsQueue(queues, name))
+		{
 			continue;
+		}
 		const queue = queues[name];
 		if (queue)
+		{
 			yield [name, queue];
+		}
 	}
 }
 
 /** The queues that want more of one resource: their priority now, and how much they still want. */
-type QueueNeeds = { totalPriority: number; tempPrio: Record<string, number>; maxNeed: Record<string, number> };
+type QueueNeeds = { totalPriority: number; tempPrio: Record<string, number>; maxNeed: Record<string, number>; };
 
 /** What the queue manager saves */
 export type SerializedQueueManager = {
@@ -143,10 +149,14 @@ export class QueueManager
 		this.queues = queues;
 		this.priorities = {};
 		for (const [name, priority] of Object.entries(Config.priorities))
+		{
 			this.priorities[name] = priority;
+		}
 		this.accounts = {};
 		for (const q in this.queues)
+		{
 			this.accounts[q] = new ResourcesManager();
+		}
 
 		// the sorting is updated on priority change.
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
@@ -162,7 +172,9 @@ export class QueueManager
 	{
 		const resources = gameState.getResources();
 		for (const key in this.queues)
+		{
 			resources.subtract(this.accounts[key]);
+		}
 		return resources;
 	}
 
@@ -171,7 +183,9 @@ export class QueueManager
 	{
 		const resources = new ResourcesManager();
 		for (const key in this.queues)
+		{
 			resources.add(this.accounts[key]);
+		}
 		return resources;
 	}
 
@@ -183,14 +197,18 @@ export class QueueManager
 		{
 			const queue = q[1];
 			if (!queue.hasQueuedUnits() || !queue.plans[0].isGo(gameState))
+			{
 				continue;
+			}
 			const costs = queue.plans[0].getCost();
 			needed.add(costs);
 		}
 		// get out current resources, not removing accounts.
 		const current = gameState.getResources();
 		for (const res of Resources.GetCodes())
+		{
 			needed[res] = Math.max(0, needed[res] - current[res]);
+		}
 
 		return needed;
 	}
@@ -213,25 +231,39 @@ export class QueueManager
 		{
 			const queue = q[1];
 			if (queue.paused)
+			{
 				continue;
+			}
 			for (let j = 0; j < queue.length(); ++j)
 			{
 				if (j > 1)
+				{
 					break;
+				}
 				const cost = queue.plans[j].getCost();
 				if (queue.plans[j].isGo(gameState))
 				{
 					if (j === 0)
+					{
 						total = totalShort;
+					}
 					else
+					{
 						total = totalMedium;
+					}
 				}
 				else
+				{
 					total = totalLong;
+				}
 				for (const type in total)
+				{
 					total[type] += cost[type];
+				}
 				if (!queue.plans[j].isGo(gameState))
+				{
 					break;
+				}
 			}
 		}
 	}
@@ -246,7 +278,7 @@ export class QueueManager
 	 * TODO never called since the gatherer split was dropped (FINDINGS §19):
 	 * for the decisions of stage 5 that weigh queued costs.
 	 */
-	gatherDemand(gameState: CommonGameState): { costs: Record<string, number>; floors: Record<string, number> }
+	gatherDemand(gameState: CommonGameState): { costs: Record<string, number>; floors: Record<string, number>; }
 	{
 		const costs: Record<string, number> = {};
 		const floors: Record<string, number> = {};
@@ -281,13 +313,15 @@ export class QueueManager
 	private queuedTotals(
 		gameState: CommonGameState,
 		initial: (res: string) => [number, number, number],
-	): { totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number> }
+	): { totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number>; }
 	{
 		const totalShort: Record<string, number> = {};
 		const totalMedium: Record<string, number> = {};
 		const totalLong: Record<string, number> = {};
 		for (const res of Resources.GetCodes())
+		{
 			[totalShort[res], totalMedium[res], totalLong[res]] = initial(res);
+		}
 		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
 		return { totalShort, totalMedium, totalLong };
 	}
@@ -301,7 +335,9 @@ export class QueueManager
 		{
 			const ret: Record<string, number> = {};
 			for (const res of Resources.GetCodes())
+			{
 				ret[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
+			}
 			return ret;
 		}
 
@@ -312,7 +348,9 @@ export class QueueManager
 		// long queue contains the isGo=false items, assumed to be ready in 300s
 		const { totalShort, totalMedium, totalLong } = this.queuedTotals(
 			gameState,
-			res => [
+			(
+				res,
+			) => [
 				this.Config.queues.short[res] || this.Config.queues.short.default,
 				this.Config.queues.medium[res] || this.Config.queues.medium.default,
 				this.Config.queues.long[res] || this.Config.queues.long.default,
@@ -334,7 +372,9 @@ export class QueueManager
 					totalMedium[res] -= diff;
 					current[res] -= diff;
 					if (current[res] > 0)
+					{
 						totalLong[res] -= Math.min(current[res], totalLong[res]);
+					}
 				}
 			}
 			rates[res] = totalShort[res] / 30 + totalMedium[res] / 60 + totalLong[res] / 300;
@@ -346,7 +386,7 @@ export class QueueManager
 	printQueues(gameState: CommonGameState): void
 	{
 		let numWorkers = 0;
-		gameState.getOwnUnits().forEach(ent =>
+		gameState.getOwnUnits().forEach((ent) =>
 		{
 			if (
 				ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER &&
@@ -375,7 +415,9 @@ export class QueueManager
 		}
 		aiWarn("Accounts");
 		for (const p in this.accounts)
+		{
 			aiWarn(p + ": " + uneval(this.accounts[p]));
+		}
 		aiWarn("Current Resources: " + uneval(gameState.getResources()));
 		aiWarn("Available Resources: " + uneval(this.getAvailableResources(gameState)));
 		aiWarn("Wanted Gather Rates: " + uneval(hqOf(gameState).GetWantedGatherRates(gameState)));
@@ -388,7 +430,9 @@ export class QueueManager
 	clear(): void
 	{
 		for (const [, queue] of queueEntries(this.queues))
+		{
 			queue.empty();
+		}
 	}
 
 	/**
@@ -404,7 +448,9 @@ export class QueueManager
 		for (const res of Resources.GetCodes())
 		{
 			if (this.accounts[i][res] >= cost[res])
+			{
 				continue;
+			}
 			this.accounts[i][res] += Math.min(available[res], cost[res] - this.accounts[i][res]);
 		}
 	}
@@ -421,7 +467,9 @@ export class QueueManager
 		for (const res of Resources.GetCodes())
 		{
 			if (this.accounts[j][res] >= cost[res])
+			{
 				continue;
+			}
 			const diff = Math.min(this.accounts[i][res], cost[res] - this.accounts[j][res]);
 			this.accounts[i][res] -= diff;
 			this.accounts[j][res] += diff;
@@ -436,8 +484,10 @@ export class QueueManager
 		const availableRes = this.getAvailableResources(gameState);
 		for (const res of Resources.GetCodes())
 		{
-			if (availableRes[res] < 0) // rescale the accounts if we've spent resources already accounted (e.g. by bartering)
+			if (availableRes[res] < 0)
+			{ // rescale the accounts if we've spent resources already accounted (e.g. by bartering)
 				this.rescaleAccounts(gameState, res, availableRes);
+			}
 
 			if (!availableRes[res])
 			{
@@ -476,7 +526,7 @@ export class QueueManager
 	 */
 	private queueNeeds(gameState: CommonGameState, res: string, availableRes: ResourcesManager): QueueNeeds
 	{
-		const needs: QueueNeeds = { "totalPriority": 0, "tempPrio": {}, "maxNeed": {} };
+		const needs: QueueNeeds = { totalPriority: 0, tempPrio: {}, maxNeed: {} };
 		for (const [j, queue] of queueEntries(this.queues))
 		{
 			// returns exactly the correct amount, ie 0 if we're not go.
@@ -489,10 +539,14 @@ export class QueueManager
 				// if we have enough of that resource for our first item in the queue, diminish our priority.
 				const nextPlan = queue.getNext();
 				if (nextPlan && this.accounts[j][res] >= nextPlan.getCost()[res])
+				{
 					needs.tempPrio[j] /= 2;
+				}
 
 				if (needs.tempPrio[j])
+				{
 					needs.totalPriority += needs.tempPrio[j];
+				}
 			}
 			else if (this.accounts[j][res] > queueCost[res])
 			{
@@ -518,9 +572,13 @@ export class QueueManager
 			// we'll add at much what can be allowed to this queue.
 			let toAdd = Math.floor(availableRes * tempPrio[j] / totalPriority);
 			if (toAdd >= maxNeed[j])
+			{
 				toAdd = maxNeed[j];
+			}
 			else
+			{
 				missing = true;
+			}
 			this.accounts[j][res] += toAdd;
 			maxNeed[j] -= toAdd;
 			available -= toAdd;
@@ -533,11 +591,15 @@ export class QueueManager
 				this.accounts[j][res] += toAdd;
 				available -= toAdd;
 				if (available <= 0)
+				{
 					break;
+				}
 			}
 		}
 		if (available < 0)
+		{
 			aiWarn("Petra: problem with remaining " + res + " in queueManager " + available);
+		}
 	}
 
 	switchResource(gameState: CommonGameState, res: string): void
@@ -548,20 +610,30 @@ export class QueueManager
 		for (const [j, queue] of queueEntries(this.queues))
 		{
 			if (!queue.hasQueuedUnits() || queue.paused)
+			{
 				continue;
+			}
 
 			const queueCost = queue.maxAccountWanted(gameState, 0);
 			if (this.accounts[j][res] >= queueCost[res])
+			{
 				continue;
+			}
 
 			for (const [i, otherQueue] of queueEntries(this.queues))
 			{
 				if (i === j)
+				{
 					continue;
+				}
 				if (this.priorities[i] >= this.priorities[j] || otherQueue.switched !== 0)
+				{
 					continue;
+				}
 				if (this.accounts[j][res] + this.accounts[i][res] < queueCost[res])
+				{
 					continue;
+				}
 
 				const diff = queueCost[res] - this.accounts[j][res];
 				this.accounts[j][res] += diff;
@@ -594,36 +666,48 @@ export class QueueManager
 		{
 			const [name, queue] = this.queueArrays[k];
 			if (!queue.hasQueuedUnits() || queue.paused)
+			{
 				continue;
+			}
 			const plan = requireValue(queue.getNext());
 			if (!plan.isGo(gameState))
+			{
 				continue;
+			}
 			const cost = plan.getCost();
 			const account = this.accounts[name];
 			if (account.canAfford(cost))
+			{
 				return;
+			}
 			// the queues below this one, the lowest first
 			const donors = this.queueArrays.slice(k + 1).filter(([j]) => this.priorities[j] < this.priorities[name])
 				.reverse();
 			if (
-				!codes.every(res =>
+				!codes.every((res) =>
 					cost[res] - account[res] <=
 						Math.max(0, free[res]) + donors.reduce((sum, [j]) => sum + this.accounts[j][res], 0)
 				)
 			)
+			{
 				continue;
+			}
 			for (const res of codes)
 			{
 				let short = cost[res] - account[res];
 				if (short <= 0)
+				{
 					continue;
+				}
 				const fromFree = Math.min(short, Math.max(0, free[res]));
 				account[res] += fromFree;
 				short -= fromFree;
 				for (const [j] of donors)
 				{
 					if (short <= 0)
+					{
 						break;
+					}
 					const taken = Math.min(short, this.accounts[j][res]);
 					this.accounts[j][res] -= taken;
 					account[res] += taken;
@@ -671,7 +755,9 @@ export class QueueManager
 		{
 			queue.check(gameState); // do basic sanity checks on the queue
 			if (this.priorities[i] > 0)
+			{
 				continue;
+			}
 			aiWarn("QueueManager received bad priorities, please report this error: " + uneval(this.priorities));
 			this.priorities[i] = 1; // TODO: make the Queue Manager not die when priorities are zero.
 		}
@@ -687,7 +773,9 @@ export class QueueManager
 		this.startNextItems(gameState);
 
 		if (this.Config.debug > 1 && gameState.ai.playedTurn % 50 === 0)
+		{
 			this.printQueues(gameState);
+		}
 
 		Engine.ProfileStop();
 	}
@@ -707,14 +795,18 @@ export class QueueManager
 				this.accounts[q].reset();
 			}
 			else if (queue.paused && !toBePaused)
+			{
 				queue.paused = false;
+			}
 
 			// And reduce the batch sizes of attack queues
 			if (q.indexOf("plan_") !== -1 && numWorkers < workersMin && queue.plans[0])
 			{
 				queue.plans[0].number = 1;
 				if (queue.plans[1])
+				{
 					queue.plans[1].number = 1;
+				}
 			}
 		}
 	}
@@ -728,13 +820,21 @@ export class QueueManager
 	): boolean
 	{
 		if (!hqOf(gameState).hasPotentialBase())
+		{
 			return !RUN_WITHOUT_BASE.has(q);
+		}
 		if (numWorkers < workersMin / 3)
+		{
 			return !RUN_WITH_VERY_FEW_WORKERS.has(q);
+		}
 		if (numWorkers < workersMin * 2 / 3)
+		{
 			return WAIT_WITH_FEW_WORKERS.has(q) || q.indexOf("plan_") !== -1;
+		}
 		if (numWorkers < workersMin)
+		{
 			return WAIT_SHORT_OF_WORKERS.has(q) || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
+		}
 		return false;
 	}
 
@@ -745,20 +845,30 @@ export class QueueManager
 		const hasNone = (className: string): boolean =>
 			!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
 		if (q === "field")
+		{
 			return hq.needFarm && hasNone("Field");
+		}
 		if (q === "corral")
+		{
 			return hq.needCorral && hasNone("Field");
+		}
 		if (q === "dock")
+		{
 			return hq.needFish && hasNone("Dock");
+		}
 		if (q === "ships")
+		{
 			return hq.needFish && !hq.navalManager.ships.filter(filters.byClass("FishingBoat")).hasEntities();
+		}
 		return false;
 	}
 
 	canAfford(queue: PetraRuntime.QueueName, cost: ResourcesManager | Record<string, number>): boolean
 	{
 		if (!this.accounts[queue])
+		{
 			return false;
+		}
 		return this.accounts[queue].canAfford(cost);
 	}
 
@@ -767,10 +877,14 @@ export class QueueManager
 	{
 		const held = this.queues[queue];
 		if (!held)
+		{
 			return;
+		}
 		held.paused = true;
 		if (scrapAccounts)
+		{
 			this.accounts[queue].reset();
+		}
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
@@ -778,7 +892,9 @@ export class QueueManager
 	{
 		const held = this.queues[queue];
 		if (held)
+		{
 			held.paused = false;
+		}
 	}
 
 	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
@@ -787,9 +903,13 @@ export class QueueManager
 		for (const [q, queue] of queueEntries(this.queues))
 		{
 			if (q === but)
+			{
 				continue;
+			}
 			if (scrapAccounts)
+			{
 				this.accounts[q].reset();
+			}
 			queue.paused = true;
 		}
 	}
@@ -798,8 +918,12 @@ export class QueueManager
 	unpauseAll(but: PetraRuntime.QueueName | undefined): void
 	{
 		for (const [q, queue] of queueEntries(this.queues))
+		{
 			if (q !== but)
+			{
 				queue.paused = false;
+			}
+		}
 	}
 
 	/** An attack plan's queue at this priority, made unless it exists (then it keeps its priority) */
@@ -807,7 +931,9 @@ export class QueueManager
 	{
 		const existing = this.queues[queueName];
 		if (existing !== undefined)
+		{
 			return existing;
+		}
 
 		const queue = new Queue();
 		this.queues[queueName] = queue;
@@ -821,7 +947,9 @@ export class QueueManager
 	removeQueue(queueName: PetraRuntime.AttackQueueName): void
 	{
 		if (this.queues[queueName] === undefined)
+		{
 			return;
+		}
 
 		delete this.queues[queueName];
 		delete this.priorities[queueName];
@@ -845,7 +973,9 @@ export class QueueManager
 				" to " + newPriority,
 		);
 		if (this.queues[queueName] !== undefined)
+		{
 			this.priorities[queueName] = newPriority;
+		}
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
@@ -870,7 +1000,7 @@ export class QueueManager
 			}
 		}
 
-		return { "priorities": this.priorities, "queues": queues, "accounts": accounts };
+		return { priorities: this.priorities, queues: queues, accounts: accounts };
 	}
 
 	/** A saved queue manager: its priorities, its queues with their plans, and their accounts */

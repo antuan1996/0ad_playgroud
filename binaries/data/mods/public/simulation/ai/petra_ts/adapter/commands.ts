@@ -16,5 +16,5 @@ export function postCommand(command: PetraEngineCommand): void
 /** Debug only: tints entities with an RGB colour (each channel a multiplier). */
 export function debugShade(entities: EntityId[], rgb: [number, number, number]): void
 {
-	postCommand({ "type": "set-shading-color", "entities": entities, "rgb": rgb });
+	postCommand({ type: "set-shading-color", entities: entities, rgb: rgb });
 }

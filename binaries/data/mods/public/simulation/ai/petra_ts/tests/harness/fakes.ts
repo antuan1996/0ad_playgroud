@@ -27,7 +27,7 @@ export function fake<T>(value: unknown): T
  */
 export function orders(...data: CommonUnitOrderData[]): CommonUnitOrder[]
 {
-	return data.map(order => ({ "type": "Order", "data": order }));
+	return data.map((order) => ({ type: "Order", data: order }));
 }
 
 /**
@@ -38,7 +38,7 @@ export function orders(...data: CommonUnitOrderData[]): CommonUnitOrder[]
  */
 function gathers(classes: readonly string[]): boolean
 {
-	return ["Worker", "CitizenSoldier", "FishingBoat"].some(cls => classes.includes(cls)) &&
+	return ["Worker", "CitizenSoldier", "FishingBoat"].some((cls) => classes.includes(cls)) &&
 		!classes.includes("Mercenary");
 }
 
@@ -49,14 +49,16 @@ export type Methods = Record<string, (...args: any[]) => unknown>;
 let engineStubs: Map<string, unknown> | undefined;
 let globalStubs: Map<string, unknown> | undefined;
 
-const globals = fake<Record<string, unknown> & { Engine: Record<string, unknown> }>(globalThis);
+const globals = fake<Record<string, unknown> & { Engine: Record<string, unknown>; }>(globalThis);
 
 /** Swap an Engine builtin for the test; pair with restoreEngine. */
 export function stubEngine(name: string, value: unknown): void
 {
 	engineStubs ??= new Map();
 	if (!engineStubs.has(name))
+	{
 		engineStubs.set(name, globals.Engine[name]);
+	}
 	globals.Engine[name] = value;
 }
 
@@ -65,7 +67,9 @@ export function stubGlobal(name: string, value: unknown): void
 {
 	globalStubs ??= new Map();
 	if (!globalStubs.has(name))
+	{
 		globalStubs.set(name, globals[name]);
+	}
 	globals[name] = value;
 }
 
@@ -75,19 +79,23 @@ export function restoreEngine(): void
 	if (engineStubs)
 	{
 		for (const [name, value] of engineStubs)
+		{
 			globals.Engine[name] = value;
+		}
 	}
 	if (globalStubs)
 	{
 		for (const [name, value] of globalStubs)
+		{
 			globals[name] = value;
+		}
 	}
 	engineStubs = undefined;
 	globalStubs = undefined;
 }
 
 /** Let Engine.ComputePath answer with the given waypoints for the test. */
-export function withPath(path: Array<{ "x": number; "y": number }> | null, body: () => void): void
+export function withPath(path: Array<{ x: number; y: number; }> | null, body: () => void): void
 {
 	stubEngine("ComputePath", () => path);
 	try
@@ -104,27 +112,27 @@ export function withPath(path: Array<{ "x": number; "y": number }> | null, body:
 export function emptyEvents(): EngineAIEvents
 {
 	return {
-		"Create": [],
-		"Destroy": [],
-		"Attacked": [],
-		"ConstructionFinished": [],
-		"DiplomacyChanged": [],
-		"TrainingStarted": [],
-		"TrainingFinished": [],
-		"AIMetadata": [],
-		"PlayerDefeated": [],
-		"EntityRenamed": [],
-		"ValueModification": [],
-		"OwnershipChanged": [],
-		"Garrison": [],
-		"UnGarrison": [],
-		"TerritoriesChanged": [],
-		"TerritoryDecayChanged": [],
-		"TributeExchanged": [],
-		"AttackRequest": [],
-		"CeasefireEnded": [],
-		"DiplomacyRequest": [],
-		"TributeRequest": [],
+		Create: [],
+		Destroy: [],
+		Attacked: [],
+		ConstructionFinished: [],
+		DiplomacyChanged: [],
+		TrainingStarted: [],
+		TrainingFinished: [],
+		AIMetadata: [],
+		PlayerDefeated: [],
+		EntityRenamed: [],
+		ValueModification: [],
+		OwnershipChanged: [],
+		Garrison: [],
+		UnGarrison: [],
+		TerritoriesChanged: [],
+		TerritoryDecayChanged: [],
+		TributeExchanged: [],
+		AttackRequest: [],
+		CeasefireEnded: [],
+		DiplomacyRequest: [],
+		TributeRequest: [],
 	};
 }
 
@@ -169,9 +177,13 @@ export function makeEntity(
 			// Petra clears roles by writing undefined; drop the key so
 			// "no metadata" answers stay truthful.
 			if (value === undefined)
+			{
 				delete store.metadata[key];
+			}
 			else
+			{
 				store.metadata[key] = value;
+			}
 		},
 		// Neutral answers for the questions every entity in Petra hears.
 		angle: () => 0,
@@ -205,7 +217,7 @@ export function makeEntity(
 		maxHitpoints: () => 100,
 		foundationProgress: () => undefined,
 		resourceCarrying: () => undefined,
-		obstructionRadius: () => ({ "max": 2 }),
+		obstructionRadius: () => ({ max: 2 }),
 		// every entity on the map has a footprint (structures and units alike), as the API probe found
 		footprintRadius: () => 2,
 		captureStrength: () => 0,
@@ -231,7 +243,7 @@ export function makeEntity(
 		resistanceStrengths: () => ({}),
 		attackTypes: () => undefined,
 		attackStrengths: () => undefined,
-		attackRange: () => ({ "max": 0 }),
+		attackRange: () => ({ max: 0 }),
 		attackTimes: () => undefined,
 		costSum: () => 500,
 		trainingQueue: () => false,
@@ -267,18 +279,26 @@ export function makeEntity(
 			get(target, property)
 			{
 				if (typeof property === "symbol")
+				{
 					return Reflect.get(target, property);
+				}
 				if (property in target)
+				{
 					return Reflect.get(target, property);
+				}
 				const value = defaults[String(property)];
 				if (value === undefined && !(String(property) in defaults))
+				{
 					throw new Error(`fake entity ${spec.id} has no "${String(property)}" — declare it in the test`);
+				}
 				return value;
 			},
 			set(target, property, value)
 			{
 				if (typeof property !== "symbol")
+				{
 					defaults[String(property)] = value;
+				}
 				return true;
 			},
 		}),
@@ -308,7 +328,9 @@ function templateValue(template: object, path: string): unknown
 	for (const part of path.split("/"))
 	{
 		if (typeof value !== "object" || value === null)
+		{
 			return undefined;
+		}
 		value = fake<Record<string, unknown>>(value)[part];
 	}
 	return value;
@@ -338,9 +360,9 @@ export function makeTemplate(name: string, detail: {
 	/** the Damage dictionaries, keyed by attack type, as Attack/<type>/Damage reads */
 	attackStrengths?: Record<string, Record<string, number>>;
 	/** the ranges, as Attack/<type>/MaxRange and MinRange read */
-	attackRanges?: Record<string, { max: number; min?: number }>;
+	attackRanges?: Record<string, { max: number; min?: number; }>;
 	/** the timing, as Attack/<type>/PrepareTime and RepeatTime read */
-	attackTimes?: Record<string, { prepare?: number; repeat?: number }>;
+	attackTimes?: Record<string, { prepare?: number; repeat?: number; }>;
 	/** the resistance Damage dictionary, as Resistance/Entity/Damage reads */
 	resistanceStrengths?: Record<string, number>;
 	/** the Health/Max; template_unit gives 100, infantry 80, ranged 50 */
@@ -365,7 +387,7 @@ export function makeTemplate(name: string, detail: {
 	const getTemplateValue = (path: string): unknown => templateValue(getPaths, path);
 	return fake<CommonTemplate>({
 		// the raw serialized template, as the original reads it
-		"_template": { "Cost": { "Population": detail.popCost ?? 1 } },
+		_template: { Cost: { Population: detail.popCost ?? 1 } },
 		cost: () => ({ ...cost }),
 		costSum: () => Object.values(cost).reduce((sum: number, amount: number) => sum + amount, 0),
 		get: (path: string) => getTemplateValue(path),
@@ -386,20 +408,17 @@ export function makeTemplate(name: string, detail: {
 		// as common-api template.attackRange reads Attack/<type>/MaxRange, MinRange
 		attackRange: (type: string) =>
 			detail.attackRanges?.[type] ?
-				{ "max": detail.attackRanges[type].max, "min": detail.attackRanges[type].min ?? 0 } :
+				{ max: detail.attackRanges[type].max, min: detail.attackRanges[type].min ?? 0 } :
 				undefined,
 		// as common-api template.attackTimes reads PrepareTime and RepeatTime
 		attackTimes: (type: string) =>
 			detail.attackTimes?.[type] ?
-				{
-					"prepare": detail.attackTimes[type].prepare ?? 0,
-					"repeat": detail.attackTimes[type].repeat ?? 1000,
-				} :
+				{ prepare: detail.attackTimes[type].prepare ?? 0, repeat: detail.attackTimes[type].repeat ?? 1000 } :
 				undefined,
 		// as common-api template.resistanceStrengths reads Resistance/Entity: the
 		// damage resistances under its Damage key
 		resistanceStrengths: () =>
-			detail.resistanceStrengths ? { "Damage": { ...detail.resistanceStrengths } } : undefined,
+			detail.resistanceStrengths ? { Damage: { ...detail.resistanceStrengths } } : undefined,
 		maxHitpoints: () => detail.maxHitpoints ?? 100,
 		maxGatherers: () => detail.maxGatherers ?? 0,
 		researchTime: detail.researchTime,
@@ -417,7 +436,9 @@ export function makeTemplate(name: string, detail: {
 		buildTerritories: (): string[] | undefined =>
 		{
 			if (getTemplateValue("BuildRestrictions") === undefined)
+			{
 				return undefined;
+			}
 			const territory = getTemplateValue("BuildRestrictions/Territory");
 			return territory === undefined ? undefined : String(territory).split(/\s+/);
 		},
@@ -432,7 +453,9 @@ export function makeTemplate(name: string, detail: {
 export function placed(ent: CommonEntity): CommonPlacedEntity
 {
 	if (!isPlaced(ent))
+	{
 		throw new Error("the fake entity " + ent.id() + " has no position");
+	}
 	return ent;
 }
 
@@ -444,6 +467,8 @@ export function placed(ent: CommonEntity): CommonPlacedEntity
 export function structure(template: CommonTemplate): CommonStructureTemplate
 {
 	if (!isStructureTemplate(template))
+	{
 		throw new Error("the fake template " + template.templateName() + " has no obstruction or footprint");
+	}
 	return template;
 }

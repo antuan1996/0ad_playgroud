@@ -61,16 +61,20 @@ function readGames(dir: string): Game[]
 {
 	const path = join(dir, "results.jsonl");
 	if (!existsSync(path))
+	{
 		fail(`no results.jsonl in ${dir}`);
+	}
 	const games: Game[] = [];
 	for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean))
 	{
 		const row: BatchRow = JSON.parse(line);
 		const file = join(dir, "games", String(row.game).padStart(4, "0"), "metadata.json");
 		if (row.outcome === "failed" || !existsSync(file))
+		{
 			continue;
+		}
 		const states = JSON.parse(readFileSync(file, "utf8")).playerStates;
-		games.push({ row, "sequences": [states[1].sequences, states[2].sequences] });
+		games.push({ row, sequences: [states[1].sequences, states[2].sequences] });
 	}
 	return games;
 }
@@ -80,9 +84,13 @@ function valueAt(sequences: Sequences, metric: Metric, minute: number): number
 {
 	let i = sequences.time.length - 1;
 	while (i > 0 && sequences.time[i] > minute * 60 + 1)
+	{
 		--i;
+	}
 	if (metric === "units")
+	{
 		return sequences.unitsTrained.Unit[i];
+	}
 	return ["food", "wood", "stone", "metal"].reduce((sum, res) => sum + sequences.resourcesGathered[res][i], 0);
 }
 
@@ -112,25 +120,29 @@ function pairsOf(games: Game[]): Map<string, [Game, Game]>
 	const pairs = new Map<string, [Game, Game]>();
 	for (const [key, list] of bySeeds)
 	{
-		const straight = list.find(g => !g.row.swapped);
-		const swapped = list.find(g => g.row.swapped);
+		const straight = list.find((g) => !g.row.swapped);
+		const swapped = list.find((g) => g.row.swapped);
 		if (straight && swapped)
+		{
 			pairs.set(key, [straight, swapped]);
+		}
 	}
 	return pairs;
 }
 
 /** Mean and 95% interval half-width (Student's t, approximated). */
-function interval(values: number[]): { mean: number; half: number; n: number }
+function interval(values: number[]): { mean: number; half: number; n: number; }
 {
 	const n = values.length;
 	const mean = values.reduce((a, b) => a + b, 0) / n;
 	if (n < 2)
-		return { mean, "half": NaN, n };
+	{
+		return { mean, half: NaN, n };
+	}
 	const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (n - 1);
 	const z = 1.959964;
 	const t = z + (z ** 3 + z) / (4 * (n - 1)) + (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * (n - 1) ** 2);
-	return { mean, "half": t * Math.sqrt(variance / n), n };
+	return { mean, half: t * Math.sqrt(variance / n), n };
 }
 
 function correlation(xs: number[], ys: number[]): number
@@ -172,36 +184,48 @@ function main(args: string[]): void
 	for (let i = 0; i < args.length; ++i)
 	{
 		if (args[i] === "--minute" && i + 1 < args.length)
+		{
 			minute = Number(args[++i]);
+		}
 		else if (args[i] === "--compare" && i + 1 < args.length)
+		{
 			compare = args[++i];
+		}
 		else if (args[i].startsWith("--"))
+		{
 			fail(`unknown option ${args[i]} (see the header of build/petra_ts/pair-score.ts)`);
+		}
 		else
+		{
 			dirs.push(args[i]);
+		}
 	}
 	if (dirs.length !== 1 || !(minute > 0))
+	{
 		fail("usage: node build/petra_ts/pair-score.ts <batch dir> [--minute M] [--compare <batch dir>]");
+	}
 	const games = readGames(dirs[0]);
 	const pairs = pairsOf(games);
 	const out = [
 		`${games.length} games, ${pairs.size} complete seed pairs; blue's lead at minute ${minute}, mean of a pair's two games:`,
 	];
 	for (const metric of METRICS)
+	{
 		out.push(describe(metric, [...pairScores(pairs, metric, minute).values()]));
+	}
 
-	const decided = games.filter(g => blueResult(g) !== 0);
+	const decided = games.filter((g) => blueResult(g) !== 0);
 	out.push(
 		"",
 		`as a proxy, over ${decided.length} decided games: how often the side ahead won (ties left out),`,
 		"and the correlation of blue's lead with its result:",
 	);
-	out.push("  minute  " + METRICS.map(m => `${m}: ahead won  corr`.padStart(24)).join(""));
+	out.push("  minute  " + METRICS.map((m) => `${m}: ahead won  corr`.padStart(24)).join(""));
 	for (const m of [...new Set([...VALIDATION_MINUTES, minute])].sort((a, b) => a - b))
 	{
-		const cells = METRICS.map(metric =>
+		const cells = METRICS.map((metric) =>
 		{
-			const leads = decided.map(g => lead(g, metric, m));
+			const leads = decided.map((g) => lead(g, metric, m));
 			const results = decided.map(blueResult);
 			const counted = leads.map((l, i) => [l, results[i]]).filter(([l]) => l !== 0);
 			const right = counted.filter(([l, r]) => Math.sign(l) === r).length;
@@ -215,7 +239,7 @@ function main(args: string[]): void
 	if (compare)
 	{
 		const other = pairsOf(readGames(compare));
-		const shared = [...pairs.keys()].filter(key => other.has(key));
+		const shared = [...pairs.keys()].filter((key) => other.has(key));
 		out.push(
 			"",
 			`against ${compare}: ${shared.length} shared seed pairs, this batch minus that one, pair by pair:`,
@@ -224,12 +248,13 @@ function main(args: string[]): void
 		{
 			const mine = pairScores(pairs, metric, minute);
 			const theirs = pairScores(other, metric, minute);
-			out.push(describe(metric, shared.map(key => (mine.get(key) ?? NaN) - (theirs.get(key) ?? NaN))));
+			out.push(describe(metric, shared.map((key) => (mine.get(key) ?? NaN) - (theirs.get(key) ?? NaN))));
 		}
 		const wins = (list: Map<string, [Game, Game]>, key: string): number =>
 			(list.get(key) ?? []).reduce((n, g) => n + (blueResult(g) === 1 ? 1 : 0), 0);
 		out.push(
-			describe("wins", shared.map(key => wins(pairs, key) - wins(other, key))) + "  (blue's wins per pair, of 2)",
+			describe("wins", shared.map((key) => wins(pairs, key) - wins(other, key))) +
+				"  (blue's wins per pair, of 2)",
 		);
 	}
 	console.log(out.join("\n"));

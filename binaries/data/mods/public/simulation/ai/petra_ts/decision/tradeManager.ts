@@ -24,7 +24,32 @@ import * as difficulty from "../world/difficultyLevel.ts";
 import type { Geography } from "../world/geography.ts";
 import { getBestBase } from "./baseManager.ts";
 
-export type TradeRoute = { source: EntityId; target: EntityId; gain: number; land?: AccessIndex; sea?: SeaIndex };
+export type TradeRoute = { source: EntityId; target: EntityId; gain: number; land?: AccessIndex; sea?: SeaIndex; };
+
+/** Our markets and our allies' exclusive ones; undefined when there are not two markets yet. */
+function tradeMarketPair(
+	gameState: CommonGameState,
+):
+	| { market1: CommonEntityCollection<CommonStructureEntity>; market2: CommonEntityCollection; onlyOurs: boolean; }
+	| undefined
+{
+	const market1 = gameState.updatingCollection("OwnMarkets", filters.byClass("Trade"), gameState.getOwnStructures());
+	let market2 = gameState.updatingCollection(
+		"diplo-ExclusiveAllyMarkets",
+		filters.byClass("Trade"),
+		gameState.getExclusiveAllyEntities(),
+	);
+	if (market1.length + market2.length < 2)
+	{ // We have to wait  ... markets will be built soon
+		return undefined;
+	}
+	const onlyOurs = !market2.hasEntities();
+	if (onlyOurs)
+	{
+		market2 = market1;
+	}
+	return { market1, market2, onlyOurs };
+}
 
 /** What a barter decision reads: our barter market, the resources, what we hold, need and gather, and the prices. */
 type BarterMarket = {
@@ -33,12 +58,12 @@ type BarterMarket = {
 	available: ResourcesManager;
 	needs: ResourcesManager;
 	rates: Record<string, number>;
-	prices: { buy: CommonResourceAmounts; sell: CommonResourceAmounts };
+	prices: { buy: CommonResourceAmounts; sell: CommonResourceAmounts; };
 };
 
 /** How much of buy one sale of sell brings, in percent */
 function barterRateOf(
-	prices: { buy: Record<string, number>; sell: Record<string, number> },
+	prices: { buy: Record<string, number>; sell: Record<string, number>; },
 	buy: string,
 	sell: string,
 ): number
@@ -54,27 +79,39 @@ function minimalBarterRate(available: ResourcesManager, buy: string, sell: strin
 	{
 		barterRateMin = 30;
 		if (available[sell] > 40000)
+		{
 			barterRateMin = 0;
+		}
 		else if (available[sell] > 15000)
+		{
 			barterRateMin = 5;
+		}
 		else if (available[sell] > 1000)
+		{
 			barterRateMin = 10;
+		}
 	}
 	else
 	{
 		barterRateMin = 70;
 		if (available[sell] > 5000)
+		{
 			barterRateMin = 30;
+		}
 		else if (available[sell] > 1000)
+		{
 			barterRateMin = 50;
+		}
 		if (buy === "food")
+		{
 			barterRateMin += 20;
+		}
 	}
 	return barterRateMin;
 }
 
 /** The routes checkRoutes chooses between */
-type BestRoutes = { candidate: TradeRoute; potential: TradeRoute; bestIndex: TradeRoute; bestLand: TradeRoute };
+type BestRoutes = { candidate: TradeRoute; potential: TradeRoute; bestIndex: TradeRoute; bestLand: TradeRoute; };
 
 /** Keeps route among the best routes it beats; a route between markets not all built only as a potential one. */
 function keepRoute(
@@ -88,13 +125,19 @@ function keepRoute(
 	if (built)
 	{
 		if (accessIndex && !keepForIndex(gameState, best, route, accessIndex))
+		{
 			return;
+		}
 		if (route.gain < best.candidate.gain)
+		{
 			return;
+		}
 		best.candidate = { ...route };
 	}
 	if (route.gain < best.potential.gain)
+	{
 		return;
+	}
 	best.potential = { ...route };
 }
 
@@ -113,13 +156,17 @@ function keepForIndex(
 	if (regionType === "water" && route.sea === accessIndex || regionType === "land" && route.land === accessIndex)
 	{
 		if (route.gain < best.bestIndex.gain)
+		{
 			return false;
+		}
 		best.bestIndex = { ...route };
 	}
 	else if (regionType === "land")
 	{
 		if (route.gain < best.bestLand.gain)
+		{
 			return false;
+		}
 		best.bestLand = { ...route };
 	}
 	return true;
@@ -138,7 +185,9 @@ function switchMerchantShip(gameState: CommonGameState, sea: SeaIndex): boolean
 	gameState.ai.HQ.navalManager.fleet(sea)?.transports.forEach(function(ship: CommonEntity): void
 	{
 		if (already || !ship.hasClass("Trader"))
+		{
 			return;
+		}
 		if (ship.getMetadata(PlayerID, "role") === Worker.ROLE_SWITCH_TO_TRADER)
 		{
 			already = true;
@@ -147,13 +196,21 @@ function switchMerchantShip(gameState: CommonGameState, sea: SeaIndex): boolean
 		shipToSwitch = ship;
 	});
 	if (already)
+	{
 		return true;
+	}
 	if (!shipToSwitch)
+	{
 		return false;
+	}
 	if (shipToSwitch.getMetadata(PlayerID, "transporter") === undefined)
+	{
 		shipToSwitch.setMetadata(PlayerID, "role", Worker.ROLE_TRADER);
+	}
 	else
+	{
 		shipToSwitch.setMetadata(PlayerID, "role", Worker.ROLE_SWITCH_TO_TRADER);
+	}
 	return true;
 }
 
@@ -219,11 +276,15 @@ export class TradeManager
 	trainMoreTraders(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (!this.hasTradeRoute() || queues.trader.hasQueuedUnits())
+		{
 			return;
+		}
 
 		const route = this.tradeRoute;
 		if (!route)
+		{
 			return;
+		}
 
 		const { numTraders, numSeaTraders, numLandTraders } = this.countTraders(gameState);
 		if (
@@ -231,14 +292,18 @@ export class TradeManager
 			(!route.sea && numLandTraders >= Math.floor(this.targetNumTraders / 2) ||
 				route.sea && numSeaTraders >= Math.floor(this.targetNumTraders / 2))
 		)
+		{
 			return;
+		}
 
 		let template;
-		const metadata: PlanMetadata = { "role": Worker.ROLE_TRADER };
+		const metadata: PlanMetadata = { role: Worker.ROLE_TRADER };
 		if (route.sea)
 		{
 			if (switchMerchantShip(gameState, route.sea))
+			{
 				return;
+			}
 			template = gameState.applyCiv("units/{civ}/ship_merchant");
 			metadata.sea = route.sea;
 		}
@@ -247,7 +312,9 @@ export class TradeManager
 			template = gameState.applyCiv("units/{civ}/support_trader");
 			const sourceObject = gameState.getEntityById(route.source);
 			if (!sourceObject)
+			{
 				return;
+			}
 			const baseObject = sourceObject.hasClass("Naval") ? gameState.getEntityById(route.target) : sourceObject;
 
 			// all our own markets always have their base set (see assignEntity)
@@ -271,7 +338,7 @@ export class TradeManager
 	/** Our traders, at sea and on land, those in training counted in. */
 	private countTraders(
 		gameState: CommonGameState,
-	): { numTraders: number; numSeaTraders: number; numLandTraders: number }
+	): { numTraders: number; numSeaTraders: number; numLandTraders: number; }
 	{
 		let numTraders = this.traders.length;
 		let numSeaTraders = this.traders.filter(filters.byClass("Ship")).length;
@@ -282,12 +349,18 @@ export class TradeManager
 			for (const item of ent.trainingQueue() ?? [])
 			{
 				if (!item.metadata || !item.metadata.role || item.metadata.role !== Worker.ROLE_TRADER)
+				{
 					continue;
+				}
 				numTraders += item.count;
 				if (item.metadata.sea !== undefined)
+				{
 					numSeaTraders += item.count;
+				}
 				else
+				{
 					numLandTraders += item.count;
+				}
 			}
 		});
 		return { numTraders, numSeaTraders, numLandTraders };
@@ -305,9 +378,13 @@ export class TradeManager
 		}
 
 		if (!this.hasTradeRoute() || !ent.isIdle() || !isPlaced(ent))
+		{
 			return;
+		}
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
+		{
 			return;
+		}
 
 		// TODO if the trader is idle and has workOrders, restore them to avoid losing the current gain
 
@@ -321,7 +398,9 @@ export class TradeManager
 	{
 		const access = ent.hasClass("Ship") ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
 		if (access === undefined)
+		{
 			return;
+		}
 		const route = this.checkRoutes(gameState, access);
 		if (!route)
 		{
@@ -333,7 +412,9 @@ export class TradeManager
 		const routeTarget = gameState.getEntityById(route.target);
 		// the route's markets: on the map
 		if (!routeSource || !routeTarget || !isPlaced(routeSource) || !isPlaced(routeTarget))
+		{
 			return;
+		}
 
 		const nearerSource =
 			!(SquareVectorDistance(routeTarget.position(), ent.position()) <
@@ -349,9 +430,13 @@ export class TradeManager
 		}
 
 		if (nearerSource)
+		{
 			ent.tradeRoute(routeTarget, routeSource);
+		}
 		else
+		{
 			ent.tradeRoute(routeSource, routeTarget);
+		}
 		ent.setMetadata(PlayerID, "route", route);
 	}
 
@@ -359,10 +444,14 @@ export class TradeManager
 	{
 		const resTradeCodes = Resources.GetTradableCodes();
 		if (!resTradeCodes.length)
+		{
 			return;
+		}
 		const tradingGoods: Record<string, number> = {};
 		for (const res of resTradeCodes)
+		{
 			tradingGoods[res] = 0;
+		}
 		// first, try to anticipate future needs
 		const stocks = gameState.ai.HQ.getTotalResourceLevel(gameState);
 		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState, resTradeCodes);
@@ -372,7 +461,9 @@ export class TradeManager
 		for (const res of resTradeCodes)
 		{
 			if (res === "food")
+			{
 				continue;
+			}
 			const wantedRate = wantedRates[res];
 			if (stocks[res] < 200)
 			{
@@ -399,10 +490,14 @@ export class TradeManager
 
 		tradingGoods[mostNeeded[0].type] += mainNeed;
 		if (mostNeeded[1] && mostNeeded[1].wanted > 0)
+		{
 			tradingGoods[mostNeeded[1].type] += nextNeed;
+		}
 		else
+		{
 			tradingGoods[mostNeeded[0].type] += nextNeed;
-		postCommand({ "type": "set-trading-goods", "tradingGoods": tradingGoods });
+		}
+		postCommand({ type: "set-trading-goods", tradingGoods: tradingGoods });
 		debugWarn(this.Config, 2, () => " trading goods set to " + uneval(tradingGoods));
 	}
 
@@ -414,25 +509,33 @@ export class TradeManager
 	{
 		const barterers = gameState.getOwnEntitiesByClass("Barter", true).filter(filters.isBuilt()).toEntityArray();
 		if (barterers.length === 0)
+		{
 			return false;
+		}
 		const resBarterCodes = Resources.GetBarterableCodes();
 		if (!resBarterCodes.length)
+		{
 			return false;
+		}
 
 		const market: BarterMarket = {
-			"barterer": barterers[0],
-			"codes": resBarterCodes,
+			barterer: barterers[0],
+			codes: resBarterCodes,
 			// Available resources after account substraction
-			"available": gameState.ai.queueManager.getAvailableResources(gameState),
-			"needs": gameState.ai.queueManager.currentNeeds(gameState),
-			"rates": gameState.ai.HQ.GetCurrentGatherRates(gameState),
-			"prices": gameState.getBarterPrices(),
+			available: gameState.ai.queueManager.getAvailableResources(gameState),
+			needs: gameState.ai.queueManager.currentNeeds(gameState),
+			rates: gameState.ai.HQ.GetCurrentGatherRates(gameState),
+			prices: gameState.getBarterPrices(),
 		};
 
 		// loop through each missing resource checking if we could barter and help finishing a queue quickly.
 		for (const buy of resBarterCodes)
+		{
 			if (this.necessityBarter(market, buy))
+			{
 				return true;
+			}
+		}
 
 		// now do contingency bartering, selling food to buy finite resources (and annoy our ennemies by increasing prices)
 		return this.contingencyBarter(market);
@@ -444,7 +547,9 @@ export class TradeManager
 		const { available, needs, rates } = market;
 		// Check if our rate allows to gather it fast enough
 		if (needs[buy] === 0 || needs[buy] < rates[buy] * 30)
+		{
 			return false;
+		}
 
 		// Pick the best resource to barter.
 		let bestToSell: string | undefined;
@@ -452,10 +557,14 @@ export class TradeManager
 		for (const sell of market.codes)
 		{
 			if (sell === buy)
+			{
 				continue;
+			}
 			// Do not sell if we need it or do not have enough buffer
 			if (needs[sell] > 0 || available[sell] < 500)
+			{
 				continue;
+			}
 
 			const barterRate = barterRateOf(market.prices, buy, sell);
 			if (barterRate > bestRate && barterRate > minimalBarterRate(available, buy, sell))
@@ -465,7 +574,9 @@ export class TradeManager
 			}
 		}
 		if (bestToSell === undefined)
+		{
 			return false;
+		}
 		const amount = available[bestToSell] > 5000 ? 500 : 100;
 		market.barterer.barter(buy, bestToSell, amount);
 		debugWarn(
@@ -486,19 +597,27 @@ export class TradeManager
 	{
 		const { available, needs } = market;
 		if (available.food < 1000 || needs.food > 0 || market.codes.indexOf("food") === -1)
+		{
 			return false;
+		}
 		let bestToBuy: string | undefined;
 		let bestChoice = 0;
 		for (const buy of market.codes)
 		{
 			if (buy === "food")
+			{
 				continue;
+			}
 			let barterRateMin = 80;
 			if (available[buy] < 5000 && available.food > 5000)
+			{
 				barterRateMin -= 20 - Math.floor(available[buy] / 250);
+			}
 			const barterRate = barterRateOf(market.prices, buy, "food");
 			if (barterRate < barterRateMin)
+			{
 				continue;
+			}
 			const choice = barterRate / (100 + available[buy]);
 			if (choice > bestChoice)
 			{
@@ -507,7 +626,9 @@ export class TradeManager
 			}
 		}
 		if (bestToBuy === undefined)
+		{
 			return false;
+		}
 		const amount = available.food > 5000 ? 500 : 100;
 		market.barterer.barter(bestToBuy, "food", amount);
 		debugWarn(
@@ -528,11 +649,15 @@ export class TradeManager
 		{
 			const ent = gameState.getEntityById(evt.newentity);
 			if (ent && ent.hasClass("Trade"))
+			{
 				this.renameMarket(evt.entity, evt.newentity);
+			}
 		}
 
 		if (!this.marketsChanged(gameState, events))
+		{
 			return false;
+		}
 		this.activateProspection(gameState);
 		return true;
 	}
@@ -544,13 +669,21 @@ export class TradeManager
 		{
 			const route = trader.getMetadata(PlayerID, "route");
 			if (!route)
+			{
 				continue;
+			}
 			if (route.source === entity)
+			{
 				route.source = newentity;
+			}
 			else if (route.target === entity)
+			{
 				route.target = newentity;
+			}
 			else
+			{
 				continue;
+			}
 			trader.setMetadata(PlayerID, "route", route);
 		}
 	}
@@ -571,7 +704,9 @@ export class TradeManager
 		for (const evt of events.Destroy)
 		{
 			if (this.onRoute(evt.entity))
+			{
 				return true;
+			}
 		}
 
 		// same thing if one market is built
@@ -582,17 +717,23 @@ export class TradeManager
 				ent && ent.foundationProgress() === undefined && ent.hasClass("Trade") &&
 				gameState.isPlayerAlly(ent.owner())
 			)
+			{
 				return true;
+			}
 		}
 
 		// and same thing for captured markets
 		for (const evt of events.OwnershipChanged)
 		{
 			if (!gameState.isPlayerAlly(evt.from) && !gameState.isPlayerAlly(evt.to))
+			{
 				continue;
+			}
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent && ent.foundationProgress() === undefined && ent.hasClass("Trade"))
+			{
 				return true;
+			}
 		}
 
 		// or if diplomacy changed
@@ -622,26 +763,14 @@ export class TradeManager
 			return false;
 		}
 
-		const market1 = gameState.updatingCollection(
-			"OwnMarkets",
-			filters.byClass("Trade"),
-			gameState.getOwnStructures(),
-		);
-		let market2 = gameState.updatingCollection(
-			"diplo-ExclusiveAllyMarkets",
-			filters.byClass("Trade"),
-			gameState.getExclusiveAllyEntities(),
-		);
-		if (market1.length + market2.length < 2)
-		{ // We have to wait  ... markets will be built soon
+		const markets = tradeMarketPair(gameState);
+		if (!markets)
+		{
 			this.tradeRoute = undefined;
 			this.potentialTradeRoute = undefined;
 			return false;
 		}
-
-		const onlyOurs = !market2.hasEntities();
-		if (onlyOurs)
-			market2 = market1;
+		const { market1, market2, onlyOurs } = markets;
 		const { candidate, potential, bestIndex, bestLand } = this.bestRoutes(
 			gameState,
 			market1,
@@ -651,9 +780,13 @@ export class TradeManager
 		);
 
 		if (potential.gain < 1)
+		{
 			this.potentialTradeRoute = undefined;
+		}
 		else
+		{
 			this.potentialTradeRoute = potential;
+		}
 
 		if (candidate.gain < 1)
 		{
@@ -672,18 +805,26 @@ export class TradeManager
 			}
 		}
 		else
+		{
 			debugWarn(this.Config, 1, () => "one trade route set with gain " + candidate.gain);
+		}
 		this.tradeRoute = candidate;
 
 		if (this.Config.chat)
+		{
 			this.warnAlly(gameState, this.tradeRoute);
+		}
 
 		if (accessIndex)
 		{
 			if (bestIndex.gain > 0)
+			{
 				return bestIndex;
+			}
 			else if (gameState.ai.accessibility.regionType[accessIndex] === "land" && bestLand.gain > 0)
+			{
 				return bestLand;
+			}
 			return false;
 		}
 		return true;
@@ -698,7 +839,9 @@ export class TradeManager
 		{
 			const targetEnt = gameState.getEntityById(route.target);
 			if (targetEnt)
+			{
 				owner = targetEnt.owner();
+			}
 		}
 		if (owner !== PlayerID && !this.warnedAllies[owner])
 		{
@@ -719,8 +862,8 @@ export class TradeManager
 		accessIndex: RegionIndex | undefined,
 	): BestRoutes
 	{
-		const none = (): TradeRoute => ({ "source": INVALID_ENTITY, "target": INVALID_ENTITY, "gain": 0 });
-		const best: BestRoutes = { "candidate": none(), "potential": none(), "bestIndex": none(), "bestLand": none() };
+		const none = (): TradeRoute => ({ source: INVALID_ENTITY, target: INVALID_ENTITY, gain: 0 });
+		const best: BestRoutes = { candidate: none(), potential: none(), bestIndex: none(), bestLand: none() };
 
 		const mapSize = gameState.sharedScript.mapSize;
 		const traderTemplatesGains = gameState.getTraderTemplatesGains();
@@ -732,17 +875,22 @@ export class TradeManager
 			for (const m2 of market2.values())
 			{
 				if (onlyOurs && m1.id() >= m2.id())
+				{
 					continue;
+				}
 				if (!isPlaced(m2))
+				{
 					continue;
+				}
 				const route = this.routeBetween(
 					gameState,
-					{ "market": m1, "land": access1, "sea": sea1 },
+					{ market: m1, land: access1, sea: sea1 },
 					m2,
 					mapSize,
 					traderTemplatesGains,
 				);
 				if (route)
+				{
 					keepRoute(
 						gameState,
 						best,
@@ -750,6 +898,7 @@ export class TradeManager
 						m1.foundationProgress() === undefined && m2.foundationProgress() === undefined,
 						accessIndex,
 					);
+				}
 			}
 		}
 		return best;
@@ -758,7 +907,7 @@ export class TradeManager
 	/** The route from m1 to m2 on a land or sea they share, outside enemy territory, worth its gain, or undefined. */
 	private routeBetween(
 		gameState: CommonGameState,
-		from: { market: CommonStructureEntity; land: AccessIndex | undefined; sea: SeaIndex | undefined },
+		from: { market: CommonStructureEntity; land: AccessIndex | undefined; sea: SeaIndex | undefined; },
 		m2: CommonPlacedEntity,
 		mapSize: number,
 		traderTemplatesGains: ReturnType<CommonGameState["getTraderTemplatesGains"]>,
@@ -770,22 +919,34 @@ export class TradeManager
 		const land = from.land === access2 ? from.land : undefined;
 		const sea = from.sea && from.sea === sea2 ? from.sea : undefined;
 		if (!land && !sea)
+		{
 			return undefined;
+		}
 		if (land && isLineInsideEnemyTerritory(gameState, m1.position(), m2.position()))
+		{
 			return undefined;
+		}
 		let gainMultiplier;
 		if (land && traderTemplatesGains.landGainMultiplier)
+		{
 			gainMultiplier = traderTemplatesGains.landGainMultiplier;
+		}
 		else if (sea && traderTemplatesGains.navalGainMultiplier)
+		{
 			gainMultiplier = traderTemplatesGains.navalGainMultiplier;
+		}
 		else
+		{
 			return undefined;
+		}
 		const gain = Math.round(
 			gainMultiplier * TradeGain(SquareVectorDistance(m1.position(), m2.position()), mapSize),
 		);
 		if (gain < this.minimalGain)
+		{
 			return undefined;
-		return { "source": m1.id(), "target": m2.id(), "gain": gain, "land": land, "sea": sea };
+		}
+		return { source: m1.id(), target: m2.id(), gain: gain, land: land, sea: sea };
 	}
 
 	/** Called when a market was built or destroyed, and checks if trader orders should be changed */
@@ -793,7 +954,9 @@ export class TradeManager
 	{
 		const presentRoute = ent.getMetadata(PlayerID, "route");
 		if (!presentRoute)
+		{
 			return;
+		}
 
 		if (!isPlaced(ent))
 		{
@@ -836,9 +999,13 @@ export class TradeManager
 	prospectForNewMarket(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (queues.economicBuilding.hasQueuedUnitsWithClass("Trade") || queues.dock.hasQueuedUnitsWithClass("Trade"))
+		{
 			return;
+		}
 		if (!gameState.ai.HQ.canBuild(gameState, "structures/{civ}/market"))
+		{
 			return;
+		}
 		if (
 			!gameState.updatingCollection("OwnMarkets", filters.byClass("Trade"), gameState.getOwnStructures())
 				.hasEntities() &&
@@ -859,14 +1026,20 @@ export class TradeManager
 		{ // marketPos[3] is the expected gain
 			// no position found
 			if (gameState.getOwnEntitiesByClass("Market", true).hasEntities())
+			{
 				gameState.ai.HQ.buildManager.setUnbuildable(gameState, gameState.applyCiv("structures/{civ}/market"));
+			}
 			else
+			{
 				this.routeProspection = false;
+			}
 			return;
 		}
 		this.routeProspection = false;
 		if (!this.isNewMarketWorth(marketPos[3]))
+		{
 			return; // position found, but not enough gain compared to our present route
+		}
 
 		if (this.Config.debug > 1)
 		{
@@ -884,38 +1057,52 @@ export class TradeManager
 		}
 
 		if (!this.tradeRoute)
+		{
 			gameState.ai.queueManager.changePriority("economicBuilding", 2 * this.Config.priorities.economicBuilding);
+		}
 		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
 		if (!this.tradeRoute)
+		{
 			plan.queueToReset = "economicBuilding";
+		}
 		queues.economicBuilding.addPlan(plan);
 	}
 
 	isNewMarketWorth(expectedGain: number): boolean
 	{
 		if (!Resources.GetTradableCodes().length)
+		{
 			return false;
+		}
 		if (expectedGain < this.minimalGain)
+		{
 			return false;
+		}
 		if (
 			this.potentialTradeRoute && expectedGain < 2 * this.potentialTradeRoute.gain &&
 			expectedGain < this.potentialTradeRoute.gain + 20
 		)
+		{
 			return false;
+		}
 		return true;
 	}
 
 	update(gameState: CommonGameState, events: EngineAIEvents, queues: PetraRuntime.QueueCollection): void
 	{
 		if (gameState.ai.HQ.canBarter && Resources.GetBarterableCodes().length)
+		{
 			this.performBarter(gameState);
+		}
 
 		if (this.Config.difficulty <= difficulty.VERY_EASY)
+		{
 			return;
+		}
 
 		if (this.checkEvents(gameState, events))
 		{ // true if one market was built or destroyed
-			this.traders.forEach(ent =>
+			this.traders.forEach((ent) =>
 			{
 				this.checkTrader(gameState, ent);
 			});
@@ -924,30 +1111,38 @@ export class TradeManager
 
 		if (this.tradeRoute)
 		{
-			this.traders.forEach(ent =>
+			this.traders.forEach((ent) =>
 			{
 				this.updateTrader(gameState, ent);
 			});
 			if (gameState.ai.playedTurn % 5 === 0)
+			{
 				this.trainMoreTraders(gameState, queues);
+			}
 			if (gameState.ai.playedTurn % 20 === 0 && this.traders.length >= 2)
+			{
 				gameState.ai.HQ.researchManager.researchTradeBonus(gameState, queues);
+			}
 			if (gameState.ai.playedTurn % 60 === 0)
+			{
 				this.setTradingGoods(gameState);
+			}
 		}
 
 		if (this.routeProspection)
+		{
 			this.prospectForNewMarket(gameState, queues);
+		}
 	}
 
 	Serialize(): SerializedTradeManager
 	{
 		return {
-			"tradeRoute": this.tradeRoute,
-			"potentialTradeRoute": this.potentialTradeRoute,
-			"routeProspection": this.routeProspection,
-			"targetNumTraders": this.targetNumTraders,
-			"warnedAllies": this.warnedAllies,
+			tradeRoute: this.tradeRoute,
+			potentialTradeRoute: this.potentialTradeRoute,
+			routeProspection: this.routeProspection,
+			targetNumTraders: this.targetNumTraders,
+			warnedAllies: this.warnedAllies,
 		};
 	}
 

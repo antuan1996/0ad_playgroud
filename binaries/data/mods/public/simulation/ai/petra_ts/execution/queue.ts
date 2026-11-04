@@ -14,7 +14,7 @@ export type PlanSerialize =
  * Holds a list of wanted plans to train or construct
  */
 /** What a queue saves: its plans, and whether it is paused or switched */
-export type SerializedQueue = { plans: Array<PlanSerialize>; paused: boolean; switched: number };
+export type SerializedQueue = { plans: Array<PlanSerialize>; paused: boolean; switched: number; };
 
 export class Queue
 {
@@ -49,7 +49,9 @@ export class Queue
 				return;
 			}
 			else if (newPlan.category === "technology" && samePlanType(plan, newPlan))
+			{
 				return;
+			}
 		}
 		this.plans.push(newPlan);
 	}
@@ -61,13 +63,17 @@ export class Queue
 		{
 			const plan = this.plans[0];
 			if (!plan.isInvalid(gameState))
+			{
 				return;
+			}
 			this.plans.shift();
 			if (plan.queueToReset)
+			{
 				gameState.ai.queueManager.changePriority(
 					plan.queueToReset,
 					gameState.ai.Config.priorities[plan.queueToReset],
 				);
+			}
 		}
 	}
 
@@ -97,7 +103,9 @@ export class Queue
 	{
 		const cost = new ResourcesManager();
 		if (this.plans.length > 0 && this.plans[0].isGo(gameState))
+		{
 			cost.add(this.plans[0].getCost());
+		}
 		if (this.plans.length > 1 && this.plans[1].isGo(gameState) && fraction > 0)
 		{
 			const costs = this.plans[1].getCost();
@@ -112,7 +120,9 @@ export class Queue
 	{
 		const cost = new ResourcesManager();
 		for (const plan of this.plans)
+		{
 			cost.add(plan.getCost());
+		}
 		return cost;
 	}
 
@@ -130,21 +140,27 @@ export class Queue
 	{
 		let count = 0;
 		for (const plan of this.plans)
+		{
 			count += plan.number;
+		}
 		return count;
 	}
 
 	hasQueuedUnitsWithClass(classe: string): boolean
 	{
-		return this.plans.some(plan => plan.category !== "technology" && plan.template.hasClass(classe));
+		return this.plans.some((plan) => plan.category !== "technology" && plan.template.hasClass(classe));
 	}
 
 	countQueuedUnitsWithClass(classe: string): number
 	{
 		let count = 0;
 		for (const plan of this.plans)
+		{
 			if (plan.category !== "technology" && plan.template.hasClass(classe))
+			{
 				count += plan.number;
+			}
+		}
 		return count;
 	}
 
@@ -155,18 +171,22 @@ export class Queue
 		{
 			const metadata = plan.metadata;
 			if (metadata && metadata[data] && metadata[data] === value)
+			{
 				count += plan.number;
+			}
 		}
 		return count;
 	}
 
-	Serialize(): { plans: Array<PlanSerialize>; paused: boolean; switched: number }
+	Serialize(): { plans: Array<PlanSerialize>; paused: boolean; switched: number; }
 	{
 		const plans: PlanSerialize[] = [];
 		for (const plan of this.plans)
+		{
 			plans.push(plan.Serialize());
+		}
 
-		return { "plans": plans, "paused": this.paused, "switched": this.switched };
+		return { plans: plans, paused: this.paused, switched: this.switched };
 	}
 
 	/** A saved queue with its plans */
@@ -185,13 +205,21 @@ export class Queue
 		for (const dataPlan of data.plans)
 		{
 			if (dataPlan.category === "unit")
+			{
 				this.plans.push(TrainingPlan.restore(gameState, dataPlan));
+			}
 			else if (dataPlan.category === "building")
+			{
 				this.plans.push(ConstructionPlan.restore(gameState, dataPlan));
+			}
 			else if (dataPlan.category === "technology")
+			{
 				this.plans.push(ResearchPlan.restore(gameState, dataPlan));
+			}
 			else
+			{
 				aiWarn("Petra deserialization error: plan unknown " + uneval(dataPlan));
+			}
 		}
 	}
 }
