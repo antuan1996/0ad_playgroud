@@ -18,10 +18,7 @@ import { ordersOf } from "../adapter/orders.ts";
 export class Worker
 {
 	base: WorkerBase;
-	declare baseAccess: AccessIndex;
 	baseID: BaseId;
-	declare ent: CommonEntity;
-	declare entAccess: AccessIndex;
 
 	constructor(base: WorkerBase)
 	{
@@ -58,12 +55,10 @@ export class Worker
 		if (ent.getMetadata(PlayerID, "transport") !== undefined && this.waitForTransport(gameState, ent, subrole))
 			return;
 
-		this.entAccess = requireValue(getLandAccess(gameState, ent));
+		const entAccess = requireValue(getLandAccess(gameState, ent));
 		// Base for unassigned entities has no accessIndex, so take the one from the entity.
-		if (this.baseID === hqOf(gameState).basesManager.baselessBase().ID)
-			this.baseAccess = this.entAccess;
-		else
-			this.baseAccess = this.base.accessIndex ?? NO_REGION;
+		const baseAccess = this.baseID === hqOf(gameState).basesManager.baselessBase().ID ? entAccess :
+			this.base.accessIndex ?? NO_REGION;
 
 		if (subrole === undefined)	// subrole may-be undefined after a transport, garrisoning, army, ...
 		{
@@ -73,8 +68,127 @@ export class Worker
 			return;
 		}
 
-		this.ent = ent;
+		new UnitWork(this, ent, entAccess, baseAccess).run(gameState, subrole);
+	}
 
+	/** A worker booked for a transport: a builder whose foundation is gone, or a gatherer with no dropsite where it goes, leaves it. Whether it still waits for it. */
+	waitForTransport(gameState: CommonGameState, ent: CommonEntity, subrole: WorkerSubrole | undefined): boolean
+	{
+		// Except if builder with their foundation destroyed, in which case cancel the transport if not yet on board
+		if (subrole === Worker.SUBROLE_BUILDER && ent.getMetadata(PlayerID, "target-foundation") !== undefined)
+		{
+			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const target = gameState.getEntityById(ent.getMetadata(PlayerID, "target-foundation"));
+			if (!target && plan && plan.state === TransportPlan.BOARDING && ent.position())
+				plan.removeUnit(gameState, ent);
+		}
+		// and gatherer if there are no more dropsite accessible in the base the ent is going to
+		if (subrole === Worker.SUBROLE_GATHERER || subrole === Worker.SUBROLE_HUNTER)
+		{
+			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
+			{
+				let hasDropsite = false;
+				const gatherType = ent.getMetadata(PlayerID, "gather-type") || "food";
+				for (const structure of gameState.getOwnStructures().values())
+				{
+					if (getLandAccess(gameState, structure) !== plan.endIndex)
+						continue;
+					const resourceDropsiteTypes = getBuiltEntity(gameState, structure).resourceDropsiteTypes();
+					if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
+						continue;
+					hasDropsite = true;
+					break;
+				}
+				if (!hasDropsite)
+				{
+					for (const unit of gameState.getOwnUnits().filter(filters.byClass("Support")).values())
+					{
+						if (!unit.position() || getLandAccess(gameState, unit) !== plan.endIndex)
+							continue;
+						const resourceDropsiteTypes = unit.resourceDropsiteTypes();
+						if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
+							continue;
+						hasDropsite = true;
+						break;
+					}
+				}
+				if (!hasDropsite)
+					plan.removeUnit(gameState, ent);
+			}
+		}
+		if (ent.getMetadata(PlayerID, "transport") !== undefined)
+			return true;
+		return false;
+	}
+
+	/**
+	 * Workers elephant should move away from the buildings they've built to avoid being trapped in between constructions.
+	 * For the time being, we move towards the nearest gatherer (providing him a dropsite).
+	 * BaseManager does also use that function to deal with its mobile dropsites.
+	 */
+	moveToGatherer(gameState: CommonGameState, ent: CommonEntity, forced: boolean): void
+	{
+		const pos = ent.position();
+		if (!pos || ent.getMetadata(PlayerID, "target-foundation") !== undefined)
+			return;
+		if (!forced && gameState.ai.elapsedTime < (ent.getMetadata(PlayerID, "nextMoveToGatherer") || 5))
+			return;
+		const gatherers = this.base.workersBySubrole(gameState, Worker.SUBROLE_GATHERER);
+		let dist = Math.min();
+		let destination;
+		const access = getLandAccess(gameState, ent);
+		const types = ent.resourceDropsiteTypes() ?? [];
+		for (const gatherer of gatherers.values())
+		{
+			const gathererType = gatherer.getMetadata(PlayerID, "gather-type") ?? "";
+			if (!gathererType || types.indexOf(gathererType) === -1)
+				continue;
+			const gathererPos = gatherer.position();
+			if (!gathererPos || gatherer.getMetadata(PlayerID, "transport") !== undefined ||
+				getLandAccess(gameState, gatherer) !== access || gatherer.isIdle())
+			{
+				continue;
+			}
+			const distance = SquareVectorDistance(pos, gathererPos);
+			if (distance > dist)
+				continue;
+			dist = distance;
+			destination = gathererPos;
+		}
+		ent.setMetadata(PlayerID, "nextMoveToGatherer", seconds(gameState.ai.elapsedTime + (destination ? 12 : 5)));
+		if (destination && dist > 10)
+			ent.move(destination[0], destination[1]);
+	}
+}
+
+/**
+ * One unit's work for a turn, for the base's Worker: the unit, the land it
+ * stands on and its base's land, worked out before it is made.
+ */
+export class UnitWork
+{
+	readonly worker: Worker;
+	readonly base: WorkerBase;
+	readonly baseID: BaseId;
+	readonly ent: CommonEntity;
+	readonly entAccess: AccessIndex;
+	readonly baseAccess: AccessIndex;
+
+	constructor(worker: Worker, ent: CommonEntity, entAccess: AccessIndex, baseAccess: AccessIndex)
+	{
+		this.worker = worker;
+		this.base = worker.base;
+		this.baseID = worker.baseID;
+		this.ent = ent;
+		this.entAccess = entAccess;
+		this.baseAccess = baseAccess;
+	}
+
+	/** The unit's work this turn, by its subrole and what it is doing */
+	run(gameState: CommonGameState, subrole: WorkerSubrole): void
+	{
+		const ent = this.ent;
 		const state = unitState(ent);
 		if ((subrole === Worker.SUBROLE_HUNTER || subrole === Worker.SUBROLE_GATHERER) &&
 		    (stateIs(state, "INDIVIDUAL.GATHER.GATHERING") || stateIs(state, "INDIVIDUAL.GATHER.APPROACHING") ||
@@ -205,7 +319,7 @@ export class Worker
 				{
 					// reassign it to something useful
 					this.base.reassignIdleWorkers(gameState, [ent]);
-					this.update(gameState, ent);
+					this.worker.update(gameState, ent);
 					return;
 				}
 			}
@@ -225,12 +339,12 @@ export class Worker
 			ent.setMetadata(PlayerID, "target-foundation", undefined);
 			// If worker elephant, move away to avoid being trapped in between constructions
 			if (ent.hasClass("Elephant"))
-				this.moveToGatherer(gameState, ent, true);
+				this.worker.moveToGatherer(gameState, ent, true);
 			else if (this.baseID !== hqOf(gameState).basesManager.baselessBase().ID)
 			{
 				// reassign it to something useful
 				this.base.reassignIdleWorkers(gameState, [ent]);
-				this.update(gameState, ent);
+				this.worker.update(gameState, ent);
 				return;
 			}
 		}
@@ -452,57 +566,6 @@ export class Worker
 				}
 			}
 		}
-		return false;
-	}
-
-	/** A worker booked for a transport: a builder whose foundation is gone, or a gatherer with no dropsite where it goes, leaves it. Whether it still waits for it. */
-	waitForTransport(gameState: CommonGameState, ent: CommonEntity, subrole: WorkerSubrole | undefined): boolean
-	{
-		// Except if builder with their foundation destroyed, in which case cancel the transport if not yet on board
-		if (subrole === Worker.SUBROLE_BUILDER && ent.getMetadata(PlayerID, "target-foundation") !== undefined)
-		{
-			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
-			const target = gameState.getEntityById(ent.getMetadata(PlayerID, "target-foundation"));
-			if (!target && plan && plan.state === TransportPlan.BOARDING && ent.position())
-				plan.removeUnit(gameState, ent);
-		}
-		// and gatherer if there are no more dropsite accessible in the base the ent is going to
-		if (subrole === Worker.SUBROLE_GATHERER || subrole === Worker.SUBROLE_HUNTER)
-		{
-			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
-			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
-			{
-				let hasDropsite = false;
-				const gatherType = ent.getMetadata(PlayerID, "gather-type") || "food";
-				for (const structure of gameState.getOwnStructures().values())
-				{
-					if (getLandAccess(gameState, structure) !== plan.endIndex)
-						continue;
-					const resourceDropsiteTypes = getBuiltEntity(gameState, structure).resourceDropsiteTypes();
-					if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
-						continue;
-					hasDropsite = true;
-					break;
-				}
-				if (!hasDropsite)
-				{
-					for (const unit of gameState.getOwnUnits().filter(filters.byClass("Support")).values())
-					{
-						if (!unit.position() || getLandAccess(gameState, unit) !== plan.endIndex)
-							continue;
-						const resourceDropsiteTypes = unit.resourceDropsiteTypes();
-						if (!resourceDropsiteTypes || resourceDropsiteTypes.indexOf(gatherType) === -1)
-							continue;
-						hasDropsite = true;
-						break;
-					}
-				}
-				if (!hasDropsite)
-					plan.removeUnit(gameState, ent);
-			}
-		}
-		if (ent.getMetadata(PlayerID, "transport") !== undefined)
-			return true;
 		return false;
 	}
 
@@ -876,7 +939,6 @@ export class Worker
 		return false;
 	}
 
-
 	/**
 	 * if position is given, we only check if we could hunt from this position but do nothing
 	 * otherwise the position of the entity is taken, and if something is found, we directly start the hunt
@@ -1154,45 +1216,6 @@ export class Worker
 			bestFarmDist = dist;
 		}
 		return bestFarmEnt;
-	}
-
-	/**
-	 * Workers elephant should move away from the buildings they've built to avoid being trapped in between constructions.
-	 * For the time being, we move towards the nearest gatherer (providing him a dropsite).
-	 * BaseManager does also use that function to deal with its mobile dropsites.
-	 */
-	moveToGatherer(gameState: CommonGameState, ent: CommonEntity, forced: boolean): void
-	{
-		const pos = ent.position();
-		if (!pos || ent.getMetadata(PlayerID, "target-foundation") !== undefined)
-			return;
-		if (!forced && gameState.ai.elapsedTime < (ent.getMetadata(PlayerID, "nextMoveToGatherer") || 5))
-			return;
-		const gatherers = this.base.workersBySubrole(gameState, Worker.SUBROLE_GATHERER);
-		let dist = Math.min();
-		let destination;
-		const access = getLandAccess(gameState, ent);
-		const types = ent.resourceDropsiteTypes() ?? [];
-		for (const gatherer of gatherers.values())
-		{
-			const gathererType = gatherer.getMetadata(PlayerID, "gather-type") ?? "";
-			if (!gathererType || types.indexOf(gathererType) === -1)
-				continue;
-			const gathererPos = gatherer.position();
-			if (!gathererPos || gatherer.getMetadata(PlayerID, "transport") !== undefined ||
-				getLandAccess(gameState, gatherer) !== access || gatherer.isIdle())
-			{
-				continue;
-			}
-			const distance = SquareVectorDistance(pos, gathererPos);
-			if (distance > dist)
-				continue;
-			dist = distance;
-			destination = gathererPos;
-		}
-		ent.setMetadata(PlayerID, "nextMoveToGatherer", seconds(gameState.ai.elapsedTime + (destination ? 12 : 5)));
-		if (destination && dist > 10)
-			ent.move(destination[0], destination[1]);
 	}
 
 	/**

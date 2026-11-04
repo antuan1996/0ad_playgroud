@@ -38,8 +38,6 @@ export type SerializedBuildManager = {
 
 export class BuildManager
 {
-	declare elapsedTime: GameSeconds;
-
 	// List of buildings we have builders for, with number of possible builders.
 	builders = new Map<TemplateName, EntityId[]>();
 	// List of buildings we can't currently build (because no room, no builder or whatever),
@@ -57,7 +55,6 @@ export class BuildManager
 	/** Update the builders counters */
 	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		this.elapsedTime = gameState.ai.elapsedTime;
 		const civ = gameState.getPlayerCiv();
 
 		for (const evt of events.Create)

@@ -285,6 +285,13 @@ identical game for game before and after):
    the build manager's time), the worker's three per-unit fields set at the
    start of each update, the attack plan's `path` (set when it sets off,
    read only after) and the bot's `player` (set by `BaseAI`).
+   **Then (2026-11-04) the two-step set-up went:** objects are made whole by
+   their constructor or a `restore` factory from explicit inputs (the
+   analysed `Geography`, the fleet, `canBuildUnits`), never via
+   `gameState.ai.HQ` while being built; `gameAnalysis` keeps only the first
+   turn's actions; the worker's per-unit fields became a `UnitWork` per unit.
+   One `declare` field is left, the bot's `player` (set by `BaseAI`);
+   `SAVE_VERSION` 3.
 
 A third round (done, the same checks, the 24 games identical again):
 `BaseId`, `ArmyId`, `TransportPlanId` brands (with `NO_BASE`, and `NEW_BASE`

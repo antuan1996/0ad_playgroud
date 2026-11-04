@@ -22,6 +22,7 @@ export const FISH_PER_BOAT = 1500;
 export const FISH_MAX_BOATS = 8;
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
+import type { Geography } from "../world/geography.ts";
 import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugWarn } from "../adapter/debug.ts";
@@ -38,11 +39,11 @@ import { debugWarn } from "../adapter/debug.ts";
 export class NavalManager
 {
 	Config: Config;
-	declare docks: CommonEntityCollection;
-	declare fishShips: CommonEntityCollection;
-	declare ships: CommonEntityCollection;
-	declare transportShips: CommonEntityCollection;
-	declare warShips: CommonEntityCollection;
+	docks: CommonEntityCollection;
+	fishShips: CommonEntityCollection;
+	ships: CommonEntityCollection;
+	transportShips: CommonEntityCollection;
+	warShips: CommonEntityCollection;
 
 	// ship subCollections. Also exist for land zones, idem, not caring.
 	seaShips: Array<CommonEntityCollection | undefined> = [];
@@ -63,14 +64,9 @@ export class NavalManager
 	// shore-line regions where we can load and unload units
 	landingZones: Record<number, Record<number, Set<number>>> = {};
 
-	constructor(Config: Config)
+	constructor(Config: Config, gameState: CommonGameState, geography: Geography)
 	{
 		this.Config = Config;
-	}
-
-	/** More initialisation for stuff that needs the gameState */
-	init(gameState: CommonGameState, deserializing = false): void
-	{
 		// docks
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
 		this.docks.registerUpdates();
@@ -101,7 +97,7 @@ export class NavalManager
 
 		for (let i = 0; i < gameState.ai.accessibility.regionSize.length; ++i)
 		{
-			if (!gameState.ai.HQ.geography.navalRegions[i])
+			if (!geography.navalRegions[i])
 			{
 				// push dummies
 				this.seaShips.push(undefined);
@@ -138,9 +134,6 @@ export class NavalManager
 				this.neededWarShips.push(0);
 			}
 		}
-
-		if (deserializing)
-			return;
 
 		// determination of the possible landing zones
 		const width = gameState.getPassabilityMap().width;
@@ -189,8 +182,20 @@ export class NavalManager
 				}
 			}
 		}
+	}
 
-		// Assign our initial docks and ships
+	/** A saved naval manager: its wishes, landing zones and transports from the save */
+	static restore(Config: Config, gameState: CommonGameState, geography: Geography,
+		data: ReturnType<NavalManager["Serialize"]>): NavalManager
+	{
+		const manager = new NavalManager(Config, gameState, geography);
+		manager.resume(gameState, data);
+		return manager;
+	}
+
+	/** At the start of a game, the sea each of our docks and ships is on */
+	assignStartingSeas(gameState: CommonGameState): void
+	{
 		for (const ship of this.ships.values())
 			setSeaAccess(gameState, ship);
 		for (const dock of this.docks.values())
@@ -455,7 +460,6 @@ export class NavalManager
 			debugWarn(this.Config, 1, () => ">>>> transport plan aborted <<<<");
 			return false;
 		}
-		plan.init(gameState);
 		this.transportPlans.push(plan);
 		return true;
 	}
@@ -470,7 +474,6 @@ export class NavalManager
 			debugWarn(this.Config, 1, () => ">>>> split of transport plan aborted <<<<");
 			return false;
 		}
-		newplan.init(gameState);
 
 		for (const ent of plan.needSplit)
 		{
@@ -509,7 +512,6 @@ export class NavalManager
 			const plan = TransportPlan.create(gameState, units, fromAccess, toAccess, toPos, ship);
 			if (!plan)
 				continue;
-			plan.init(gameState);
 			this.transportPlans.push(plan);
 		}
 	}
@@ -1051,7 +1053,7 @@ export class NavalManager
 		return { "properties": properties, "transports": transports };
 	}
 
-	Deserialize(gameState: CommonGameState, data: ReturnType<NavalManager["Serialize"]>): void
+	private resume(gameState: CommonGameState, data: ReturnType<NavalManager["Serialize"]>): void
 	{
 		this.wantedTransportShips = data.properties.wantedTransportShips;
 		this.wantedWarShips = data.properties.wantedWarShips;
@@ -1064,10 +1066,7 @@ export class NavalManager
 		for (const i in data.transports)
 		{
 			const dataPlan = data.transports[i];
-			const plan = TransportPlan.restore(gameState, dataPlan.startIndex, dataPlan.endIndex, dataPlan.endPos);
-			plan.Deserialize(dataPlan);
-			plan.init(gameState);
-			this.transportPlans.push(plan);
+			this.transportPlans.push(TransportPlan.restore(gameState, this, dataPlan));
 		}
 	}
 }

@@ -9,6 +9,7 @@ import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import { INVALID_ENTITY, landRegion } from "../adapter/brands.ts";
+import type { Geography } from "../world/geography.ts";
 import { requiredStateWithin } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
@@ -36,15 +37,15 @@ export type SerializedTradeManager = {
 export class TradeManager
 {
 	Config: Config;
-	declare minimalGain: number;
+	minimalGain: number;
 	potentialTradeRoute: TradeRoute | undefined;
 	routeProspection: boolean;
 	targetNumTraders: number;
 	tradeRoute: TradeRoute | undefined;
-	declare traders: CommonEntityCollection;
+	traders: CommonEntityCollection;
 	warnedAllies: Record<number, boolean>;
 
-	constructor(config: Config)
+	constructor(config: Config, gameState: CommonGameState, geography: Geography)
 	{
 		this.Config = config;
 		this.tradeRoute = undefined;
@@ -52,15 +53,20 @@ export class TradeManager
 		this.routeProspection = false;
 		this.targetNumTraders = this.Config.Economy.targetNumTraders;
 		this.warnedAllies = {};
-	}
-
-	init(gameState: CommonGameState): void
-	{
 		this.traders = gameState.getOwnUnits().filter(
 			filters.byMetadata(PlayerID, "role", Worker.ROLE_TRADER));
 		this.traders.registerUpdates();
-		this.minimalGain = gameState.ai.HQ.geography.navalMap ? 3 : 5;
+		this.minimalGain = geography.navalMap ? 3 : 5;
 	}
+
+	/** A saved trade manager: its route and wishes from the save */
+	static restore(config: Config, gameState: CommonGameState, geography: Geography, data: SerializedTradeManager): TradeManager
+	{
+		const manager = new TradeManager(config, gameState, geography);
+		manager.resume(data);
+		return manager;
+	}
+
 
 	hasTradeRoute(): boolean
 	{
@@ -770,7 +776,7 @@ export class TradeManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedTradeManager): void
+	private resume(data: SerializedTradeManager): void
 	{
 		// The fallbacks keep the value set by the constructor for fields absent in
 		// savegames written by an older version

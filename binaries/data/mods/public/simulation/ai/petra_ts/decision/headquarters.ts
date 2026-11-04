@@ -16,7 +16,7 @@ import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsi
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
-import { createBorderMap, createObstructionMap, createTerritoryMap, type TerritoryMap } from
+import { createObstructionMap, createTerritoryMap, type TerritoryMap } from
 	"../world/mapModule.ts";
 import { NavalManager } from "./navalManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -26,10 +26,10 @@ import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "../execution/worker.ts";
-import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
-import { Geography } from "../world/geography.ts";
+import { type Geography, restoreGeography, seaBetween } from "../world/geography.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { ProductionLoad } from "../world/production.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
@@ -138,8 +138,7 @@ export class Headquarters
 	canExpand = false;
 	capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId> }>;
 	capturableTargetsTime: GameSeconds;
-	/** set by init() from the game state */
-	declare currentPhase: number;
+	currentPhase: number;
 	decayingStructures: Set<EntityId> = new Set();
 	defenseManager: DefenseManager;
 	diplomacyManager: DiplomacyManager;
@@ -169,8 +168,7 @@ export class Headquarters
 	towerLapseTime: GameSeconds;
 	towerStartTime: GameSeconds;
 	tradeManager: TradeManager;
-	/** set by init() from the game state */
-	declare treasures: CommonEntityCollection;
+	treasures: CommonEntityCollection;
 	turnCache: HeadquartersTurnCache;
 	victoryManager: VictoryManager;
 
@@ -198,9 +196,14 @@ export class Headquarters
 	get navalMap(): boolean { return this.geography.navalMap; }
 	set navalMap(naval: boolean) { this.geography.navalMap = naval; }
 
-	constructor(config: Config, deserialized: boolean)
+	/**
+	 * A headquarters on an analysed map (startingStrategy.gameAnalysis then
+	 * takes the first turn's decisions), or one restored from its save with
+	 * its managers and their plans.
+	 */
+	constructor(config: Config, gameState: CommonGameState, geography: Geography, saved?: HeadquartersSerializedData)
 	{
-		this.geography = new Geography();
+		this.geography = geography;
 		this.Config = config;
 		this.phasing = 0;	// existing values: 0 means no, i > 0 means phasing towards phase i
 
@@ -222,50 +225,96 @@ export class Headquarters
 		this.extraTowers = Math.round(Math.min(this.Config.difficulty, 3) * this.Config.personality.defensive);
 		this.extraFortresses = Math.round(Math.max(Math.min(this.Config.difficulty - 1, 2), 0) * this.Config.personality.defensive);
 
-		this.basesManager = new BasesManager(this.Config);
-		this.attackManager = new AttackManager(this.Config);
-		this.buildManager = new BuildManager();
-		this.defenseManager = new DefenseManager(this.Config);
-		this.tradeManager = new TradeManager(this.Config);
-		this.navalManager = new NavalManager(this.Config);
-		this.researchManager = new ResearchManager(this.Config);
-		this.diplomacyManager = new DiplomacyManager(this.Config, deserialized);
-		this.garrisonManager = new GarrisonManager(this.Config);
-		this.victoryManager = new VictoryManager(this.Config);
-		this.emergencyManager = new EmergencyManager(this.Config);
-
 		this.capturableTargets = new Map();
 		this.capturableTargetsTime = seconds(0);
-	}
-
-	/** More initialisation for stuff that needs the gameState */
-	init(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		this.geography.territoryMap = createTerritoryMap(gameState);
-		// create borderMap: flag cells on the border of the map
-		// then this map will be completed with our frontier in updateTerritories
-		this.geography.borderMap = createBorderMap(gameState);
-		// list of allowed regions
-		this.geography.landRegions = {};
-		// try to determine if we have a water map
-		this.geography.navalMap = false;
-		this.geography.navalRegions = {};
 
 		this.treasures = gameState.getEntities().filter((ent) => ent.isTreasure());
 		this.treasures.registerUpdates();
 		this.currentPhase = gameState.currentPhase();
-		this.decayingStructures = new Set();
+
+		if (saved)
+		{
+			const properties = saved.properties;
+			this.phasing = properties.phasing;
+			this.lastFailedGather = properties.lastFailedGather;
+			this.firstBaseConfig = properties.firstBaseConfig;
+			this.supportRatio = properties.supportRatio;
+			this.targetNumWorkers = properties.targetNumWorkers;
+			this.fortStartTime = properties.fortStartTime;
+			this.towerStartTime = properties.towerStartTime;
+			this.fortressStartTime = properties.fortressStartTime;
+			this.bAdvanced = properties.bAdvanced;
+			this.saveResources = properties.saveResources;
+			this.saveSpace = properties.saveSpace;
+			this.needCorral = properties.needCorral;
+			this.needFarm = properties.needFarm;
+			this.needFish = properties.needFish;
+			this.maxFields = properties.maxFields;
+			this.canExpand = properties.canExpand;
+			this.canBuildUnits = properties.canBuildUnits;
+			this.decayingStructures = properties.decayingStructures;
+			this.capturableTargets = properties.capturableTargets;
+			this.capturableTargetsTime = properties.capturableTargetsTime;
+
+			this.gatherEconomy = new GatherEconomy();
+			this.gatherEconomy.Deserialize(saved.gatherEconomy);
+
+			this.basesManager = new BasesManager(this.Config, gameState, saved.basesManager);
+			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager);
+			this.attackManager = AttackManager.restore(this.Config, gameState, saved.attackManager, this.canBuildUnits);
+
+			this.buildManager = new BuildManager();
+			this.buildManager.Deserialize(saved.buildManager);
+
+			this.defenseManager = new DefenseManager(this.Config, geography);
+			this.defenseManager.Deserialize(gameState, saved.defenseManager);
+
+			this.tradeManager = TradeManager.restore(this.Config, gameState, geography, saved.tradeManager);
+
+			this.researchManager = new ResearchManager(this.Config);
+			this.researchManager.Deserialize(saved.researchManager);
+
+			this.diplomacyManager = new DiplomacyManager(this.Config, true);
+			this.diplomacyManager.Deserialize(saved.diplomacyManager);
+
+			this.garrisonManager = new GarrisonManager(this.Config);
+			this.garrisonManager.Deserialize(saved.garrisonManager);
+
+			this.victoryManager = new VictoryManager(this.Config);
+			this.victoryManager.Deserialize(saved.victoryManager);
+
+			this.emergencyManager = new EmergencyManager(this.Config);
+			this.emergencyManager.Deserialize(saved.emergencyManager);
+			return;
+		}
+
+		this.basesManager = new BasesManager(this.Config, gameState);
+		this.attackManager = new AttackManager(this.Config, gameState);
+		this.buildManager = new BuildManager();
+		this.defenseManager = new DefenseManager(this.Config, geography);
+		this.tradeManager = new TradeManager(this.Config, gameState, geography);
+		this.navalManager = new NavalManager(this.Config, gameState, geography);
+		this.researchManager = new ResearchManager(this.Config);
+		this.diplomacyManager = new DiplomacyManager(this.Config, false);
+		this.garrisonManager = new GarrisonManager(this.Config);
+		this.victoryManager = new VictoryManager(this.Config);
+		this.emergencyManager = new EmergencyManager(this.Config);
 		this.emergencyManager.init(gameState);
 	}
+
+	/** A saved headquarters: its map's regions from the save, its maps read again */
+	static restore(config: Config, gameState: CommonGameState, saved: HeadquartersSerializedData): Headquarters
+	{
+		const regions = { "landRegions": saved.properties.landRegions, "navalRegions": saved.properties.navalRegions,
+			"navalMap": saved.properties.navalMap };
+		return new Headquarters(config, gameState, restoreGeography(gameState, regions), saved);
+	}
+
+	/** More initialisation for stuff that needs the gameState */
 
 	/**
 	 * initialization needed after deserialization (only called when deserialization)
 	 */
-	postinit(gameState: CommonGameState): void
-	{
-		this.basesManager.postinit(gameState);
-	}
-
 	/**
 	 * returns the sea index linking regions 1 and region 2 (supposed to be different land region)
 	 * otherwise return undefined
@@ -273,17 +322,7 @@ export class Headquarters
 	 */
 	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined
 	{
-		const path = gameState.ai.accessibility.getTrajectToIndex(index1, index2);
-		if (path && path.length === 3 && gameState.ai.accessibility.regionType[path[1]] === "water")
-			return seaRegion(path[1]);
-
-		if (this.Config.debug > 1)
-		{
-			aiWarn("bad path from " + index1 + " to " + index2 + " ??? " + uneval(path));
-			aiWarn(" regionLinks start " + uneval(gameState.ai.accessibility.regionLinks[index1]));
-			aiWarn(" regionLinks end   " + uneval(gameState.ai.accessibility.regionLinks[index2]));
-		}
-		return undefined;
+		return seaBetween(gameState, index1, index2, this.Config.debug);
 	}
 
 	/** checkEvents: units trained. */
@@ -3016,72 +3055,4 @@ export class Headquarters
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: HeadquartersSerializedData): void
-	{
-		const properties = data.properties;
-		this.phasing = properties.phasing;
-		this.lastFailedGather = properties.lastFailedGather;
-		this.firstBaseConfig = properties.firstBaseConfig;
-		this.supportRatio = properties.supportRatio;
-		this.targetNumWorkers = properties.targetNumWorkers;
-		this.fortStartTime = properties.fortStartTime;
-		this.towerStartTime = properties.towerStartTime;
-		this.fortressStartTime = properties.fortressStartTime;
-		this.bAdvanced = properties.bAdvanced;
-		this.saveResources = properties.saveResources;
-		this.saveSpace = properties.saveSpace;
-		this.needCorral = properties.needCorral;
-		this.needFarm = properties.needFarm;
-		this.needFish = properties.needFish;
-		this.maxFields = properties.maxFields;
-		this.canExpand = properties.canExpand;
-		this.canBuildUnits = properties.canBuildUnits;
-		this.navalMap = properties.navalMap;
-		this.landRegions = properties.landRegions;
-		this.navalRegions = properties.navalRegions;
-		this.decayingStructures = properties.decayingStructures;
-		this.capturableTargets = properties.capturableTargets;
-		this.capturableTargetsTime = properties.capturableTargetsTime;
-
-		this.gatherEconomy = new GatherEconomy();
-		this.gatherEconomy.Deserialize(data.gatherEconomy);
-
-		this.basesManager = new BasesManager(this.Config);
-		this.basesManager.init(gameState, true);
-		this.basesManager.Deserialize(gameState, data.basesManager);
-
-		this.navalManager = new NavalManager(this.Config);
-		this.navalManager.init(gameState, true);
-		this.navalManager.Deserialize(gameState, data.navalManager);
-
-		this.attackManager = new AttackManager(this.Config);
-		this.attackManager.Deserialize(gameState, data.attackManager);
-		this.attackManager.init(gameState);
-		this.attackManager.Deserialize(gameState, data.attackManager);
-
-		this.buildManager = new BuildManager();
-		this.buildManager.Deserialize(data.buildManager);
-
-		this.defenseManager = new DefenseManager(this.Config);
-		this.defenseManager.Deserialize(gameState, data.defenseManager);
-
-		this.tradeManager = new TradeManager(this.Config);
-		this.tradeManager.init(gameState);
-		this.tradeManager.Deserialize(gameState, data.tradeManager);
-
-		this.researchManager = new ResearchManager(this.Config);
-		this.researchManager.Deserialize(data.researchManager);
-
-		this.diplomacyManager = new DiplomacyManager(this.Config, true);
-		this.diplomacyManager.Deserialize(data.diplomacyManager);
-
-		this.garrisonManager = new GarrisonManager(this.Config);
-		this.garrisonManager.Deserialize(data.garrisonManager);
-
-		this.victoryManager = new VictoryManager(this.Config);
-		this.victoryManager.Deserialize(data.victoryManager);
-
-		this.emergencyManager = new EmergencyManager(this.Config);
-		this.emergencyManager.Deserialize(data.emergencyManager);
-	}
 }

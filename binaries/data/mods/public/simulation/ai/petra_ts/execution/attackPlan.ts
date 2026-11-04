@@ -58,7 +58,7 @@ export type SerializedAttackPlan = {
 		target: EntityId | undefined;
 		targetPos: CommonPosition | undefined;
 		uniqueTargetId: EntityId | undefined;
-		path: CommonPosition[];
+		path: CommonPosition[] | undefined;
 		unitCollUpdateArray: EntityId[] | undefined;
 	};
 };
@@ -217,30 +217,38 @@ function attackComposition(type: AttackType, data: AttackPlanData | undefined):
 	return { priority, unitStat, neededShips };
 }
 
+/**
+ * What an attack plan is made from: a new plan's type, its data, where it
+ * starts and its size roll, or a save; and whether we can train units at all
+ * (the headquarters' canBuildUnits: the plan then has build orders).
+ */
+type AttackPlanSetup = { canBuildUnits: boolean } & (
+	| { kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number }
+	| { kind: "saved"; saved: SerializedAttackPlan });
+
 export class AttackPlan
 {
 	Config: Config;
 	buildOrders: AttackBuildOrder[];
 	canBuildUnits: boolean;
 	forced: boolean;
-	declare gameState: CommonGameState;
 	isBlocked: boolean;
 	lastPosition: CommonPosition;
 	maxCompletingTime: GameSeconds;
 	name: AttackPlanId;
 	neededShips: number;
 	overseas: SeaIndex | 0;
-	declare path: CommonPosition[];
+	/** The way to the target, made when the plan sets off (getPathToTarget); walked in STATE_WALKING */
+	path: CommonPosition[] | undefined = undefined;
 	paused: boolean;
 	position: CommonPosition | undefined;
 	position5TurnsAgo: CommonPosition;
-	declare queue: Queue;
-	declare queueChamp: Queue;
-	declare queueSiege: Queue;
+	queue: Queue;
+	queueChamp: Queue;
+	queueSiege: Queue;
 	rallyPoint: CommonPosition;
 	/** Set when an ally asked for this attack: it does not ask its allies in turn */
 	requested: boolean | undefined = undefined;
-	declare sameLand: AccessIndex | false;
 	siegeState: number;
 	startingAttack = false;
 	/** Changed only by changeState, and restored by Deserialize. */
@@ -250,9 +258,9 @@ export class AttackPlan
 	targetPos: CommonPosition | undefined;
 	type: AttackType;
 	uniqueTargetId: EntityId | undefined;
-	declare unit: Record<string, CommonEntityCollection>;
+	unit: Record<string, CommonEntityCollection>;
 	unitCollUpdateArray: EntityId[] | undefined = undefined;
-	declare unitCollection: CommonEntityCollection;
+	unitCollection: CommonEntityCollection;
 	unitStat: Record<string, AttackUnitStat>;
 
 	/**
@@ -350,115 +358,166 @@ export class AttackPlan
 		type: AttackType = AttackPlan.TYPE_DEFAULT, data?: AttackPlanData): AttackPlan | undefined
 	{
 		const start = AttackPlan.findStart(gameState, type, attackPlanId(uniqueID), data?.target);
-		return start && new AttackPlan(gameState, config, uniqueID, type, data, false, start);
+		// some randomness on the attack's size
+		return start && new AttackPlan(gameState, config, uniqueID, { "kind": "new", type, data, start,
+			"variation": randFloat(0.8, 1.2), "canBuildUnits": hqOf(gameState).canBuildUnits });
 	}
 
-	/**
-	 * A saved plan, before its Deserialize: the search runs as for a new plan
-	 * (it may ask the naval manager for a transport), and the save's start
-	 * replaces what it found.
-	 */
-	static restore(gameState: CommonGameState, config: Config, uniqueID: number): AttackPlan
+	/** A saved plan, as it was saved: its queues (restored with the queue manager) and units found again. */
+	static restore(gameState: CommonGameState, config: Config, saved: SerializedAttackPlan, canBuildUnits: boolean): AttackPlan
 	{
-		const start = AttackPlan.findStart(gameState, AttackPlan.TYPE_DEFAULT, attackPlanId(uniqueID), undefined);
-		return new AttackPlan(gameState, config, uniqueID, AttackPlan.TYPE_DEFAULT, undefined, true,
-			start ?? { "rallyPoint": worldPos(0, 0), "overseas": 0 });
+		return new AttackPlan(gameState, config, saved.properties.name, { "kind": "saved", saved, canBuildUnits });
 	}
 
-	constructor(gameState: CommonGameState, config: Config, uniqueID: number, type: AttackType,
-		data: AttackPlanData | undefined, deserialized: boolean, start: AttackStart)
+	constructor(gameState: CommonGameState, config: Config, uniqueID: number, setup: AttackPlanSetup)
 	{
 		this.Config = config;
 		this.name = attackPlanId(uniqueID);
-		this.type = type;
-		this.state = AttackPlan.STATE_UNEXECUTED;
-		this.forced = false;  // true when this attacked has been forced to help an ally
-
-		if (data && data.target)
+		if (setup.kind === "saved")
 		{
-			this.target = data.target;
-			this.targetPos = this.target.position();
-			this.targetPlayer = this.target.owner();
+			const saved = setup.saved;
+			this.type = saved.properties.type;
+			const state = saved.properties.state;
+			if (isAttackPlanState(state))
+				this.state = state;
+			else
+			{
+				aiWarn("Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
+					"\": it prepares again");
+				this.state = AttackPlan.STATE_UNEXECUTED;
+			}
+			this.forced = saved.properties.forced;
+			this.rallyPoint = saved.properties.rallyPoint;
+			this.overseas = saved.properties.overseas;
+			this.paused = saved.properties.paused;
+			this.maxCompletingTime = saved.properties.maxCompletingTime;
+			this.neededShips = saved.properties.neededShips;
+			this.unitStat = saved.properties.unitStat;
+			this.siegeState = saved.properties.siegeState;
+			this.position5TurnsAgo = saved.properties.position5TurnsAgo;
+			this.lastPosition = saved.properties.lastPosition;
+			this.position = saved.properties.position;
+			this.isBlocked = saved.properties.isBlocked;
+			this.targetPlayer = saved.properties.targetPlayer;
+			this.targetPos = saved.properties.targetPos;
+			this.uniqueTargetId = saved.properties.uniqueTargetId;
+			this.path = saved.properties.path;
+			this.unitCollUpdateArray = saved.properties.unitCollUpdateArray;
+
+			const targetId = saved.properties.target;
+			this.target = typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined;
 		}
 		else
 		{
-			this.target = undefined;
-			this.targetPos = undefined;
-			this.targetPlayer = undefined;
-		}
+			const data = setup.data;
+			this.type = setup.type;
+			this.state = AttackPlan.STATE_UNEXECUTED;
+			this.forced = false;  // true when this attacked has been forced to help an ally
 
-		this.uniqueTargetId = data && data.uniqueTargetId || undefined;
+			if (data && data.target)
+			{
+				this.target = data.target;
+				this.targetPos = this.target.position();
+				this.targetPlayer = this.target.owner();
+			}
+			else
+			{
+				this.target = undefined;
+				this.targetPos = undefined;
+				this.targetPlayer = undefined;
+			}
 
-		this.rallyPoint = start.rallyPoint;
-		this.overseas = start.overseas;
-		this.paused = false;
-		this.maxCompletingTime = seconds(0);
+			this.uniqueTargetId = data && data.uniqueTargetId || undefined;
 
-		// the army this type aims at (see attackComposition)
-		const composition = attackComposition(type, data);
-		let priority = composition.priority;
-		this.unitStat = composition.unitStat;
-		this.neededShips = composition.neededShips;
+			this.rallyPoint = setup.start.rallyPoint;
+			this.overseas = setup.start.overseas;
+			this.paused = false;
+			this.maxCompletingTime = seconds(0);
 
-		// Put some randomness on the attack size
-		let variation = deserialized ? 1 : randFloat(0.8, 1.2);
-		// and lower priority and smaller sizes for easier difficulty levels
-		if (this.Config.difficulty < difficulty.EASY)
-		{
-			priority *= 0.4;
-			variation *= 0.2;
-		}
-		else if (this.Config.difficulty < difficulty.MEDIUM)
-		{
-			priority *= 0.8;
-			variation *= 0.6;
-		}
+			// the army this type aims at (see attackComposition)
+			const composition = attackComposition(setup.type, data);
+			let priority = composition.priority;
+			this.unitStat = composition.unitStat;
+			this.neededShips = composition.neededShips;
 
-		if (this.Config.difficulty < difficulty.EASY)
-		{
+			let variation = setup.variation;
+			// lower priority and smaller sizes for easier difficulty levels
+			if (this.Config.difficulty < difficulty.EASY)
+			{
+				priority *= 0.4;
+				variation *= 0.2;
+			}
+			else if (this.Config.difficulty < difficulty.MEDIUM)
+			{
+				priority *= 0.8;
+				variation *= 0.6;
+			}
+
+			if (this.Config.difficulty < difficulty.EASY)
+			{
+				for (const cat in this.unitStat)
+				{
+					this.unitStat[cat].targetSize = Math.ceil(variation * this.unitStat[cat].targetSize);
+					this.unitStat[cat].minSize = Math.min(this.unitStat[cat].targetSize, Math.min(this.unitStat[cat].minSize, 2));
+					this.unitStat[cat].batchSize = this.unitStat[cat].minSize;
+				}
+			}
+			else
+			{
+				for (const cat in this.unitStat)
+				{
+					this.unitStat[cat].targetSize = Math.ceil(variation * this.unitStat[cat].targetSize);
+					this.unitStat[cat].minSize = Math.min(this.unitStat[cat].minSize, this.unitStat[cat].targetSize);
+				}
+			}
+
+			// change the sizes according to max population
+			this.neededShips = Math.ceil(this.Config.popScaling * this.neededShips);
 			for (const cat in this.unitStat)
 			{
-				this.unitStat[cat].targetSize = Math.ceil(variation * this.unitStat[cat].targetSize);
-				this.unitStat[cat].minSize = Math.min(this.unitStat[cat].targetSize, Math.min(this.unitStat[cat].minSize, 2));
-				this.unitStat[cat].batchSize = this.unitStat[cat].minSize;
+				this.unitStat[cat].targetSize = Math.ceil(this.Config.popScaling * this.unitStat[cat].targetSize);
+				this.unitStat[cat].minSize = Math.ceil(this.Config.popScaling * this.unitStat[cat].minSize);
 			}
-		}
-		else
-		{
-			for (const cat in this.unitStat)
-			{
-				this.unitStat[cat].targetSize = Math.ceil(variation * this.unitStat[cat].targetSize);
-				this.unitStat[cat].minSize = Math.min(this.unitStat[cat].minSize, this.unitStat[cat].targetSize);
-			}
-		}
 
-		// change the sizes according to max population
-		this.neededShips = Math.ceil(this.Config.popScaling * this.neededShips);
-		for (const cat in this.unitStat)
-		{
-			this.unitStat[cat].targetSize = Math.ceil(this.Config.popScaling * this.unitStat[cat].targetSize);
-			this.unitStat[cat].minSize = Math.ceil(this.Config.popScaling * this.unitStat[cat].minSize);
-		}
-
-		if (!deserialized)
-		{
 			// TODO: there should probably be one queue per type of training building
 			gameState.ai.queueManager.addQueue(`plan_${this.name}`, priority);
 			gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority+1);
 			gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
+
+			this.siegeState = AttackPlan.SIEGE_NOT_TESTED;
+
+			// some variables used during the attack
+			this.position5TurnsAgo = worldPos(0, 0);
+			this.lastPosition = worldPos(0, 0);
+			this.position = worldPos(0, 0);
+			this.isBlocked = false;	     // true when this attack faces walls
 		}
 
 		// each array is [ratio, [associated classes], associated EntityColl, associated unitStat, name ]
 		this.buildOrders = [];
-		this.canBuildUnits = hqOf(gameState).canBuildUnits;
-		this.siegeState = AttackPlan.SIEGE_NOT_TESTED;
+		this.canBuildUnits = setup.canBuildUnits;
 
-		// some variables used during the attack
-		this.position5TurnsAgo = worldPos(0, 0);
-		this.lastPosition = worldPos(0, 0);
-		this.position = worldPos(0, 0);
-		this.isBlocked = false;	     // true when this attack faces walls
+		// added by the constructor, or restored with the queue manager before a saved plan
+		this.queue = requireValue(gameState.ai.queues[`plan_${this.name}`]);
+		this.queueChamp = requireValue(gameState.ai.queues[`plan_${this.name}_champ`]);
+		this.queueSiege = requireValue(gameState.ai.queues[`plan_${this.name}_siege`]);
 
+		this.unitCollection = gameState.getOwnUnits().filter(
+			filters.byMetadata(PlayerID, "plan", this.name));
+		this.unitCollection.registerUpdates();
+
+		this.unit = {};
+
+		// defining the entity collections. Will look for units I own, that are part of this plan.
+		// Also defining the buildOrders.
+		for (const cat in this.unitStat)
+		{
+			const Unit = this.unitStat[cat];
+			this.unit[cat] = this.unitCollection.filter(filters.byClasses(Unit.classes));
+			this.unit[cat].registerUpdates();
+			if (this.canBuildUnits)
+				this.buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
+		}
 	}
 
 	static PREPARATION_FAILED = 0;
@@ -487,31 +546,6 @@ export class AttackPlan
 	static readonly TYPE_HUGE_ATTACK = "HugeAttack";
 	static readonly TYPE_RAID = "Raid";
 	static readonly TYPE_RUSH = "Rush";
-
-	init(gameState: CommonGameState): void
-	{
-		// added by the constructor, or restored with the queue manager before a saved plan
-		this.queue = requireValue(gameState.ai.queues[`plan_${this.name}`]);
-		this.queueChamp = requireValue(gameState.ai.queues[`plan_${this.name}_champ`]);
-		this.queueSiege = requireValue(gameState.ai.queues[`plan_${this.name}_siege`]);
-
-		this.unitCollection = gameState.getOwnUnits().filter(
-			filters.byMetadata(PlayerID, "plan", this.name));
-		this.unitCollection.registerUpdates();
-
-		this.unit = {};
-
-		// defining the entity collections. Will look for units I own, that are part of this plan.
-		// Also defining the buildOrders.
-		for (const cat in this.unitStat)
-		{
-			const Unit = this.unitStat[cat];
-			this.unit[cat] = this.unitCollection.filter(filters.byClasses(Unit.classes));
-			this.unit[cat].registerUpdates();
-			if (this.canBuildUnits)
-				this.buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
-		}
-	}
 
 	getName(): number
 	{
@@ -1294,9 +1328,7 @@ export class AttackPlan
 		if (targetPlayer === undefined)
 			return undefined;
 		this.isBlocked = false;
-		// Temporary variables needed by isValidTarget
-		this.gameState = gameState;
-		this.sameLand = sameLand && sameLand > 1 ? sameLand : false;
+		const land = sameLand && sameLand > 1 ? sameLand : false;
 
 		let targets;
 		if (this.uniqueTargetId)
@@ -1312,16 +1344,16 @@ export class AttackPlan
 				targets = this.raidTargetFinder(gameState);
 			else if (this.type === AttackPlan.TYPE_RUSH || this.type === AttackPlan.TYPE_DEFAULT)
 			{
-				targets = this.rushTargetFinder(gameState, targetPlayer);
+				targets = this.rushTargetFinder(gameState, targetPlayer, land);
 				// with no undefended building, an attack takes on the defended ones; Petra
 				// waited for siege engines, and on islands its armies, finding nothing,
 				// were aborted and remade every few seconds for good (FINDINGS §35)
 				if (!targets.hasEntities() &&
 				    (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
-					targets = this.defaultTargetFinder(gameState, targetPlayer);
+					targets = this.defaultTargetFinder(gameState, targetPlayer, land);
 			}
 			else
-				targets = this.defaultTargetFinder(gameState, targetPlayer);
+				targets = this.defaultTargetFinder(gameState, targetPlayer, land);
 		}
 		if (!targets.hasEntities())
 			return undefined;
@@ -1335,7 +1367,7 @@ export class AttackPlan
 			   (!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id())))
 				continue;
 			// Do not bother with some pointless targets
-			if (!this.isValidTarget(ent))
+			if (!this.isValidTarget(gameState, ent, land))
 				continue;
 			const entPos = ent.position();
 			if (!entPos)
@@ -1377,7 +1409,7 @@ export class AttackPlan
 	 * Default target finder aims for conquest critical targets
 	 * We must apply the *same* selection (isValidTarget) as done in getNearestTarget
 	 */
-	defaultTargetFinder(gameState: CommonGameState, playerEnemy: PlayerId): CommonEntityCollection
+	defaultTargetFinder(gameState: CommonGameState, playerEnemy: PlayerId, sameLand: AccessIndex | false = false): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		if (gameState.getVictoryConditions().has("wonder"))
@@ -1404,11 +1436,12 @@ export class AttackPlan
 				targets.addEnt(ent);
 			}
 		}
-		targets = targets.filter(this.isValidTarget, this);
+		targets = targets.filter((ent: CommonEntity): boolean => this.isValidTarget(gameState, ent, sameLand));
 		if (targets.hasEntities())
 			return targets;
 
-		const validTargets = gameState.getEnemyStructures(playerEnemy).filter(this.isValidTarget, this);
+		const validTargets = gameState.getEnemyStructures(playerEnemy).filter(
+			(ent: CommonEntity): boolean => this.isValidTarget(gameState, ent, sameLand));
 		// on a naval map the docks too, which the nearest pick favours (FINDINGS §42)
 		targets = validTargets.filter(filters.byClasses(
 			hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]));
@@ -1429,17 +1462,18 @@ export class AttackPlan
 		return targets;
 	}
 
-	isValidTarget(ent: CommonEntity): boolean
+	/** Whether a target is worth attacking: on the given land, when one is given, and not a decaying empty building */
+	isValidTarget(gameState: CommonGameState, ent: CommonEntity, sameLand: AccessIndex | false): boolean
 	{
 		if (!ent.position())
 			return false;
-		if (this.sameLand && getLandAccess(this.gameState, ent) !== this.sameLand)
+		if (sameLand && getLandAccess(gameState, ent) !== sameLand)
 			return false;
 		return !ent.decaying() || !!ent.getDefaultArrow() || ent.isGarrisonHolder() && (ent.garrisoned() || []).length > 0;
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
-	rushTargetFinder(gameState: CommonGameState, playerEnemy?: PlayerId): CommonEntityCollection
+	rushTargetFinder(gameState: CommonGameState, playerEnemy?: PlayerId, sameLand: AccessIndex | false = false): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		let buildings;
@@ -1465,7 +1499,7 @@ export class AttackPlan
 				continue;
 			if (building.hasDefensiveFire())
 				continue;
-			if (!this.isValidTarget(building))
+			if (!this.isValidTarget(gameState, building, sameLand))
 				continue;
 			const pos = building.position();
 			if (!pos)
@@ -1497,7 +1531,7 @@ export class AttackPlan
 			targets.addEnt(target);
 
 		if (!targets.hasEntities() && this.type === AttackPlan.TYPE_RUSH && playerEnemy)
-			targets = this.rushTargetFinder(gameState);
+			targets = this.rushTargetFinder(gameState, undefined, sameLand);
 
 		return targets;
 	}
@@ -1636,39 +1670,39 @@ export class AttackPlan
 		const startPos = { "x": this.rallyPoint[0], "y": this.rallyPoint[1] };
 		const endPos = { "x": targetPos[0], "y": targetPos[1] };
 		const path = Engine.ComputePath(startPos, endPos, gameState.getPassabilityClassMask("large"));
-		this.path = [];
-		this.path.push(clone(targetPos));
+		const way: CommonPosition[] = [clone(targetPos)];
 		for (const point of path)
-			this.path.push(worldPos(point.x, point.y));
-		this.path.push(clone(this.rallyPoint));
-		this.path.reverse();
+			way.push(worldPos(point.x, point.y));
+		way.push(clone(this.rallyPoint));
+		way.reverse();
+		this.path = way;
 		// Change the rally point to something useful
 		if (!fixedRallyPoint)
-			this.setRallyPoint(gameState);
+			this.setRallyPoint(gameState, way);
 		Engine.ProfileStop();
 
 		return true;
 	}
 
-	/** Set rally point at the border of our territory */
-	setRallyPoint(gameState: CommonGameState): void
+	/** Set rally point at the border of our territory, on the path out of it (cut to start there) */
+	setRallyPoint(gameState: CommonGameState, path: CommonPosition[]): void
 	{
-		for (let i = 0; i < this.path.length; ++i)
+		for (let i = 0; i < path.length; ++i)
 		{
-			if (hqOf(gameState).geography.territoryMap.getOwner(this.path[i]) === PlayerID)
+			if (hqOf(gameState).geography.territoryMap.getOwner(path[i]) === PlayerID)
 				continue;
 
 			if (i === 0)
-				this.rallyPoint = this.path[0];
-			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, this.path[i-1], 20))
+				this.rallyPoint = path[0];
+			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, path[i-1], 20))
 			{
-				this.rallyPoint = this.path[i-2];
-				this.path.splice(0, i-2);
+				this.rallyPoint = path[i-2];
+				path.splice(0, i-2);
 			}
 			else
 			{
-				this.rallyPoint = this.path[i-1];
-				this.path.splice(0, i-1);
+				this.rallyPoint = path[i-1];
+				path.splice(0, i-1);
 			}
 			break;
 		}
@@ -2426,6 +2460,8 @@ export class AttackPlan
 
 	UpdateWalking(gameState: CommonGameState, events: EngineAIEvents): boolean
 	{
+		// made by StartAttack, the only way into walking, or restored with a walking plan
+		const path = requireValue(this.path);
 		const pos = this.position;
 		if (!pos)
 			return false;
@@ -2461,7 +2497,7 @@ export class AttackPlan
 
 		// basically haven't moved an inch: very likely stuck)
 		if (pos5TurnsAgo && SquareVectorDistance(pos, pos5TurnsAgo) < 10 &&
-			this.path.length > 0 && gameState.ai.playedTurn % 5 === 0)
+			path.length > 0 && gameState.ai.playedTurn % 5 === 0)
 		{
 			// check for stuck siege units
 			let farthest = 0;
@@ -2485,10 +2521,10 @@ export class AttackPlan
 
 		const lastPos = this.lastPosition;
 		if (lastPos && SquareVectorDistance(pos, lastPos) < 16 &&
-			this.path.length > 0)
+			path.length > 0)
 		{
-			if (!this.path[0][0] || !this.path[0][1])
-				aiWarn("Start: Problem with path " + uneval(this.path));
+			if (!path[0][0] || !path[0][1])
+				aiWarn("Start: Problem with path " + uneval(path));
 			// We're stuck, presumably. Check if there are no walls just close to us.
 			for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"]))
 				.values())
@@ -2513,8 +2549,8 @@ export class AttackPlan
 				return false;
 			}
 
-			// this.unitCollection.move(this.path[0][0], this.path[0][1]);
-			this.unitCollection.moveIndiv(this.path[0][0], this.path[0][1]);
+			// this.unitCollection.move(path[0][0], path[0][1]);
+			this.unitCollection.moveIndiv(path[0][0], path[0][1]);
 		}
 
 		// check if our units are close enough from the next waypoint.
@@ -2524,11 +2560,11 @@ export class AttackPlan
 			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 			return true;
 		}
-		else if (this.path.length && SquareVectorDistance(pos, this.path[0]) < 1600)
+		else if (path.length && SquareVectorDistance(pos, path[0]) < 1600)
 		{
-			this.path.shift();
-			if (this.path.length)
-				this.unitCollection.moveToRange(this.path[0][0], this.path[0][1], 0, 15);
+			path.shift();
+			if (path.length)
+				this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
 			else
 			{
 				debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
@@ -2841,39 +2877,4 @@ export class AttackPlan
 		return { "properties": properties };
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedAttackPlan): void
-	{
-		this.name = data.properties.name;
-		this.type = data.properties.type;
-		const state = data.properties.state;
-		if (isAttackPlanState(state))
-			this.state = state;
-		else
-		{
-			aiWarn("Petra: attack plan " + data.properties.name + " saved in an unknown state \"" + state +
-				"\": it prepares again");
-			this.state = AttackPlan.STATE_UNEXECUTED;
-		}
-		this.forced = data.properties.forced;
-		this.rallyPoint = data.properties.rallyPoint;
-		this.overseas = data.properties.overseas;
-		this.paused = data.properties.paused;
-		this.maxCompletingTime = data.properties.maxCompletingTime;
-		this.neededShips = data.properties.neededShips;
-		this.unitStat = data.properties.unitStat;
-		this.siegeState = data.properties.siegeState;
-		this.position5TurnsAgo = data.properties.position5TurnsAgo;
-		this.lastPosition = data.properties.lastPosition;
-		this.position = data.properties.position;
-		this.isBlocked = data.properties.isBlocked;
-		this.targetPlayer = data.properties.targetPlayer;
-		this.targetPos = data.properties.targetPos;
-		this.uniqueTargetId = data.properties.uniqueTargetId;
-		this.path = data.properties.path;
-		this.unitCollUpdateArray = data.properties.unitCollUpdateArray;
-
-		const targetId = data.properties.target;
-		this.target = typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined;
-
-	}
 }

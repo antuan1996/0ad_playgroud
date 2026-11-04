@@ -3,6 +3,7 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config, type SerializedConfig } from "./decision/config.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
+import { analyseMap } from "./world/geography.ts";
 import { QueueManager, configuredQueues } from "./execution/queueManager.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { seconds, secondsOf } from "./adapter/brands.ts";
@@ -18,7 +19,7 @@ type PetraBotSettings = Record<string, unknown> & {
  * version is refused with a message, and the bot starts afresh from the game
  * as it stands, as it does in a new game.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** The version a save says it is of, if it says one. */
 function savedVersion(data: unknown): unknown
@@ -42,7 +43,8 @@ type PetraBotSavedData = {
 	savedEvents: HeadquartersEvents;
 	config: SerializedConfig;
 	queueManager: Parameters<QueueManager["Deserialize"]>[1];
-	HQ: HeadquartersSerializedData;
+	/** none when the map could not be read: the bot does not play */
+	HQ: HeadquartersSerializedData | undefined;
 };
 
 /** Engine events come as a fixed set of named buckets, and EngineAIEvents has no index
@@ -255,16 +257,11 @@ export class PetraBot extends BaseAI
 			this.queueManager.Deserialize(gameState, this.data.queueManager);
 			this.queues = this.queueManager.queues;
 
-			this.HQ = new Headquarters(this.Config, true);
-			this.HQ.init(gameState, this.queues);
-			this.HQ.Deserialize(gameState, this.data.HQ);
+			this.HQ = this.data.HQ && Headquarters.restore(this.Config, gameState, this.data.HQ);
 
 			this.uniqueIDs = this.data.uniqueIDs;
 			this.isDeserialized = false;
 			this.data = undefined;
-
-			// initialisation needed after the completion of the deserialization
-			this.HQ.postinit(gameState);
 		}
 		else
 		{
@@ -275,12 +272,11 @@ export class PetraBot extends BaseAI
 
 			this.queueManager = new QueueManager(this.Config, this.queues);
 
-			this.HQ = new Headquarters(this.Config, false);
-
-			this.HQ.init(gameState, this.queues);
-
-			// Try to analyze our starting position and set a strategy.
-			this.canPlay = gameAnalysis(this.HQ, gameState);
+			// Analyse the map, then our starting position, and set a strategy; a map
+			// we cannot make sense of leaves us with no headquarters, not playing
+			const geography = analyseMap(gameState, this.Config.debug);
+			this.HQ = geography && new Headquarters(this.Config, gameState, geography);
+			this.canPlay = this.HQ !== undefined && gameAnalysis(this.HQ, gameState);
 		}
 	}
 
@@ -332,8 +328,8 @@ export class PetraBot extends BaseAI
 			return this.data;
 		}
 
-		if (!this.queueManager || !this.HQ)
-			throw new Error("Cannot serialize: queueManager or HQ is undefined");
+		if (!this.queueManager)
+			throw new Error("Cannot serialize: queueManager is undefined");
 
 		return {
 			"saveVersion": SAVE_VERSION,
@@ -345,7 +341,7 @@ export class PetraBot extends BaseAI
 			"savedEvents": copySavedEvents(this.savedEvents),
 			"config": this.Config.Serialize(),
 			"queueManager": this.queueManager.Serialize(),
-			"HQ": this.HQ.Serialize()
+			"HQ": this.HQ?.Serialize()
 		};
 	}
 

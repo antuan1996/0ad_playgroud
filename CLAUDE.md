@@ -280,7 +280,7 @@ defense armies, naval, trade, research, diplomacy, garrison, victory,
 emergency) and `QueueManager` funds `queues` of plans
 (`queueplanBuilding`/`Training`/`Research`) by priority. Workers are steered
 by `worker.ts` through entity metadata (`role`, `subrole`, `base`, `plan`,
-`transport`, …). Every manager has `Serialize`/`Deserialize` for save games.
+`transport`, …). Every manager has `Serialize` for save games; objects are made whole by their constructor (no `init` step): `analyseMap` makes the `Geography`, `new Headquarters(config, gameState, geography)` builds every manager with what it needs, `Headquarters.restore` (and each manager's or plan's `restore`) builds them from a save; `gameAnalysis` keeps only the first turn's actions; a `Worker` hands each unit a `UnitWork` holding its land and base access.
 
 ## Petra tests (`petra_ts/tests/`)
 

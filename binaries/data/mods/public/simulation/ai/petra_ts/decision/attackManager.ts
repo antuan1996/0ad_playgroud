@@ -66,7 +66,8 @@ function nearestLocalTarget(enemies: readonly CommonEntity[], from: CommonPositi
 export class AttackManager
 {
 	Config: Config;
-	declare outOfPlan: CommonEntityCollection;
+	/** Our units held in reserve, out of any plan */
+	outOfPlan: CommonEntityCollection;
 
 	totalNumber = 0;
 	attackNumber = 0;
@@ -84,17 +85,22 @@ export class AttackManager
 	enemyLands = new Map<AccessIndex, CommonEntity[]>();
 	enemyLandsTurn = -1;
 
-	constructor(config: Config)
+	constructor(config: Config, gameState: CommonGameState)
 	{
 		this.Config = config;
-	}
-
-	/** More initialisation for stuff that needs the gameState */
-	init(gameState: CommonGameState): void
-	{
 		this.outOfPlan = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", PLAN_RESERVE));
 		this.outOfPlan.registerUpdates();
 	}
+
+	/** A saved attack manager with its plans; canBuildUnits is the restored headquarters' */
+	static restore(config: Config, gameState: CommonGameState, data: SerializedAttackManager, canBuildUnits: boolean): AttackManager
+	{
+		const manager = new AttackManager(config, gameState);
+		manager.resume(gameState, data, canBuildUnits);
+		return manager;
+	}
+
+	/** More initialisation for stuff that needs the gameState */
 
 	setRushes(allowed: number): void
 	{
@@ -468,7 +474,6 @@ export class AttackManager
 					debugWarn(this.Config, 1, () => "Military Manager: Rushing plan " + this.totalNumber +
 						" with maxRushes " + this.maxRushes);
 					this.totalNumber++;
-					attackPlan.init(gameState);
 					this.upcomingAttacks[AttackPlan.TYPE_RUSH].push(attackPlan);
 				}
 				this.rushNumber++;
@@ -498,7 +503,6 @@ export class AttackManager
 					debugWarn(this.Config, 1, () => "Military Manager: Creating the plan " + type + "  " +
 						this.totalNumber);
 					this.totalNumber++;
-					attackPlan.init(gameState);
 					this.upcomingAttacks[type].push(attackPlan);
 				}
 				this.attackNumber++;
@@ -770,7 +774,6 @@ export class AttackManager
 		debugWarn(this.Config, 1, () => "Military Manager: Raiding plan " + this.totalNumber);
 		this.raidNumber++;
 		this.totalNumber++;
-		attackPlan.init(gameState);
 		this.upcomingAttacks[AttackPlan.TYPE_RAID].push(attackPlan);
 		return attackPlan;
 	}
@@ -853,7 +856,6 @@ export class AttackManager
 			if (!local)
 				continue;
 			this.totalNumber++;
-			local.init(gameState);
 			this.startedAttacks[AttackPlan.TYPE_DEFAULT].push(local);
 			for (const ent of soldiers)
 			{
@@ -893,7 +895,6 @@ export class AttackManager
 		if (!attackPlan)
 			return false;
 		this.totalNumber++;
-		attackPlan.init(gameState);
 		this.startedAttacks[attackType].push(attackPlan);
 
 		const targetAccess = getLandAccess(gameState, target);
@@ -964,7 +965,7 @@ export class AttackManager
 		return { "properties": properties, "upcomingAttacks": upcomingAttacks, "startedAttacks": startedAttacks };
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedAttackManager): void
+	private resume(gameState: CommonGameState, data: SerializedAttackManager, canBuildUnits: boolean): void
 	{
 		this.totalNumber = data.properties.totalNumber;
 		this.attackNumber = data.properties.attackNumber;
@@ -977,12 +978,7 @@ export class AttackManager
 		this.defeated = data.properties.defeated;
 
 		const restore = (dataAttack: SerializedAttackPlan): AttackPlan =>
-		{
-			const attack = AttackPlan.restore(gameState, this.Config, dataAttack.properties.name);
-			attack.Deserialize(gameState, dataAttack);
-			attack.init(gameState);
-			return attack;
-		};
+			AttackPlan.restore(gameState, this.Config, dataAttack, canBuildUnits);
 		this.upcomingAttacks = byAttackType(type => data.upcomingAttacks[type].map(restore));
 		this.startedAttacks = byAttackType(type => data.startedAttacks[type].map(restore));
 	}

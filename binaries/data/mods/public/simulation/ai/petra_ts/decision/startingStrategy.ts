@@ -6,7 +6,7 @@ import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
-import { NEW_BASE, cellIndex, landRegion, seaRegion } from "../adapter/brands.ts";
+import { NEW_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 
 /**
@@ -16,21 +16,16 @@ import { debugWarn } from "../adapter/debug.ts";
 
 export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 {
-	// Analysis of the terrain and the different access regions
-	if (!regionAnalysis(HQ, gameState))
-		return false;
-
-	HQ.attackManager.init(gameState);
+	// the map was analysed (world/geography.ts analyseMap) and the managers made with the headquarters
 	HQ.buildManager.init(gameState);
-	HQ.navalManager.init(gameState);
-	HQ.tradeManager.init(gameState);
+	HQ.navalManager.assignStartingSeas(gameState);
 	HQ.diplomacyManager.init(gameState);
 
 	// Make a list of buildable structures from the config file
 	structureAnalysis(HQ, gameState);
 
 	// Let's get our initial situation here.
-	HQ.basesManager.init(gameState);
+	HQ.basesManager.createStartingBases(gameState);
 	HQ.updateTerritories(gameState);
 
 	// Assign entities and resources in the different bases
@@ -112,101 +107,6 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
  * determine the main land Index (or water index if none)
  * as well as the list of allowed (land andf water) regions
  */
-function regionAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
-{
-	const accessibility = gameState.ai.accessibility;
-	let landIndex;
-	let seaIndex;
-	const ccEnts = gameState.getOwnStructures().filter(filters.byClass("CivCentre"));
-	for (const cc of ccEnts.values())
-	{
-		const land = accessibility.getAccessValue(cc.position());
-		if (land > 1)
-		{
-			landIndex = land;
-			break;
-		}
-	}
-	if (!landIndex)
-	{
-		const civ = gameState.getPlayerCiv();
-		for (const ent of gameState.getOwnEntities().values())
-		{
-			if (!ent.position() || !ent.hasClass("Unit") && !ent.trainableEntities(civ))
-				continue;
-			const land = accessibility.getAccessValue(ent.position());
-			if (land > 1)
-			{
-				landIndex = land;
-				break;
-			}
-			const sea = accessibility.getAccessValue(ent.position(), true);
-			if (!seaIndex && sea > 1)
-				seaIndex = sea;
-		}
-	}
-	if (!landIndex && !seaIndex)
-	{
-		aiWarn("Petra error: it does not know how to interpret this map");
-		return false;
-	}
-
-	const passabilityMap = gameState.getPassabilityMap();
-	const totalSize = passabilityMap.width * passabilityMap.width;
-	const minLandSize = Math.floor(0.1*totalSize);
-	const minWaterSize = Math.floor(0.2*totalSize);
-	const cellArea = passabilityMap.cellSize * passabilityMap.cellSize;
-	for (let i = 0; i < accessibility.regionSize.length; ++i)
-	{
-		if (landIndex && i === landIndex)
-			HQ.geography.landRegions[i] = true;
-		else if (accessibility.regionType[i] === "land" && cellArea*accessibility.regionSize[i] > 320)
-		{
-			if (landIndex)
-			{
-				const sea = HQ.getSeaBetweenIndices(gameState, landIndex, landRegion(i));
-				if (sea && (accessibility.regionSize[i] > minLandSize || accessibility.regionSize[sea] > minWaterSize))
-				{
-					HQ.geography.navalMap = true;
-					HQ.geography.landRegions[i] = true;
-					HQ.geography.navalRegions[sea] = true;
-				}
-			}
-			else
-			{
-				if (seaIndex === undefined)
-					continue;
-				const traject = accessibility.getTrajectToIndex(seaIndex, landRegion(i));
-				if (traject && traject.length === 2)
-				{
-					HQ.geography.navalMap = true;
-					HQ.geography.landRegions[i] = true;
-					HQ.geography.navalRegions[seaIndex] = true;
-				}
-			}
-		}
-		else if (accessibility.regionType[i] === "water" && accessibility.regionSize[i] > minWaterSize)
-		{
-			HQ.geography.navalMap = true;
-			HQ.geography.navalRegions[i] = true;
-		}
-		else if (accessibility.regionType[i] === "water" && cellArea*accessibility.regionSize[i] > 3600)
-			HQ.geography.navalRegions[i] = true;
-	}
-
-	if (HQ.Config.debug < 3)
-		return true;
-	for (const region in HQ.geography.landRegions)
-	{
-		aiWarn(" >>> zone " + region + " taille " +
-			cellArea * gameState.ai.accessibility.regionSize[region]);
-	}
-	aiWarn(" navalMap " + HQ.geography.navalMap);
-	aiWarn(" landRegions " + uneval(HQ.geography.landRegions));
-	aiWarn(" navalRegions " + uneval(HQ.geography.navalRegions));
-	return true;
-}
-
 /**
  * load units and buildings from the config files
  * TODO: change that to something dynamic

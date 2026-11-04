@@ -34,7 +34,8 @@ type BasesManagerTurnCache = {
 export class BasesManager
 {
 	Config: Config;
-	declare basesMap: InfoMap;
+	/** Each territory cell's base id, 0 for none */
+	basesMap: InfoMap;
 
 	currentBase = 0;
 
@@ -42,41 +43,39 @@ export class BasesManager
 	turnCache: BasesManagerTurnCache = {};
 
 	// Deals with unit/structure without base.
-	declare noBase: BaseManager;
+	noBase: BaseManager;
 
 	baseManagers: BaseManager[] = [];
 
-	constructor(Config: Config)
+	/** No bases yet but the one for what has none; a saved manager has its saved bases and their map */
+	constructor(Config: Config, gameState: CommonGameState, saved?: SerializedBasesManager)
 	{
 		this.Config = Config;
-	}
-
-	init(gameState: CommonGameState, deserialize: boolean = false): void
-	{
-		// Initialize base map. Each pixel is a base ID, or 0 if not or not accessible.
+		// Each pixel is a base ID, or 0 if not or not accessible.
 		this.basesMap = new InfoMap(gameState.sharedScript, "territory");
-
-		this.noBase = new BaseManager(gameState, this);
-		this.noBase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
-		this.noBase.accessIndex = NO_LAND;
-
-		for (const cc of gameState.getOwnStructures().filter(filters.byClass("CivCentre")).values())
-			if (cc.foundationProgress() === undefined)
-				this.createBase(gameState, cc, BaseManager.STATE_WITH_ANCHOR, deserialize);
-			else
-				this.createBase(gameState, cc, BaseManager.STATE_UNCONSTRUCTED, deserialize);
-	}
-
-	/**
-	 * Initialization needed after deserialization (only called when deserialising).
-	 */
-	postinit(gameState: CommonGameState): void
-	{
-		// Rebuild the base maps from the territory indices of each base.
-		this.basesMap = new InfoMap(gameState.sharedScript, "territory");
+		if (!saved)
+		{
+			this.noBase = new BaseManager(gameState, this, BaseManager.STATE_WITH_ANCHOR);
+			this.noBase.accessIndex = NO_LAND;
+			return;
+		}
+		this.currentBase = saved.properties.currentBase;
+		this.noBase = BaseManager.restore(gameState, this, saved.noBase);
+		this.baseManagers = saved.baseManagers.map(data => BaseManager.restore(gameState, this, data));
+		// the base map, from the territory indices of each base
 		for (const base of this.baseManagers)
 			for (const j of base.territoryIndices)
 				this.basesMap.map[j] = base.ID;
+	}
+
+	/** At the start of a game, a base for each of our civic centres */
+	createStartingBases(gameState: CommonGameState): void
+	{
+		for (const cc of gameState.getOwnStructures().filter(filters.byClass("CivCentre")).values())
+			if (cc.foundationProgress() === undefined)
+				this.createBase(gameState, cc, BaseManager.STATE_WITH_ANCHOR);
+			else
+				this.createBase(gameState, cc, BaseManager.STATE_UNCONSTRUCTED);
 	}
 
 	/**
@@ -124,8 +123,7 @@ export class BasesManager
 
 		if (!newbase)
 		{
-			newbase = new BaseManager(gameState, this);
-			newbase.init(gameState, type);
+			newbase = new BaseManager(gameState, this, type);
 			this.baseManagers.push(newbase);
 		}
 		else
@@ -807,24 +805,4 @@ export class BasesManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedBasesManager): void
-	{
-		this.currentBase = data.properties.currentBase;
-
-		this.noBase = new BaseManager(gameState, this);
-		this.noBase.Deserialize(gameState, data.noBase);
-		this.noBase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
-		this.noBase.Deserialize(gameState, data.noBase);
-
-		this.baseManagers = [];
-		for (const basedata of data.baseManagers)
-		{
-			// The first call to deserialize set the ID base needed by entitycollections.
-			const newbase = new BaseManager(gameState, this);
-			newbase.Deserialize(gameState, basedata);
-			newbase.init(gameState, BaseManager.STATE_WITH_ANCHOR);
-			newbase.Deserialize(gameState, basedata);
-			this.baseManagers.push(newbase);
-		}
-	}
 }

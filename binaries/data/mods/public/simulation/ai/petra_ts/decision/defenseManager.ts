@@ -11,7 +11,7 @@ import { DefenseArmy, type SerializedDefenseArmy } from "../execution/defenseArm
 import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from
 	"../adapter/entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
-import type { TerritoryMap } from "../world/mapModule.ts";
+import type { Geography } from "../world/geography.ts";
 import { Worker } from "../execution/worker.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { Config } from "./config.ts";
@@ -34,10 +34,12 @@ export class DefenseManager
 	attackingArmies: Record<number, Record<number, number>>;
 	attackingUnits: Record<number, Record<number, number> | undefined>;
 	targetList: EntityId[];
-	declare territoryMap: TerritoryMap;
+	/** The headquarters' map of the world: the territory map is the turn's own */
+	geography: Geography;
 
-	constructor(Config: Config)
+	constructor(Config: Config, geography: Geography)
 	{
+		this.geography = geography;
 		// Array of "army" Objects.
 		this.armies = [];
 		this.Config = Config;
@@ -55,8 +57,6 @@ export class DefenseManager
 	update(gameState: CommonGameState, events: DefenseManagerEvents): void
 	{
 		Engine.ProfileStart("Defense Manager");
-
-		this.territoryMap = gameState.ai.HQ.geography.territoryMap;
 
 		this.checkEvents(gameState, events);
 
@@ -125,7 +125,7 @@ export class DefenseManager
 		if (!entity.position())
 			return false;
 
-		const territoryOwner = this.territoryMap.getOwner(entity.position());
+		const territoryOwner = this.geography.territoryMap.getOwner(entity.position());
 		if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			return false;
 		// Check if the entity is trying to build a new base near our buildings,
@@ -204,7 +204,7 @@ export class DefenseManager
 			{
 				continue;
 			}
-			if (!this.territoryMap.isBlinking(building.position()) || gameState.ai.HQ.isDefendable(building))
+			if (!this.geography.territoryMap.isBlinking(building.position()) || gameState.ai.HQ.isDefendable(building))
 				return true;
 		}
 
@@ -222,7 +222,7 @@ export class DefenseManager
 					{
 						continue;
 					}
-					if (!this.territoryMap.isBlinking(building.position()))
+					if (!this.geography.territoryMap.isBlinking(building.position()))
 						return true;
 				}
 			}
@@ -309,7 +309,7 @@ export class DefenseManager
 				continue;
 			if (!ent.capturePoints() && !ent.hasDefensiveFire())
 				continue;
-			const owner = this.territoryMap.getOwner(ent.position());
+			const owner = this.geography.territoryMap.getOwner(ent.position());
 			if (owner === PlayerID)
 				this.makeIntoArmy(gameState, ent.id(), "capturing");
 		}
@@ -362,7 +362,7 @@ export class DefenseManager
 		{
 			const army = this.armies[i];
 			army.recalculatePosition(gameState);
-			const owner = this.territoryMap.getOwner(army.foePosition);
+			const owner = this.geography.territoryMap.getOwner(army.foePosition);
 			if (!gameState.isPlayerEnemy(owner))
 			{
 				if (gameState.isPlayerMutualAlly(owner))
@@ -533,7 +533,7 @@ export class DefenseManager
 				// If outside our territory (helping an ally or attacking a cc foundation)
 				// or if in another access, keep some troops in backup.
 				if (backup < 12 && (aMin === undefined || distMin > 40000 &&
-					  this.territoryMap.getOwner(armiesNeeding[aMin].army.foePosition) !== PlayerID))
+					  this.geography.territoryMap.getOwner(armiesNeeding[aMin].army.foePosition) !== PlayerID))
 				{
 					++backup;
 					potentialDefenders[i] = undefined;
@@ -625,7 +625,7 @@ export class DefenseManager
 			{
 					const baseId = target.getMetadata(PlayerID, "base");
 					const base = baseId === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseId);
-				if (this.territoryMap.isBlinking(target.position()) && !gameState.ai.HQ.isDefendable(target) ||
+				if (this.geography.territoryMap.isBlinking(target.position()) && !gameState.ai.HQ.isDefendable(target) ||
 				    !base || gameState.ai.HQ.baseManagers().every((b: BaseManager): boolean => !b.anchor || b.accessIndex !== base.accessIndex))
 				{
 					const capture = target.capturePoints();
@@ -653,7 +653,7 @@ export class DefenseManager
 			if (attacker && attacker.position() && attacker.getMetadata(PlayerID, "PartOfArmy") === undefined &&
 				!attacker.hasClasses(["Structure", "Ship"]))
 			{
-				const territoryOwner = this.territoryMap.getOwner(attacker.position());
+				const territoryOwner = this.geography.territoryMap.getOwner(attacker.position());
 				if (territoryOwner === 0 || gameState.isPlayerAlly(territoryOwner))
 					this.makeIntoArmy(gameState, attacker.id());
 			}

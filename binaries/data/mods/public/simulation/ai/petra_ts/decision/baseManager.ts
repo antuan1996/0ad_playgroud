@@ -67,7 +67,7 @@ export class BaseManager
 	anchor: CommonEntity | undefined;
 	anchorId: EntityId | undefined;
 	basesManager: BasesManager;
-	declare buildings: CommonEntityCollection;
+	buildings: CommonEntityCollection;
 	constructing: boolean;
 	/** The resources within reach of the base's dropsites; the accessors below keep its fields' old names. */
 	resources: BaseResources;
@@ -77,20 +77,21 @@ export class BaseManager
 	set dropsites(dropsites: Record<number, boolean | undefined>) { this.resources.dropsites = dropsites; }
 	gatherers: Record<string, { nextCheck: number; used: number; lost: number }> = {};
 	maxDistResourceSquare: number;
-	declare mobileDropsites: CommonEntityCollection;
+	mobileDropsites: CommonEntityCollection;
 	neededDefenders: number;
 	territoryIndices: Array<CellIndex<"territory">>;
 	timeNextIdleCheck: GameSeconds;
-	declare units: CommonEntityCollection;
+	units: CommonEntityCollection;
 	workerObject: Worker;
-	declare workers: CommonEntityCollection;
+	workers: CommonEntityCollection;
 
-	constructor(gameState: CommonGameState, basesManager: BasesManager)
+	/** A base in the given state; a restored one takes its saved id (its collections follow its units by it) */
+	constructor(gameState: CommonGameState, basesManager: BasesManager, state: string, id?: BaseId)
 	{
 		this.Config = basesManager.Config;
-		this.ID = baseId(gameState.ai.uniqueIDs.bases++);
+		this.ID = id ?? baseId(gameState.ai.uniqueIDs.bases++);
 		this.basesManager = basesManager;
-		// init() makes it afresh; here so that a base read back from a save has one before init
+		// the resources within reach of the base's dropsites (world/baseResources.ts)
 		this.resources = new BaseResources();
 
 		// anchor building: seen as the main building of the base. Needs to have territorial influence
@@ -110,8 +111,33 @@ export class BaseManager
 		this.territoryIndices = [];
 
 		this.timeNextIdleCheck = seconds(0);
-		// init() makes it afresh, with the ID a save gave the base
+
+		if (state === BaseManager.STATE_UNCONSTRUCTED)
+			this.constructing = true;
+		else if (state !== BaseManager.STATE_CAPTURED)
+			this.neededDefenders = 0;
 		this.workerObject = new Worker(this);
+		// entitycollections
+		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "base", this.ID));
+		this.workers = this.units.filter(filters.byMetadata(PlayerID, "role", Worker.ROLE_WORKER));
+		this.buildings = gameState.getOwnStructures().filter(filters.byMetadata(PlayerID, "base", this.ID));
+		this.mobileDropsites = this.units.filter(filters.isDropsite());
+
+		this.units.registerUpdates();
+		this.workers.registerUpdates();
+		this.buildings.registerUpdates();
+		this.mobileDropsites.registerUpdates();
+
+		for (const res of Resources.GetCodes())
+			this.gatherers[res] = { "nextCheck": 0, "used": 0, "lost": 0 };
+	}
+
+	/** A saved base: its anchor, supplies and counters from the save */
+	static restore(gameState: CommonGameState, basesManager: BasesManager, data: SerializedBaseManager): BaseManager
+	{
+		const base = new BaseManager(gameState, basesManager, BaseManager.STATE_WITH_ANCHOR, data.ID);
+		base.resume(gameState, data);
+		return base;
 	}
 
 
@@ -131,31 +157,6 @@ export class BaseManager
 	 * Anchorless base, currently with dock.
 	 */
 	static STATE_ANCHORLESS = "anchorless";
-
-	init(gameState: CommonGameState, state: string): void
-	{
-		if (state === BaseManager.STATE_UNCONSTRUCTED)
-			this.constructing = true;
-		else if (state !== BaseManager.STATE_CAPTURED)
-			this.neededDefenders = 0;
-		this.workerObject = new Worker(this);
-		// entitycollections
-		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "base", this.ID));
-		this.workers = this.units.filter(filters.byMetadata(PlayerID, "role", Worker.ROLE_WORKER));
-		this.buildings = gameState.getOwnStructures().filter(filters.byMetadata(PlayerID, "base", this.ID));
-		this.mobileDropsites = this.units.filter(filters.isDropsite());
-
-		this.units.registerUpdates();
-		this.workers.registerUpdates();
-		this.buildings.registerUpdates();
-		this.mobileDropsites.registerUpdates();
-
-		// the resources within reach of the base's dropsites (world/baseResources.ts)
-		this.resources = new BaseResources();
-		this.gatherers = {};
-		for (const res of Resources.GetCodes())
-			this.gatherers[res] = { "nextCheck": 0, "used": 0, "lost": 0 };
-	}
 
 	reset(gameState: CommonGameState, state: string): void
 	{
@@ -1202,13 +1203,10 @@ export class BaseManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedBaseManager): void
+	private resume(gameState: CommonGameState, data: SerializedBaseManager): void
 	{
 		// Fallbacks for fields absent in savegames written by an older version:
-		// either the constructor default, or the value already held by this manager
-		// when it depends on the game state (basesManager calls init() between the
-		// two calls to this method)
-		this.ID = data.ID ?? this.ID;
+		// the value the constructor gave
 		this.anchorId = data.anchorId;
 		this.accessIndex = data.accessIndex;
 		this.maxDistResourceSquare = data.maxDistResourceSquare ?? 360 * 360;

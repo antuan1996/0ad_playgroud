@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
-import { seaRegion, transportPlanId, worldPos } from "../adapter/brands.ts";
+import { transportPlanId, worldPos } from "../adapter/brands.ts";
 import { stateIs, unitState } from "../adapter/unitState.ts";
 import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
@@ -30,6 +30,9 @@ import { type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../
  *   metadata for ships
  *   transporter = this.ID
  */
+
+/** The naval manager's ships, from which a plan picks its own by their metadata */
+export type TransportFleet = { ships: CommonEntityCollection; transportShips: CommonEntityCollection };
 
 export interface SerializedTransportPlan {
 	ID: TransportPlanId;
@@ -90,11 +93,11 @@ export class TransportPlan
 	/** Game seconds of the last check of the routes. */
 	lastRouteCheck = 0;
 	sea: SeaIndex;
-	declare ships: CommonEntityCollection;
+	ships: CommonEntityCollection;
 	startIndex: AccessIndex;
 	state: string;
-	declare transportShips: CommonEntityCollection;
-	declare units: CommonEntityCollection;
+	transportShips: CommonEntityCollection;
+	units: CommonEntityCollection;
 	unloaded: EntityId[] = [];
 
 	/**
@@ -123,18 +126,19 @@ export class TransportPlan
 	{
 		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
 		const sea = TransportPlan.findSea(gameState, startIndex, endIndex, ship);
-		return sea === undefined ? undefined : new TransportPlan(gameState, id, units, startIndex, endIndex, endPos, sea, ship);
+		return sea === undefined ? undefined :
+			new TransportPlan(gameState, hqOf(gameState).navalManager, id, units, startIndex, endIndex, endPos, sea, ship);
 	}
 
-	/** A saved transport, before its Deserialize: made as a new one, the save's ID and sea replacing what it found. */
-	static restore(gameState: CommonGameState, startIndex: AccessIndex, endIndex: AccessIndex, endPos: CommonPosition): TransportPlan
+	/** A saved transport, as it was saved: its units and ships found again by their metadata. */
+	static restore(gameState: CommonGameState, fleet: TransportFleet, data: SerializedTransportPlan): TransportPlan
 	{
-		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
-		const sea = TransportPlan.findSea(gameState, startIndex, endIndex);
-		return new TransportPlan(gameState, id, [], startIndex, endIndex, endPos, sea ?? seaRegion(0));
+		const plan = new TransportPlan(gameState, fleet, data.ID, [], data.startIndex, data.endIndex, data.endPos, data.sea);
+		plan.resume(data);
+		return plan;
 	}
 
-	constructor(gameState: CommonGameState, id: TransportPlanId, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
+	constructor(gameState: CommonGameState, fleet: TransportFleet, id: TransportPlanId, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
 		endPos: CommonPosition, sea: SeaIndex, ship?: CommonEntity)
 	{
 		this.ID = id;
@@ -168,6 +172,14 @@ export class TransportPlan
 		this.boardingPos = {};
 		this.needTransportShips = ship === undefined;
 		this.nTry = {};
+
+		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "transport", this.ID));
+		this.ships = fleet.ships.filter(filters.byMetadata(PlayerID, "transporter", this.ID));
+		this.transportShips = fleet.transportShips.filter(filters.byMetadata(PlayerID, "transporter", this.ID));
+
+		this.units.registerUpdates();
+		this.ships.registerUpdates();
+		this.transportShips.registerUpdates();
 	}
 
 	/**
@@ -178,19 +190,6 @@ export class TransportPlan
 	 * We're moving ships and eventually unload units.
 	 */
 	static SAILING = "sailing";
-
-	init(gameState: CommonGameState): void
-	{
-		this.units = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "transport", this.ID));
-		this.ships = hqOf(gameState).navalManager.ships.filter(filters.byMetadata(PlayerID, "transporter",
-			this.ID));
-		this.transportShips = hqOf(gameState).navalManager.transportShips.filter(filters.byMetadata(PlayerID,
-			"transporter", this.ID));
-
-		this.units.registerUpdates();
-		this.ships.registerUpdates();
-		this.transportShips.registerUpdates();
-	}
 
 	/** count available slots. TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
 	countFreeSlots(): number
@@ -973,14 +972,10 @@ export class TransportPlan
 		};
 	}
 
-	Deserialize(data: SerializedTransportPlan): void
+	/** A restored plan takes up where its save left it. */
+	private resume(data: SerializedTransportPlan): void
 	{
-		this.ID = data.ID;
 		this.flotilla = data.flotilla;
-		this.endPos = data.endPos;
-		this.endIndex = data.endIndex;
-		this.startIndex = data.startIndex;
-		this.sea = data.sea;
 		this.state = data.state;
 		this.boardingPos = data.boardingPos;
 		this.needTransportShips = data.needTransportShips;
@@ -988,6 +983,5 @@ export class TransportPlan
 		this.canceled = data.canceled;
 		this.unloaded = data.unloaded;
 		this.recovered = data.recovered;
-
 	}
 }
