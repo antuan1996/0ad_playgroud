@@ -19,6 +19,7 @@ import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager, STUCK_SEC
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { BuildManager } from "../decision/buildManager.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 
 const PlayerID = PLAYER;
 
@@ -38,6 +39,20 @@ function seat(options: Parameters<typeof navalWorld>[0] = {})
  * test laid it out (its fleet, the fish, the landing zones), with the sea of
  * each dock and ship noted, as at the start of a game.
  */
+
+/** a plan at sea, as onBoarding leaves it, with its ships' points as they were */
+function setSail(p: TransportPlan): void
+{
+	p.stage = { "state": TransportPlan.SAILING, "landingPos": p.shipPoints(), "nTry": {}, "unloaded": [], "recovered": [],
+		"canceled": undefined };
+}
+
+/** a plan back at the shore, its points kept: a test's set-up only (a plan never goes back) */
+function backToBoarding(p: TransportPlan): void
+{
+	p.stage = { "state": TransportPlan.BOARDING, "boardingPos": p.shipPoints(), "nTry": {}, "needSplit": [] };
+}
+
 const init = (s: ReturnType<typeof seat>) =>
 {
 	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography);
@@ -402,7 +417,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 				for (const u of units)
 					s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 				// close it to newcomers while the other one opens
-				s.naval.transportPlans.at(-1)!.state = "opening";
+				setSail(requireValue(s.naval.transportPlans.at(-1)));
 			};
 			if (smallFirst)
 			{
@@ -415,7 +430,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 				open([lone]);
 			}
 			for (const p of s.naval.transportPlans)
-				p.state = TransportPlan.BOARDING;
+				backToBoarding(p);
 
 			s.naval.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
 
@@ -431,7 +446,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const b = soldier(s.world, 101, [140, 170]);
 		init(s);
 		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		s.naval.transportPlans[0].state = TransportPlan.SAILING;
+		setSail(s.naval.transportPlans[0]);
 
 		s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(280, 160));
 
@@ -472,9 +487,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		a.ent.setMetadata(PlayerID, "onBoard", entityId(202));
-		p.needSplit = [a.ent];
-
-		assert.equal(s.naval.splitTransport(s.world.gameState, p), false);
+		assert.equal(s.naval.splitTransport(s.world.gameState, p, [a.ent]), false);
 		assert.equal(s.naval.transportPlans.length, 1);
 	});
 });
@@ -593,10 +606,10 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 		{
 			waiting(s, first);
 			// each its own passage
-			s.naval.transportPlans.at(-1)!.state = "waiting";
+			setSail(requireValue(s.naval.transportPlans.at(-1)));
 		}
 		for (const p of s.naval.transportPlans)
-			p.state = TransportPlan.BOARDING;
+			backToBoarding(p);
 
 		s.naval.checkLevels(s.world.gameState, queues(s.world));
 
@@ -741,7 +754,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const { carrier, p } = boarding(s);
 		assert.equal(s.naval.isShipBoarding(carrier.ent), false, "still at sea");
 
-		carrier.state.pos = p.boardingPos[200];
+		carrier.state.pos = p.shipPoints()[200];
 		assert.equal(s.naval.isShipBoarding(carrier.ent), true);
 
 		carrier.state.pos = undefined;
@@ -807,7 +820,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		s.naval.moveApart(s.world.gameState);	// it moved
 		s.world.ai.playedTurn += 1;
 		s.naval.moveApart(s.world.gameState);	// stuck one turn only
-		carrier.state.pos = p.boardingPos[200];
+		carrier.state.pos = p.shipPoints()[200];
 		s.world.ai.playedTurn += 5;
 		s.naval.moveApart(s.world.gameState);	// boarding at the shore
 		s.naval.moveApart(s.world.gameState);
@@ -1175,7 +1188,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		init(s);
 		s.naval.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
-		p.state = TransportPlan.SAILING;
+		setSail(p);
 		aboard.state.pos = undefined;	// aboard the plan's other ship
 		s.world.removeEntity(200);
 
@@ -1217,7 +1230,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		for (const u of [a, b])
 			s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
-		p.state = TransportPlan.SAILING;
+		setSail(p);
 		b.state.pos = [250, 160];	// already landed on the island
 		s.world.removeEntity(200);
 

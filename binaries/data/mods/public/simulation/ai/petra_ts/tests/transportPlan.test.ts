@@ -295,7 +295,9 @@ describe("a transport plan counting room aboard", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		p.assignUnitToShip(s.world.gameState, a.ent);
+		const stage = p.stage;
+		assert.ok(stage.state === TransportPlan.BOARDING, "a new plan boards");
+		p.assignUnitToShip(s.world.gameState, a.ent, stage);
 		p.update(s.world.gameState);
 
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
@@ -419,7 +421,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		const { p } = shipped(s, [a]);
 		p.update(s.world.gameState);
-		delete p.boardingPos[202];
+		delete p.shipPoints()[202];
 
 		p.update(s.world.gameState);
 
@@ -507,7 +509,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const a = soldier(s.world, 100, [150, 160]);
 		const { carrier, p } = shipped(s, [a]);
 		p.update(s.world.gameState);
-		carrier.state.pos = p.boardingPos[202];	// the ship is at the shore
+		carrier.state.pos = p.shipPoints()[202];	// the ship is at the shore
 
 		for (let turn = 1; turn <= 6; ++turn)
 		{
@@ -529,7 +531,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const a = soldier(s.world, 100, [150, 160]);
 		const { carrier, p } = shipped(s, [a]);
 		p.update(s.world.gameState);
-		carrier.state.pos = p.boardingPos[202];
+		carrier.state.pos = p.shipPoints()[202];
 		a.ent.setMetadata(PlayerID, "posGarrison", undefined);
 
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
@@ -546,7 +548,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const a = soldier(s.world, 100, [150, 160]);
 		const { carrier, p } = shipped(s, [a]);
 		p.update(s.world.gameState);
-		carrier.state.pos = p.boardingPos[202];
+		carrier.state.pos = p.shipPoints()[202];
 		a.state.pos = undefined;	// inside, the plan not yet told
 
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
@@ -598,7 +600,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 
-		const bp = p.boardingPos[202] as [number, number];
+		const bp = p.shipPoints()[202] as [number, number];
 		assert.deepEqual(a.state.ranges.at(-1), [bp[0], bp[1], 0, 15]);
 	});
 });
@@ -613,7 +615,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 		board(a, carrier);
 		p.update(s.world.gameState);
-		carrier.state.pos = p.boardingPos[202];
+		carrier.state.pos = p.shipPoints()[202];
 		return { a, carrier, p };
 	}
 
@@ -670,14 +672,14 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const { a, carrier, p } = arrived(s);
 		p.update(s.world.gameState);
 		disembark(a, carrier, [150, 160]);	// our own coast
-		const target = p.boardingPos[202];
+		const target = p.shipPoints()[202];
 
 		p.update(s.world.gameState);
 
 		assert.deepEqual(a.state.garrisons.at(-1), [202, undefined]);
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), "onBoard");
-		assert.notDeepEqual(p.boardingPos[202], target, "another landing spot");
-		assert.deepEqual(carrier.state.moves.at(-1), p.boardingPos[202]);
+		assert.notDeepEqual(p.shipPoints()[202], target, "another landing spot");
+		assert.deepEqual(carrier.state.moves.at(-1), p.shipPoints()[202]);
 	});
 
 	it("a unit taken back aboard makes the ship move off a little before trying again", () =>
@@ -837,13 +839,13 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 		board(a, carrier);
 		p.update(s.world.gameState);
-		const target = p.boardingPos[202];
+		const target = p.shipPoints()[202];
 		carrier.state.pos = [200, 160];	// still mid-sea
 
 		for (let turn = 0; turn < 3; ++turn)
 			p.update(s.world.gameState);
 
-		assert.notDeepEqual(p.boardingPos[202], target);
+		assert.notDeepEqual(p.shipPoints()[202], target);
 	});
 
 	// only the port passes: Petra sent a ship again by a new route each turn it

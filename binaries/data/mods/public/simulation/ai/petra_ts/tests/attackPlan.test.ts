@@ -28,13 +28,19 @@ import { attackPlanId, entityId, landRegion, playerId, seaRegion, seconds, templ
 import { requireValue } from "../adapter/entityExtend.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../decision/difficultyLevel.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
-import { AttackPlan, type AttackPlanData, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
+import { AttackPlan, type AttackPreparation, type AttackPlanData, type AttackType, type AttackUnitStat } from "../execution/attackPlan.ts";
 import type { Queue } from "../execution/queue.ts";
 
 /** the relic raids a victory manager books, its own private record */
 function raids(manager: VictoryManager): Map<EntityId, number[]>
 {
 	return fake<{ targetedGaiaRelics: Map<EntityId, number[]> }>(manager).targetedGaiaRelics;
+}
+
+/** A preparing plan's training (its queues, build orders and siege state) */
+function prepOf(plan: AttackPlan): AttackPreparation
+{
+	return requireValue(plan.preparation());
 }
 
 /** A standard plan, driven like headquarters drives it. */
@@ -111,9 +117,9 @@ describe("construction", () =>
 			"classes": ["FastMoving+CitizenSoldier"], "interests": [["strength", 1]]
 		}, "the fast-moving stat table");
 		assert.equal(plan.neededShips, 3, "a plain attack needs three ships");
-		assert.equal(plan.siegeState, 0, "siege units are untested");
+		assert.equal(prepOf(plan).siegeState, 0, "siege units are untested");
 		assert.equal(plan.isBlocked, false, "no walls are known");
-		assert.equal(plan.buildOrders.length, 3, "a build order per category, ready from the start");
+		assert.equal(prepOf(plan).buildOrders.length, 3, "a build order per category, ready from the start");
 		assert.equal(plan.canBuildUnits, true, "the HQ says the plan can build units");
 	});
 
@@ -291,14 +297,14 @@ describe("queues, queries and build orders", () =>
 		const plan = makePlan(world, { name: 1 });
 
 		assert.equal(plan.unitCollection.length, 3, "the collection holds this plan's units");
-		assert.equal(plan.queue, world.ai.queues["plan_1"], "the main queue is linked");
-		assert.equal(plan.queueChamp, world.ai.queues["plan_1_champ"], "as are the others");
-		assert.equal(plan.queueSiege, world.ai.queues["plan_1_siege"], "all three");
+		assert.equal(prepOf(plan).queue, world.ai.queues["plan_1"], "the main queue is linked");
+		assert.equal(prepOf(plan).queueChamp, world.ai.queues["plan_1_champ"], "as are the others");
+		assert.equal(prepOf(plan).queueSiege, world.ai.queues["plan_1_siege"], "all three");
 		assert.deepEqual(plan.unit.MeleeInfantry.toIdArray(), [1010, 1011, 1012], "the melee collection");
 		assert.equal(plan.unit.FastMoving.length, 0, "empty fast-mover collection");
-		assert.equal(plan.buildOrders.length, 3, "one build order per stat category");
-		assert.deepEqual(plan.buildOrders.map((order) => order[0]), [0, 0, 0], "progress starts at zero");
-		assert.equal(plan.buildOrders[0][4], "RangedInfantry", "the build order names its category");
+		assert.equal(prepOf(plan).buildOrders.length, 3, "one build order per stat category");
+		assert.deepEqual(prepOf(plan).buildOrders.map((order) => order[0]), [0, 0, 0], "progress starts at zero");
+		assert.equal(prepOf(plan).buildOrders[0][4], "RangedInfantry", "the build order names its category");
 		assert.equal(world.collections.registered.length, 4, "four collections registered for updates");
 	});
 
@@ -375,10 +381,10 @@ describe("queues, queries and build orders", () =>
 			};
 			return queue;
 		};
-		countEmpty(plan.queue, "main");
-		countEmpty(plan.queueChamp, "champ");
-		countEmpty(plan.queueSiege, "siege");
-		plan.emptyQueues();
+		countEmpty(prepOf(plan).queue, "main");
+		countEmpty(prepOf(plan).queueChamp, "champ");
+		countEmpty(prepOf(plan).queueSiege, "siege");
+		plan.emptyQueues(prepOf(plan));
 		assert.deepEqual(emptyCalls, ["main", "champ", "siege"], "all three queues emptied");
 
 		const removed: string[] = [];
@@ -394,23 +400,26 @@ describe("queues, queries and build orders", () =>
 
 		const stat = { "priority": 1, "minSize": 0, "targetSize": 5, "batchSize": 2, "classes": ["Siege"] };
 		plan.addBuildOrder(world.gameState, "Siege", stat, true);
-		assert.equal(plan.buildOrders.length, 4, "the order is added");
+		assert.equal(prepOf(plan).buildOrders.length, 4, "the order is added");
 		assert.equal(plan.unitStat.Siege, stat, "the stat is kept");
-		assert.equal(plan.buildOrders[3][4], "Siege", "under its name");
+		assert.equal(prepOf(plan).buildOrders[3][4], "Siege", "under its name");
 		assert.equal(plan.unit.Siege.length, 0, "and its collection built");
 
 		// resetQueue empties the queues
 		const emptied: number[] = [];
-		for (const queue of [plan.queue, plan.queueChamp, plan.queueSiege])
+		for (const queue of [prepOf(plan).queue, prepOf(plan).queueChamp, prepOf(plan).queueSiege])
 			queue.empty = () => {
 				emptied.push(1);
 			};
 		plan.addBuildOrder(world.gameState, "Siege2", stat, true);
 		assert.equal(emptied.length, 3, "the queues were emptied");
 
+		const prepared = prepOf(plan);
 		plan.stage = { "state": "walking", "path": [] };
 		plan.addBuildOrder(world.gameState, "Siege3", stat, true);
-		assert.equal(plan.buildOrders.length, 5, "a started plan takes no new orders");
+		assert.equal(plan.preparation(), undefined, "a started plan trains no more");
+		assert.equal(prepared.buildOrders.length, 5, "it takes no new orders");
+		assert.equal(plan.unitStat["Siege3"], undefined, "nor their stats");
 	});
 });
 
@@ -422,8 +431,8 @@ describe("siege units", () =>
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "no trainer, no siege");
-		assert.equal(plan.siegeState, 1, "the plan remembers there is no trainer");
-		assert.equal(plan.buildOrders.length, 3, "no order was added");
+		assert.equal(prepOf(plan).siegeState, 1, "the plan remembers there is no trainer");
+		assert.equal(prepOf(plan).buildOrders.length, 3, "no order was added");
 	});
 
 	it("skips trainers whose trainables are disabled or missing", () =>
@@ -443,7 +452,7 @@ describe("siege units", () =>
 
 		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "no usable trainable");
-		assert.equal(plan.siegeState, 1, "remembered as no trainer");
+		assert.equal(prepOf(plan).siegeState, 1, "remembered as no trainer");
 	});
 
 	it("adds the kind of siege unit it has a trainer for", () =>
@@ -460,8 +469,8 @@ describe("siege units", () =>
 
 		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), true, "the siege was added");
-		assert.equal(plan.siegeState, 2, "and marked as such");
-		const siegeOrder = plan.buildOrders[plan.buildOrders.length - 1];
+		assert.equal(prepOf(plan).siegeState, 2, "and marked as such");
+		const siegeOrder = prepOf(plan).buildOrders[prepOf(plan).buildOrders.length - 1];
 		assert.equal(siegeOrder[4], "Siege", "the order named Siege");
 		assert.deepEqual(siegeOrder[1], ["Siege+Melee"], "it wants melee siege units");
 		assert.equal(siegeOrder[3].targetSize, 2, "two units on medium difficulty");
@@ -482,8 +491,8 @@ describe("siege units", () =>
 
 		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), true, "still a yes");
-		assert.equal(plan.siegeState, 2, "marked");
-		assert.deepEqual(plan.buildOrders.map((order) => order[4]), ["RangedInfantry", "MeleeInfantry", "FastMoving"],
+		assert.equal(prepOf(plan).siegeState, 2, "marked");
+		assert.deepEqual(prepOf(plan).buildOrders.map((order) => order[4]), ["RangedInfantry", "MeleeInfantry", "FastMoving"],
 			"no siege order on the sandbox difficulty");
 	});
 
@@ -491,9 +500,9 @@ describe("siege units", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.siegeState = 2;
+		prepOf(plan).siegeState = 2;
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "already added");
-		plan.siegeState = 0;
+		prepOf(plan).siegeState = 0;
 		plan.stage = { "state": "walking", "path": [] };
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "or already started");
 	});
@@ -804,9 +813,9 @@ describe("training units", () =>
 		world.knobs.bestTrainable = "units/athen_spearman";
 		const plan = makePlan(world, { name: 1, type: "Rush" });
 
-		plan.trainMoreUnits(world.gameState);
-		assert.equal(plan.queue.length(), 1, "one plan queued");
-		const queued = plan.queue.plans[0];
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		assert.equal(prepOf(plan).queue.length(), 1, "one plan queued");
+		const queued = prepOf(plan).queue.plans[0];
 		assert.ok(queued.metadata, "the queued plan carries metadata");
 		assert.equal(queued.type, "units/athen_spearman", "the named unit");
 		assert.equal(queued.number, 2, "a batch of the rush's batch size");
@@ -816,7 +825,7 @@ describe("training units", () =>
 		assert.equal(queued.metadata?.base, 0, "at no base in particular");
 
 		// a second run, on the full queue path: the queue holds the wanted units
-		const first = plan.queue.plans[0];
+		const first = prepOf(plan).queue.plans[0];
 		assert.ok(first.category === "unit" && first.template.available(world.gameState), "the template is available");
 	});
 
@@ -830,10 +839,10 @@ describe("training units", () =>
 		world.knobs.bestTrainable = "units/athen_mercenary";
 		const plan = makePlan(world, { name: 1, type: "Rush" });
 
-		plan.trainMoreUnits(world.gameState);
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
 
-		assert.equal(plan.queue.plans[0]?.type, "units/athen_mercenary");
-		assert.equal(plan.queue.plans[0]?.metadata?.role, "attack");
+		assert.equal(prepOf(plan).queue.plans[0]?.type, "units/athen_mercenary");
+		assert.equal(prepOf(plan).queue.plans[0]?.metadata?.role, "attack");
 	});
 
 	it("queues champions and heroes in their own queues", () =>
@@ -847,32 +856,32 @@ describe("training units", () =>
 		// orders: each category trains in the queue its class demands, one
 		// order per call
 		for (const [cat, classes, wanted] of [
-			["Champ", ["Infantry", "Champion"], plan.queueChamp],
-			["Hero", ["Hero", "Infantry"], plan.queueSiege]
+			["Champ", ["Infantry", "Champion"], prepOf(plan).queueChamp],
+			["Hero", ["Hero", "Infantry"], prepOf(plan).queueSiege]
 		] as Array<[string, string[], Queue]>)
 		{
 			const stat: AttackUnitStat = { "priority": 1, "minSize": 0, "targetSize": 4, "batchSize": 2, "classes": [...classes], "interests": [["strength", 1]] };
 			plan.unitStat[cat] = stat;
 			const collection = plan.unitCollection.filter(filtersModule.byClasses(classes));
-			plan.buildOrders.push([0, [...classes], collection, stat, cat]);
+			prepOf(plan).buildOrders.push([0, [...classes], collection, stat, cat]);
 			assert.ok(wanted, "the queue was named");
 		}
-		plan.buildOrders = plan.buildOrders.filter((order) => ["Hero", "Champ"].indexOf(order[4]) !== -1);
-		plan.trainMoreUnits(world.gameState);
-		plan.trainMoreUnits(world.gameState);
-		assert.equal(plan.queueChamp.length(), 1, "champions queued for the plan");
-		assert.equal(plan.queueSiege.length(), 1, "heroes queued for the plan");
+		prepOf(plan).buildOrders = prepOf(plan).buildOrders.filter((order) => ["Hero", "Champ"].indexOf(order[4]) !== -1);
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		assert.equal(prepOf(plan).queueChamp.length(), 1, "champions queued for the plan");
+		assert.equal(prepOf(plan).queueSiege.length(), 1, "heroes queued for the plan");
 	});
 
 	it("deletes a category when the world cannot train it", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1, type: "Raid" });
-		assert.equal(plan.buildOrders.length, 1, "the raid wants fast-movers");
+		assert.equal(prepOf(plan).buildOrders.length, 1, "the raid wants fast-movers");
 
 		world.knobs.bestTrainable = undefined;
-		plan.trainMoreUnits(world.gameState);
-		assert.equal(plan.buildOrders.length, 0, "the order was dropped");
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		assert.equal(prepOf(plan).buildOrders.length, 0, "the order was dropped");
 		assert.equal(plan.unitStat.FastMoving, undefined, "and its stat removed");
 	});
 
@@ -886,15 +895,15 @@ describe("training units", () =>
 		// empty metadata so queues in every target can count it)
 		const filler = fake<PetraRuntime.ConcretePlan>({ "type": "units/other", "metadata": {} });
 		for (let i = 0; i < 6; ++i)
-			plan.queue.plans.push(filler);
-		plan.trainMoreUnits(world.gameState);
-		assert.equal(plan.queue.length(), 6, "the queue just held its own");
-		plan.queue.plans = [];
+			prepOf(plan).queue.plans.push(filler);
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		assert.equal(prepOf(plan).queue.length(), 6, "the queue just held its own");
+		prepOf(plan).queue.plans = [];
 
 		// the category at target size: no training
 		plan.unitStat.Infantry.targetSize = 0;
-		plan.trainMoreUnits(world.gameState);
-		assert.equal(plan.queue.length(), 0, "nothing queued");
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
+		assert.equal(prepOf(plan).queue.length(), 0, "nothing queued");
 	});
 });
 
@@ -994,7 +1003,7 @@ describe("assigning units", () =>
 		assert.equal(islander.getMetadata(PLAYER, "plan"), -1, "it left the plan");
 		assert.equal(plan.unitCollection.length, 0, "and is no longer counted");
 		assert.deepEqual(world.leavingPlans, [[1, 2]], "those enough to fight were offered a local attack first");
-		const queued = plan.queue.plans[0];
+		const queued = prepOf(plan).queue.plans[0];
 		assert.ok(queued, "the plan trains on");
 		assert.equal(queued.metadata?.index, 2, "on the rally point's land where it can");
 	});
@@ -1405,7 +1414,7 @@ describe("updatePreparation: unexecuted plans", () =>
 
 		assert.equal(plan.updatePreparation(world.gameState), 1, "the plan trains on");
 		assert.equal(plan.unitStat.RangedInfantry, undefined, "its first category was dropped for lack of a trainer");
-		assert.equal(plan.siegeState, 1, "siege has no trainer either");
+		assert.equal(prepOf(plan).siegeState, 1, "siege has no trainer either");
 		assert.equal(plan.updatePreparation(world.gameState), 1, "the plan trains on");
 		assert.equal(plan.unitStat.MeleeInfantry, undefined, "the next category was dropped");
 		assert.equal(plan.updatePreparation(world.gameState), 0, "no orders left, the plan aborts");
@@ -2489,6 +2498,23 @@ describe("wrapping up a plan", () =>
 		assert.equal(revived.state, "unexecuted");
 		assert.ok(logs.some((entry) => entry.includes("unknown state \"charging\"")), "the save was refused aloud");
 	});
+
+	it("comes back walking from a save made after it set off, its queues long gone", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1 });
+		plan.stage = { "state": "walking", "path": [worldPos(10, 10), worldPos(30, 40)] };
+		plan.path = [worldPos(10, 10), worldPos(30, 40)];
+		// set off: its queues left the queue manager
+		plan.removeQueues(world.gameState);
+		const data = plan.Serialize();
+
+		const revived = AttackPlan.restore(world.gameState, world.ai.Config, data, world.ai.HQ.canBuildUnits);
+
+		assert.equal(revived.state, "walking", "it walks on");
+		assert.equal(revived.preparation(), undefined, "with no queues to train in");
+		assert.deepEqual(revived.stage.state === "walking" ? revived.stage.path : undefined, [[10, 10], [30, 40]], "on its path");
+	});
 });
 
 describe("rare target finders", () =>
@@ -2636,17 +2662,17 @@ describe("difficulties, dumps and init corners", () =>
 		const plan = makePlan(world, { name: 1, type: "Rush" });
 		resetRecorder();
 		// two identical categories compare as a tie in the sort
-		plan.buildOrders = [
+		prepOf(plan).buildOrders = [
 			[0, ["Infantry"], plan.unitCollection, plan.unitStat.Infantry, "Infantry"],
 			[6, ["Infantry"], plan.unitCollection, plan.unitStat.Infantry, "Infantry"]
 		];
 
-		plan.trainMoreUnits(world.gameState);
+		plan.trainMoreUnits(world.gameState, prepOf(plan));
 
 		assert.ok(logs.some((entry) => /======== build order for plan 1/.test(entry)), "the dump was logged");
 		assert.ok(logs.some((entry) => /Infantry done 0/.test(entry)), "the tied category was dumped");
-		assert.equal(plan.buildOrders.length, 2, "both orders survived");
-		assert.equal(plan.queue.length(), 1, "the first was trained");
+		assert.equal(prepOf(plan).buildOrders.length, 2, "both orders survived");
+		assert.equal(prepOf(plan).queue.length(), 1, "the first was trained");
 	});
 
 	it("hands a completing islander to the fleet", () =>
@@ -3686,7 +3712,7 @@ describe("second pass: preparing and choosing", () =>
 		world.templates["units/siege_ram"] = makeTemplate("units/siege_ram", { classes: ["Siege", "Melee"], available: false });
 		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false);
-		assert.equal(plan.siegeState, 1);
+		assert.equal(prepOf(plan).siegeState, 1);
 	});
 
 	it("with a small population cap, a full town starts a smaller crowd", () =>
