@@ -1224,8 +1224,7 @@ describe("saved and restored", () =>
 		], "exactly the ten properties the game saves");
 
 		// the way the defense manager rebuilds its armies after a load
-		const restored = new DefenseArmy(world.gameState, []);
-		restored.Deserialize(data);
+		const restored = DefenseArmy.restore(world.gameState, data);
 		assert.deepEqual([restored.ID, restored.type], [army.ID, army.type]);
 		assert.deepEqual(restored.foeEntities, [2000, 2001]);
 		assert.deepEqual(restored.ownEntities, [3000, 3001]);
@@ -1238,11 +1237,10 @@ describe("saved and restored", () =>
 	it("rehydrates the book the manager rebuilds into after a load", () =>
 	{
 		const world = makeWorld();
-		const shell = new DefenseArmy(world.gameState, []);
 		const data = { "ID": armyId(77), "type": "default", "foePosition": worldPos(5, 5), "positionLastUpdate": 3,
 			"assignedAgainst": { "99": [entityId(7)] }, "assignedTo": { "7": entityId(99) }, "foeEntities": [entityId(99)],
 			"foeStrength": 12, "ownEntities": [entityId(55)], "ownStrength": 3 };
-		shell.Deserialize(data);
+		const shell = DefenseArmy.restore(world.gameState, data);
 		assert.deepEqual(
 			[shell.ID, shell.type, shell.foeEntities, shell.ownEntities, shell.assignedAgainst["99"]],
 			[77, "default", [99], [55], [7]], "the rehydrated army carried its whole book");

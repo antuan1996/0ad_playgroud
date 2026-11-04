@@ -164,10 +164,8 @@ behaviour the original happened to have.
 
 `persistence.test.ts` checks the managers that survive a save game. Petra has no
 storage: each manager returns a blob from `Serialize()`, and on load the
-manager is made from it: by its `restore` factory or a constructor taking the
-save (the headquarters, its bases, naval, trade and attack managers and their
-plans; the round trip's `fromSave`), or, for the simpler managers, a freshly
-constructed one filled by `Deserialize()`. A field either side forgets is
+manager is made from it by its `restore` factory (or, for the bases manager, a
+constructor taking the save): the round trip's `fromSave`. A field either side forgets is
 invisible until someone reloads a match, so `harness/persistence.ts` checks two
 things per class, without naming a single field:
 

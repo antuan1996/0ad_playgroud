@@ -21,6 +21,7 @@ import type { Headquarters } from "../decision/headquarters.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { type BuildingPosition, ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import * as mapMask from "../world/mapMask.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 
 /** a town seated on the plain, its territory read once */
 function seat(worldOptions: Partial<HqWorldOptions> = {})
@@ -57,7 +58,7 @@ function builder(world: HqWorld, hq: Headquarters, buildable: string[], laid: un
 		"buildableEntities": () => buildable,
 		"construct": (...args: unknown[]) => laid.push(args)
 	}));
-	hq.buildManager.init(world.gameState);
+	hq.buildManager = BuildManager.start(world.gameState);
 	return { ent, laid };
 }
 
@@ -109,7 +110,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 	{
 		const { world, hq } = seat();
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		const plan = new ConstructionPlan(world.gameState, barracks);
 		assert.ok(!plan.canStart(world.gameState), "no builder yet");
 
@@ -228,7 +229,7 @@ describe("a building plan laying its foundation: start", () =>
 	{
 		const { world, hq } = seat();
 		const barracks = card(world, "barracks", { "classes": ["Structure", "Military"] });
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		new ConstructionPlan(world.gameState, barracks).start(world.gameState);
 

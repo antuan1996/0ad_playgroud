@@ -21,6 +21,7 @@ import { Config } from "../decision/config.ts";
 import { MEDIUM, SANDBOX } from "../decision/difficultyLevel.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { QueueManager } from "../execution/queueManager.ts";
 
 const KEEP = AttackPlan.PREPARATION_KEEP_GOING;
 const FAILED = AttackPlan.PREPARATION_FAILED;
@@ -1437,7 +1438,7 @@ describe("attack manager", () =>
 
 			const fresh = makeWorld();
 			// as the bot loads: the queue manager first, with the plans' queues
-			fresh.ai.queueManager.Deserialize(fresh.gameState, world.ai.queueManager.Serialize());
+			fresh.ai.queueManager = QueueManager.restore(fresh.ai.Config, fresh.gameState, world.ai.queueManager.Serialize());
 			fresh.ai.queues = fresh.ai.queueManager.queues;
 			const restored = AttackManager.restore(worldConfig(fresh), fresh.gameState, saved, fresh.ai.HQ.canBuildUnits);
 			fresh.ai.HQ.attackManager = restored;

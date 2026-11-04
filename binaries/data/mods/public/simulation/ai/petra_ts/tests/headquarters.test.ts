@@ -33,6 +33,7 @@ import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import { BasesManager } from "../decision/basesManager.ts";
 import { border, largeFrontier, narrowFrontier, outside } from "../world/mapMask.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 
 /** an office seated on the plain, with its doors recorded (unless a suite seats its own) */
 function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<HqSeatOptions> = {})
@@ -682,7 +683,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
 			{ "classes": ["Structure", "Corral"] });
 		builder(world, 17, ["structures/athen/corral"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.handleNewBase(world.gameState);
 
@@ -709,7 +710,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
 			{ "classes": ["Structure", "Corral"] });
 		builder(world, 17, ["structures/athen/corral"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.handleNewBase(world.gameState);
 
@@ -777,7 +778,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
 			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"] });
 		builder(world, 17, ["structures/athen/storehouse"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, seedCC, false);
 		// the scanner saw the forest inside the town square's radius (medium band)
@@ -816,7 +817,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
 			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"], "cost": { "wood": 100 } });
 		builder(world, 17, ["structures/athen/storehouse"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, seedCC, false);
 
 		hq.handleNewBase(world.gameState);
@@ -837,7 +838,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
 			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"] });
 		builder(world, 17, ["structures/athen/storehouse"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.handleNewBase(world.gameState);
 
@@ -968,7 +969,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
 			{ "classes": ["Structure", "Trade", "Town", "Market"] });
 		builder(world, 17, ["structures/athen/market"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -1004,7 +1005,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple",
 			{ "classes": ["Structure", "Town", "Temple"] });
 		builder(world, 17, ["structures/athen/temple"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -1033,7 +1034,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
 			{ "classes": ["Structure", "Town", "Forge"] });
 		builder(world, 17, ["structures/athen/forge"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -1069,7 +1070,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 			"classes": ["Structure", "Town", "Forge"],
 			"templateName": "structures/athen/forge",
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -1097,7 +1098,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
 			{ "classes": ["Structure", "Town", "Forge"] });
 		builder(world, 17, ["structures/athen/market"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
 			{ "classes": ["Structure", "Corral"] });
@@ -1124,7 +1125,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
 			{ "classes": ["Structure", "Trade", "Town", "Market"] });
 		builder(world, 17, ["structures/athen/market"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -1144,7 +1145,7 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder",
 			{ "classes": ["Structure", "City", "Wonder"] });
 		builder(world, 17, ["structures/athen/wonder"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
@@ -2427,7 +2428,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat();
 		world.templates["structures/athen/house"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true);
 		assert.equal(hq.buildManager.unbuildables.size, 0,
@@ -2439,7 +2440,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat({ "entityLimits": { "House": 5 }, "entityCounts": { "House": 5 } });
 		world.templates["structures/athen/house"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
 		assert.deepEqual(
@@ -2453,7 +2454,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat({ "entityLimits": { "House": 5 }, "entityCounts": { "House": 4 } });
 		world.templates["structures/athen/house"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true);
 	});
@@ -2463,7 +2464,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat({ "entityCounts": { "House": 99 } });
 		world.templates["structures/athen/house"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true,
 			"no limit row for the category means the count is ignored");
@@ -2474,7 +2475,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat({ "disabledTemplates": ["structures/athen/storehouse"] });
 		world.templates["structures/athen/storehouse"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/storehouse"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/storehouse"), false);
 		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/storehouse"),
@@ -2511,7 +2512,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat();
 		world.templates["structures/athen/house"] = houseTemplate({ "available": false });
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
 		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
@@ -2538,7 +2539,7 @@ describe("canBuild: which stones the office will book", () =>
 
 		// the season rolls on and a builder walks in with the template in hand
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(2201) }] }));
 		world.ai.elapsedTime = seconds(150);
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false,
 			"hold is on for 120 seconds, and the office trusts it");
@@ -2566,7 +2567,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat();
 		world.templates["structures/athen/house"] = houseTemplate();
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		// the town's civic centre still standing: a foundation is a potential
 		// base, not a working one (the territory board answers all the same,
 		// so the territorial walk in the office hears identical rows)
@@ -2585,7 +2586,7 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat();
 		world.templates["structures/athen/civil_centre"] = ccTemplate();
 		seatBuilder(world, ["structures/{civ}/civil_centre"]);
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
 			() => 0;
 		hq.basesManager.resetBaseCache();
@@ -3363,7 +3364,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 				["structures/{civ}/military_colony", "structures/{civ}/civil_centre"]
 					.map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
 	it("the office plants the colony card where its towns keep the cc ways", () =>
@@ -3479,7 +3480,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 			"buildableEntities": (civ: string) =>
 				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
 	/** our swelling town: `count` own worker-capable units standing idle */
@@ -3668,7 +3669,7 @@ describe("the office's turn on the clock: update's schedule", () =>
 			"buildableEntities": (civ: string) =>
 				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		for (let i = 0; i < 71; ++i)
 			world.addEntity(makeHqEntity({
 				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
@@ -3703,7 +3704,7 @@ describe("the office's turn on the clock: update's schedule", () =>
 			"buildableEntities": (civ: string) =>
 				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 		for (let i = 0; i < 71; ++i)
 			world.addEntity(makeHqEntity({
 				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
@@ -3860,7 +3861,7 @@ describe("a pen for the herd: manageCorral", () =>
 		}, {
 			"buildableEntities": (civ: string) => ["structures/{civ}/corral"].map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
 	it("the office plants a pen when the town keeps none", () =>
@@ -3934,7 +3935,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 		}, {
 			"buildableEntities": (civ: string) => ["structures/{civ}/wonder"].map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
 	it("the office lays the wonder when the stock is high in every need", () =>
@@ -4011,7 +4012,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		}, {
 			"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
 		}));
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
 	it("a census with cap room to spare plans no house", () =>
@@ -4060,7 +4061,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
 			"classes": ["Structure", "House", "Village"], "popBonus": 20
 		});
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
@@ -4078,7 +4079,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
 			"classes": ["Structure", "House", "Village"], "popBonus": 20
 		});
-		hq.buildManager.init(world.gameState);
+		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
@@ -4186,7 +4187,7 @@ function bookBuilder(world: HqWorld, hq: Headquarters, buildable: string[]): voi
 	}, {
 		"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
 	}));
-	hq.buildManager.init(world.gameState);
+	hq.buildManager = BuildManager.start(world.gameState);
 }
 
 /** a building of ours already standing */

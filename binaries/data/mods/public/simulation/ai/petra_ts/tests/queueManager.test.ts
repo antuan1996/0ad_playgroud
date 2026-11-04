@@ -827,8 +827,7 @@ describe("QueueManager", () =>
 		manager.queues.villager.paused = true;
 		manager.queues.villager.switched = 2;
 
-		const restored = makeManager(makeConfig());
-		restored.Deserialize(gameState, manager.Serialize());
+		const restored = QueueManager.restore(makeConfig(), gameState, manager.Serialize());
 
 		assert.deepEqual(restored.priorities, manager.priorities);
 		assert.deepEqual(Object.keys(restored.queues), Object.keys(manager.queues),
@@ -849,8 +848,7 @@ describe("QueueManager", () =>
 		saved.accounts["military"] = new ResourcesManager().Serialize();
 		const logged = logs.length;
 
-		const restored = makeManager(makeConfig());
-		restored.Deserialize(gameState, saved);
+		const restored = QueueManager.restore(makeConfig(), gameState, saved);
 
 		assert.deepEqual(Object.keys(restored.queues), Object.keys(configuredQueues()), "only the queues it knows");
 		assert.equal(restored.accounts["military"], undefined);

@@ -1896,8 +1896,7 @@ describe("the office itself", () =>
 		manager.attackedAllies[3] = 2;
 
 		const data = manager.Serialize();
-		const fresh = makeDefenseManager(world);
-		fresh.Deserialize(world.gameState, data);
+		const fresh = DefenseManager.restore(world.ai.Config, world.gameState, world.ai.HQ.geography, data);
 
 		assert.equal(fresh.armies.length, 1, "one army restored");
 		assert.deepEqual(fresh.getArmy(manager.armies[0].ID)?.foeEntities, [2000],

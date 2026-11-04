@@ -85,8 +85,7 @@ function town(population: number, roots: number, others: number): Town
 	build(roots, others);
 	const config = new Config();
 	config.emergencyValues = { "population": 0.6, "structures": 0.6, "roots": 0.5 };
-	const manager = new EmergencyManager(config);
-	manager.init(world.gameState);
+	const manager = EmergencyManager.start(config, world.gameState);
 	return { world, "population": pop, build, lose, manager };
 }
 

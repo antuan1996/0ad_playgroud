@@ -425,6 +425,6 @@ describe("the research manager's bookkeeping", () =>
 		const { manager } = seat();
 		assert.equal(manager.CostSum({ "food": 100, "metal": 50 }), 150);
 		assert.deepEqual(manager.Serialize(), {});
-		manager.Deserialize({});
+		assert.deepEqual(ResearchManager.restore(manager.Config, {}).Serialize(), {});
 	});
 });

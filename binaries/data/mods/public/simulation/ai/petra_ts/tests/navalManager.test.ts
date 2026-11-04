@@ -18,6 +18,7 @@ import * as baseModule from "../decision/baseManager.ts";
 import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager, STUCK_SECONDS } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 
 const PlayerID = PLAYER;
 
@@ -975,7 +976,7 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 		s.world.addEntity(makeHqEntity({ "id": 9001, "owner": PLAYER, "position": [30, 30], "classes": ["Unit", "Support", "Worker"] }, {
 			"buildableEntities": () => ["dock", "shipyard", "super_dock", "market"].map((n) => "structures/athen/" + n)
 		}));
-		s.hq.buildManager.init(s.world.gameState);
+		s.hq.buildManager = BuildManager.start(s.world.gameState);
 		init(s);
 		return s;
 	}

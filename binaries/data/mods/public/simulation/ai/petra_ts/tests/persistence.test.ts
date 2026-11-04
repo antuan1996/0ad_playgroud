@@ -18,19 +18,19 @@ import { techName } from "../adapter/brands.ts";
 import { AttackManager, type SerializedAttackManager } from "../decision/attackManager.ts";
 import { BaseManager, type SerializedBaseManager } from "../decision/baseManager.ts";
 import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
-import { BuildManager } from "../decision/buildManager.ts";
-import { Config } from "../decision/config.ts";
-import { DefenseManager } from "../decision/defenseManager.ts";
-import { DiplomacyManager } from "../decision/diplomacyManager.ts";
-import { EmergencyManager } from "../decision/emergencyManager.ts";
-import { GarrisonManager } from "../decision/garrisonManager.ts";
+import { BuildManager, type SerializedBuildManager } from "../decision/buildManager.ts";
+import { Config, type SerializedConfig } from "../decision/config.ts";
+import { DefenseManager, type SerializedDefenseManager } from "../decision/defenseManager.ts";
+import { DiplomacyManager, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
+import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
+import { GarrisonManager, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { type HeadquartersSerializedData, Headquarters } from "../decision/headquarters.ts";
 import { NavalManager } from "../decision/navalManager.ts";
 import { ResearchManager } from "../decision/researchManager.ts";
 import { type SerializedTradeManager, TradeManager } from "../decision/tradeManager.ts";
-import { VictoryManager } from "../decision/victoryManager.ts";
-import { Queue } from "../execution/queue.ts";
-import { QueueManager, configuredQueues } from "../execution/queueManager.ts";
+import { type SerializedVictoryManager, VictoryManager } from "../decision/victoryManager.ts";
+import { Queue, type SerializedQueue } from "../execution/queue.ts";
+import { QueueManager, type SerializedQueueManager, configuredQueues } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -68,7 +68,7 @@ describe("save and reload", () =>
 			{
 				label: "Config",
 				original: () => makeConfig(),
-				restored: () => makeConfig(),
+				fromSave: (data) => Config.restore(fake<SerializedConfig>(data)),
 				// `debug` is deliberately not saved, and `personality` is drawn at
 				// game start, so neither may be compared across a reload.
 				keep: ["debug"]
@@ -83,7 +83,7 @@ describe("save and reload", () =>
 			{
 				label: "Queue",
 				original: () => new Queue(),
-				restored: () => new Queue(),
+				fromSave: (data, gameState) => Queue.restore(gameState, fake<SerializedQueue>(data)),
 				set: { paused: true, switched: 42 }
 			},
 			makeFakeGameState().gameState
@@ -96,7 +96,7 @@ describe("save and reload", () =>
 			{
 				label: "BuildManager",
 				original: () => new BuildManager(),
-				restored: () => new BuildManager()
+				fromSave: (data) => BuildManager.restore(fake<SerializedBuildManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -108,7 +108,7 @@ describe("save and reload", () =>
 			{
 				label: "GarrisonManager",
 				original: () => new GarrisonManager(makeConfig()),
-				restored: () => new GarrisonManager(makeConfig())
+				fromSave: (data) => GarrisonManager.restore(makeConfig(), fake<SerializedGarrisonManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -120,7 +120,7 @@ describe("save and reload", () =>
 			{
 				label: "EmergencyManager",
 				original: () => new EmergencyManager(makeConfig()),
-				restored: () => new EmergencyManager(makeConfig())
+				fromSave: (data) => EmergencyManager.restore(makeConfig(), fake<SerializedEmergencyManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -132,7 +132,7 @@ describe("save and reload", () =>
 			{
 				label: "DiplomacyManager",
 				original: () => new DiplomacyManager(makeConfig(), false),
-				restored: () => new DiplomacyManager(makeConfig(), false)
+				fromSave: (data) => DiplomacyManager.restore(makeConfig(), fake<SerializedDiplomacyManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -144,7 +144,7 @@ describe("save and reload", () =>
 			{
 				label: "VictoryManager",
 				original: () => new VictoryManager(makeConfig()),
-				restored: () => new VictoryManager(makeConfig())
+				fromSave: (data) => VictoryManager.restore(makeConfig(), fake<SerializedVictoryManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -156,7 +156,7 @@ describe("save and reload", () =>
 			{
 				label: "ResearchManager",
 				original: () => new ResearchManager(makeConfig()),
-				restored: () => new ResearchManager(makeConfig())
+				fromSave: () => ResearchManager.restore(makeConfig(), {})
 			},
 			makeFakeGameState().gameState
 		);
@@ -184,7 +184,7 @@ describe("save and reload", () =>
 			{
 				label: "DefenseManager",
 				original: () => new DefenseManager(makeConfig(), bareGeography(world)),
-				restored: () => new DefenseManager(makeConfig(), bareGeography(world))
+				fromSave: (data, gameState) => DefenseManager.restore(makeConfig(), gameState, bareGeography(gameState), fake<SerializedDefenseManager>(data))
 			},
 			world
 		);
@@ -228,7 +228,7 @@ describe("save and reload", () =>
 			{
 				label: "QueueManager",
 				original: () => new QueueManager(makeConfig(), queues()),
-				restored: () => new QueueManager(makeConfig(), queues())
+				fromSave: (data, gameState) => QueueManager.restore(makeConfig(), gameState, fake<SerializedQueueManager>(data))
 			},
 			makeFakeGameState().gameState
 		);
@@ -350,9 +350,9 @@ describe("save and reload", () =>
 				{
 					label: "TrainingPlan",
 					original: () => new TrainingPlan(world, "units/athenians_soldite"),
-					restored: () => new TrainingPlan(world, "units/athenians_soldite"),
-					// The template is looked up again on load, never copied.
-					keep: ["ID"]
+					fromSave: (data, gameState) => TrainingPlan.restore(gameState, fake<ReturnType<TrainingPlan["Serialize"]>>(data)),
+					// The template is looked up again on load, by the saved type, never copied.
+					keep: ["ID", "type"]
 				},
 				world
 			);
@@ -364,8 +364,8 @@ describe("save and reload", () =>
 				{
 					label: "ConstructionPlan",
 					original: () => new ConstructionPlan(world, "structures/athenians_barracks"),
-					restored: () => new ConstructionPlan(world, "structures/athenians_barracks"),
-					keep: ["ID"]
+					fromSave: (data, gameState) => ConstructionPlan.restore(gameState, fake<ReturnType<ConstructionPlan["Serialize"]>>(data)),
+					keep: ["ID", "type"]
 				},
 				world
 			);
@@ -377,8 +377,8 @@ describe("save and reload", () =>
 				{
 					label: "ResearchPlan",
 					original: () => new ResearchPlan(world, techName("research/athenians_myrnidian_founding")),
-					restored: () => new ResearchPlan(world, techName("research/athenians_myrnidian_founding")),
-					keep: ["ID"]
+					fromSave: (data, gameState) => ResearchPlan.restore(gameState, fake<ReturnType<ResearchPlan["Serialize"]>>(data)),
+					keep: ["ID", "type"]
 				},
 				world
 			);

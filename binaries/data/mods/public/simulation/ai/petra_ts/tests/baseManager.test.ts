@@ -24,6 +24,7 @@ import { EASY, HARD, MEDIUM } from "../decision/difficultyLevel.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { Worker } from "../execution/worker.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 
 // the player id the common-api reads metadata under
 const PlayerID = PLAYER;
@@ -239,7 +240,7 @@ function bookBuilder(world: HqWorld, hq: Headquarters, buildable: string[]): voi
 	}, {
 		"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
 	}));
-	hq.buildManager.init(world.gameState);
+	hq.buildManager = BuildManager.start(world.gameState);
 }
 
 /** the resource map cell of a map position, as the board reads it */

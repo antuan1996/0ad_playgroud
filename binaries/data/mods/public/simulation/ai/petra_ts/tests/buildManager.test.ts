@@ -64,10 +64,9 @@ describe("the builder book: who can raise what", () =>
 	it("a support unit ready to build a house takes it into the book", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		assert.deepEqual(
 			[...mgr.builders.keys()], ["structures/athen/house"],
@@ -78,13 +77,12 @@ describe("the builder book: who can raise what", () =>
 	it("a unit with no Builder tag raises nothing, and a structure raises nothing", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		// the common support unit owns no Builder/Entities tag; a structure,
 		// whatever its template, is outside the getOwnUnits walk
 		world.addEntity(builderUnit(3001, undefined));
 		world.addEntity(structure(3100, ["structures/{civ}/house"]));
 
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		assert.equal(mgr.builders.size, 0, "no template is booked");
 	});
@@ -92,11 +90,10 @@ describe("the builder book: who can raise what", () =>
 	it("two builders share a template entry, and the ids keep their order", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house", "structures/{civ}/storehouse"]));
 		world.addEntity(builderUnit(3002, ["structures/{civ}/house"]));
 
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001, 3002]);
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3001]);
@@ -108,8 +105,7 @@ describe("the book over one turn's events", () =>
 	it("a fresh unit walks in with its buildables", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
 		mgr.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(3001) }] }));
@@ -120,8 +116,7 @@ describe("the book over one turn's events", () =>
 	it("a unit created and destroyed the same turn is never booked", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
 		mgr.checkEvents(world.gameState, eventsWith({
@@ -135,10 +130,9 @@ describe("the book over one turn's events", () =>
 	it("a destroyed builder leaves every entry it filled, empty list behind", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house", "structures/{civ}/storehouse"]));
 		world.addEntity(builderUnit(3002, ["structures/{civ}/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		mgr.checkEvents(world.gameState, eventsWith({ "Destroy": [{ "entity": entityId(3001) }] }));
 
@@ -153,8 +147,7 @@ describe("the book over one turn's events", () =>
 	it("a captured builder takes his skills over", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 		// the captured worker now fights for us: the engine names the entity
 		// and the new owner, the office asks its template
 		world.ents.set(3001, builderUnit(3001, ["structures/{civ}/house"]));
@@ -169,11 +162,10 @@ describe("the book over one turn's events", () =>
 	it("a builder captured away leaves the book, whoever raises stones", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		const other = builderUnit(3002, ["structures/athen/storehouse"]);
 		world.addEntity(other);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		mgr.checkEvents(world.gameState, eventsWith({
 			"OwnershipChanged": [{ "entity": entityId(3001), "from": PLAYER, "to": ENEMY }]
@@ -191,10 +183,9 @@ describe("the book over one turn's events", () =>
 	it("an overhaul of the Builder component dumps and rebuilds the whole book", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		const incumbent = builderUnit(3001, ["structures/{civ}/house"]);
 		world.addEntity(incumbent);
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		// the season rolls over: the house builder died, and a new support
 		// unit walked in with a wider list. The engine cannot say which single
@@ -215,9 +206,8 @@ describe("the book over one turn's events", () =>
 	it("an overhaul of some other component leaves the book alone", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		mgr.checkEvents(world.gameState, eventsWith({
 			// the wrong component, and the right one touched on a value the
@@ -237,14 +227,13 @@ describe("what a project needs in the book", () =>
 	it("findStructuresByFilter walks the book and refuses the dead entries", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		registerTemplates(world);
 		// the town's builders: one raises houses and stables, one raises the
 		// defense tower, one raises a template the engine never shipped
 		world.addEntity(builderUnit(3001, ["structures/athen/house", "structures/athen/stable"]));
 		world.addEntity(builderUnit(3002, ["structures/athen/defense_tower"]));
 		world.addEntity(builderUnit(3003, ["structures/athen/missing"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 		// the game disables the tower per civ
 		world.gameState.isTemplateDisabled =
 			(name: string) => name === "structures/athen/defense_tower";
@@ -260,10 +249,9 @@ describe("what a project needs in the book", () =>
 	it("a project that wants a tower class finds none when every holder is gone", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		registerTemplates(world);
 		world.addEntity(builderUnit(3001, ["structures/athen/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		assert.equal(
 			mgr.findStructureWithClass(world.gameState, ["Tower"]), undefined,
@@ -273,11 +261,10 @@ describe("what a project needs in the book", () =>
 	it("findStructureWithClass answers the first booked template of the class", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		registerTemplates(world);
 		world.addEntity(builderUnit(3001, ["structures/athen/storehouse"]));
 		world.addEntity(builderUnit(3002, ["structures/athen/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		// both buildings share the Economic class; the book's own order picks
 		// which template the office reads first (TODO in the source: when
@@ -291,9 +278,8 @@ describe("what a project needs in the book", () =>
 	it("hasBuilder answers the booked id list, and stays silent with no entry", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 
 		assert.equal(mgr.hasBuilder(templateName("structures/athen/house")), true,
 			"the id list counts somebody — the office answers just true, not the list");
@@ -387,14 +373,12 @@ describe("the parking lot: unbuildables and their waits", () =>
 	it("the ledger saves and reloads whole: builders, holds and all", () =>
 	{
 		const world = makeWorld();
-		const mgr = new BuildManager();
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house", "structures/{civ}/storehouse"]));
-		mgr.init(world.gameState);
+		const mgr = BuildManager.start(world.gameState);
 		mgr.setUnbuildable(world.gameState, "structures/athen/fortress", 90, "limit");
 
 		const saved = mgr.Serialize();
-		const restored = new BuildManager();
-		restored.Deserialize(saved);
+		const restored = BuildManager.restore(saved);
 
 		assert.deepEqual(restored.Serialize(), saved);
 		// and the loaded book keeps its meaning as well

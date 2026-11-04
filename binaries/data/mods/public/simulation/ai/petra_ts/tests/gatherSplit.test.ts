@@ -367,8 +367,7 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 		const economy = new GatherEconomy();
 		economy.update(world(town(), 0));
 		economy.update(world(town(), 30));
-		const loaded = new GatherEconomy();
-		loaded.Deserialize(JSON.parse(JSON.stringify(economy.Serialize())));
+		const loaded = GatherEconomy.restore(JSON.parse(JSON.stringify(economy.Serialize())));
 
 		assert.deepEqual(loaded.perGatherer, economy.perGatherer);
 		assert.deepEqual(loaded.perFoodGatherer, economy.perFoodGatherer);

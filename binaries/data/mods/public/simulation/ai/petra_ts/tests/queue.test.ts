@@ -307,8 +307,7 @@ describe("restoring a saved queue", () =>
 			switched: 4
 		};
 
-		const queue = new Queue();
-		queue.Deserialize(gameState, saved);
+		const queue = Queue.restore(gameState, saved);
 
 		assert.equal(queue.length(), 3, "each entry should have rebuilt a plan");
 		assert.equal(queue.countQueuedUnits(), 3, "each rebuilt plan keeps its own count");
@@ -316,20 +315,17 @@ describe("restoring a saved queue", () =>
 		assert.equal(queue.switched, 4, "the switched flag comes from the save");
 	});
 
-	it("empties the queue when the save holds no plans", () =>
+	it("comes back empty from a save that holds no plans", () =>
 	{
-		const queue = new Queue();
-		queue.addPlan(makePlan({ type: "leftover" }));
-		queue.Deserialize(gameState, { plans: [], paused: false, switched: 0 });
+		const queue = Queue.restore(gameState, { plans: [], paused: false, switched: 0 });
 
-		assert.equal(queue.length(), 0, "restoring replaces the plans, it does not append");
+		assert.equal(queue.length(), 0, "a restored queue holds the saved plans only");
 	});
 
 	it("reports a saved entry it cannot rebuild", () =>
 	{
 		const logged = logs.length;
-		const queue = new Queue();
-		queue.Deserialize(gameState,
+		const queue = Queue.restore(gameState,
 		{
 			plans:
 			[

@@ -164,6 +164,8 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		state["getEntities"] = () => fakeEntityList();
 		state["currentPhase"] = () => 1;
 		state["getPopulation"] = () => 0;
+		// a civilisation for the builders' book, which has none to enter
+		state["getPlayerCiv"] = () => "athen";
 		// Petra's own region analysis, from accessibility.js. "No regions" is
 		// what an unanalysed map looks like to the code that iterates it.
 		// Every cell of a declared map is impassable to land units and ships alike.

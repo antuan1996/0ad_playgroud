@@ -163,8 +163,7 @@ describe("a batch of units: TrainingPlan", () =>
 		const { world } = seat();
 		const plan = new TrainingPlan(world.gameState, SPEARMAN, { "role": "worker" }, 2, 3);
 		const saved = JSON.parse(JSON.stringify(plan.Serialize()));
-		const loaded = new TrainingPlan(world.gameState, SPEARMAN);
-		loaded.Deserialize(world.gameState, saved);
+		const loaded = TrainingPlan.restore(world.gameState, saved);
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
 	});
 });
@@ -256,8 +255,7 @@ describe("a technology: ResearchPlan", () =>
 		const plan = new ResearchPlan(s.world.gameState, TECH, true);
 		plan.queueToReset = "minorTech";
 		const saved = JSON.parse(JSON.stringify(plan.Serialize()));
-		const loaded = new ResearchPlan(s.world.gameState, TECH);
-		loaded.Deserialize(s.world.gameState, saved);
+		const loaded = ResearchPlan.restore(s.world.gameState, saved);
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
 	});
 });

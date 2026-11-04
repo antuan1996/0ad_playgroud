@@ -37,10 +37,6 @@ class BarePlan extends QueuePlan<CommonTemplate>
 		return { "category": this.category, "type": this.type, "ID": this.ID, "metadata": this.metadata,
 			"cost": this.cost.Serialize(), "number": this.number };
 	}
-
-	Deserialize(): void
-	{
-	}
 }
 
 /** A template id every test builds a plan from, and what it costs. */

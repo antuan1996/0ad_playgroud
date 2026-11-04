@@ -88,7 +88,7 @@ describe("diplomacy at the start: init", () =>
 		const { world, manager } = seat([GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" } },
 			{ "towards": { 1: "ally" } }, { "towards": { 1: "neutral" } }, {}]);
 
-		manager.init(world.gameState);
+		manager.answerStartingStances(world.gameState);
 
 		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), { "requestType": "ally", "status": "accepted" });
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(3))?.status, "waitingForTribute", "3 is allied to us, not we to 3");

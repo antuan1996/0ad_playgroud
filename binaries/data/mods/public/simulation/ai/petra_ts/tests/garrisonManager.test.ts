@@ -1178,8 +1178,7 @@ describe("garrisonManager", () =>
 
 			const saved = manager.Serialize();
 			assert.deepEqual(Object.keys(saved).sort(), ["decayingStructures", "holders"]);
-			const fresh = makeGarrisonManager(world);
-			fresh.Deserialize(saved);
+			const fresh = GarrisonManager.restore(world.ai.Config, saved);
 
 			assert.equal(leaf(fresh, 5000).list.length, 1, "the march is booked again");
 			assert.equal(fresh.allowMelee(tower), true);

@@ -27,6 +27,7 @@ import type { Headquarters } from "../decision/headquarters.ts";
 import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
 import { entityId, landRegion } from "../adapter/brands.ts";
 import { analyseMap } from "../world/geography.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
@@ -586,7 +587,7 @@ function homeless(options: StartOptions = {}): { world: HqWorld; hq: Headquarter
 /** builders known to the build manager, as its init counts them */
 function initBuilders(world: HqWorld, hq: Headquarters): void
 {
-	hq.buildManager.init(world.gameState);
+	hq.buildManager = BuildManager.start(world.gameState);
 }
 
 describe("buildFirstBase: founding a town from nothing", () =>
