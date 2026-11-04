@@ -73,8 +73,10 @@ parameters, a callback measured on its own; per class lines, methods and
 fields; per module code lines and sums; and duplicated code, runs of at
 least 60 tokens over 6 lines found twice or more (imports left out;
 `--renamed` also catches copies over other names). It prints the functions
-over the thresholds (lines 80, cyclomatic 15, cognitive 25, depth 4, params
-5), the worst functions, modules and classes, and each clone with every
+over the thresholds (lines 96, cyclomatic 15, cognitive 25, depth 4, params
+5; the line limit is 96 rather than 80 because dprint's `useBraces: "always"`
+added a brace to every single-line block, +21% code lines), the worst
+functions, modules and classes, and each clone with every
 place it occurs. Half a second for the port. The port has no function over
 the thresholds and no clone: keep it so (split by extract-method, the games
 identical, checked by the smoke test).

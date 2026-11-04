@@ -42,7 +42,9 @@
  * module are skipped.
  *
  * The thresholds the summary counts against (functions over them):
- * lines 80, cyclomatic 15, cognitive 25, depth 4, params 5.
+ * lines 96, cyclomatic 15, cognitive 25, depth 4, params 5. The line limit
+ * was 80 before dprint's useBraces "always" added a brace to every single-line
+ * block (+21% code lines); 96 keeps the same budget per function.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -90,7 +92,7 @@ export interface SourceMetrics
 	module: ModuleMetrics;
 }
 
-export const THRESHOLDS = { lines: 80, cyclomatic: 15, cognitive: 25, depth: 4, params: 5 } as const;
+export const THRESHOLDS = { lines: 96, cyclomatic: 15, cognitive: 25, depth: 4, params: 5 } as const;
 
 type FunctionNode =
 	| ts.FunctionDeclaration
