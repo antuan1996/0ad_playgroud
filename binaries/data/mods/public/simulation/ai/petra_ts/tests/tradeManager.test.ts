@@ -19,6 +19,7 @@ import { collectionOf } from "./harness/world.ts";
 import { baseId, entityId, landRegion, playerId, seaRegion } from "../adapter/brands.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { type SerializedTradeManager, TradeManager, type TradeRoute } from "../decision/tradeManager.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 const PlayerID = PLAYER;
 
@@ -410,7 +411,7 @@ describe("a trader sent on its way: updateTrader", () =>
 		} });
 		world.addEntity(makeHqEntity({ "id": 900, "owner": 0, "position": [210, 200], "classes": ["Treasure"] },
 			{ "isTreasure": () => true }, { "sea": 2 }));
-		hq.treasures = world.gameState.getEntities().filter((e: CommonEntity) => e.isTreasure());
+		hq.treasures = world.gameState.getEntities().filter((e): e is CommonPlacedEntity => e.isTreasure() && isPlaced(e));
 		ship.ent.setMetadata(PlayerID, "sea", seaRegion(2));
 		world.ai.playedTurn = 5;
 

@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal, placed } from "./harness/fakes.ts";
 import {
 	centerOfCell, doorCalls, doorManagers, dropsiteCC, ENEMY, GAIA, type HqSeatOptions, type HqWorld,
 	type HqWorldOptions, makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ,
@@ -5123,11 +5123,11 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 
 		started["Raid"] = [raid(8)];
 		hq.turnCache.numAround = undefined;
-		assert.equal(hq.isDefendable(building), false, "eight raiders are not yet a threat to defend against");
+		assert.equal(hq.isDefendable(placed(building)), false, "eight raiders are not yet a threat to defend against");
 
 		started["Raid"] = [raid(9)];
 		hq.turnCache.numAround = undefined;
-		assert.equal(hq.isDefendable(building), true, "nine raiders make the building worth defending");
+		assert.equal(hq.isDefendable(placed(building)), true, "nine raiders make the building worth defending");
 	});
 
 	it("a base is found by its own number, and an unknown number finds none", () =>

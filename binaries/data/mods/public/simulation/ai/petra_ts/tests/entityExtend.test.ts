@@ -10,11 +10,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { makeEntity, makeTemplate, type Methods, override } from "./harness/fakes.ts";
+import { makeEntity, makeTemplate, type Methods, override, placed } from "./harness/fakes.ts";
 import { collectionOf, ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
 import { entityId, seaRegion, templateName } from "../adapter/brands.ts";
 import * as ext from "../adapter/entityExtend.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /** the real Config's damage weights */
 const IMPORTANCE = { "Hack": 0.075, "Pierce": 0.085, "Crush": 0.045, "Fire": 0.001 };
@@ -370,12 +371,12 @@ describe("isNotWorthBuilding: foundations outside our territory", () =>
 			{ "buildTerritories": () => ["own"] });
 		const camp = makeEntity({ "id": 101, "owner": PLAYER, "position": [100, 100], "classes": ["Structure"] },
 			{ "buildTerritories": () => ["own", "neutral"] });
-		assert.equal(ext.isNotWorthBuilding(world.gameState, house), true);
-		assert.equal(ext.isNotWorthBuilding(world.gameState, camp), false);
+		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(house)), true);
+		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(camp)), false);
 		// in our territory the house is fine
 		const home = makeEntity({ "id": 102, "owner": PLAYER, "position": [10, 10], "classes": ["Structure"] },
 			{ "buildTerritories": () => ["own"] });
-		assert.equal(ext.isNotWorthBuilding(world.gameState, home), false);
+		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(home)), false);
 	});
 });
 
@@ -391,7 +392,7 @@ describe("gatherTreasure: sending a unit for treasure", () =>
 		for (const spot of spots)
 			if (spot.access)
 				world.accessAt.set(`${spot.position[0]},${spot.position[1]}`, spot.access);
-		world.ai.HQ.treasures = collectionOf(world, treasures);
+		world.ai.HQ.treasures = collectionOf(world, treasures).filter(isPlaced);
 		return world;
 	}
 	function collector(world: World, id: number, position: [number, number] | undefined, collects = true): { ent: CommonEntity; went: number[] }

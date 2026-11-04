@@ -16,7 +16,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, eventsWith, makeEntity, type Methods, orders } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, makeEntity, type Methods, orders, placed } from "./harness/fakes.ts";
 import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
 
 import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
@@ -1562,8 +1562,8 @@ describe("garrisoning by hand", () =>
 		world.addEntity(archer(3000, ["Ranged"]));
 		world.addEntity(archer(3001, ["Melee"]));
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000) }), true, "someone went up");
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)) }), true, "someone went up");
 		assert.deepEqual(world.garrisonCalls.map(([unit]) => unit.id()), [3000, 3001],
 			"nearest first, melee allowed because the raider is a plain soldier");
 	});
@@ -1574,8 +1574,8 @@ describe("garrisoning by hand", () =>
 		world.addEntity(archer(3000, ["Ranged"]));
 		world.garrisonCounts.set(5000, 5);
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000) }), false,
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)) }), false,
 			"the tower is full");
 		assert.equal(world.garrisonCalls.length, 0, "nobody was ordered up");
 	});
@@ -1584,8 +1584,8 @@ describe("garrisoning by hand", () =>
 	{
 		const { world, manager, tower } = towerWorld({ hitpoints: () => 50 });	// under the 0.7 eject health
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000) }), false,
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)) }), false,
 			"it would immediately fling its men out again");
 		assert.equal(world.garrisonCalls.length, 0);
 	});
@@ -1596,8 +1596,8 @@ describe("garrisoning by hand", () =>
 		const farRaider = makeSoldier(2001, [80, 80]);
 		world.addEntity(farRaider);
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": farRaider }), false, "out of arrow range means no garrison");
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(farRaider) }), false, "out of arrow range means no garrison");
 	});
 
 	it("keeps melee fighters down when the office says so", () =>
@@ -1607,8 +1607,8 @@ describe("garrisoning by hand", () =>
 		world.addEntity(archer(3000, ["Ranged"]));
 		world.addEntity(archer(3001, ["Melee"]));
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000) }), true, "a ranged fighter went up");
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)) }), true, "a ranged fighter went up");
 		assert.deepEqual(world.garrisonCalls.map(([unit]) => unit.id()), [3000],
 			"the melee fighter stays down");
 	});
@@ -1618,16 +1618,16 @@ describe("garrisoning by hand", () =>
 		const { world, manager, tower } = towerWorld();
 		world.addEntity(archer(3000, ["Ranged"], { "plan": 1, "subrole": "attacking" }));
 
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000) }), false,
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)) }), false,
 			"a plan hand with a fighting job is not pulled out");
 
 		const removed: number[] = [];
 		const planStub = { "state": "started", "removeUnit": (ent: CommonEntity) => { removed.push(ent.id()); } };
 		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
 		// the tower is a captured decay-prone one: it takes even plan hands
-		assert.equal(manager.garrisonUnitsInside(world.gameState, tower,
-			{ "attacker": userEnt(world, 2000), "type": GarrisonManager.TYPE_DECAY }), true,
+		assert.equal(manager.garrisonUnitsInside(world.gameState, placed(tower),
+			{ "attacker": placed(userEnt(world, 2000)), "type": GarrisonManager.TYPE_DECAY }), true,
 			"a decay tower takes even plan hands");
 		assert.deepEqual(removed, [3000], "the plan was told to release him");
 		assert.deepEqual(world.garrisonCalls.map(([unit]) => unit.id()), [3000]);
@@ -1655,7 +1655,7 @@ describe("garrisoning by hand", () =>
 		near.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(near);
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, ram), true);
+		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(ram)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]),
 			[[3000, 5001]], "the nearer fortress took the ramm");
 	});
@@ -1676,7 +1676,7 @@ describe("garrisoning by hand", () =>
 		world.addEntity(fortress);
 		world.garrisonCounts.set(5000, 4);
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, ram), false,
+		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(ram)), false,
 			"the fortress is full");
 		assert.equal(world.garrisonCalls.length, 0);
 	});
@@ -1704,7 +1704,7 @@ describe("garrisoning by hand", () =>
 		});
 		world.addEntity(wounded);
 
-		assert.equal(manager.garrisonAttackedUnit(world.gameState, wounded), true);
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, placed(wounded)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]),
 			[[3000, 5001, GarrisonManager.TYPE_PROTECTION]],
 			"only the healing house was taken, though farther");
@@ -1725,7 +1725,7 @@ describe("garrisoning by hand", () =>
 		});
 		world.addEntity(wounded);
 
-		assert.equal(manager.garrisonAttackedUnit(world.gameState, wounded), false,
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, placed(wounded)), false,
 			"outside a crisis a mere shelter does not treat wounds");
 		assert.equal(world.garrisonCalls.length, 0);
 	});
@@ -1750,7 +1750,7 @@ describe("garrisoning by hand", () =>
 		});
 		world.addEntity(bleeding);
 
-		assert.equal(manager.garrisonAttackedUnit(world.gameState, bleeding, true), true,
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, placed(bleeding), true), true,
 			"the emergency got a place");
 		assert.deepEqual(unloadCalls, [3000], "the resident was evicted first");
 		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]),
@@ -1775,7 +1775,7 @@ describe("garrisoning by hand", () =>
 		});
 		world.addEntity(bleeding);
 
-		assert.equal(manager.garrisonAttackedUnit(world.gameState, bleeding, true), false,
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, placed(bleeding), true), false,
 			"no place, nobody to evict");
 		assert.equal(world.garrisonCalls.length, 0);
 	});
@@ -2036,7 +2036,7 @@ describe("rarer turns of the defence", () =>
 		const army = manager.armies[0];
 		army.addOwn(world.gameState, entityId(3005));
 
-		const ret = manager.garrisonUnitsInside(world.gameState, fort, { "min": 2, "type": GarrisonManager.TYPE_DECAY });
+		const ret = manager.garrisonUnitsInside(world.gameState, placed(fort), { "min": 2, "type": GarrisonManager.TYPE_DECAY });
 
 		assert.equal(ret, true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, , type]) => [unit.id(), type]),
@@ -2062,7 +2062,7 @@ describe("rarer turns of the defence", () =>
 		const catapult = world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20],
 			classes: ["Unit", "Siege", "StoneThrower"] }));
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, catapult), true);
+		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(catapult)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
 	});
 
@@ -2083,7 +2083,7 @@ describe("rarer turns of the defence", () =>
 		const villager = world.addEntity(makeEntity({ id: 3000, owner: PLAYER, position: [20, 20],
 			classes: ["Unit", "Support", "Worker"] }));
 
-		assert.equal(manager.garrisonAttackedUnit(world.gameState, villager), true);
+		assert.equal(manager.garrisonAttackedUnit(world.gameState, placed(villager)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
 	});
 

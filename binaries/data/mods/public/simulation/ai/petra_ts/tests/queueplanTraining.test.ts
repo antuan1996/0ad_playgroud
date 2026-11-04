@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, makeTemplate } from "./harness/fakes.ts";
+import { fake, makeTemplate, placed } from "./harness/fakes.ts";
 import {
 	doorManagers, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, PLAYER, seatHQ
 } from "./harness/hqWorld.ts";
@@ -117,7 +117,7 @@ describe("a batch of units: TrainingPlan", () =>
 		const plan = new TrainingPlan(world.gameState, SPEARMAN);
 		plan.canStart(world.gameState);
 		// every building at the same price for this test
-		plan.trainers = [cc.ent, busy.ent, idle.ent];
+		plan.trainers = [placed(cc.ent), placed(busy.ent), placed(idle.ent)];
 
 		plan.start(world.gameState);
 

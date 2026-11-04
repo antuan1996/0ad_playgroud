@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { eventsWith, fake, makeTemplate, type Methods, override } from "./harness/fakes.ts";
+import { eventsWith, fake, makeTemplate, type Methods, override, placed } from "./harness/fakes.ts";
 import {
 	doorCalls, doorManagers, ENEMY, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld,
 	PLAYER, seatHQ
@@ -597,19 +597,19 @@ describe("the relic game: raids on gaia relics", () =>
 	{
 		const none = relicGame([60, 60], 0);
 		raids(none.manager).set(entityId(701), []);
-		none.manager.captureGaiaRelic(none.world.gameState, none.relic.ent);
+		none.manager.captureGaiaRelic(none.world.gameState, placed(none.relic.ent));
 		assert.deepEqual(none.forced, []);
 
 		const weak = relicGame([60, 60], 1);
 		weak.relic.ent.capturePoints = () => [5000, 0, 0];
 		raids(weak.manager).set(entityId(701), []);
-		weak.manager.captureGaiaRelic(weak.world.gameState, weak.relic.ent);
+		weak.manager.captureGaiaRelic(weak.world.gameState, placed(weak.relic.ent));
 		assert.deepEqual(weak.forced, [], "2.5 against 5000 points");
 
 		const declined = relicGame([60, 60]);
 		declined.hq.attackManager.raidTargetEntity = () => undefined;
 		raids(declined.manager).set(entityId(701), []);
-		declined.manager.captureGaiaRelic(declined.world.gameState, declined.relic.ent);
+		declined.manager.captureGaiaRelic(declined.world.gameState, placed(declined.relic.ent));
 		assert.deepEqual(declined.forced, []);
 	});
 
@@ -621,7 +621,7 @@ describe("the relic game: raids on gaia relics", () =>
 		raids(manager).set(entityId(701), [5]);
 		manager_relic(world).capturePoints = () => [200, 0, 0];
 
-		manager.captureGaiaRelic(world.gameState, manager_relic(world));
+		manager.captureGaiaRelic(world.gameState, placed(manager_relic(world)));
 		assert.deepEqual(forced, [], "7.5 capture less 1 regeneration beats a fiftieth of 200 points");
 
 		const busy = relicGame([60, 60]);
@@ -629,7 +629,7 @@ describe("the relic game: raids on gaia relics", () =>
 		busy.units[1].ent.setMetadata(PlayerID, "PartOfArmy", armyId(1));
 		busy.units[2].ent.setMetadata(PlayerID, "plan", -2);
 		raids(busy.manager).set(entityId(701), []);
-		busy.manager.captureGaiaRelic(busy.world.gameState, busy.relic.ent);
+		busy.manager.captureGaiaRelic(busy.world.gameState, placed(busy.relic.ent));
 		assert.deepEqual(busy.forced, []);
 	});
 
@@ -647,7 +647,7 @@ describe("the relic game: raids on gaia relics", () =>
 		raids(manager).set(entityId(701), [5]);
 		manager_relic(world).capturePoints = () => [200, 0, 0];
 
-		manager.captureGaiaRelic(world.gameState, manager_relic(world));
+		manager.captureGaiaRelic(world.gameState, placed(manager_relic(world)));
 		assert.deepEqual(forced, [], "the three capturers alone are enough");
 	});
 

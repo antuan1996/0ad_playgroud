@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, eventsWith, fake, makeTemplate, override } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, fake, makeTemplate, override, placed } from "./harness/fakes.ts";
 import {
 	ENEMY, makeGaiaSupply, makeHqEntity, MAP_CELLS, PLAYER, structureTemplate
 } from "./harness/hqWorld.ts";
@@ -269,9 +269,9 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const shoal = fish(s.world, 400, [300, 160]);
 		init(s);
 
-		assert.equal(s.naval.getFishSea(s.world.gameState, shoal), SEA);
+		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), SEA);
 		assert.equal(shoal.getMetadata(PlayerID, "opensea"), true);
-		assert.equal(s.naval.canFishSafely(s.world.gameState, shoal), true);
+		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), true);
 	});
 
 	it("a shoal by rocks, or by the edge of a round map, is still in the open sea; by land it is not", () =>
@@ -301,11 +301,11 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const shoal = fish(s.world, 400, [200, 160]);
 		init(s);
 
-		assert.equal(s.naval.getFishSea(s.world.gameState, shoal), SEA);
+		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), SEA);
 		assert.equal(shoal.getMetadata(PlayerID, "opensea"), undefined);
 		assert.equal(shoal.getMetadata(PlayerID, "sea"), SEA);
 		shoal.setMetadata(PlayerID, "sea", seaRegion(9));
-		assert.equal(s.naval.getFishSea(s.world.gameState, shoal), 9, "read back, not measured again");
+		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), 9, "read back, not measured again");
 	});
 
 	it("a shoal near enemy ground is not safe to fish", () =>
@@ -313,10 +313,10 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const s = seat();
 		const shoal = fish(s.world, 400, [200, 160]);
 		init(s);
-		assert.equal(s.naval.canFishSafely(s.world.gameState, shoal), true, "our ground and the open water around it");
+		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), true, "our ground and the open water around it");
 
 		s.world.map.setTerritoryOwner(33, 20, ENEMY);	// on the island, 60 m east
-		assert.equal(s.naval.canFishSafely(s.world.gameState, shoal), false);
+		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), false);
 	});
 });
 

@@ -6,6 +6,7 @@
  * anything else raises with the missing method's name, so a test cannot pass
  * because a call quietly returned undefined.
  */
+import { isPlaced } from "../../adapter/placed.ts";
 
 /**
  * A fake standing in for the engine's or the port's own `T`: the harness's one
@@ -387,4 +388,16 @@ export function makeTemplate(name: string, detail: {
 			return territory === undefined ? undefined : String(territory).split(/\s+/);
 		}
 	});
+}
+
+/**
+ * A fake entity, checked to be on the map, as the game checks an entity once
+ * where it enters a computation (`isPlaced`): for a port function that takes
+ * a placed entity.
+ */
+export function placed(ent: CommonEntity): CommonPlacedEntity
+{
+	if (!isPlaced(ent))
+		throw new Error("the fake entity " + ent.id() + " has no position");
+	return ent;
 }

@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, orders, override } from "./harness/fakes.ts";
+import { fake, orders, override, placed } from "./harness/fakes.ts";
 import {
 	bookCentreSupplies, doorCalls, doorManagers, ENEMY, type HqSeatOptions, type HqWorld,
 	type HqWorldOptions, makeGaiaSupply, makeHqEntity, makeHqWorld, PLAYER, seatHQ, structureTemplate
@@ -20,6 +20,7 @@ import { BaseManager } from "../decision/baseManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { UnitWork, Worker } from "../execution/worker.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 // the player id the common-api reads metadata under
 const PlayerID = PLAYER;
@@ -36,7 +37,7 @@ function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<H
 /** the unit's work for the turn, as the worker's update() makes it before a call */
 function prime(w: Worker, ent: CommonEntity, access = 2): UnitWork
 {
-	return new UnitWork(w, ent, landRegion(access), landRegion(access));
+	return new UnitWork(w, placed(ent), landRegion(access), landRegion(access));
 }
 
 /** a worker of ours, on a base's payroll with the given metadata and methods */
@@ -224,6 +225,7 @@ describe("a worker at the fields: gatherNearestField and buildAnyField", () =>
 			"classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 		}, {
 			"get": (path: string) => path === "ResourceSupply/Type" ? "food.grain" : undefined,
+			"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 			"resourceSupplyNumGatherers": () => numGatherers,
 			"resourceSupplyAmount": () => 1000,
 			"getDiminishingReturns": () => diminishing,
@@ -748,6 +750,7 @@ describe("a worker reading its book: findSupply edges and the food fields", () =
 			"classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 		}, {
 			"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+			"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 			"resourceSupplyNumGatherers": () => 0, "resourceSupplyAmount": () => 1000,
 			"getDiminishingReturns": () => 1, "maxGatherers": () => 8
 		}, { "base": base.ID }));
@@ -1558,6 +1561,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 			"classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 		}, {
 			"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+			"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 			"resourceSupplyNumGatherers": () => 0, "resourceSupplyAmount": () => 1000,
 			"getDiminishingReturns": () => 1, "maxGatherers": () => 8
 		}, access === undefined ? { "base": baseID } : { "base": baseID, "access": access }));
@@ -1849,6 +1853,7 @@ describe("a worker's smaller judgements", () =>
 			"classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 		}, {
 			"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+			"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 			"resourceSupplyNumGatherers": () => 2, "resourceSupplyAmount": () => 1000,
 			"getDiminishingReturns": () => 0.5, "maxGatherers": () => 8
 		}, { "base": base.ID }));
@@ -2229,7 +2234,7 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 		world.addEntity(makeHqEntity({ id, "owner": 0, position, "classes": ["Treasure"] }, { "isTreasure": () => true }));
 		// Headquarters.init filters the world's entities by isTreasure, and the
 		// collection's updates add the ones found later
-		hq.treasures = world.gameState.getEntities().filter((e: CommonEntity) => e.isTreasure());
+		hq.treasures = world.gameState.getEntities().filter((e): e is CommonPlacedEntity => e.isTreasure() && isPlaced(e));
 	}
 
 	it("a woodcutter picks up a treasure near it before going back to the trees", () =>
@@ -2278,6 +2283,7 @@ describe("what a worker takes up first: treasure and the hunt", () =>
 			"classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 		}, {
 			"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+			"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 			"resourceSupplyNumGatherers": () => 0, "resourceSupplyAmount": () => 1000,
 			"getDiminishingReturns": () => 1, "maxGatherers": () => 8
 		}, { "base": base.ID }));
@@ -2466,6 +2472,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 				id, "owner": PLAYER, position, "classes": ["Structure", "Field"], "templateName": "structures/athen/field"
 			}, {
 				"get": (p: string) => p === "ResourceSupply/Type" ? "food.grain" : undefined,
+				"resourceSupplyType": () => ({ "generic": "food", "specific": "grain" }),
 				"resourceSupplyNumGatherers": () => numGatherers, "resourceSupplyAmount": () => 1000,
 				"getDiminishingReturns": () => 1, "maxGatherers": () => 8
 			}, { "base": base.ID }));
