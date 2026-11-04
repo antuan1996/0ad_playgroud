@@ -1821,7 +1821,7 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 		});
 
 		// the plain economics call answers the ground not worth a town (cut 60)
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			false, "a town for its own sake is too dear there");
 		// the strategic call delegates with the cheaper cut and takes the lot
 		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [193, 161],
@@ -1838,7 +1838,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// the village plants beside the party rather than in the far country
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", worldPos(100, 100), false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "proximity": worldPos(100, 100), "fromStrategic": false }),
 			[97, 97], "the first act of founding likes company");
 	});
 
@@ -1853,7 +1853,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			for (let px = 44; px <= 59; ++px)
 				world.map.setPassData(px, pz, 0xB);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", worldPos(72, 72), false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "proximity": worldPos(72, 72), "fromStrategic": false }),
 			[151, 81], "the settlement stays on the water's edge");
 	});
 
@@ -1876,7 +1876,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 				resource === undefined || resource === "" || resource === "wood"
 		}));
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			[233, 233], "the yard is kept for the carts");
 	});
 
@@ -1890,12 +1890,12 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
 		});
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			[233, 233], "the denser stand pulls the village");
 		// and the sheet moved south, the village follows the wood
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 40;
 		world.map.ccResourceMaps.wood.map[29 + 15 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			[233, 121], "the sheet moved, the village moved");
 	});
 
@@ -1910,9 +1910,9 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		for (const sheet of Object.values(world.map.ccResourceMaps))
 			sheet.map.fill(0);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }), false,
 			"nothing to gather there: below the cut");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }),
 			[233, 233], "for its room, the free lot");
 	});
 
@@ -1926,12 +1926,12 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		override(hq.attackManager, { "enemiesByLand": () => new Map([[2, [makeHqEntity({
 			"id": 6100, "owner": ENEMY, "position": [240, 240], "classes": ["Unit", "Soldier"] })]]]) });
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }), false,
 			"an enemy soldier beside it: contested");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }),
 			[233, 233], "for its room, the contested lot all the same");
 		hq.ccSpotsAvoided.push({ "pos": worldPos(233, 233), "until": 1e9 });
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, true, true), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }), false,
 			"but not one that failed");
 	});
 
@@ -1946,7 +1946,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		});
 		hq.defenseManager.armies.push({ "foePosition": [124, 228] } as never);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			[233, 225], "the village plants beyond the raid");
 	});
 
@@ -1967,7 +1967,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 60 } : undefined
 		}));
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			[233, 225], "the village keeps out of range");
 	});
 
@@ -1980,7 +1980,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			"territoryOwner": (ix: number, iy: number) => ix >= 35 && iy >= 35 ? 0 : PLAYER
 		});
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false),
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
 			false, "a town that far out never pays");
 		// (the oversea arm needs distances beyond 500, which a 320-wide board
 		// cannot produce, so its lift is not exercisable on this harness)
@@ -4929,7 +4929,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 		town(world, 2400, ENEMY, [100, 100]);
 
-		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false });
 		assert.ok(Array.isArray(spot), "a clear lot is still found");
 		assert.ok(Math.hypot(spot[0] - 100, spot[1] - 100) >= 120,
 			"no town is planted within a hundred and twenty units of a rival");
@@ -4944,7 +4944,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		});
 		town(world, 2401, PLAYER, [100, 100]);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false), false,
+		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }), false,
 			"no lot is taken inside an allied town's two-hundred-unit ring");
 	});
 
@@ -4989,7 +4989,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"regionTypes": { 2: "land", 3: "land", 8: "water" }
 		}, { "landRegions": { 2: true, 3: true } });
 
-		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false });
 		assert.ok(Array.isArray(spot));
 		assert.ok(spot[0] >= 160, "the lot is on the island across the water");
 		assert.ok(doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
@@ -5007,7 +5007,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"obstruction": { "min": 15, "max": 21.2 }
 		});
 
-		const spot = hq.findEconomicCCLocation(world.gameState, structure(round), "wood", undefined, false);
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(round), "wood", { "fromStrategic": false });
 		assert.ok(Array.isArray(spot), "the round centre finds its lot like a square one");
 	});
 });

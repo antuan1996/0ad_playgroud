@@ -17,7 +17,7 @@ import {
 
 import { NO_BASE, baseId, landRegion, seaRegion, worldPos } from "../adapter/brands.ts";
 import { BaseManager } from "../decision/baseManager.ts";
-import type { Headquarters } from "../decision/headquarters.ts";
+import type { EconomicCCOptions, Headquarters } from "../decision/headquarters.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { type BuildingPosition, ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import * as mapMask from "../world/mapMask.ts";
@@ -339,9 +339,9 @@ describe("where the special buildings go: findGoodPosition", () =>
 		const { world, hq } = seat();
 		const cc = card(world, "civil_centre", { "classes": ["Structure", "CivCentre"] });
 		const asked: unknown[] = [];
-		hq.findEconomicCCLocation = (_g: unknown, _t: unknown, resource: unknown, proximity: unknown) =>
+		hq.findEconomicCCLocation = (_g: unknown, _t: unknown, resource: unknown, options: EconomicCCOptions = {}) =>
 		{
-			asked.push([resource, proximity]);
+			asked.push([resource, options.proximity]);
 			return worldPos(250, 60);
 		};
 
