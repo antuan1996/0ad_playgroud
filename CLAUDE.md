@@ -49,12 +49,24 @@ npm run build:petra:baselines       # the baseline bots petra_parity and petra_f
 npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
 npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
 npm run coverage:petra -- [src|out] [--file <module>]   # real per-module coverage
+npm run quality:petra -- [--file <module>] [--top N] [--tests] [--renamed] [--json F]   # size, complexity, duplication
 # one file / one test (tests/run.ts preloads harness/setup.ts; a bare node --test cannot load the port):
 npm run test:petra -- <name>.test.ts --test-name-pattern="<regex>"
 npm run test:petra:out -- <name>.test.ts
 ```
 Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
 built-in line figure counts never-run branches as covered.
+`quality:petra` (`build/petra_ts/quality.ts`, tested by `quality.test.ts` in
+`test:petra:tools`) parses the port (not the `.d.ts`; `--tests` adds the
+tests) with the TypeScript compiler, no type check: per function its lines,
+cyclomatic and cognitive (SonarSource) complexity, nesting depth and
+parameters, a callback measured on its own; per class lines, methods and
+fields; per module code lines and sums; and duplicated code, runs of at
+least 60 tokens over 6 lines found twice or more (imports left out;
+`--renamed` also catches copies over other names). It prints the functions
+over the thresholds (lines 80, cyclomatic 15, cognitive 25, depth 4, params
+5), the worst functions, modules and classes, and each clone with every
+place it occurs. Half a second for the port.
 
 The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
 `tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only
