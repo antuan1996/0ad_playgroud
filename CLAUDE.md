@@ -69,6 +69,23 @@ over the thresholds (lines 80, cyclomatic 15, cognitive 25, depth 4, params
 place it occurs. Half a second for the port. The port has no function over
 the thresholds and no clone: keep it so (split by extract-method, the games
 identical, checked by the smoke test).
+`npm run structure:petra -- [--check] [--update-baseline] [--top N] [--json F]`
+(`build/petra_ts/structure.ts`, tested by `structure.test.ts` in
+`test:petra:tools`, about a second) checks the port's structure. Rules, which
+`--check` fails on: no `as` cast outside `adapter/brands.ts` (`as const`
+apart), no `!`, `Engine.PostCommand` only in `adapter/commands.ts`, execution
+code reaching the HQ only through `execution/hq.ts`. Counts that `--check`
+holds to `build/petra_ts/structure-baseline.json` (lower one, then
+`--update-baseline` in the same commit): imports against the layers (adapter <
+world < execution < decision < root, `PLAN.md` §3.4; type-only ones too),
+modules in value-import cycles, `Engine` outside `adapter/` (profiling apart),
+dead exports, dead methods (no code of the port or `bot-state.js` names
+them, unmarked) and stale `TODO never called` markers (a call of the port
+reaches the method, resolved by the type checker). It also lists exports
+only their module or only the tests use, each module's fan-in and fan-out,
+and per class its methods, fields and LCOM4 (groups of methods sharing no
+field nor call, the members an eighth of the methods use set apart as hubs)
+with the methods using no member (module functions, really).
 
 The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
 `tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only

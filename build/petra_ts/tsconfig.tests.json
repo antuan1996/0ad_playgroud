@@ -24,7 +24,9 @@
 		"./parity-bisect.ts",
 		"./ai-times.ts",
 		"./quality.ts",
-		"./quality.test.ts"
+		"./quality.test.ts",
+		"./structure.ts",
+		"./structure.test.ts"
 	],
 	// The inherited exclude would drop the tests directory.
 	"exclude": []
