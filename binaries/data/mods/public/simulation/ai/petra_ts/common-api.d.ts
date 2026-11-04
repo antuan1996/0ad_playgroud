@@ -103,6 +103,22 @@ type CommonPlacedEntity = { position(): CommonPosition } & CommonEntity;
  * entity without the ResourceSupply component, so for a supply they are all
  * there; the supply queries return these.
  */
+/**
+ * A structure's template (adapter/templateData.ts isStructureTemplate): its
+ * obstruction and footprint are there (undefined only for a template without
+ * them, never a structure's: the API probe, FINDINGS §23).
+ */
+type CommonStructureTemplate = {
+	obstructionRadius(): { max: number; min: number };
+	footprintRadius(): number;
+} & CommonTemplate;
+
+/** A structure on the map: what the structure queries return. */
+type CommonStructureEntity = {
+	obstructionRadius(): { max: number; min: number };
+	footprintRadius(): number;
+} & CommonPlacedEntity;
+
 type CommonSupplyEntity = {
 	resourceSupplyAmount(): number;
 	resourceSupplyNumGatherers(): number;
@@ -725,7 +741,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** All entities owned by the AI player. */
 		getOwnEntities(): CommonEntityCollection;
 /** Structures of the AI player. */
-		getOwnStructures(): CommonEntityCollection<CommonPlacedEntity>;
+		getOwnStructures(): CommonEntityCollection<CommonStructureEntity>;
 /** Units of the AI player. */
 		getOwnUnits(): CommonEntityCollection;
 /** Entities of all non-enemy allied players (global view). */
@@ -733,12 +749,12 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Entity ids of exclusive allies. */
 		getExclusiveAllyEntities(): CommonEntityCollection;
 /** Structures of ally `allyID` or of all allies. */
-		getAllyStructures(allyID?: PlayerId): CommonEntityCollection<CommonPlacedEntity>;
+		getAllyStructures(allyID?: PlayerId): CommonEntityCollection<CommonStructureEntity>;
 /** All structures of neutral players as global collection. */
-		getNeutralStructures(): CommonEntityCollection<CommonPlacedEntity>;
+		getNeutralStructures(): CommonEntityCollection<CommonStructureEntity>;
 /** Entities/structures/units of all enemy players (global view). */
 		getEnemyEntities(): CommonEntityCollection;
-		getEnemyStructures(enemyID?: PlayerId): CommonEntityCollection<CommonPlacedEntity>;
+		getEnemyStructures(enemyID?: PlayerId): CommonEntityCollection<CommonStructureEntity>;
 		getEnemyUnits(enemyID?: PlayerId): CommonEntityCollection;
 /** Auto-updating collections of Petra's own entities whose metadata key matches `value`. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
@@ -749,7 +765,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** By Identity class single (Collection filtered by class). */
 		getOwnEntitiesByClass(cls: string, maintain?: boolean): CommonEntityCollection;
 /** Foundations of the AI player with a given identity class (placement helpers). */
-		getOwnFoundationsByClass(cls: string, maintain?: boolean): CommonEntityCollection<CommonPlacedEntity>;
+		getOwnFoundationsByClass(cls: string, maintain?: boolean): CommonEntityCollection<CommonStructureEntity>;
 /** Own structures able to train (has Trainer). */
 		getOwnTrainingFacilities(): CommonEntityCollection;
 /** Own structures able to research. */
@@ -767,7 +783,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** countOwnEntitiesAndQueuedWithRole parameterized on arbitrary metadata. */
 		countOwnQueuedEntitiesWithMetadata(data: string, value: unknown): number;
 /** Own foundations. */
-		getOwnFoundations(): CommonEntityCollection<CommonPlacedEntity>;
+		getOwnFoundations(): CommonEntityCollection<CommonStructureEntity>;
 /** Own dropsite structures (optionally for one resource). */
 		getOwnDropsites(resource?: string): CommonEntityCollection;
 /** Dropsites of all players (any owner). */

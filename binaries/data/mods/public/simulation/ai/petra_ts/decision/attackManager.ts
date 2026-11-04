@@ -272,7 +272,7 @@ export class AttackManager
 				let targetPos: CommonPosition | undefined;
 				if (dist > range)
 				{
-					const safety = requireValue(struct.footprintRadius()) + 30;
+					const safety = struct.footprintRadius() + 30;
 					targetPos = worldPos(
 						structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
 						structPos[1] + (entPos[1] - structPos[1]) * safety / dist

@@ -6,6 +6,12 @@
  * leaf is NaN).
  */
 
+/** Whether a template has a structure's obstruction and footprint, narrowing it to a structure's template. */
+export function isStructureTemplate(template: CommonTemplate): template is CommonStructureTemplate
+{
+	return template.obstructionRadius() !== undefined && template.footprintRadius() !== undefined;
+}
+
 /** A template leaf as a number, as `+value` reads it. */
 function numberAt(template: CommonTemplate, path: string): number
 {

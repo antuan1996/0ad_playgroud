@@ -7,7 +7,7 @@ import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { NEW_ANCHORLESS_BASE, NO_BASE, NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
-import { footprintHalves } from "../adapter/templateData.ts";
+import { footprintHalves, isStructureTemplate } from "../adapter/templateData.ts";
 import { hqOf } from "./hq.ts";
 import { isPlaced } from "../adapter/placed.ts";
 
@@ -26,7 +26,7 @@ export type BuildingPosition = {
  * We'll try to fing a good position if non has been provided
  */
 
-export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
+export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "building">
 {
 	position: CommonPosition | 0;
 
@@ -34,7 +34,9 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 		position?: CommonPosition | 0)
 	{
 		const name = gameState.applyCiv(type);
-		super(gameState, name, gameState.getTemplate(name), "building", metadata);
+		// a building's template: the base refuses one that is not a structure's as one it cannot find
+		const template = gameState.getTemplate(name);
+		super(gameState, name, template && isStructureTemplate(template) ? template : null, "building", metadata);
 
 		this.position = position ? position : 0;
 	}
@@ -174,7 +176,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
 
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		let radius;
 		if (template.hasClasses(["Fortress", "Arsenal"]) ||
 			this.type === gameState.applyCiv("structures/{civ}/elephant_stable"))
@@ -214,7 +216,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 	 * The placement of a building with a rule of its own (a civic centre, a tower or
 	 * fortress, a market): a position, false for none, or undefined to search as for any.
 	 */
-	specialPosition(gameState: CommonGameState, template: CommonTemplate): BuildingPosition | undefined
+	specialPosition(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
 		const HQ = hqOf(gameState);
 		if (template.hasClass("CivCentre"))
@@ -236,9 +238,9 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			const templateName = gameState.applyCiv("structures/{civ}/dock");
 			if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
 			{
-				// canBuild() above already verified that the template exists.
+				// canBuild() above already verified that the template exists; a dock is a structure
 				const dockTemplate = requireTemplate(gameState, templateName);
-				if (gameState.getResources().canAfford(
+				if (isStructureTemplate(dockTemplate) && gameState.getResources().canAfford(
 					new ResourcesManager(dockTemplate.cost())))
 				{
 					this.buildOverseaDock(gameState, dockTemplate);
@@ -274,7 +276,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 	}
 
 	/** The placement map's values: near the position asked for, else by what the building wants near it. Whether houses already stand. */
-	placeInfluence(gameState: CommonGameState, template: CommonTemplate, placement: InfoMap<"territory">): boolean
+	placeInfluence(gameState: CommonGameState, template: CommonStructureTemplate, placement: InfoMap<"territory">): boolean
 	{
 		const HQ = hqOf(gameState);
 		const cellSize = placement.cellSize;
@@ -365,7 +367,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 	}
 
 	/** The placement map kept to our territory, our base's when the plan names one, and away from invading armies. */
-	restrictPlacement(gameState: CommonGameState, template: CommonTemplate, placement: InfoMap<"territory">): void
+	restrictPlacement(gameState: CommonGameState, template: CommonStructureTemplate, placement: InfoMap<"territory">): void
 	{
 		const HQ = hqOf(gameState);
 		const cellSize = placement.cellSize;
@@ -465,7 +467,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			wantedLand[proxyAccess] = true;
 		}
 		const dropsiteTypes = template.resourceDropsiteTypes();
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		// halfSize for the dock angle, halfDepth and halfWidth for checkPlacement
@@ -620,7 +622,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 	/**
 	 * Find a good island to build a dock.
 	 */
-	buildOverseaDock(gameState: CommonGameState, template: CommonTemplate): void
+	buildOverseaDock(gameState: CommonGameState, template: CommonStructureTemplate): void
 	{
 		const docks = gameState.getOwnStructures().filter(filters.byClass("Dock"));
 		if (!docks.hasEntities())

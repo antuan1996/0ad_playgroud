@@ -27,7 +27,7 @@ import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { Worker } from "../execution/worker.ts";
 import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
-import { footprintHalves } from "../adapter/templateData.ts";
+import { footprintHalves, isStructureTemplate } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { type Geography, restoreGeography, seaBetween } from "../world/geography.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
@@ -904,7 +904,7 @@ export class Headquarters
 	 * Returns the best position to build a new Civil Center
 	 * Whose primary function would be to reach new resources of type "resource".
 	 */
-	findEconomicCCLocation(gameState: CommonGameState, template: CommonTemplate, resource: string,
+	findEconomicCCLocation(gameState: CommonGameState, template: CommonStructureTemplate, resource: string,
 		proximity?: CommonPosition, fromStrategic?: boolean, forRoom = false): false | CommonPosition
 	{
 		const spot = this.searchEconomicCCLocation(gameState, template, resource, proximity, fromStrategic, forRoom, false);
@@ -917,7 +917,7 @@ export class Headquarters
 	}
 
 	/** findEconomicCCLocation's search, contested spots allowed or not (spots remembered as failed never). */
-	searchEconomicCCLocation(gameState: CommonGameState, template: CommonTemplate, resource: string,
+	searchEconomicCCLocation(gameState: CommonGameState, template: CommonStructureTemplate, resource: string,
 		proximity: CommonPosition | undefined, fromStrategic: boolean | undefined, forRoom: boolean,
 		allowContested: boolean): false | CommonPosition
 	{
@@ -935,7 +935,7 @@ export class Headquarters
 
 		let bestIdx = -1;
 		let bestVal = -Infinity;
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		let radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		let scale = 250 * 250;
 		let proxyAccess;
@@ -1153,7 +1153,7 @@ export class Headquarters
 	 * Returns the best position to build a new Civil Center
 	 * Whose primary function would be to assure territorial continuity with our allies
 	 */
-	findStrategicCCLocation(gameState: CommonGameState, template: CommonTemplate): false | CommonPosition | undefined
+	findStrategicCCLocation(gameState: CommonGameState, template: CommonStructureTemplate): false | CommonPosition | undefined
 	{
 		// This builds a map. The procedure is fairly simple.
 		// We minimize the Sum((dist - 300)^2) where the sum is on the three nearest allied CC
@@ -1183,7 +1183,7 @@ export class Headquarters
 
 		let bestIdx = -1;
 		let bestVal = Infinity;
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const width = this.geography.territoryMap.width;
@@ -1303,7 +1303,7 @@ export class Headquarters
 	 * for performance reasons.
 	 */
 	/** [x, z, base, expected gain]; base -1 (and x, z -1) when the market goes where the standard placement puts it */
-	findMarketLocation(gameState: CommonGameState, template: CommonTemplate): false | [number, number, BaseId | -1, number]
+	findMarketLocation(gameState: CommonGameState, template: CommonStructureTemplate): false | [number, number, BaseId | -1, number]
 	{
 		let markets = gameState.updatingCollection("diplo-ExclusiveAllyMarkets", filters.byClass("Trade"),
 			gameState.getExclusiveAllyEntities()).toEntityArray();
@@ -1326,7 +1326,7 @@ export class Headquarters
 		let bestVal = -Infinity;
 		let bestDistSq = 0;
 		let bestGainMult = 0;
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 		const isNavalMarket = template.hasClasses(["Naval+Trade"]);
 
@@ -1423,7 +1423,7 @@ export class Headquarters
 	 * Returns the best position to build defensive buildings (fortress and towers)
 	 * Whose primary function is to defend our borders
 	 */
-	findDefensiveLocation(gameState: CommonGameState, template: CommonTemplate):
+	findDefensiveLocation(gameState: CommonGameState, template: CommonStructureTemplate):
 		[number, number, BaseId] | undefined
 	{
 		// a tower goes first where the enemy's ships pass, on naval maps, and
@@ -1466,7 +1466,7 @@ export class Headquarters
 			if (wonderMode)
 			{
 				// wonders always have a footprint
-				const wonderRadius = requireValue(wonders[0].footprintRadius());
+				const wonderRadius = wonders[0].footprintRadius();
 				wonderDistmin = (50 + wonderRadius) * (50 + wonderRadius);
 			}
 		}
@@ -1483,7 +1483,7 @@ export class Headquarters
 
 		const isTower = template.hasClass("Tower");
 		const isFortress = template.hasClass("Fortress");
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		let radius;
 		if (isFortress)
 			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
@@ -1704,7 +1704,7 @@ export class Headquarters
 	hasShoreTowerSpot(gameState: CommonGameState, templateName: string): boolean
 	{
 		const template = gameState.getTemplate(gameState.applyCiv(templateName));
-		return !!template && this.findShoreTowerLocation(gameState, template) !== undefined;
+		return !!template && isStructureTemplate(template) && this.findShoreTowerLocation(gameState, template) !== undefined;
 	}
 
 	/**
@@ -1716,7 +1716,7 @@ export class Headquarters
 	 * keeps the distances of findDefensiveLocation (30 m from our towers and
 	 * fortresses, 80 m from the enemy's defenses) and is not dangerous.
 	 */
-	findShoreTowerLocation(gameState: CommonGameState, template: CommonTemplate): [number, number, BaseId] | undefined
+	findShoreTowerLocation(gameState: CommonGameState, template: CommonStructureTemplate): [number, number, BaseId] | undefined
 	{
 		const traffic = this.shipTraffic;
 		if (!traffic)

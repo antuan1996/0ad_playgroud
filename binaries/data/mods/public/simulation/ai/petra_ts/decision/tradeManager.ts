@@ -3,7 +3,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { newTradeRoute as chatNewTradeRoute } from "../adapter/chatHelper.ts";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireTemplate } from
+import { gatherTreasure, getBestBase, getLandAccess, getSeaAccess, isLineInsideEnemyTerritory, requireMetadata, requireStructureTemplate } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -687,7 +687,7 @@ export class TradeManager
 			return;
 		}
 		// canBuild() above already verified that the template exists.
-		const template = requireTemplate(gameState, gameState.applyCiv("structures/{civ}/market"));
+		const template = requireStructureTemplate(gameState, gameState.applyCiv("structures/{civ}/market"));
 		this.checkRoutes(gameState);
 		const marketPos = gameState.ai.HQ.findMarketLocation(gameState, template);
 		if (!marketPos || marketPos[3] === 0)   // marketPos[3] is the expected gain

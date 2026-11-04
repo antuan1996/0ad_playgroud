@@ -1,7 +1,7 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import type { BaseManager } from "../decision/baseManager.ts";
 import { worldPos } from "./brands.ts";
-import { attackBonuses, footprintHalves } from "./templateData.ts";
+import { attackBonuses, footprintHalves, isStructureTemplate } from "./templateData.ts";
 import { isPlaced } from "./placed.ts";
 
 /** returns true if this unit should be considered as a siege unit */
@@ -186,6 +186,19 @@ export function requireTemplate(gameState: CommonGameState, type: TemplateName):
 	if (!template)
 	{
 		const message = "Petra error: template " + type + " not found although it should always be available.";
+		aiWarn(message);
+		throw new Error(message);
+	}
+	return template;
+}
+
+/** A structure's template, where the context guarantees it exists and is one (see requireTemplate). */
+export function requireStructureTemplate(gameState: CommonGameState, type: TemplateName): CommonStructureTemplate
+{
+	const template = requireTemplate(gameState, type);
+	if (!isStructureTemplate(template))
+	{
+		const message = "Petra error: template " + type + " has no obstruction or footprint although it is a structure's.";
 		aiWarn(message);
 		throw new Error(message);
 	}
