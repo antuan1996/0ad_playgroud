@@ -227,6 +227,9 @@ type AttackPlanSetup = { canBuildUnits: boolean } & (
 	| { kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number }
 	| { kind: "saved"; saved: SerializedAttackPlan });
 
+/** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
+export type AttackAim = { target: CommonEntity; pos: CommonPosition };
+
 export class AttackPlan
 {
 	Config: Config;
@@ -517,6 +520,12 @@ export class AttackPlan
 			if (this.canBuildUnits)
 				this.buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
 		}
+	}
+
+	/** The target and its position together, when the plan has both (none before a target is chosen, or once it is lost). */
+	aim(): AttackAim | undefined
+	{
+		return this.target && this.targetPos ? { "target": this.target, "pos": this.targetPos } : undefined;
 	}
 
 	static PREPARATION_FAILED = 0;
@@ -842,8 +851,9 @@ export class AttackPlan
 		if (!this.target && !this.chooseTarget(gameState))
 			return AttackPlan.PREPARATION_FAILED;
 		this.leaveDisputedLands(gameState, this.targetLand(gameState));
-		if (!this.overseas)
-			this.getPathToTarget(gameState);
+		const aim = this.aim();
+		if (!this.overseas && aim)
+			this.getPathToTarget(gameState, aim);
 
 		if (this.type === AttackPlan.TYPE_RAID)
 			this.maxCompletingTime = seconds(this.forced ? 0 : gameState.ai.elapsedTime + 20);
@@ -1652,10 +1662,10 @@ export class AttackPlan
 		return target;
 	}
 
-	getPathToTarget(gameState: CommonGameState, fixedRallyPoint: boolean = false): boolean
+	getPathToTarget(gameState: CommonGameState, aim: AttackAim, fixedRallyPoint: boolean = false): boolean
 	{
-		const target = requireValue(this.target);
-		const targetPos = requireValue(this.targetPos);
+		const target = aim.target;
+		const targetPos = aim.pos;
 		const startAccess = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		const endAccess = getLandAccess(gameState, target);
 		if (startAccess !== endAccess)
@@ -1741,7 +1751,7 @@ export class AttackPlan
 		if (rallyAccess === targetAccess)
 		{
 			if (!this.path)
-				this.getPathToTarget(gameState, true);
+				this.getPathToTarget(gameState, { target, "pos": targetPos }, true);
 			if (!this.path || !this.path[0][0] || !this.path[0][1])
 				return false;
 			this.overseas = 0;
@@ -1836,13 +1846,14 @@ export class AttackPlan
 		if (this.state === AttackPlan.STATE_ATTACKING)
 		{
 			// First update the target and/or its position if needed
-			if (!this.UpdateTarget(gameState))
+			const aim = this.UpdateTarget(gameState);
+			if (!aim)
 			{
 				Engine.ProfileStop();
 				return false;
 			}
 
-			this.updateAttacking(gameState, events);
+			this.updateAttacking(gameState, events, aim);
 		}
 		this.lastPosition = clone(this.position);
 		Engine.ProfileStop();
@@ -1851,10 +1862,10 @@ export class AttackPlan
 	}
 
 	/** The attacking state's turn: answer the blows, then look at a few attackers' orders. */
-	updateAttacking(gameState: CommonGameState, events: EngineAIEvents): void
+	updateAttacking(gameState: CommonGameState, events: EngineAIEvents, aim: AttackAim): void
 	{
-		const target = requireValue(this.target);
-		const targetPos = requireValue(this.targetPos);
+		const target = aim.target;
+		const targetPos = aim.pos;
 
 		const time = gameState.ai.elapsedTime;
 		const attackedByStructure = this.answerAttackers(gameState, events, time);
@@ -2570,11 +2581,11 @@ export class AttackPlan
 		return true;
 	}
 
-	UpdateTarget(gameState: CommonGameState): boolean
+	UpdateTarget(gameState: CommonGameState): AttackAim | undefined
 	{
 		const pos = this.position;
 		if (!pos)
-			return false;
+			return undefined;
 		// First update the target position in case it's a unit (and check if it has garrisoned)
 		if (this.target && this.target.hasClass("Unit"))
 		{
@@ -2596,7 +2607,7 @@ export class AttackPlan
 		{
 			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
-				return false;
+				return undefined;
 
 			if (this.target && this.target.owner() !== this.targetPlayer)
 				this.target = undefined;
@@ -2613,7 +2624,7 @@ export class AttackPlan
 			if (!this.target)
 			{
 				if (this.uniqueTargetId)
-					return false;
+					return undefined;
 
 				// Check if we could help any current attack
 				const attackManager = hqOf(gameState).attackManager;
@@ -2633,7 +2644,7 @@ export class AttackPlan
 					this.target = attack.target;
 					this.targetPlayer = attack.targetPlayer;
 					this.targetPos = this.target.position();
-					return true;
+					return this.aim();
 				}
 
 				// If not, let's look for another enemy
@@ -2646,14 +2657,14 @@ export class AttackPlan
 					{
 						debugWarn(this.Config, 1, () => "No new target found. Remaining units " +
 							this.unitCollection.length);
-						return false;
+						return undefined;
 					}
 				}
 				debugWarn(this.Config, 1, () => "We will help one of our other attacks");
 			}
 			this.targetPos = this.target.position();
 		}
-		return true;
+		return this.aim();
 	}
 
 	/** reset any units */

@@ -13,6 +13,7 @@
  * key of FSM.states for UnitFsmSpec); refresh it when UnitAI.js changes its
  * states. A state not in it parses as "other" with its raw name.
  */
+import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { requireValue } from "./entityExtend.ts";
 
 export const UNIT_AI_STATES = [
@@ -202,7 +203,11 @@ export function requireStateName(ent: CommonEntity): string
 export function requireActivity(state: UnitState): string | undefined
 {
 	if (state.kind === "none")
-		requireValue(undefined);
+	{
+		const message = "Petra error: required value was unexpectedly undefined.";
+		aiWarn(message);
+		throw new Error(message);
+	}
 	return activityOf(state);
 }
 

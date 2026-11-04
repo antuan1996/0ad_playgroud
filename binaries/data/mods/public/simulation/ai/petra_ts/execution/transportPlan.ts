@@ -431,14 +431,14 @@ export class TransportPlan
 				// turn) is not tested for having drifted from it
 				const boardingPos = this.boardingPos[shipId];
 				const distShip = boardingPos ? SquareVectorDistance(boardingPos, ship.position()) : 0;
-				if (!shipTested[shipId] && distShip > this.boardingRange)
+				if (boardingPos && !shipTested[shipId] && distShip > this.boardingRange)
 				{
 					shipTested[shipId] = true;
-					this.checkBoardingShip(gameState, ent, ship, shipId, time);
+					this.checkBoardingShip(gameState, ent, ship, shipId, boardingPos, time);
 				}
 
 				if (since(ent, time) > 2)
-					this.checkBoardingUnit(gameState, ent, ship, shipId, distShip, time);
+					this.checkBoardingUnit(gameState, ent, ship, boardingPos, distShip, time);
 			}
 		}
 
@@ -454,9 +454,7 @@ export class TransportPlan
 		const shooters = shootersOf(gameState);
 		for (const ship of this.ships.values())
 		{
-			this.boardingPos[ship.id()] = undefined;
-			// with the plan's end position as destination, a boarding position is always found
-			const bp = requireValue(this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true));
+			const bp = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
 			this.boardingPos[ship.id()] = bp;
 			this.sailTo(gameState, ship, bp, shooters);
 		}
@@ -473,10 +471,12 @@ export class TransportPlan
 		if (ship)
 		{
 			const shipId = ship.id();
-			if (!this.boardingPos[shipId])
+			// a ship goes to a boarding point near the unit; one inside a building
+			// leaves that to the next unit on the map (the original threw)
+			const entPos = ent.position();
+			if (!this.boardingPos[shipId] && entPos)
 			{
-				// with the unit's position as destination, a boarding position is always found
-				const bp = requireValue(this.getBoardingPos(gameState, ship, this.startIndex, this.sea, ent.position(), false));
+				const bp = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, entPos, false);
 				this.boardingPos[shipId] = bp;
 				this.sailTo(gameState, ship, bp);
 				ship.setMetadata(PlayerID, "timeGarrison", time);
@@ -490,7 +490,8 @@ export class TransportPlan
 	}
 
 	/** A ship far from its boarding point while a unit waits for it: is it stuck? Then send it again, or to another point */
-	checkBoardingShip(gameState: CommonGameState, ent: CommonEntity, ship: CommonPlacedEntity, shipId: EntityId, time: GameSeconds): void
+	checkBoardingShip(gameState: CommonGameState, ent: CommonEntity, ship: CommonPlacedEntity, shipId: EntityId,
+		boardingPos: CommonPosition, time: GameSeconds): void
 	{
 		let retry = false;
 		const state = unitState(ship);
@@ -530,29 +531,30 @@ export class TransportPlan
 				this.nTry[shipId] = 1;
 			else
 				++this.nTry[shipId];
+			let bp = boardingPos;
 			if (this.nTry[shipId] > 1)	// we must have been blocked by something ... try with another boarding point
 			{
 				this.nTry[shipId] = 0;
 				debugWarn(this, 1, () => "ship " + shipId + " new attempt for a landing point ");
-				this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.startIndex, this.sea, undefined, false);
+				bp = this.retryBoardingPos(gameState, ship, boardingPos, this.startIndex, false);
+				this.boardingPos[shipId] = bp;
 			}
-			// a new search falls back to the previous boarding position
-			const bp = requireValue(this.boardingPos[shipId]);
 			this.sailTo(gameState, ship, bp);
 			ship.setMetadata(PlayerID, "timeGarrison", time);
 		}
 	}
 
 	/** A unit that has not moved for 2 s on its way to its ship: get it out of a trap, or nearer the boarding point */
-	checkBoardingUnit(gameState: CommonGameState, ent: CommonEntity, ship: CommonEntity, shipId: EntityId, distShip: number,
-		time: GameSeconds): void
+	checkBoardingUnit(gameState: CommonGameState, ent: CommonEntity, ship: CommonEntity, boardingPos: CommonPosition | undefined,
+		distShip: number, time: GameSeconds): void
 	{
 		// a unit without a position has just gone in (the original threw too)
 		const oldPos = ent.getMetadata(PlayerID, "posGarrison");
 		const newPos = ent.position();
 		if (oldPos && newPos && oldPos[0] === newPos[0] && oldPos[1] === newPos[1])
 		{
-			if (distShip < this.boardingRange)	// looks like we are blocked ... try to go out of this trap
+			// (a ship without a boarding point is no distance from it)
+			if (!boardingPos || distShip < this.boardingRange)	// looks like we are blocked ... try to go out of this trap
 			{
 				if (!this.nTry[ent.id()])
 					this.nTry[ent.id()] = 1;
@@ -572,9 +574,8 @@ export class TransportPlan
 			}
 			else
 			{
-				const bp = requireValue(this.boardingPos[shipId]);
-				if (SquareVectorDistance(bp, newPos) > 225)
-					ent.moveToRange(bp[0], bp[1], 0, 15);
+				if (SquareVectorDistance(boardingPos, newPos) > 225)
+					ent.moveToRange(boardingPos[0], boardingPos[1], 0, 15);
 			}
 		}
 		else
@@ -596,7 +597,25 @@ export class TransportPlan
 		return false;
 	}
 
-	/** when avoidEnnemy is true, we try to not board/unboard in ennemy territory */
+	/**
+	 * Another landing point for a ship blocked on its way to `current` (its
+	 * plan's land and sea): the nearest to the ship, or `current` when none is.
+	 */
+	retryBoardingPos(gameState: CommonGameState, ship: CommonEntity, current: CommonPosition, landIndex: AccessIndex,
+		avoidEnnemy: boolean): CommonPosition
+	{
+		return this.getBoardingPos(gameState, ship, landIndex, this.sea, undefined, avoidEnnemy) ?? current;
+	}
+
+	/**
+	 * The landing point nearest the destination on that land and sea; when
+	 * avoidEnnemy is true, we try to not board/unboard in ennemy territory.
+	 * With a destination there always is one (the destination itself when no
+	 * landing zone is better); without one, the ship's present boarding point
+	 * when nothing is found.
+	 */
+	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: AccessIndex, seaIndex: SeaIndex, destination: CommonPosition, avoidEnnemy?: boolean): CommonPosition;
+	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: AccessIndex, seaIndex: SeaIndex, destination?: CommonPosition, avoidEnnemy?: boolean): CommonPosition | undefined;
 	getBoardingPos(gameState: CommonGameState, ship: CommonEntity, landIndex: AccessIndex, seaIndex: SeaIndex, destination?: CommonPosition, avoidEnnemy: boolean = false): CommonPosition | undefined
 	{
 		if (!hqOf(gameState).navalManager.landingZones[landIndex])
@@ -681,8 +700,7 @@ export class TransportPlan
 		{
 			for (const ship of this.ships.values())
 			{
-				this.boardingPos[ship.id()] = undefined;
-				const boardingPos = requireValue(this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true));
+				const boardingPos = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
 				this.boardingPos[ship.id()] = boardingPos;
 				this.sailTo(gameState, ship, boardingPos);
 			}
@@ -798,7 +816,7 @@ export class TransportPlan
 		}
 		for (const shipId in shipsToMove)
 		{
-			const boardingPos = requireValue(this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true));
+			const boardingPos = this.getBoardingPos(gameState, shipsToMove[shipId], this.endIndex, this.sea, this.endPos, true);
 			this.boardingPos[shipId] = boardingPos;
 			this.sailTo(gameState, shipsToMove[shipId], boardingPos);
 		}
@@ -849,14 +867,14 @@ export class TransportPlan
 				this.nTry[shipId] = 1;
 			else
 				++this.nTry[shipId];
+			let newBp = bp;
 			if (this.nTry[shipId] > 2)	// we must have been blocked by something ... try with another boarding point
 			{
 				this.nTry[shipId] = 0;
 				debugWarn(this, 1, () => shipId + " new attempt for a landing point ");
-				this.boardingPos[shipId] = this.getBoardingPos(gameState, ship, this.endIndex, this.sea, undefined, true);
+				newBp = this.retryBoardingPos(gameState, ship, bp, this.endIndex, true);
+				this.boardingPos[shipId] = newBp;
 			}
-			// a new search falls back to the previous boarding position
-			const newBp = requireValue(this.boardingPos[shipId]);
 			this.sailTo(gameState, ship, newBp);
 		}
 	}
