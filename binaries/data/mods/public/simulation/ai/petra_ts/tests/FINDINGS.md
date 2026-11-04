@@ -2068,3 +2068,44 @@ So an army of 150 stood at a rally point for five minutes in a game it won,
 and its plans' per-unit work is the turn's cost. Not fixed: it is the
 attack's handling, stage 6's first item (the turn budget's 99.9th, and the
 army's use).
+Later found (§48): the turn's cost was mostly a leak of registered
+collections, which made every change of a unit's plan slow; the held army
+and the churn made many such changes. Fixed there; the army's use is left.
+
+## 48. Late-game turns: a collection registered on every turn (2026-11-04)
+
+Visual games stalled briefly every few seconds past minute 30. Measured on
+four long mirror games (`late-*` batches, seed pairs 10357832/21428834,
+581830560/441091089, 69005611/703238273, 501488891/576103559, 38-66 game
+minutes) with a new per-turn recorder (`PYROGENESIS_TURN_TIMES`, set by
+`match.sh -P`, `source/ps/MatchTimes.h`: each turn's whole update, the AI's
+state set-up and computation, the GC call after the turn, every GC slice with
+its reason and the AI player running then, and every `Engine.ProfileStart`
+region of the AI scripts, written to `turntimes.txt`):
+
+- Not the garbage collector: every slice kept to its 6 ms budget, none ran
+  inside an AI call. Not the AI's state set-up (under 5 ms).
+- 90% of the turns over 40 ms after minute 30 were the AI's own computation,
+  on the HQ turns (one in eight per player, so a stall every 0.8-1.6 s):
+  the attack plans' `assignUnits` (27 ms a slow turn) and the defense
+  manager (22 ms), and inside both the shared script's
+  `updateEntityCollections` for `metadata.plan` (52 ms a slow turn), each
+  call walking 4096-8192 registered collections; their number doubled every
+  ten minutes or so (128 at the start, 4096 by minute 25, 8192 by 55).
+- The registrations, counted by call site in one game: 4545 from
+  `AttackPlan.checkEvents`, none released. On every turn's events it made a
+  new `unitCollection` (`getOwnUnits().filter(byMetadata("plan", name))`)
+  and registered it, never unregistering the last (the original's
+  `attackPlan.js` 2188-2190, the port's copy). Each stayed in the shared
+  script's lists, for both players, and was re-filtered on every plan or
+  owner change of any entity.
+
+Fixed (the port, an original bug): the constructor's registered collection
+is kept; `checkEvents` makes none. The games are the same (the four long
+ones, 24 of 24 smoke games and the island game keep their fingerprints);
+past minute 30 the whole turn's 99.9th percentile went from 133 ms to 29,
+its worst from 545 to 41, the AI's computation's from 123 and 536 to 15 and
+29; turns over 40 ms from 182 to 2. Left: a started attack's update, 50-85
+ms on a few turns at minutes 15-20 (an army reaching its target), and the
+simulation's own cost, up to about 45 ms on every other turn in big
+battles, which is the engine's.

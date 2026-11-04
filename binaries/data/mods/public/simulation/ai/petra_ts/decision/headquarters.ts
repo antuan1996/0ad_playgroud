@@ -2859,12 +2859,22 @@ export class Headquarters
 	update(gameState: CommonGameState, queues: HeadquartersQueues, events: HeadquartersEvents): void
 	{
 		Engine.ProfileStart("Headquarters update");
+		Engine.ProfileStart("HQ emergency");
 		this.emergencyManager.update(gameState);
+		Engine.ProfileStop();
 		this.turnCache = {};
+		Engine.ProfileStart("HQ gatherEconomy");
 		this.gatherEconomy.update(gameState);
+		Engine.ProfileStop();
+		Engine.ProfileStart("HQ productionLoad");
 		this.productionLoad.update(gameState);
+		Engine.ProfileStop();
+		Engine.ProfileStart("HQ territoryMap");
 		this.geography.territoryMap = createTerritoryMap(gameState);
+		Engine.ProfileStop();
+		Engine.ProfileStart("HQ followCivCentreOrders");
 		this.followCivCentreOrders(gameState);
+		Engine.ProfileStop();
 		if (gameState.ai.playedTurn % 10 === 3)
 			this.provideForDryLand(gameState, queues);
 		if (this.geography.navalMap)
@@ -2900,8 +2910,12 @@ export class Headquarters
 		}
 		*/
 
+		Engine.ProfileStart("HQ checkEvents");
 		this.checkEvents(gameState, events);
+		Engine.ProfileStop();
+		Engine.ProfileStart("HQ naval checkEvents");
 		this.navalManager.checkEvents(gameState, queues, events);
+		Engine.ProfileStop();
 
 		if (this.phasing)
 			this.checkPhaseRequirements(gameState, queues);
@@ -2911,29 +2925,54 @@ export class Headquarters
 		if (this.hasActiveBase())
 		{
 			if (gameState.ai.playedTurn % 4 === 0)
+			{
+				Engine.ProfileStart("HQ trainMoreWorkers");
 				this.trainMoreWorkers(gameState, queues);
+				Engine.ProfileStop();
+			}
 
 			if (gameState.ai.playedTurn % 4 === 1)
+			{
+				Engine.ProfileStart("HQ buildMoreHouses");
 				this.buildMoreHouses(gameState, queues);
+				Engine.ProfileStop();
+			}
 
 			if ((!this.saveResources || this.canBarter) && gameState.ai.playedTurn % 4 === 2)
+			{
+				Engine.ProfileStart("HQ buildFarmstead");
 				this.buildFarmstead(gameState, queues);
+				Engine.ProfileStop();
+			}
 
 			if (this.needCorral && gameState.ai.playedTurn % 4 === 3)
+			{
+				Engine.ProfileStart("HQ manageCorral");
 				this.manageCorral(gameState, queues);
+				Engine.ProfileStop();
+			}
 
 			if (gameState.ai.playedTurn % 5 === 1)
+			{
+				Engine.ProfileStart("HQ research");
 				this.researchManager.update(gameState, queues);
+				Engine.ProfileStop();
+			}
 		}
 
 		if (!this.hasPotentialBase() ||
 		    this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1)
+		{
+			Engine.ProfileStart("HQ checkBaseExpansion");
 			this.checkBaseExpansion(gameState, queues);
+			Engine.ProfileStop();
+		}
 
 		if (this.currentPhase === 1 && gameState.ai.playedTurn % 3 === 0 && !this.canBarter)
 			this.buildEarlyMarket(gameState, queues);
 		if (this.currentPhase > 1 && gameState.ai.playedTurn % 3 === 0)
 		{
+			Engine.ProfileStart("HQ market forge temple wonder");
 			if (!this.canBarter)
 				this.buildMarket(gameState, queues);
 
@@ -2946,34 +2985,59 @@ export class Headquarters
 			if (gameState.ai.playedTurn % 30 === 0 &&
 			    gameState.getPopulation() > 0.9 * gameState.getPopulationMax())
 				this.buildWonder(gameState, queues, false);
+			Engine.ProfileStop();
 		}
 
+		Engine.ProfileStart("HQ trade");
 		this.tradeManager.update(gameState, events, queues);
+		Engine.ProfileStop();
 
+		Engine.ProfileStart("HQ garrison");
 		this.garrisonManager.update(gameState, events);
+		Engine.ProfileStop();
+		Engine.ProfileStart("HQ defense");
 		this.defenseManager.update(gameState, events);
+		Engine.ProfileStop();
 
 		if (gameState.ai.playedTurn % 3 === 0)
 		{
+			Engine.ProfileStart("HQ training buildings and defenses");
 			this.constructTrainingBuildings(gameState, queues);
 			if (this.Config.difficulty > difficulty.SANDBOX)
 				this.buildDefenses(gameState, queues);
+			Engine.ProfileStop();
 		}
 
+		Engine.ProfileStart("HQ bases");
 		this.basesManager.update(gameState, queues, events);
+		Engine.ProfileStop();
 
+		Engine.ProfileStart("HQ naval");
 		this.navalManager.update(gameState, queues, events);
+		Engine.ProfileStop();
 
 		if (this.Config.difficulty > difficulty.SANDBOX && (this.hasActiveBase() || !this.canBuildUnits))
+		{
+			Engine.ProfileStart("HQ attacks");
 			this.attackManager.update(gameState, queues, events);
+			Engine.ProfileStop();
+		}
 
+		Engine.ProfileStart("HQ diplomacy");
 		this.diplomacyManager.update(gameState, events);
+		Engine.ProfileStop();
 
+		Engine.ProfileStart("HQ victory");
 		this.victoryManager.update(gameState, events, queues);
+		Engine.ProfileStop();
 
 		// We update the capture strength at the end as it can change attack orders
 		if (gameState.ai.elapsedTime - this.capturableTargetsTime > 3)
+		{
+			Engine.ProfileStart("HQ updateCaptureStrength");
 			this.updateCaptureStrength(gameState);
+			Engine.ProfileStop();
+		}
 
 		Engine.ProfileStop();
 	}

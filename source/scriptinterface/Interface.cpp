@@ -26,6 +26,7 @@
 #include "ps/CLogger.h"
 #include "ps/CStr.h"
 #include "ps/Filesystem.h"
+#include "ps/MatchTimes.h"
 #include "ps/Profile.h"
 #include "ps/Profiler2.h"
 #include "ps/ThreadUtil.h"
@@ -266,6 +267,9 @@ void ProfileStart(const std::string& regionName)
 		g_Profiler.StartScript(name);
 
 	g_Profiler2.RecordRegionEnter(name);
+
+	if (MatchTimes::Enabled() && Threading::IsMainThread())
+		MatchTimes::RegionEnter(name);
 }
 
 void ProfileStop()
@@ -274,6 +278,9 @@ void ProfileStop()
 		g_Profiler.Stop();
 
 	g_Profiler2.RecordRegionLeave();
+
+	if (MatchTimes::Enabled() && Threading::IsMainThread())
+		MatchTimes::RegionLeave();
 }
 
 void ProfileAttribute(const std::string& attr)

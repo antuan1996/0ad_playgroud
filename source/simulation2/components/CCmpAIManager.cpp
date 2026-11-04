@@ -42,6 +42,7 @@
 #include "scriptinterface/FunctionWrapper.h"
 #include "scriptinterface/JSON.h"
 #include "scriptinterface/ModuleLoader.h"
+#include "ps/MatchTimes.h"
 #include "scriptinterface/Object.h"
 #include "scriptinterface/Context.h"
 #include "scriptinterface/Conversions.h"
@@ -271,6 +272,7 @@ public:
 	~CAIWorker()
 	{
 		WriteAITimes();
+		MatchTimes::Write();
 		// Init will always be called.
 		JS_RemoveExtraGCRootsTracer(m_ScriptInterface->GetGeneralJSContext(), Trace, this);
 	}
@@ -643,8 +645,11 @@ public:
 	{
 		if (!m_CommandsComputed)
 		{
+			const double start = MatchTimes::Enabled() ? timer_Time() : 0.0;
 			PerformComputation();
 			m_CommandsComputed = true;
+			if (start != 0.0)
+				MatchTimes::Add("aicompute", -1, start);
 		}
 	}
 
@@ -857,7 +862,9 @@ private:
 		{
 			PROFILE3("AI run shared component");
 			const double start = timing ? timer_Time() : 0.0;
+			MatchTimes::SetAIPlayer(0);
 			Script::Function::CallVoid(rq, m_SharedAIObj, "onUpdate", m_GameState);
+			MatchTimes::SetAIPlayer(-1);
 			if (timing)
 				m_AITimes.push_back({ m_Computations, 0, static_cast<float>((timer_Time() - start) * 1e6) });
 		}
@@ -869,10 +876,12 @@ private:
 			PROFILE2_ATTR("script: %ls", m_Players[i]->m_AIName.c_str());
 
 			const double start = timing ? timer_Time() : 0.0;
+			MatchTimes::SetAIPlayer(m_Players[i]->m_Player);
 			if (m_HasSharedComponent && m_Players[i]->m_UseSharedComponent)
 				m_Players[i]->Run(m_GameState, m_Players[i]->m_Player, m_SharedAIObj);
 			else
 				m_Players[i]->Run(m_GameState, m_Players[i]->m_Player);
+			MatchTimes::SetAIPlayer(-1);
 			if (timing)
 				m_AITimes.push_back({ m_Computations, m_Players[i]->m_Player,
 					static_cast<float>((timer_Time() - start) * 1e6) });
@@ -1044,6 +1053,12 @@ public:
 	void StartComputation() override
 	{
 		PROFILE("AI setup");
+		const double timingStart = MatchTimes::Enabled() ? timer_Time() : 0.0;
+		struct SetupTimer
+		{
+			double start;
+			~SetupTimer() { if (start != 0.0) MatchTimes::Add("aisetup", -1, start); }
+		} setupTimer{ timingStart };
 
 		const Script::Interface& scriptInterface = GetSimContext().GetScriptInterface();
 		Script::Request rq(scriptInterface);

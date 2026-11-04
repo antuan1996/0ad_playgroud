@@ -444,7 +444,7 @@ fi
 watchdog=""
 set +e
 if [ "$aiTimes" = true ]; then
-	PYROGENESIS_AI_TIMES="$out/aitimes.txt" "$game" "${args[@]}" >"$out/game.log" 2>&1 &
+	PYROGENESIS_AI_TIMES="$out/aitimes.txt" PYROGENESIS_TURN_TIMES="$out/turntimes.txt" "$game" "${args[@]}" >"$out/game.log" 2>&1 &
 else
 	"$game" "${args[@]}" >"$out/game.log" 2>&1 &
 fi

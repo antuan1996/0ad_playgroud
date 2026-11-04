@@ -59,7 +59,9 @@ export class DefenseManager
 	{
 		Engine.ProfileStart("Defense Manager");
 
+		Engine.ProfileStart("defense checkEvents");
 		this.checkEvents(gameState, events);
+		Engine.ProfileStop();
 
 		// Check if our potential targets are still valid.
 		for (let i = 0; i < this.targetList.length; ++i)
@@ -97,9 +99,15 @@ export class DefenseManager
 				this.attackedAllies[ally] += 1;
 			}
 		}
+		Engine.ProfileStart("defense checkEnemyArmies");
 		this.checkEnemyArmies(gameState);
+		Engine.ProfileStop();
+		Engine.ProfileStart("defense checkEnemyUnits");
 		this.checkEnemyUnits(gameState);
+		Engine.ProfileStop();
+		Engine.ProfileStart("defense assignDefenders");
 		this.assignDefenders(gameState);
+		Engine.ProfileStop();
 
 		Engine.ProfileStop();
 	}

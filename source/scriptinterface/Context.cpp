@@ -24,6 +24,7 @@
 #include "lib/alignment.h"
 #include "lib/debug.h"
 #include "ps/Profile.h"
+#include "ps/MatchTimes.h"
 #include "ps/Profiler2.h"
 #include "ps/ThreadUtil.h"
 #include "scriptinterface/ModuleLoader.h"
@@ -43,7 +44,7 @@ namespace JS { class Realm; }
 struct JSContext;
 struct JSRuntime;
 
-void GCSliceCallbackHook(JSContext*, JS::GCProgress progress, const JS::GCDescription&)
+void GCSliceCallbackHook(JSContext*, JS::GCProgress progress, const JS::GCDescription& desc)
 {
 	/**
 	 * From the GCAPI.h file:
@@ -59,12 +60,16 @@ void GCSliceCallbackHook(JSContext*, JS::GCProgress progress, const JS::GCDescri
 		if (CProfileManager::IsInitialised() && Threading::IsMainThread())
 			g_Profiler.Start("GCSlice");
 		g_Profiler2.RecordRegionEnter("GCSlice");
+		if (MatchTimes::Enabled() && Threading::IsMainThread())
+			MatchTimes::GCSliceBegin(JS::ExplainGCReason(desc.reason_));
 	}
 	else if (progress == JS::GC_SLICE_END)
 	{
 		if (CProfileManager::IsInitialised() && Threading::IsMainThread())
 			g_Profiler.Stop();
 		g_Profiler2.RecordRegionLeave();
+		if (MatchTimes::Enabled() && Threading::IsMainThread())
+			MatchTimes::GCSliceEnd();
 	}
 
 	// The following code can be used to print some information aobut garbage collection

@@ -28,6 +28,7 @@
 #include "lib/path.h"
 #include "lib/sysdep/filesystem.h"
 #include "lib/timer.h"
+#include "ps/MatchTimes.h"
 #include "lib/utf8.h"
 #include "maths/Fixed.h"
 #include "maths/MathUtil.h"
@@ -119,6 +120,7 @@ public:
 
 	~CSimulation2Impl()
 	{
+		MatchTimes::Write();
 		UnregisterFileReloadFunc(ReloadChangedFileCB, this);
 	}
 
@@ -388,6 +390,10 @@ void CSimulation2Impl::Update(int turnLength, const std::vector<SimulationComman
 {
 	PROFILE3("sim update");
 	PROFILE2_ATTR("turn %d", m_TurnNumber);
+	const bool matchTimes = MatchTimes::Enabled();
+	const double turnStart = matchTimes ? timer_Time() : 0.0;
+	if (matchTimes)
+		MatchTimes::BeginTurn();
 
 	fixed turnLengthFixed = fixed::FromInt(turnLength) / 1000;
 
@@ -534,7 +540,13 @@ void CSimulation2Impl::Update(int turnLength, const std::vector<SimulationComman
 
 	// (TODO: we ought to schedule this for a frame where we're not
 	// running the sim update, to spread the load)
+	const double gcStart = matchTimes ? timer_Time() : 0.0;
 	scriptInterface.GetContext().MaybeIncrementalGC();
+	if (matchTimes)
+	{
+		MatchTimes::Add("gc", -1, gcStart);
+		MatchTimes::Add("turn", -1, turnStart);
+	}
 
 	if (m_EnableOOSLog)
 		DumpState();

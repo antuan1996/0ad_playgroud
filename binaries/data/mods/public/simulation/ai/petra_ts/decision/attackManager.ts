@@ -321,13 +321,21 @@ export class AttackManager
 		if (this.Config.debug > 2 && gameState.ai.elapsedTime > this.debugTime + 60)
 			this.warnAttacks(gameState);
 
+		Engine.ProfileStart("attacks checkEvents");
 		this.checkEvents(gameState, events);
+		Engine.ProfileStop();
+		Engine.ProfileStart("attacks upcoming");
 		const unexecutedAttacks = this.updateUpcomingAttacks(gameState, events);
+		Engine.ProfileStop();
+		Engine.ProfileStart("attacks started");
 		this.updateStartedAttacks(gameState, events);
+		Engine.ProfileStop();
 
 		// creating plans after updating because an aborted plan might be reused in that case.
 
+		Engine.ProfileStart("attacks create");
 		this.createAttacks(gameState, unexecutedAttacks);
+		Engine.ProfileStop();
 
 		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 &&
 			gameState.ai.HQ.defenseManager.targetList.length)
@@ -400,7 +408,9 @@ export class AttackManager
 						"started ???");
 				}
 
+				Engine.ProfileStart("attack preparation " + attackType);
 				const updateStep = attack.updatePreparation(gameState);
+				Engine.ProfileStop();
 				// now we're gonna check if the preparation time is over
 				if (updateStep === AttackPlan.PREPARATION_KEEP_GOING || attack.isPaused())
 				{
