@@ -26,6 +26,7 @@ import type { Geography } from "../world/geography.ts";
 import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Naval Manager
@@ -88,7 +89,7 @@ export class NavalManager
 		for (const fish of gameState.getFishableSupplies().values())
 		{
 			const sea = this.getFishSea(gameState, fish);
-			const amount = requireValue(fish.resourceSupplyAmount());
+			const amount = fish.resourceSupplyAmount();
 			if (sea && availableFishes[sea])
 				availableFishes[sea] += amount;
 			else if (sea)
@@ -240,7 +241,7 @@ export class NavalManager
 	}
 
 	/** Get the sea, cache it if not yet done and check if in opensea */
-	getFishSea(gameState: CommonGameState, fish: CommonEntity): number
+	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
 	{
 		let sea = fish.getMetadata(PlayerID, "sea");
 		if (sea)
@@ -278,7 +279,7 @@ export class NavalManager
 	}
 
 	/** check if we can safely fish at the fish position */
-	canFishSafely(gameState: CommonGameState, fish: CommonEntity): boolean
+	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
 	{
 		if (fish.getMetadata(PlayerID, "opensea"))
 			return true;
@@ -361,7 +362,7 @@ export class NavalManager
 				// just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
 				plan.units.forEach((ent) =>
 				{
-					if (ent.getMetadata(PlayerID, "onBoard") === "onBoard" && ent.position() ||
+					if (ent.getMetadata(PlayerID, "onBoard") === "onBoard" && isPlaced(ent) ||
 					    ent.getMetadata(PlayerID, "onBoard") === shipId)
 						ent.setMetadata(PlayerID, "onBoard", undefined);
 				});
@@ -372,9 +373,9 @@ export class NavalManager
 				const endIndex = plan.endIndex;
 				for (const ent of plan.units.values())
 				{
-					if (!ent.position())  // unit from another ship of this plan ... do nothing
+					if (!isPlaced(ent))  // unit from another ship of this plan ... do nothing
 						continue;
-					const access = requireValue(getLandAccess(gameState, ent));
+					const access = getLandAccess(gameState, ent);
 					const endPos = requireMetadata(ent, "endPos");
 					ent.setMetadata(PlayerID, "transport", undefined);
 					ent.setMetadata(PlayerID, "onBoard", undefined);
@@ -662,8 +663,8 @@ export class NavalManager
 		}
 		// the enemy's towers, fortresses and civic centres: prey in their reach is let be
 		const towers = gameState.getEnemyStructures().toEntityArray()
-			.filter(ent => ent.owner() !== GAIA && ent.hasDefensiveFire() && ent.position() !== undefined)
-			.map(ent => ({ "pos": requireValue(ent.position()), "range": ent.attackRange("Ranged")?.max ?? DEFAULT_TOWER_REACH }));
+			.filter(ent => ent.owner() !== GAIA && ent.hasDefensiveFire())
+			.map(ent => ({ "pos": ent.position(), "range": ent.attackRange("Ranged")?.max ?? DEFAULT_TOWER_REACH }));
 		for (const ship of this.warShips.values())
 		{
 			const pos = ship.position();
@@ -699,7 +700,7 @@ export class NavalManager
 	/** Return true if this ship is likeky (un)garrisoning units */
 	isShipBoarding(ship: CommonEntity): boolean
 	{
-		if (!ship.position())
+		if (!isPlaced(ship))
 			return false;
 		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
 		const bp = plan?.boardingPos[ship.id()];
@@ -739,14 +740,14 @@ export class NavalManager
 
 	moveApart(gameState: CommonGameState): void
 	{
-		const blockedShips = [];
+		const blockedShips: CommonPlacedEntity[] = [];
 		const blockedIds = [];
 
 		for (const ship of this.ships.values())
 		{
-			const shipPosition = ship.position();
-			if (!shipPosition)
+			if (!isPlaced(ship))
 				continue;
+			const shipPosition = ship.position();
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.isShipBoarding(ship))
 				continue;
 
@@ -773,9 +774,9 @@ export class NavalManager
 
 		for (const ship of gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).values())
 		{
-			const shipPosition = ship.position();
-			if (!shipPosition)
+			if (!isPlaced(ship))
 				continue;
+			const shipPosition = ship.position();
 			const role = ship.getMetadata(PlayerID, "role");
 			if (role === undefined || role !== Worker.ROLE_TRADER)	// already accounted before
 				continue;
@@ -799,7 +800,7 @@ export class NavalManager
 			const sea = requireMetadata(ship, "sea");
 			for (const blockingShip of requireValue(this.seaShips[sea]).values())
 			{
-				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !blockingShip.position())
+				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !isPlaced(blockingShip))
 					continue;
 				const distSquare = SquareVectorDistance(shipPosition, blockingShip.position());
 				const state = unitState(blockingShip);
@@ -819,7 +820,7 @@ export class NavalManager
 			{
 				if (blockingShip.getMetadata(PlayerID, "sea") !== sea)
 					continue;
-				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !blockingShip.position())
+				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !isPlaced(blockingShip))
 					continue;
 				const role = blockingShip.getMetadata(PlayerID, "role");
 				if (role === undefined || role !== Worker.ROLE_TRADER)	// already accounted before

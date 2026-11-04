@@ -14,6 +14,7 @@ import { requiredStateWithin } from "../adapter/unitState.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export type TradeRoute = {
 	source: EntityId;
@@ -175,7 +176,7 @@ export class TradeManager
 			return;
 		}
 
-		if (!this.hasTradeRoute() || !ent.isIdle() || !ent.position())
+		if (!this.hasTradeRoute() || !ent.isIdle() || !isPlaced(ent))
 			return;
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 			return;
@@ -199,7 +200,8 @@ export class TradeManager
 		}
 		const routeSource = gameState.getEntityById(route.source);
 		const routeTarget = gameState.getEntityById(route.target);
-		if (!routeSource || !routeTarget)
+		// the route's markets: on the map
+		if (!routeSource || !routeTarget || !isPlaced(routeSource) || !isPlaced(routeTarget))
 			return;
 
 		let nearerSource = true;
@@ -517,15 +519,13 @@ export class TradeManager
 
 		for (const m1 of market1.values())
 		{
-			if (!m1.position())
-				continue;
 			const access1 = getLandAccess(gameState, m1);
 			const sea1 = m1.hasClass("Naval") ? getSeaAccess(gameState, m1) : undefined;
 			for (const m2 of market2.values())
 			{
 				if (onlyOurs && m1.id() >= m2.id())
 					continue;
-				if (!m2.position())
+				if (!isPlaced(m2))
 					continue;
 				const access2 = getLandAccess(gameState, m2);
 				const sea2 = m2.hasClass("Naval") ? getSeaAccess(gameState, m2) : undefined;
@@ -637,7 +637,7 @@ export class TradeManager
 		if (!presentRoute)
 			return;
 
-		if (!ent.position())
+		if (!isPlaced(ent))
 		{
 			// This trader is garrisoned, we will decide later (when ungarrisoning) what to do
 			ent.setMetadata(PlayerID, "route", undefined);

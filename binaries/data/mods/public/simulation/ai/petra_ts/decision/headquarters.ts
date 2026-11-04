@@ -40,12 +40,13 @@ import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
 	allowDistantFood?: boolean;
 	wantedRates?: Record<string, number>;
-	firingStructures?: CommonEntityCollection;
+	firingStructures?: CommonEntityCollection<CommonPlacedEntity>;
 	numAround?: Record<number, number>;
 	accountedPopulation?: number;
 	accountedWorkers?: number;
@@ -168,7 +169,7 @@ export class Headquarters
 	towerLapseTime: GameSeconds;
 	towerStartTime: GameSeconds;
 	tradeManager: TradeManager;
-	treasures: CommonEntityCollection;
+	treasures: CommonEntityCollection<CommonPlacedEntity>;
 	turnCache: HeadquartersTurnCache;
 	victoryManager: VictoryManager;
 
@@ -228,7 +229,7 @@ export class Headquarters
 		this.capturableTargets = new Map();
 		this.capturableTargetsTime = seconds(0);
 
-		this.treasures = gameState.getEntities().filter((ent) => ent.isTreasure());
+		this.treasures = gameState.getEntities().filter((ent): ent is CommonPlacedEntity => ent.isTreasure() && isPlaced(ent));
 		this.treasures.registerUpdates();
 		this.currentPhase = gameState.currentPhase();
 
@@ -322,7 +323,7 @@ export class Headquarters
 				if (!ent || !ent.isOwn(PlayerID))
 					continue;
 
-				if (!ent.position())
+				if (!isPlaced(ent))
 				{
 					// we are autogarrisoned, check that the holder is registered in the garrisonManager
 					const holderID = ent.garrisonHolderID();
@@ -1357,6 +1358,9 @@ export class Headquarters
 			let gainMultiplier;
 			for (const market of markets)
 			{
+				// a market: on the map
+				if (!isPlaced(market))
+					continue;
 				if (isNavalMarket && template.hasClasses(["Naval+Trade"]))
 				{
 					if (getSeaAccess(gameState, market) !== gameState.ai.accessibility.getAccessValue(pos, true))
@@ -1524,8 +1528,6 @@ export class Headquarters
 				if (str.foundationProgress() !== undefined)
 					continue;
 				const strPos = str.position();
-				if (!strPos)
-					continue;
 				const dist = SquareVectorDistance(strPos, pos);
 				if (dist < 6400) // TODO check on true attack range instead of this 80×80
 				{
@@ -1542,8 +1544,6 @@ export class Headquarters
 			for (const str of ownStructures)
 			{
 				const strPos = str.position();
-				if (!strPos)
-					continue;
 				if (SquareVectorDistance(strPos, pos) < cutDist)
 				{
 					minDist = -1;
@@ -2383,7 +2383,7 @@ export class Headquarters
 		let distMin = Math.min();
 		for (const cce of ccEnts)
 		{
-			if (gameState.isPlayerAlly(cce.owner()))
+			if (!isPlaced(cce) || gameState.isPlayerAlly(cce.owner()))
 				continue;
 			if (enemyFound && !gameState.isPlayerEnemy(cce.owner()))
 				continue;
@@ -2391,7 +2391,7 @@ export class Headquarters
 			const isEnemy = gameState.isPlayerEnemy(cce.owner());
 			for (const cc of ccEnts)
 			{
-				if (cc.owner() !== PlayerID)
+				if (cc.owner() !== PlayerID || !isPlaced(cc))
 					continue;
 				if (getLandAccess(gameState, cc) !== access)
 					continue;
@@ -2427,7 +2427,7 @@ export class Headquarters
 			// check nearest base anchor
 			for (const base of this.baseManagers())
 			{
-				if (!base.anchor || !base.anchor.position())
+				if (!base.anchor)
 					continue;
 				if (getLandAccess(gameState, base.anchor) !== access)
 					continue;
@@ -2464,7 +2464,7 @@ export class Headquarters
 				// only unit batches are trained with a garrisonType metadata (Petra never
 				// attaches it to research), so the unit-only `count` field is present.
 				if (item.metadata && item.metadata.garrisonType)
-					numGarrisoned += requireValue(item.count);
+					numGarrisoned += item.count;
 				else if (!item.progress && (!item.metadata || !item.metadata.trainer))
 					nearestAnchor.stopProduction(item.id);
 			}
@@ -2780,7 +2780,7 @@ export class Headquarters
 	/**
 	 * Check if a structure in blinking territory should/can be defended (currently if it has some attacking armies around)
 	 */
-	isDefendable(ent: CommonEntity): boolean
+	isDefendable(ent: CommonPlacedEntity): boolean
 	{
 		if (!this.turnCache.numAround)
 			this.turnCache.numAround = {};
@@ -2893,7 +2893,7 @@ export class Headquarters
 		if (this.Config.debug > 1)
 		{
 			gameState.getOwnUnits().forEach (function (ent) {
-				if (!ent.position())
+				if (!isPlaced(ent))
 					return;
 				dumpEntity(ent);
 			});

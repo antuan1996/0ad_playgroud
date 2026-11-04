@@ -9,6 +9,7 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import type { ResourceSupply } from "../decision/baseManager.ts";
 import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export class BaseResources
 {
@@ -28,7 +29,7 @@ export class BaseResources
 	 * distance; false if the dropsite was listed already. `baseAccess` is the
 	 * base's land; the baseless pool (`baseless`) takes each dropsite's own.
 	 */
-	addDropsite(gameState: CommonGameState, dropsite: CommonEntity, baseAccess: AccessIndex | undefined, baseless: boolean,
+	addDropsite(gameState: CommonGameState, dropsite: CommonPlacedEntity, baseAccess: AccessIndex | undefined, baseless: boolean,
 		maxDistResourceSquare: number, debug: number): boolean
 	{
 		if (this.dropsites[dropsite.id()])
@@ -60,7 +61,7 @@ export class BaseResources
 
 				resources.forEach(function(supply: CommonEntity): void 
 				{
-					if (!supply.position())
+					if (!isPlaced(supply))
 						return;
 					// Moving resources and fields are treated differently.
 					if (supply.hasClasses(["Animal", "Field"]))

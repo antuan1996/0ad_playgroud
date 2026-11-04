@@ -8,6 +8,7 @@ import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
 import { NEW_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -142,7 +143,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		// Check for treasures around available in some maps at startup
 		for (const ent of gameState.getOwnUnits().values())
 		{
-			if (!ent.position())
+			if (!isPlaced(ent))
 				continue;
 			// If we can get a treasure around, just do it
 			if (ent.isIdle())
@@ -192,7 +193,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		if (!pos)
 		{
 			const holder = getHolder(gameState, ent);
-			if (!holder || !holder.position())
+			if (!holder || !isPlaced(holder))
 				continue;
 			pos = holder.position();
 		}

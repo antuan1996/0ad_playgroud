@@ -9,6 +9,7 @@ import { Worker } from "../execution/worker.ts";
 import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
 import { requireStateName } from "../adapter/unitState.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export interface SerializedBasesManager {
 	properties: {
@@ -170,7 +171,7 @@ export class BasesManager
 			if (!base.anchorId || base.anchorId !== evt.entity)
 				continue;
 			base.anchorId = evt.newentity;
-			base.anchor = ent;
+			base.anchor = ent && isPlaced(ent) ? ent : undefined;
 		}
 	}
 
@@ -344,7 +345,7 @@ export class BasesManager
 					base.reassignIdleWorkers(gameState, [ent]);
 					base.workerObject.update(gameState, ent);
 				}
-				else if (ent.resourceSupplyType() && ent.position())
+				else if (ent.resourceSupplyType() && isPlaced(ent))
 				{
 					const type = ent.resourceSupplyType();
 					if (!type || !type.generic)
@@ -356,7 +357,7 @@ export class BasesManager
 					let goal;
 					for (const dropsite of dropsites.values())
 					{
-						if (!dropsite.position() || getLandAccess(gameState, dropsite) !== access)
+						if (!isPlaced(dropsite) || getLandAccess(gameState, dropsite) !== access)
 							continue;
 						const dist = SquareVectorDistance(pos, dropsite.position());
 						if (dist > distmin)
@@ -669,7 +670,7 @@ export class BasesManager
 					bestbase.assignEntity(gameState, garrisoned);
 			}
 		// and find something useful to do if we already have a base
-		if (ent.position() && bestbase && bestbase.ID !== this.noBase.ID)
+		if (isPlaced(ent) && bestbase && bestbase.ID !== this.noBase.ID)
 		{
 			bestbase.assignRolelessUnits(gameState, [ent]);
 			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
@@ -748,7 +749,7 @@ export class BasesManager
 		const pos: CommonPosition = worldPos(gameState.ai.HQ.geography.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.geography.territoryMap.width + 0.5), gameState.ai.HQ.geography.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.geography.territoryMap.width) + 0.5));
 		for (const base of this.baseManagers)
 		{
-			if (!base.anchor || !base.anchor.position())
+			if (!base.anchor)
 				continue;
 			if (base.accessIndex !== access)
 				continue;

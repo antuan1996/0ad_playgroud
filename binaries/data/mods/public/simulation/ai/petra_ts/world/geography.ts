@@ -14,6 +14,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { type TerritoryMap, createBorderMap, createTerritoryMap } from "./mapModule.ts";
 import { landRegion, seaRegion } from "../adapter/brands.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /** The land and sea regions we use, and whether the map has a sea worth a navy. */
 export type MapRegions = {
@@ -101,7 +102,7 @@ function analyseRegions(gameState: CommonGameState, debug: number): MapRegions |
 		const civ = gameState.getPlayerCiv();
 		for (const ent of gameState.getOwnEntities().values())
 		{
-			if (!ent.position() || !ent.hasClass("Unit") && !ent.trainableEntities(civ))
+			if (!isPlaced(ent) || !ent.hasClass("Unit") && !ent.trainableEntities(civ))
 				continue;
 			const land = accessibility.getAccessValue(ent.position());
 			if (land > 1)

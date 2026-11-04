@@ -4,6 +4,7 @@ import type { Config } from "./config.ts";
 import { playerId, seconds } from "../adapter/brands.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 type DiplomacyRequestType = "ally" | "neutral";
 type DiplomacyRequestStatus = "accepted" | "allianceBroken" | "declinedRequest" | "waitingForTribute";
@@ -292,7 +293,7 @@ export class DiplomacyManager
 		for (const evt of events.Attacked)
 		{
 			const target = gameState.getEntityById(evt.target);
-			if (!target || !target.position() ||
+			if (!target || !isPlaced(target) ||
 				gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
 				!gameState.isPlayerEnemy(target.owner()))
 				continue;

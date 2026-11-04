@@ -8,6 +8,7 @@ import { debugShade } from "../adapter/commands.ts";
 import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Describes a transport plan
@@ -246,7 +247,7 @@ export class TransportPlan
 		// choose a unit of this plan not yet assigned to a ship
 		for (const ent of this.units.values())
 		{
-			if (!ent.position() || ent.getMetadata(PlayerID, "onBoard") !== undefined)
+			if (!isPlaced(ent) || ent.getMetadata(PlayerID, "onBoard") !== undefined)
 				continue;
 			pos = ent.position();
 			break;
@@ -256,7 +257,7 @@ export class TransportPlan
 		let nearest: CommonEntity | undefined;
 		requireValue(hqOf(gameState).navalManager.seaTransportShips[this.sea]).forEach((ship) =>
 		{
-			if (ship.getMetadata(PlayerID, "transporter"))
+			if (ship.getMetadata(PlayerID, "transporter") || !isPlaced(ship))
 				return;
 			if (pos)
 			{
@@ -358,17 +359,17 @@ export class TransportPlan
 		const ent = this.units.toEntityArray()[0];
 		const baseID = ent.getMetadata(PlayerID, "base");
 		let base = baseID === undefined ? undefined : hqOf(gameState).getBaseByID(baseID);
-		if (!base || !base.anchor || !base.anchor.position())
+		if (!base || !base.anchor || !isPlaced(base.anchor))
 		{
 			for (const newbase of hqOf(gameState).baseManagers())
 			{
-				if (!newbase.anchor || !newbase.anchor.position())
+				if (!newbase.anchor || !isPlaced(newbase.anchor))
 					continue;
 				ent.setMetadata(PlayerID, "base", newbase.ID);
 				base = newbase;
 				break;
 			}
-			if (!base || !base.anchor || !base.anchor.position())
+			if (!base || !base.anchor || !isPlaced(base.anchor))
 				return false;
 			const baseForUnits = base;
 			this.units.forEach((unit) => { unit.setMetadata(PlayerID, "base", baseForUnits.ID); });
@@ -422,6 +423,9 @@ export class TransportPlan
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 					continue;
 				}
+				// a ship sails: never off the map
+				if (!isPlaced(ship))
+					continue;
 				// set when the first unit was sent to this ship; a ship without one
 				// (FINDINGS §32: the original threw too, ending the boarding for the
 				// turn) is not tested for having drifted from it
@@ -486,7 +490,7 @@ export class TransportPlan
 	}
 
 	/** A ship far from its boarding point while a unit waits for it: is it stuck? Then send it again, or to another point */
-	checkBoardingShip(gameState: CommonGameState, ent: CommonEntity, ship: CommonEntity, shipId: EntityId, time: GameSeconds): void
+	checkBoardingShip(gameState: CommonGameState, ent: CommonEntity, ship: CommonPlacedEntity, shipId: EntityId, time: GameSeconds): void
 	{
 		let retry = false;
 		const state = unitState(ship);
@@ -607,6 +611,9 @@ export class TransportPlan
 		}
 
 		const startPos = ship.position();
+		// a ship off the map (never: ships are not garrisoned) has no landing nearer than the destination
+		if (!startPos)
+			return destination;
 		let distmin = Math.min();
 		let posmin = destination;
 		const width = gameState.getPassabilityMap().width;
@@ -695,7 +702,7 @@ export class TransportPlan
 			const ent = gameState.getEntityById(recov.entId);
 			if (!ent)  // entity destroyed
 				continue;
-			if (!ent.position())  // reloading succeeded ... move a bit the ship before trying again
+			if (!isPlaced(ent))  // reloading succeeded ... move a bit the ship before trying again
 			{
 				const ship = gameState.getEntityById(recov.shipId);
 				if (ship)
@@ -704,7 +711,7 @@ export class TransportPlan
 			}
 			debugWarn(this, 1, () => ">>> transport " + this.ID + " reloading failed ... <<<");
 			// destroy the unit if inaccessible otherwise leave it there
-			const index = requireValue(getLandAccess(gameState, ent));
+			const index = getLandAccess(gameState, ent);
 			if (hqOf(gameState).geography.landRegions[index])
 			{
 				debugWarn(this, 1, () => " recovered entity kept " + ent.id());
@@ -732,7 +739,7 @@ export class TransportPlan
 			const ent = gameState.getEntityById(entId);
 			if (!ent)  // entity destroyed
 				continue;
-			else if (!ent.position())  // unloading failed
+			else if (!isPlaced(ent))  // unloading failed
 			{
 				const ship = this.shipOf(gameState, ent);
 				if (ship)
@@ -804,7 +811,7 @@ export class TransportPlan
 		// only a ship that has stopped: Petra took any ship not WALKING, one
 		// between two of its route's waypoints too, and sent it again by a new
 		// route every turn, a new landing point every third (FINDINGS §41)
-		if (!ship.isIdle())
+		if (!ship.isIdle() || !isPlaced(ship))
 			return;
 		const shipId = ship.id();
 		// set for every ship of the plan when it set sail

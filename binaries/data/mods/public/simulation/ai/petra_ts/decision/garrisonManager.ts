@@ -5,6 +5,7 @@ import type { Config } from "./config.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export type GarrisonHolderData = {
 	list: EntityId[];
@@ -73,7 +74,7 @@ export class GarrisonManager
 			// Update the list of garrisoned units
 			this.updateGarrisonList(gameState, holder, id, list, events);
 
-			if (!holder.position())     // could happen with siege unit inside a ship
+			if (!isPlaced(holder))     // could happen with siege unit inside a ship
 				continue;
 
 			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
@@ -116,7 +117,8 @@ export class GarrisonManager
 		for (const [id, gmin] of this.decayingStructures.entries())
 		{
 			const ent = gameState.getEntityById(id);
-			if (!ent || ent.owner() !== PlayerID)
+			// a decaying structure: on the map
+			if (!ent || !isPlaced(ent) || ent.owner() !== PlayerID)
 				this.decayingStructures.delete(id);
 			else if (this.numberOfGarrisonedSlots(ent) < gmin)
 				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, { "min": gmin, "type": GarrisonManager.TYPE_DECAY });
@@ -216,7 +218,7 @@ export class GarrisonManager
 	}
 
 	/** Which threats are within the holder's range: defensive structures, siege and other units */
-	threatsAround(gameState: CommonGameState, holder: CommonEntity): GarrisonThreats
+	threatsAround(gameState: CommonGameState, holder: CommonPlacedEntity): GarrisonThreats
 	{
 		const holderAttackRange = holder.attackRange("Ranged");
 		const range = holderAttackRange ? holderAttackRange.max : 80;
@@ -238,7 +240,7 @@ export class GarrisonManager
 			}
 			else
 				continue;
-			if (!ent.position())
+			if (!isPlaced(ent))
 				continue;
 			const dist = SquareVectorDistance(ent.position(), holder.position());
 			if (dist > range*range)

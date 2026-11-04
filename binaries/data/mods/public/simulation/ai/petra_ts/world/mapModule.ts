@@ -5,6 +5,7 @@ import { getMapIndices } from "simulation/ai/common-api/utils.js";
 import * as mapMask from "./mapMask.ts";
 import { cellIndex, playerId } from "../adapter/brands.ts";
 import { debugShade } from "../adapter/commands.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /** map functions */
 
@@ -110,8 +111,6 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 				[];
 			for (const ent of structures.values())
 			{
-				if (!ent.position())
-					continue;
 				const pos = ent.position();
 				const x = Math.round(pos[0] / cellSize);
 				const z = Math.round(pos[1] / cellSize);
@@ -232,9 +231,9 @@ export function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 	const cell = map.cellSize;
 	gameState.getEntities().forEach((ent) =>
 	{
-		const pos = ent.position();
-		if (!pos)
+		if (!isPlaced(ent))
 			return;
+		const pos = ent.position();
 		const x = Math.round(pos[0] / cell);
 		const z = Math.round(pos[1] / cell);
 		const id = x + width*z;

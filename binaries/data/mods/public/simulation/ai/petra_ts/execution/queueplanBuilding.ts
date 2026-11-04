@@ -9,6 +9,7 @@ import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { NEW_ANCHORLESS_BASE, NO_BASE, NO_LAND, cellIndex, landRegion, worldPos } from "../adapter/brands.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { hqOf } from "./hq.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export type BuildingPosition = {
 	x: number;
@@ -311,7 +312,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 
 			if (!HQ.requireHouses || !template.hasClass("House"))
 			{
-				gameState.getOwnStructures().forEach(function(ent: CommonEntity): void
+				gameState.getOwnStructures().forEach((ent) =>
 				{
 					const pos = ent.position();
 					const x = Math.round(pos[0] / cellSize);
@@ -575,7 +576,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 	 * and far from our docks on its sea, for trade: its added score
 	 */
 	overseaDockScore(gameState: CommonGameState, pos: CommonPosition, sea: number, ccEnts: CommonEntityCollection | null,
-		docks: CommonEntityCollection | null, width: number, cellSize: number, factor: number): number | undefined
+		docks: CommonEntityCollection<CommonPlacedEntity> | null, width: number, cellSize: number, factor: number): number | undefined
 	{
 		// Not much farther to one of our cc than to enemy ones
 		let enemyDist;
@@ -584,7 +585,7 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 			for (const cc of ccEnts.values())
 		{
 			const owner = cc.owner();
-			if (owner !== PlayerID && !gameState.isPlayerEnemy(owner))
+			if (owner !== PlayerID && !gameState.isPlayerEnemy(owner) || !isPlaced(cc))
 				continue;
 			const dist = SquareVectorDistance(pos, cc.position());
 			if (owner === PlayerID && (!ownDist || dist < ownDist))

@@ -84,7 +84,30 @@ type CommonTemplate = import("simulation/ai/common-api/entity.js").Template;
 
 type CommonEntity = import("simulation/ai/common-api/entity.js").Entity;
 
-type CommonEntityCollection = import("simulation/ai/common-api/entitycollection.js").EntityCollection;
+/**
+ * A collection of entities; `E` says what every member is (a structure's or a
+ * supply's collection holds only entities on the map: `CommonPlacedEntity`).
+ */
+type CommonEntityCollection<E extends CommonEntity = CommonEntity> = import("simulation/ai/common-api/entitycollection.js").EntityCollection<E>;
+
+/**
+ * An entity whose position is known this turn (adapter/placed.ts isPlaced).
+ * Structures and resource supplies are always on the map: their queries
+ * return these; a unit is one only while it is not garrisoned or aboard.
+ */
+type CommonPlacedEntity = { position(): CommonPosition } & CommonEntity;
+
+/**
+ * A resource supply on the map (adapter/placed.ts isSupply): a tree, a mine,
+ * a field, a shoal, an animal. Its supply readings are undefined only for an
+ * entity without the ResourceSupply component, so for a supply they are all
+ * there; the supply queries return these.
+ */
+type CommonSupplyEntity = {
+	resourceSupplyAmount(): number;
+	resourceSupplyNumGatherers(): number;
+	resourceSupplyType(): CommonResourceSupplyType;
+} & CommonPlacedEntity;
 
 type CommonInfoMap = import("simulation/ai/common-api/map-module.js").InfoMap;
 
@@ -597,11 +620,11 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Copies the shared script's current values into this object (per-turn refresh). */
 		update(sharedScript: CommonSharedScript): void;
 /** Registers a named, auto-updating entity collection filtered by `filter`, derived from `parentCollection` (or the own entities). */
-		updatingCollection(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection): CommonEntityCollection;
+		updatingCollection<E extends CommonEntity = CommonEntity>(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection<E>): CommonEntityCollection<E>;
 /** Unregisters a per-player updating collection by id. */
 		destroyCollection(id: string): void;
 /** Updating collection filtered over the whole map's entities instead of one player's. */
-		updatingGlobalCollection(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection): CommonEntityCollection;
+		updatingGlobalCollection<E extends CommonEntity = CommonEntity>(id: string, filter: CommonEntityFilter, parentCollection?: CommonEntityCollection<E>): CommonEntityCollection<E>;
 /** destroys a global updating collection by id. */
 		destroyGlobalCollection(id: string): void;
 /** Rebuilds auto-updating collections after a diplomacy change reclassifies owners. */
@@ -702,7 +725,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** All entities owned by the AI player. */
 		getOwnEntities(): CommonEntityCollection;
 /** Structures of the AI player. */
-		getOwnStructures(): CommonEntityCollection;
+		getOwnStructures(): CommonEntityCollection<CommonPlacedEntity>;
 /** Units of the AI player. */
 		getOwnUnits(): CommonEntityCollection;
 /** Entities of all non-enemy allied players (global view). */
@@ -710,12 +733,12 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Entity ids of exclusive allies. */
 		getExclusiveAllyEntities(): CommonEntityCollection;
 /** Structures of ally `allyID` or of all allies. */
-		getAllyStructures(allyID?: PlayerId): CommonEntityCollection;
+		getAllyStructures(allyID?: PlayerId): CommonEntityCollection<CommonPlacedEntity>;
 /** All structures of neutral players as global collection. */
-		getNeutralStructures(): CommonEntityCollection;
+		getNeutralStructures(): CommonEntityCollection<CommonPlacedEntity>;
 /** Entities/structures/units of all enemy players (global view). */
 		getEnemyEntities(): CommonEntityCollection;
-		getEnemyStructures(enemyID?: PlayerId): CommonEntityCollection;
+		getEnemyStructures(enemyID?: PlayerId): CommonEntityCollection<CommonPlacedEntity>;
 		getEnemyUnits(enemyID?: PlayerId): CommonEntityCollection;
 /** Auto-updating collections of Petra's own entities whose metadata key matches `value`. */
 		getOwnEntitiesByMetadata(key: string, value: unknown, maintain?: boolean): CommonEntityCollection;
@@ -726,7 +749,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** By Identity class single (Collection filtered by class). */
 		getOwnEntitiesByClass(cls: string, maintain?: boolean): CommonEntityCollection;
 /** Foundations of the AI player with a given identity class (placement helpers). */
-		getOwnFoundationsByClass(cls: string, maintain?: boolean): CommonEntityCollection;
+		getOwnFoundationsByClass(cls: string, maintain?: boolean): CommonEntityCollection<CommonPlacedEntity>;
 /** Own structures able to train (has Trainer). */
 		getOwnTrainingFacilities(): CommonEntityCollection;
 /** Own structures able to research. */
@@ -744,17 +767,17 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** countOwnEntitiesAndQueuedWithRole parameterized on arbitrary metadata. */
 		countOwnQueuedEntitiesWithMetadata(data: string, value: unknown): number;
 /** Own foundations. */
-		getOwnFoundations(): CommonEntityCollection;
+		getOwnFoundations(): CommonEntityCollection<CommonPlacedEntity>;
 /** Own dropsite structures (optionally for one resource). */
 		getOwnDropsites(resource?: string): CommonEntityCollection;
 /** Dropsites of all players (any owner). */
 		getAnyDropsites(resource?: string): CommonEntityCollection;
 /** Supplies of one resource (auto-updating collection over all entities). */
-		getResourceSupplies(resource: string): CommonEntityCollection;
+		getResourceSupplies(resource: string): CommonEntityCollection<CommonSupplyEntity>;
 /** Animal resource supplies ("huntable" — non-defensive, killable prey). */
 		getHuntableSupplies(): CommonEntityCollection;
 /** Fish resource supplies. */
-		getFishableSupplies(): CommonEntityCollection;
+		getFishableSupplies(): CommonEntityCollection<CommonSupplyEntity>;
 /**
  * Aggregate list of all units the AI's own structures train, filtered by
  * class affinity (`classes` vs `anticlasses` matches-class-list specs) and by
@@ -861,14 +884,14 @@ declare module "simulation/ai/common-api/entitycollection.js"
  * defreeze. The class also provides the formation move/attack command helpers
  * (each issuing a PostCommand for all members at once).
  */
-	export class EntityCollection
+	export class EntityCollection<E extends CommonEntity = CommonEntity>
 	{
 /**
  * Builds the collection from the given map of entities (default: an empty
  * map) and initial filters. `sharedAI` is required to enable membership
  * tracking of dynamic filters and the registration updates.
  */
-		constructor(sharedAI: CommonSharedScript, entities?: Map<EntityId, CommonEntity>, filters?: CommonEntityFilter[]);
+		constructor(sharedAI: CommonSharedScript, entities?: Map<EntityId, E>, filters?: CommonEntityFilter[]);
 /** Number of entities in the collection (a getter backed by the entity map). */
 		readonly length: number;
 /** Whether updates from the engine are queued (deferred) rather than applied instantly. */
@@ -884,9 +907,9 @@ declare module "simulation/ai/common-api/entitycollection.js"
 /** Entity ids as plain array. */
 		toIdArray(): EntityId[];
 /** Entity objects as plain array. */
-		toEntityArray(): CommonEntity[];
+		toEntityArray(): E[];
 /** Iterates over the entities (unsorted). */
-		values(): IterableIterator<CommonEntity>;
+		values(): IterableIterator<E>;
 /** Debug helper printing the template names of the members. */
 		toString(): string;
 /**
@@ -894,13 +917,14 @@ declare module "simulation/ai/common-api/entitycollection.js"
  * the entries of `dynamicProperties` of CommonEntityFilter cause re-checking
  * on the listed entity field changes.
  */
-		filter(filter: CommonEntityFilter | ((entity: CommonEntity, id: EntityId, collection: this) => boolean), thisp?: unknown): EntityCollection;
+		filter<F extends E>(filter: (entity: E, id: EntityId, collection: this) => entity is F, thisp?: unknown): EntityCollection<F>;
+		filter(filter: CommonEntityFilter | ((entity: E, id: EntityId, collection: this) => boolean), thisp?: unknown): EntityCollection<E>;
 /** The entities of the collection nearest to `targetPos` (all of them when `n` is omitted; entities without a position are skipped), as a new collection. */
-		filterNearest(targetPos: CommonPosition, n?: number): EntityCollection;
+		filterNearest(targetPos: CommonPosition, n?: number): EntityCollection<E>;
 /** filter() with a raw function that receives the raw entity object rather than the wrapper (faster, e.g. velocity check). */
-		filter_raw(callback: (entity: unknown, id: EntityId, collection: this) => boolean, thisp?: unknown): EntityCollection;
+		filter_raw(callback: (entity: unknown, id: EntityId, collection: this) => boolean, thisp?: unknown): EntityCollection<E>;
 /** Runs `callback` on each member entity and returns the collection. */
-		forEach(callback: (entity: CommonEntity) => void): this;
+		forEach(callback: (entity: E) => void): this;
 /** Whether the collection holds at least one entity. */
 		hasEntities(): boolean;
 /** Move in formation to (x, z) in world coordinates. */
@@ -934,7 +958,7 @@ declare module "simulation/ai/common-api/entitycollection.js"
 /** Removes one entity from the collection (entity wrapper); true actually removed. */
 		removeEnt(entity: CommonEntity): boolean;
 /** Adds one entity (when not already in); true added. */
-		addEnt(entity: CommonEntity): boolean;
+		addEnt(entity: E): boolean;
 /** Re-evaluates a member against the collection's filters; true kept, false dropped. */
 		updateEnt(entity: CommonEntity, force?: boolean): boolean;
 /** Registers this collection with the shared script for automatic updates. */
@@ -1164,8 +1188,8 @@ declare module "simulation/ai/common-api/entity.js"
 		deleteAllMetadata(player: PlayerId): void;
 /** Deletes one metadata key of a player+entity pair. */
 		deleteMetadata(player: PlayerId, key: string): void;
-/** World position [x, z]. Entities without a position component (rare, mostly short-lived effects) are not usable here. */
-		position(): CommonPosition;
+/** World position [x, z]; undefined while the entity is not on the map: garrisoned, aboard a ship, or not yet placed. */
+		position(): CommonPosition | undefined;
 /** Facing angle in radians (built from the position coordinates of the engine direction data). */
 		angle(): number | undefined;
 /** Whether the entity is currently idle (undefined when it has no UnitAI). */

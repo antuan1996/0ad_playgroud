@@ -8,6 +8,7 @@ import { Worker } from "../execution/worker.ts";
 import type { Config } from "./config.ts";
 import { NO_BASE, seconds } from "../adapter/brands.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -183,7 +184,7 @@ export class VictoryManager
 			{
 				this.criticalEnts.set(ent.id(), { "guardsAssigned": new Set(), "guards": new Map() });
 				// Move captured relics to the closest base
-				if (ent.hasClass("Relic"))
+				if (ent.hasClass("Relic") && isPlaced(ent))
 					this.pickCriticalEntRetreatLocation(gameState, ent, false);
 			}
 		}
@@ -269,7 +270,7 @@ export class VictoryManager
 				continue;
 
 			const target = gameState.getEntityById(evt.target);
-			if (!target || !target.position() || target.healthLevel() > this.Config.garrisonHealthLevel.high)
+			if (!target || !isPlaced(target) || target.healthLevel() > this.Config.garrisonHealthLevel.high)
 				continue;
 
 			const plan = target.getMetadata(PlayerID, "plan");
@@ -557,7 +558,7 @@ export class VictoryManager
 		const plan = guardEnt.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan !== PLAN_RESERVE ||
 		    guardEnt.getMetadata(PlayerID, "transport") !== undefined || this.criticalEnts.has(guardEnt.id()) ||
-		    checkForSameAccess && (!guardEnt.position() || !criticalEnt.position() ||
+		    checkForSameAccess && (!isPlaced(guardEnt) || !isPlaced(criticalEnt) ||
 		    getLandAccess(gameState, criticalEnt) !== getLandAccess(gameState, guardEnt)))
 			return false;
 
@@ -570,7 +571,7 @@ export class VictoryManager
 		return true;
 	}
 
-	pickCriticalEntRetreatLocation(gameState: CommonGameState, criticalEnt: CommonEntity, emergency: boolean): void
+	pickCriticalEntRetreatLocation(gameState: CommonGameState, criticalEnt: CommonPlacedEntity, emergency: boolean): void
 	{
 		gameState.ai.HQ.defenseManager.garrisonAttackedUnit(gameState, criticalEnt, emergency);
 		const plan = criticalEnt.getMetadata(PlayerID, "plan");
@@ -656,7 +657,7 @@ export class VictoryManager
 		}
 
 		const criticalEnt = gameState.getEntityById(criticalEntId);
-		if (!criticalEnt || !criticalEnt.position() || !guardEnt.position())
+		if (!criticalEnt || !isPlaced(criticalEnt) || !isPlaced(guardEnt))
 		{
 			this.guardEnts.set(guardEnt.id(), false);
 			return false;
@@ -739,7 +740,8 @@ export class VictoryManager
 				const relic = gameState.getEntityById(relicId);
 				if (!relic || relic.owner() !== 0)
 					this.abortCaptureGaiaRelic(gameState, relicId);
-				else
+				// a relic held in a structure waits there
+				else if (isPlaced(relic))
 					this.captureGaiaRelic(gameState, relic);
 			}
 			// And look for some new gaia relics visible by any of our units
@@ -748,9 +750,9 @@ export class VictoryManager
 				.filter((relic) => relic.owner() === 0);
 			for (const relic of allGaiaRelics.values())
 			{
-				const relicPosition = relic.position();
-				if (!relicPosition || this.targetedGaiaRelics.has(relic.id()))
+				if (!isPlaced(relic) || this.targetedGaiaRelics.has(relic.id()))
 					continue;
+				const relicPosition = relic.position();
 				const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(relicPosition);
 				if (territoryOwner === PlayerID)
 				{
@@ -764,7 +766,7 @@ export class VictoryManager
 
 				for (const ent of gameState.getOwnUnits().values())
 				{
-					if (!ent.position() || !ent.visionRange())
+					if (!isPlaced(ent) || !ent.visionRange())
 						continue;
 					if (SquareVectorDistance(ent.position(), relicPosition) > Math.square(ent.visionRange()))
 						continue;
@@ -779,7 +781,7 @@ export class VictoryManager
 	/**
 	 * Send an expedition to capture a gaia relic, or reinforce an existing one.
 	 */
-	captureGaiaRelic(gameState: CommonGameState, relic: CommonEntity): void
+	captureGaiaRelic(gameState: CommonGameState, relic: CommonPlacedEntity): void
 	{
 		let capture = -relic.defaultRegenRate();
 		const relicCapturePoints = relic.capturePoints();
@@ -804,7 +806,7 @@ export class VictoryManager
 		const access = getLandAccess(gameState, relic);
 		const units = gameState.getOwnUnits().filter((ent) =>
 		{
-			if (!ent.position() || !ent.canCapture(relic))
+			if (!isPlaced(ent) || !ent.canCapture(relic))
 				return false;
 			if (ent.getMetadata(PlayerID, "transport") !== undefined)
 				return false;

@@ -18,6 +18,7 @@ import { PLAN_RESERVE } from "./unitPlan.ts";
 import { type PlanMetadata } from "./queueplan.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export type AttackUnitStat = {
 	priority: number;
@@ -279,9 +280,9 @@ export class AttackPlan
 		{
 			if (!base.anchor)
 				continue;
-			const anchorPos = base.anchor.position();
-			if (!anchorPos)
+			if (!isPlaced(base.anchor))
 				continue;
+			const anchorPos = base.anchor.position();
 			const access = getLandAccess(gameState, base.anchor);
 			if (access === undefined)
 				continue;
@@ -297,9 +298,9 @@ export class AttackPlan
 		{
 			for (const ent of gameState.getOwnEntities().values())
 			{
-				const entPos = ent.position();
-				if (!entPos)
+				if (!isPlaced(ent))
 					continue;
+				const entPos = ent.position();
 				const access = getLandAccess(gameState, ent);
 				if (access === undefined)
 					continue;
@@ -319,8 +320,6 @@ export class AttackPlan
 			for (const structure of gameState.getEnemyStructures().values())
 			{
 				if (target && structure.id() !== target.id())
-					continue;
-				if (!structure.position())
 					continue;
 				const access = getLandAccess(gameState, structure);
 				if (access === undefined)
@@ -1122,7 +1121,7 @@ export class AttackPlan
 
 	isAvailableUnit(gameState: CommonGameState, ent: CommonEntity): boolean
 	{
-		if (!ent.position())
+		if (!isPlaced(ent))
 			return false;
 		if (ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== PLAN_RESERVE ||
 		    ent.getMetadata(PlayerID, "transport") !== undefined || ent.getMetadata(PlayerID, "transporter") !== undefined)
@@ -1137,7 +1136,7 @@ export class AttackPlan
 	{
 		for (const ent of this.unitCollection.values())
 		{
-			if (!ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined)
+			if (!isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined)
 				continue;
 			if (!ent.hasClasses(["FastMoving+CitizenSoldier"]))
 				continue;
@@ -1369,9 +1368,9 @@ export class AttackPlan
 			// Do not bother with some pointless targets
 			if (!this.isValidTarget(gameState, ent, land))
 				continue;
-			const entPos = ent.position();
-			if (!entPos)
+			if (!isPlaced(ent))
 				continue;
+			const entPos = ent.position();
 			let dist = SquareVectorDistance(entPos, position);
 			// In normal attacks, disfavor fields
 			if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_RAID && ent.hasClass("Field"))
@@ -1465,7 +1464,7 @@ export class AttackPlan
 	/** Whether a target is worth attacking: on the given land, when one is given, and not a decaying empty building */
 	isValidTarget(gameState: CommonGameState, ent: CommonEntity, sameLand: AccessIndex | false): boolean
 	{
-		if (!ent.position())
+		if (!isPlaced(ent))
 			return false;
 		if (sameLand && getLandAccess(gameState, ent) !== sameLand)
 			return false;
@@ -1502,16 +1501,12 @@ export class AttackPlan
 			if (!this.isValidTarget(gameState, building, sameLand))
 				continue;
 			const pos = building.position();
-			if (!pos)
-				continue;
 			let defended = false;
 			for (const defense of buildings)
 			{
 				if (!defense.hasDefensiveFire())
 					continue;
 				const defPos = defense.position();
-				if (!defPos)
-					continue;
 				const dist = SquareVectorDistance(pos, defPos);
 				if (dist < 6400)   // TODO check on defense range rather than this fixed 80*80
 				{
@@ -1543,7 +1538,7 @@ export class AttackPlan
 		for (const targetId of hqOf(gameState).defenseManager.targetList)
 		{
 			const target = gameState.getEntityById(targetId);
-			if (target && target.position())
+			if (target && isPlaced(target))
 				targets.addEnt(target);
 		}
 		return targets;
@@ -1559,9 +1554,9 @@ export class AttackPlan
 		if (getLandAccess(gameState, target) !== gameState.ai.accessibility.getAccessValue(position))
 			return target;
 
-		const targetPos = target.position();
-		if (!targetPos)
+		if (!isPlaced(target))
 			return undefined;
+		const targetPos = target.position();
 		const startPos = { "x": position[0], "y": position[1] };
 		const endPos = { "x": targetPos[0], "y": targetPos[1] };
 		let blocker;
@@ -1784,7 +1779,7 @@ export class AttackPlan
 		// units waits for good and holds up the next attack.
 		for (const ent of this.unitCollection.values())
 		{
-			if (ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined)
+			if (isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined)
 				continue;
 			const holderId = ent.garrisonHolderID();
 			const holder = holderId === undefined ? undefined : gameState.getEntityById(holderId);
@@ -1908,7 +1903,7 @@ export class AttackPlan
 		for (let check = 0; check < lgth; check++)
 		{
 			const ent = gameState.getEntityById(this.unitCollUpdateArray[check]);
-			if (!ent || !ent.position())
+			if (!ent || !isPlaced(ent))
 				continue;
 			this.orderAttacker(gameState, ent, ctx);
 		}
@@ -1933,11 +1928,11 @@ export class AttackPlan
 			continue;
 		const attacker = gameState.getEntityById(evt.attacker);
 		const ourUnit = gameState.getEntityById(evt.target);
-		if (!ourUnit || !ourUnit.position() || !attacker || !attacker.position())
+		if (!ourUnit || !isPlaced(ourUnit) || !attacker || !isPlaced(attacker))
+			continue;
+		if (!isPlaced(ourUnit))
 			continue;
 		const ourUnitPosRaw = ourUnit.position();
-		if (!ourUnitPosRaw)
-			continue;
 		const ourUnitPos: CommonPosition = ourUnitPosRaw;
 		if (!attacker.hasClass("Unit"))
 		{
@@ -2069,9 +2064,9 @@ export class AttackPlan
 	/** One attacker's orders, the turn it is looked at (updateAttacking): left, or given a new target. */
 	orderAttacker(gameState: CommonGameState, ent: CommonEntity, ctx: AttackerContext): void
 	{
-		const entPosRaw = ent.position();
-		if (!entPosRaw)
+		if (!isPlaced(ent))
 			return;
+		const entPosRaw = ent.position();
 		const entPos: CommonPosition = entPosRaw;
 		const need = this.attackerNeedsOrder(gameState, ent, ctx);
 		if (need === undefined)
@@ -2354,9 +2349,9 @@ export class AttackPlan
 				let attacker: CommonEntity | undefined;
 				this.unitCollection.forEach((unit) =>
 				{
-					const unitPos = unit.position();
-					if (!unitPos)
+					if (!isPlaced(unit))
 						return;
+					const unitPos = unit.position();
 					const orderData = ordersOf(unit);
 					if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length ||
 						!orderData[0].target)
@@ -2504,9 +2499,9 @@ export class AttackPlan
 			let farthestEnt;
 			for (const ent of this.unitCollection.filter(filters.byClass("Siege")).values())
 			{
-				const entPos = ent.position();
-				if (!entPos)
+				if (!isPlaced(ent))
 					continue;
+				const entPos = ent.position();
 				const dist = SquareVectorDistance(entPos, pos);
 				if (dist < farthest)
 					continue;
@@ -2530,8 +2525,6 @@ export class AttackPlan
 				.values())
 			{
 				const entPos = ent.position();
-				if (!entPos)
-					continue;
 				if (SquareVectorDistance(pos, entPos) > 800)
 					continue;
 				const enemyClass = ent.hasClass("Wall") ? "Wall" : "Palisade";
@@ -2772,7 +2765,7 @@ export class AttackPlan
 		for (const evt of events.Create)
 		{
 			const ent = gameState.getEntityById(evt.entity);
-			if (!ent || !ent.position() || !ent.hasClass("Structure"))
+			if (!ent || !isPlaced(ent) || !ent.hasClass("Structure"))
 				continue;
 			if (!gameState.isPlayerEnemy(ent.owner()))
 				continue;

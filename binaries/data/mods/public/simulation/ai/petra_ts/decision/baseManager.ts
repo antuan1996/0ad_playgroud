@@ -18,6 +18,7 @@ import { gatherRate } from "../adapter/orders.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Base Manager
@@ -34,7 +35,7 @@ import { fieldsBeatBerries } from "./foodSource.ts";
 export type ResourceSupply = {
 	dropsite: EntityId;
 	dist: number;
-	ent?: CommonEntity;
+	ent?: CommonSupplyEntity;
 	id: EntityId;
 };
 
@@ -64,10 +65,10 @@ export class BaseManager
 	Config: Config;
 	ID: BaseId;
 	accessIndex: AccessIndex | undefined;
-	anchor: CommonEntity | undefined;
+	anchor: CommonPlacedEntity | undefined;
 	anchorId: EntityId | undefined;
 	basesManager: BasesManager;
-	buildings: CommonEntityCollection;
+	buildings: CommonEntityCollection<CommonPlacedEntity>;
 	constructing: boolean;
 	/** The resources within reach of the base's dropsites; the accessors below keep its fields' old names. */
 	resources: BaseResources;
@@ -182,7 +183,8 @@ export class BaseManager
 
 	setAnchor(gameState: CommonGameState, anchorEntity: CommonEntity, deserialize: boolean = false): boolean
 	{
-		if (!anchorEntity.hasClass("CivCentre"))
+		// a civic centre, a structure: always on the map
+		if (!anchorEntity.hasClass("CivCentre") || !isPlaced(anchorEntity))
 		{
 			aiWarn("Error: Petra base " + this.ID + " has been assigned " + anchorEntity.templateName() +
 				" as anchor.");
@@ -242,6 +244,9 @@ export class BaseManager
 	 */
 	assignResourceToDropsite(gameState: CommonGameState, dropsite: CommonEntity, deserialized: boolean): void
 	{
+		// a mobile dropsite aboard a ship reaches nothing
+		if (!isPlaced(dropsite))
+			return;
 		const baseless = this.ID === this.basesManager.baselessBase().ID;
 		if (!this.resources.addDropsite(gameState, dropsite, this.accessIndex, baseless, this.maxDistResourceSquare, this.Config.debug))
 			return;
@@ -350,8 +355,6 @@ export class BaseManager
 			for (const dp of dpEnts)
 			{
 				const dpPos = dp.position();
-				if (!dpPos)
-					continue;
 				const dist = SquareVectorDistance(dpPos, pos);
 				if (dist < 3600)
 				{
@@ -529,7 +532,7 @@ export class BaseManager
 
 			this.gatherersByType(gameState, res).forEach((ent) =>
 			{
-				if (ent.isIdle() || !ent.position())
+				if (ent.isIdle() || !isPlaced(ent))
 					return;
 				const gRate = gatherRate(gameState, ent);
 				if (gRate)
@@ -539,7 +542,7 @@ export class BaseManager
 			{
 				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent) =>
 				{
-					if (ent.isIdle() || !ent.position())
+					if (ent.isIdle() || !isPlaced(ent))
 						return;
 					const gRate = gatherRate(gameState, ent);
 					if (gRate)
@@ -547,7 +550,7 @@ export class BaseManager
 				});
 				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent) =>
 				{
-					if (ent.isIdle() || !ent.position())
+					if (ent.isIdle() || !isPlaced(ent))
 						return;
 					const gRate = gatherRate(gameState, ent);
 					if (gRate)
@@ -678,7 +681,7 @@ export class BaseManager
 		for (const ent of idleWorkers)
 		{
 			// Check that the worker isn't garrisoned
-			if (!ent.position())
+			if (!isPlaced(ent))
 				continue;
 			// Support elephant can only be builders
 			if (ent.hasClass("Support") && ent.hasClass("Elephant"))
@@ -740,7 +743,7 @@ export class BaseManager
 	{
 		const availableWorkers = this.workers.filter((ent) =>
 		{
-			if (!ent.position() || !ent.isBuilder())
+			if (!isPlaced(ent) || !ent.isBuilder())
 				return false;
 			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				return false;
@@ -849,7 +852,7 @@ export class BaseManager
 	}
 
 	/** Send builders to one foundation, within the crew's limits */
-	assignToFoundation(gameState: CommonGameState, target: CommonEntity, crew: BuilderCrew): void
+	assignToFoundation(gameState: CommonGameState, target: CommonPlacedEntity, crew: BuilderCrew): void
 	{
 		if (target.hasClass("Field"))
 			return; // we do not build fields
@@ -898,7 +901,7 @@ export class BaseManager
 		{
 			if (ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 				return;
-			if (assigned >= targetNB || !ent.position() ||
+			if (assigned >= targetNB || !isPlaced(ent) ||
 				SquareVectorDistance(ent.position(), target.position()) > 40000)
 			{
 				return;
@@ -909,11 +912,11 @@ export class BaseManager
 		});
 		if (assigned >= targetNB || crew.builderTot >= maxTotalBuilders)
 			return;
-		const nonBuilderWorkers = crew.workers.filter(function(ent: CommonEntity): boolean 
+		const nonBuilderWorkers = crew.workers.filter((ent): ent is CommonPlacedEntity =>
 		{
 			if (ent.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
 				return false;
-			if (!ent.position())
+			if (!isPlaced(ent))
 				return false;
 			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				return false;
@@ -922,7 +925,7 @@ export class BaseManager
 			return true;
 		}).toEntityArray();
 		const time = target.buildTime();
-		nonBuilderWorkers.sort((workerA: CommonEntity, workerB: CommonEntity): number =>
+		nonBuilderWorkers.sort((workerA, workerB): number =>
 		{
 			let coeffA = SquareVectorDistance(target.position(), workerA.position());
 			// elephant moves slowly, so when far away they are only useful if build time is long
@@ -951,7 +954,7 @@ export class BaseManager
 	}
 
 	/** Send builders to repair one damaged building, within the crew's limits */
-	assignToRepair(gameState: CommonGameState, target: CommonEntity, noRepair: boolean, crew: BuilderCrew): void
+	assignToRepair(gameState: CommonGameState, target: CommonPlacedEntity, noRepair: boolean, crew: BuilderCrew): void
 	{
 		// Don't repair if we're still under attack, unless it's a vital (civcentre or wall) building
 		// that's being destroyed.
@@ -992,7 +995,7 @@ export class BaseManager
 		{
 			if (ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 				return;
-			if (assigned >= targetNB || !ent.position() ||
+			if (assigned >= targetNB || !isPlaced(ent) ||
 			    SquareVectorDistance(ent.position(), target.position()) > 40000)
 				return;
 			++assigned;
@@ -1001,11 +1004,11 @@ export class BaseManager
 		});
 		if (assigned >= targetNB || crew.builderTot >= maxTotalBuilders)
 			return;
-		const nonBuilderWorkers = crew.workers.filter(function(ent: CommonEntity): boolean 
+		const nonBuilderWorkers = crew.workers.filter((ent): ent is CommonPlacedEntity =>
 		{
 			if (ent.getMetadata(PlayerID, "subrole") === Worker.SUBROLE_BUILDER)
 				return false;
-			if (!ent.position())
+			if (!isPlaced(ent))
 				return false;
 			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				return false;
@@ -1093,8 +1096,6 @@ export class BaseManager
 			let reassignedBase;
 			for (const ent of this.buildings.values())
 			{
-				if (!ent.position())
-					continue;
 				const base = getBestBase(gameState, ent);
 				if (!base)
 					continue;
@@ -1143,7 +1144,7 @@ export class BaseManager
 					filters.byClass("CivCentre"));
 				for (const cc of ccEnts.values())
 				{
-					if (cc.owner() !== owner)
+					if (cc.owner() !== owner || !isPlaced(cc))
 						continue;
 					if (SquareVectorDistance(cc.position(), this.anchor.position()) > 8000)
 						continue;
@@ -1217,6 +1218,8 @@ export class BaseManager
 		this.timeNextIdleCheck = data.timeNextIdleCheck ?? 0;
 		this.resources.dropsiteSupplies = data.dropsiteSupplies ?? this.resources.dropsiteSupplies;
 
-		this.anchor = this.anchorId !== undefined ? gameState.getEntityById(this.anchorId) : undefined;
+		const anchor = this.anchorId !== undefined ? gameState.getEntityById(this.anchorId) : undefined;
+		// a civic centre: on the map
+		this.anchor = anchor && isPlaced(anchor) ? anchor : undefined;
 	}
 }

@@ -10,6 +10,7 @@ import { GAIA, playerId, worldPos } from "../adapter/brands.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export type SerializedAttackManager = {
     properties: {
@@ -229,7 +230,7 @@ export class AttackManager
 		{
 			// Filtered on having a Ranged attack, so attackRange("Ranged") is defined.
 			const ranged = ent.attackRange("Ranged");
-			if (!ent.position() || !ent.isIdle() || !ranged)
+			if (!isPlaced(ent) || !ent.isIdle() || !ranged)
 				continue;
 			if (isLent(ent.getMetadata(PlayerID, "plan")))
 				continue;
@@ -621,7 +622,7 @@ export class AttackManager
 			const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
 			for (const ourcc of ccEnts.values())
 			{
-				if (ourcc.owner() !== PlayerID)
+				if (ourcc.owner() !== PlayerID || !isPlaced(ourcc))
 					continue;
 				const ourPos = ourcc.position();
 				const access = getLandAccess(gameState, ourcc);
@@ -631,7 +632,7 @@ export class AttackManager
 						continue;
 					if (!gameState.isPlayerEnemy(enemycc.owner()))
 						continue;
-					if (access !== getLandAccess(gameState, enemycc))
+					if (!isPlaced(enemycc) || access !== getLandAccess(gameState, enemycc))
 						continue;
 					const dist = SquareVectorDistance(ourPos, enemycc.position());
 					if (distmin && dist > distmin)
@@ -807,7 +808,7 @@ export class AttackManager
 		this.enemyLands = new Map();
 		for (const enemy of gameState.getEnemyEntities().values())
 		{
-			if (enemy.owner() === GAIA || !enemy.position() || enemy.hasClass("Ship") ||
+			if (enemy.owner() === GAIA || !isPlaced(enemy) || enemy.hasClass("Ship") ||
 			    !enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"]))
 				continue;
 			// 1 marks an impassable cell (a cliff's edge, the map's), no land
@@ -881,7 +882,7 @@ export class AttackManager
 	 */
 	switchDefenseToAttack(gameState: CommonGameState, target: CommonEntity, data: { range?: number; armyID?: ArmyId; uniqueTarget?: boolean }): boolean
 	{
-		if (!target || !target.position())
+		if (!target || !isPlaced(target))
 			return false;
 		if (!data.range && !data.armyID)
 		{
@@ -922,7 +923,7 @@ export class AttackManager
 				// the original ORed in "transport metadata exists" here, but
 				// isAvailableUnit below always rejects transport-marked units, so the
 				// clause could never lead to an enlistment and was dropped
-				if (unit.position() && getLandAccess(gameState, unit) === targetAccess &&
+				if (isPlaced(unit) && getLandAccess(gameState, unit) === targetAccess &&
 					attackPlan.isAvailableUnit(gameState, unit))
 				{
 					unit.setMetadata(PlayerID, "plan", attackPlan.name);

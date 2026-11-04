@@ -18,6 +18,7 @@
  */
 import { gatherRate, ordersOf } from "../adapter/orders.ts";
 import { isInState } from "../adapter/unitState.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /** Seconds over which the rate per gatherer is smoothed (an exponential moving average's time constant). */
 export const SMOOTHING = 60;
@@ -122,7 +123,7 @@ export class GatherEconomy
 				res = ent.getMetadata(PlayerID, "gather-type");
 			else if (subrole === "hunter" || subrole === "fisher")
 				res = "food";
-			if (res === undefined || !(res in gatherers) || !ent.position())
+			if (res === undefined || !(res in gatherers) || !isPlaced(ent))
 				continue;
 			++gatherers[res];
 			const rate = isInState(ent, "INDIVIDUAL.GATHER.GATHERING") ? gatherRate(gameState, ent) ?? 0 : 0;

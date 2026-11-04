@@ -8,6 +8,7 @@ import { armyId, playerId, worldPos } from "../adapter/brands.ts";
 import { hqOf } from "./hq.ts";
 import { lentPlan, releasedPlan } from "./unitPlan.ts";
 import { ordersOf } from "../adapter/orders.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 /** The fields a save keeps. */
 export type SerializedDefenseArmy = Pick<DefenseArmy, "ID" | "type" | "foePosition" | "positionLastUpdate" | "assignedAgainst" | "assignedTo" | "foeEntities" | "foeStrength" | "ownEntities" | "ownStrength">;
@@ -82,7 +83,7 @@ export class DefenseArmy
 		if (this.foeEntities.indexOf(enemyId) !== -1)
 			return false;
 		const ent = gameState.getEntityById(enemyId);
-		if (!ent || !ent.position())
+		if (!ent || !isPlaced(ent))
 			return false;
 
 		// check distance
@@ -135,7 +136,7 @@ export class DefenseArmy
 		if (this.ownEntities.indexOf(id) !== -1)
 			return false;
 		const ent = gameState.getEntityById(id);
-		if (!ent || !ent.position() && !force)
+		if (!ent || !isPlaced(ent) && !force)
 			return false;
 
 		this.ownEntities.push(id);
@@ -187,7 +188,7 @@ export class DefenseArmy
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
 			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
-			if (plan && plan.state === TransportPlan.BOARDING && ent.position())
+			if (plan && plan.state === TransportPlan.BOARDING && isPlaced(ent))
 				plan.removeUnit(gameState, ent);
 		}
 
@@ -213,7 +214,7 @@ export class DefenseArmy
 		for (const entId of this.ownEntities)
 		{
 			const ent = gameState.getEntityById(entId);
-			if (!ent || !ent.position())
+			if (!ent || !isPlaced(ent))
 				continue;
 			const pos = ent.position();
 			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
@@ -278,7 +279,7 @@ export class DefenseArmy
 			this.removeOwn(gameState, entId, ent);
 			if (ent)
 			{
-				if (!ent.position() || ent.getMetadata(PlayerID, "transport") !== undefined ||
+				if (!isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined ||
 					                 ent.getMetadata(PlayerID, "transporter") !== undefined)
 					continue;
 				if (ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
@@ -305,20 +306,22 @@ export class DefenseArmy
 		// we'll also override any previous assignment
 
 		const ent = gameState.getEntityById(entID);
-		if (!ent || !ent.position())
+		if (!ent || !isPlaced(ent))
 			return false;
 
 		// try to return its resources, and if any, the attack order will be queued
 		const queued = returnResources(gameState, ent);
 
 		let idMin;
+		let foeMin;
 		let distMin = Infinity;
 		let idMinAll;
+		let foeMinAll;
 		let distMinAll = Infinity;
 		for (const id of this.foeEntities)
 		{
 			const eEnt = gameState.getEntityById(id);
-			if (!eEnt || !eEnt.position())	// probably can't happen.
+			if (!eEnt || !isPlaced(eEnt))	// probably can't happen.
 				continue;
 
 			if (!ent.canAttackTarget(eEnt, allowCapture(gameState, ent, eEnt)))
@@ -328,6 +331,7 @@ export class DefenseArmy
 				ordersOf(eEnt)[0].target && ordersOf(eEnt)[0].target === entID)
 			{   // being attacked  >>> target the unit
 				idMin = id;
+				foeMin = eEnt;
 				break;
 			}
 
@@ -340,6 +344,7 @@ export class DefenseArmy
 			if (idMinAll === undefined || dist < distMinAll)
 			{
 				idMinAll = id;
+				foeMinAll = eEnt;
 				distMinAll = dist;
 			}
 			if (this.assignedAgainst[id].length > 2)
@@ -347,22 +352,27 @@ export class DefenseArmy
 			if (idMin === undefined || dist < distMin)
 			{
 				idMin = id;
+				foeMin = eEnt;
 				distMin = dist;
 			}
 		}
 
 		let idFoe;
-		if (idMin !== undefined)
+		let foeEnt;
+		if (idMin !== undefined && foeMin)
+		{
 			idFoe = idMin;
-		else if (idMinAll !== undefined)
+			foeEnt = foeMin;
+		}
+		else if (idMinAll !== undefined && foeMinAll)
+		{
 			idFoe = idMinAll;
+			foeEnt = foeMinAll;
+		}
 		else
 			return false;
 
 		const ownIndex = getLandAccess(gameState, ent);
-		// idFoe was validated alive inside the loop above and cannot vanish
-		// synchronously in the same tick
-		const foeEnt = requireValue(gameState.getEntityById(idFoe));
 		const foePosition = foeEnt.position();
 		const foeIndex = gameState.ai.accessibility.getAccessValue(foePosition);
 		if (ownIndex === foeIndex || ent.hasClass("Ship"))
@@ -372,10 +382,7 @@ export class DefenseArmy
 			ent.attack(idFoe, allowCapture(gameState, ent, foeEnt), queued);
 		}
 		else
-			// ownIndex is a number: ent.position() was checked at the entry of
-			// this function, so getLandAccess resolved past its position guard.
-			hqOf(gameState).navalManager.requireTransport(gameState, ent,
-				requireValue(ownIndex), foeIndex, foePosition);
+			hqOf(gameState).navalManager.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
 		return true;
 	}
 
@@ -460,7 +467,7 @@ export class DefenseArmy
 		for (const id of this.foeEntities)
 		{
 			const ent = gameState.getEntityById(id);
-			if (!ent || !ent.position())
+			if (!ent || !isPlaced(ent))
 				continue;
 			npos++;
 			const epos = ent.position();
@@ -628,7 +635,7 @@ export class DefenseArmy
 			{
 				const id = this.foeEntities[i];
 				const ent = gameState.getEntityById(id);
-				if (!ent || !ent.position())
+				if (!ent || !isPlaced(ent))
 					continue;
 				if (SquareVectorDistance(ent.position(), this.foePosition) > this.breakawaySize)
 				{

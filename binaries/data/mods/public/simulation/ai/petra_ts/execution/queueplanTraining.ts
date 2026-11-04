@@ -3,11 +3,12 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { type PlanMetadata, QueuePlan } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 import { hqOf } from "./hq.ts";
+import { isPlaced } from "../adapter/placed.ts";
 
 export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 {
 	maxMerge: number;
-	trainers: CommonEntity[] | undefined;
+	trainers: CommonPlacedEntity[] | undefined;
 
 	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
 		number: number = 1, maxMerge: number = 5)
@@ -35,12 +36,12 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		return true;
 	}
 
-	getBestTrainers(gameState: CommonGameState): CommonEntity[] | undefined
+	getBestTrainers(gameState: CommonGameState): CommonPlacedEntity[] | undefined
 	{
 		if (this.metadata && this.metadata.trainer)
 		{
 			const trainer = gameState.getEntityById(this.metadata.trainer);
-			if (trainer)
+			if (trainer && isPlaced(trainer))
 				return [trainer];
 		}
 
@@ -54,9 +55,12 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 
 		// Keep only trainers with smallest cost
 		let costMin = Math.min();
-		let trainers: CommonEntity[] = [];
+		let trainers: CommonPlacedEntity[] = [];
 		for (const ent of allTrainers.values())
 		{
+			// a trainer is a structure: on the map
+			if (!isPlaced(ent))
+				continue;
 			const cost = this.template.costSum(ent);
 			if (cost === costMin)
 				trainers.push(ent);
@@ -89,7 +93,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 			const workerUnit = this.metadata && this.metadata.role &&
 				this.metadata.role === Worker.ROLE_WORKER;
 			const supportUnit = this.template.hasClass("Support");
-			trainers.sort(function(a: CommonEntity, b: CommonEntity): number
+			trainers.sort(function(a, b): number
 			{
 				// Prefer training buildings with short queues
 				let aa = a.trainingQueueTime() ?? NaN;

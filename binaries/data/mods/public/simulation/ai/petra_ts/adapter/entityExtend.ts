@@ -2,6 +2,7 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import type { BaseManager } from "../decision/baseManager.ts";
 import { worldPos } from "./brands.ts";
 import { attackBonuses, footprintHalves } from "./templateData.ts";
+import { isPlaced } from "./placed.ts";
 
 /** returns true if this unit should be considered as a siege unit */
 export function isSiegeUnit(ent: CommonEntity): boolean
@@ -86,7 +87,12 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 	return strength * ent.maxHitpoints() / 100.0;
 }
 
-/** Get access and cache it (except for units as it can change) in metadata if not already done */
+/**
+ * Get access and cache it (except for units as it can change) in metadata if not already done.
+ * An entity on the map always has one; one off the map has its holder's, or none.
+ */
+export function getLandAccess(gameState: CommonGameState, ent: CommonPlacedEntity): AccessIndex;
+export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): AccessIndex | undefined;
 export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): AccessIndex | undefined
 {
 	if (ent.hasClass("Unit"))
@@ -106,14 +112,15 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 	}
 
 	let access = ent.getMetadata(PlayerID, "access");
-	if (!access)
+	// a structure, a supply, a treasure: never off the map
+	const entPos = ent.position();
+	if (!access && entPos)
 	{
-		access = gameState.ai.accessibility.getAccessValue(ent.position());
+		access = gameState.ai.accessibility.getAccessValue(entPos);
 		// Docks are sometimes not as expected
 		if (access < 2 && ent.buildPlacementType() === "shore")
 		{
 			const halfDepth = footprintHalves(ent).halfDepth;
-			const entPos = ent.position();
 			const entAngle = ent.angle();
 			const cosa = Math.cos(entAngle ?? NaN);
 			const sina = Math.sin(entAngle ?? NaN);
@@ -131,17 +138,19 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 	return access;
 }
 
-/** Sea access always cached as it never changes */
+/** Sea access always cached as it never changes; an entity on the map always has one */
+export function getSeaAccess(gameState: CommonGameState, ent: CommonPlacedEntity): SeaIndex;
+export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): SeaIndex | undefined;
 export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): SeaIndex | undefined
 {
 	let sea = ent.getMetadata(PlayerID, "sea");
-	if (!sea)
+	const entPos = ent.position();
+	if (!sea && entPos)
 	{
-		sea = gameState.ai.accessibility.getAccessValue(ent.position(), true);
+		sea = gameState.ai.accessibility.getAccessValue(entPos, true);
 		// Docks are sometimes not as expected
 		if (sea < 2 && ent.buildPlacementType() === "shore")
 		{
-			const entPos = ent.position();
 			const entAngle = ent.angle();
 			const cosa = Math.cos(entAngle ?? NaN);
 			const sina = Math.sin(entAngle ?? NaN);
@@ -285,7 +294,7 @@ export function getAttackBonus(ent: CommonEntity, target: CommonEntity, type: st
 export function returnResources(gameState: CommonGameState, ent: CommonEntity): boolean
 {
 	const carrying = ent.resourceCarrying();
-	if (!carrying || !carrying.length || !ent.position())
+	if (!carrying || !carrying.length || !isPlaced(ent))
 		return false;
 
 	const resource = carrying[0].type;
@@ -297,7 +306,7 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 		gameState.getAnyDropsites(resource) : gameState.getOwnDropsites(resource);
 	for (const dropsite of dropsiteCollection.values())
 	{
-		if (!dropsite.position())
+		if (!isPlaced(dropsite))
 			continue;
 		const owner = dropsite.owner();
 		// owner !== PlayerID can only happen when hasSharedDropsites === true, so no need to test it again
@@ -339,7 +348,7 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 	if (!pos)
 	{
 		const holder = getHolder(gameState, ent);
-		if (!holder || !holder.position())
+		if (!holder || !isPlaced(holder))
 		{
 			aiWarn("Petra error: entity without position, but not garrisoned");
 			dumpEntity(ent);
@@ -363,15 +372,13 @@ export function getBestBase(gameState: CommonGameState, ent: CommonEntity, onlyC
 			continue;
 		if (ent.hasClass("Structure") && base.accessIndex !== accessIndex)
 			continue;
-		if (base.anchor && base.anchor.position())
+		if (base.anchor)
 			dist = SquareVectorDistance(base.anchor.position(), pos);
 		else
 		{
 			let found = false;
 			for (const structure of base.buildings.values())
 			{
-				if (!structure.position())
-					continue;
 				dist = SquareVectorDistance(structure.position(), pos);
 				found = true;
 				break;
@@ -417,7 +424,7 @@ export function getBuiltEntity(gameState: CommonGameState, ent: CommonEntity): C
  * return true if it is not worth finishing this building (it would surely decay)
  * TODO implement the other conditions
  */
-export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonEntity): boolean
+export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonPlacedEntity): boolean
 {
 	if (gameState.ai.HQ.geography.territoryMap.getOwner(ent.position()) !== PlayerID)
 	{
@@ -451,7 +458,7 @@ export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | u
 {
 	if (!gameState.ai.HQ.treasures.hasEntities())
 		return false;
-	if (!ent || !ent.position())
+	if (!ent || !isPlaced(ent))
 		return false;
 	if (!ent.isTreasureCollector())
 		return false;
