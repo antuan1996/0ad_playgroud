@@ -163,7 +163,15 @@ export class GatherEconomy
 		return { "perGatherer": this.perGatherer, "perFoodGatherer": this.perFoodGatherer, "lastUpdate": this.lastUpdate };
 	}
 
-	Deserialize(data: SerializedGatherEconomy): void
+	/** A saved economy: its measured rates */
+	static restore(data: SerializedGatherEconomy): GatherEconomy
+	{
+		const economy = new GatherEconomy();
+		economy.resume(data);
+		return economy;
+	}
+
+	private resume(data: SerializedGatherEconomy): void
 	{
 		this.perGatherer = data.perGatherer;
 		this.perFoodGatherer = data.perFoodGatherer;

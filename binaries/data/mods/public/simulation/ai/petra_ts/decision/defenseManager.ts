@@ -1037,7 +1037,15 @@ export class DefenseManager
 		return { "properties": properties, "armies": this.armies.map(army => army.Serialize()) };
 	}
 
-	Deserialize(gameState: CommonGameState, data: SerializedDefenseManager): void
+	/** A saved defense manager with its armies */
+	static restore(Config: Config, gameState: CommonGameState, geography: Geography, data: SerializedDefenseManager): DefenseManager
+	{
+		const manager = new DefenseManager(Config, geography);
+		manager.resume(gameState, data);
+		return manager;
+	}
+
+	private resume(gameState: CommonGameState, data: SerializedDefenseManager): void
 	{
 		const properties = data.properties;
 		this.targetList = properties.targetList;
@@ -1049,9 +1057,7 @@ export class DefenseManager
 		this.armies = [];
 		for (const dataArmy of data.armies)
 		{
-			const army = new DefenseArmy(gameState, []);
-			army.Deserialize(dataArmy);
-			this.armies.push(army);
+			this.armies.push(DefenseArmy.restore(gameState, dataArmy));
 		}
 	}
 }

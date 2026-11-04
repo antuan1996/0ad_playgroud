@@ -57,9 +57,9 @@ export class VictoryManager
 	}
 
 	/**
-	 * Cache the ids of any inital victory-critical entities.
+	 * Cache the ids of any inital victory-critical entities (on the first turn, when trigger scripts have spawned them).
 	 */
-	init(gameState: CommonGameState): void
+	findCriticalEnts(gameState: CommonGameState): void
 	{
 		if (gameState.getVictoryConditions().has("wonder"))
 		{
@@ -702,7 +702,7 @@ export class VictoryManager
 	{
 		// Wait a turn for trigger scripts to spawn any critical ents (i.e. in regicide)
 		if (gameState.ai.playedTurn === 1)
-			this.init(gameState);
+			this.findCriticalEnts(gameState);
 
 		this.checkEvents(gameState, events);
 
@@ -898,7 +898,15 @@ export class VictoryManager
 		};
 	}
 
-	Deserialize(data: SerializedVictoryManager): void
+	/** A saved victory manager: its critical entities, their guards and the relics it goes for */
+	static restore(Config: Config, data: SerializedVictoryManager): VictoryManager
+	{
+		const manager = new VictoryManager(Config);
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(data: SerializedVictoryManager): void
 	{
 		// The fallbacks keep the value set by the constructor for fields absent in
 		// savegames written by an older version

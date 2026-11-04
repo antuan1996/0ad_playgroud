@@ -658,7 +658,15 @@ export class DefenseArmy
 		};
 	}
 
-	Deserialize(data: SerializedDefenseArmy): void
+	/** A saved defense army: its foes, its defenders and their pairings */
+	static restore(gameState: CommonGameState, data: SerializedDefenseArmy): DefenseArmy
+	{
+		const army = new DefenseArmy(gameState, []);
+		army.resume(data);
+		return army;
+	}
+
+	private resume(data: SerializedDefenseArmy): void
 	{
 		this.ID = data.ID;
 		this.type = data.type;

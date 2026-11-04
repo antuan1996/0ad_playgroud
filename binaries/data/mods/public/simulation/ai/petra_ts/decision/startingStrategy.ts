@@ -17,9 +17,8 @@ import { debugWarn } from "../adapter/debug.ts";
 export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
 {
 	// the map was analysed (world/geography.ts analyseMap) and the managers made with the headquarters
-	HQ.buildManager.init(gameState);
 	HQ.navalManager.assignStartingSeas(gameState);
-	HQ.diplomacyManager.init(gameState);
+	HQ.diplomacyManager.answerStartingStances(gameState);
 
 	// Make a list of buildable structures from the config file
 	structureAnalysis(HQ, gameState);

@@ -181,7 +181,15 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: ReturnType<TrainingPlan["Serialize"]>): void
+	/** A saved plan: its id, metadata and cost from the save */
+	static restore(gameState: CommonGameState, data: ReturnType<TrainingPlan["Serialize"]>): TrainingPlan
+	{
+		const plan = new TrainingPlan(gameState, data.type);
+		plan.resume(data);
+		return plan;
+	}
+
+	private resume(data: ReturnType<TrainingPlan["Serialize"]>): void
 	{
 		this.type = data.type;
 		this.ID = data.ID;

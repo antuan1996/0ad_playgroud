@@ -313,7 +313,15 @@ export class ResearchManager
 		return {};
 	}
 
-	Deserialize(data: Record<string, never>): void
+	/** A saved research manager: it saves nothing of its own */
+	static restore(Config: Config, data: Record<string, never>): ResearchManager
+	{
+		const manager = new ResearchManager(Config);
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(_data: Record<string, never>): void
 	{
 	}
 }

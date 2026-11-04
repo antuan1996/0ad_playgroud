@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
-import { Queue } from "./queue.ts";
+import { Queue, type SerializedQueue } from "./queue.ts";
 import { Worker } from "./worker.ts";
 import type { Config } from "../decision/config.ts";
 import { hqOf } from "./hq.ts";
@@ -85,6 +85,13 @@ function* queueEntries(queues: PetraRuntime.QueueCollection): Generator<[PetraRu
 			yield [name, queue];
 	}
 }
+
+/** What the queue manager saves */
+export type SerializedQueueManager = {
+	priorities: Record<string, number>;
+	queues: Record<string, SerializedQueue>;
+	accounts: Record<string, Parameters<ResourcesManager["Deserialize"]>[0]>;
+};
 
 export class QueueManager
 {
@@ -785,11 +792,15 @@ export class QueueManager
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: {
-		priorities: Record<string, number>;
-		queues: Record<string, Parameters<Queue["Deserialize"]>[1]>;
-		accounts: Record<string, Parameters<ResourcesManager["Deserialize"]>[0]>;
-	}): void
+	/** A saved queue manager: its priorities, its queues with their plans, and their accounts */
+	static restore(Config: Config, gameState: CommonGameState, data: SerializedQueueManager): QueueManager
+	{
+		const manager = new QueueManager(Config, configuredQueues());
+		manager.resume(gameState, data);
+		return manager;
+	}
+
+	private resume(gameState: CommonGameState, data: SerializedQueueManager): void
 	{
 		this.priorities = data.priorities;
 		// the configured queues, then an attack plan's, in the saved order
@@ -805,9 +816,7 @@ export class QueueManager
 				aiWarn("Petra deserialization error: queue unknown " + q);
 				continue;
 			}
-			const queue = this.queues[q] ?? new Queue();
-			this.queues[q] = queue;
-			queue.Deserialize(gameState, data.queues[q]);
+			this.queues[q] = Queue.restore(gameState, data.queues[q]);
 			this.accounts[q] = new ResourcesManager();
 			this.accounts[q].Deserialize(data.accounts[q]);
 		}

@@ -10,6 +10,13 @@ export type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnTy
 /**
  * Holds a list of wanted plans to train or construct
  */
+/** What a queue saves: its plans, and whether it is paused or switched */
+export type SerializedQueue = {
+	plans: Array<PlanSerialize>;
+	paused: boolean;
+	switched: number;
+};
+
 export class Queue
 {
 	/** Plan list in submission order; the head (index 0) is the next plan to start. */
@@ -163,11 +170,15 @@ export class Queue
 		return { "plans": plans, "paused": this.paused, "switched": this.switched };
 	}
 
-	Deserialize(gameState: CommonGameState, data: {
-		plans: Array<PlanSerialize>;
-		paused: boolean;
-		switched: number;
-	}): void
+	/** A saved queue with its plans */
+	static restore(gameState: CommonGameState, data: SerializedQueue): Queue
+	{
+		const queue = new Queue();
+		queue.resume(gameState, data);
+		return queue;
+	}
+
+	private resume(gameState: CommonGameState, data: SerializedQueue): void
 	{
 		this.paused = data.paused;
 		this.switched = data.switched;
@@ -175,23 +186,11 @@ export class Queue
 		for (const dataPlan of data.plans)
 		{
 			if (dataPlan.category === "unit")
-			{
-				const plan = new TrainingPlan(gameState, dataPlan.type);
-				plan.Deserialize(gameState, dataPlan);
-				this.plans.push(plan);
-			}
+				this.plans.push(TrainingPlan.restore(gameState, dataPlan));
 			else if (dataPlan.category === "building")
-			{
-				const plan = new ConstructionPlan(gameState, dataPlan.type);
-				plan.Deserialize(gameState, dataPlan);
-				this.plans.push(plan);
-			}
+				this.plans.push(ConstructionPlan.restore(gameState, dataPlan));
 			else if (dataPlan.category === "technology")
-			{
-				const plan = new ResearchPlan(gameState, dataPlan.type);
-				plan.Deserialize(gameState, dataPlan);
-				this.plans.push(plan);
-			}
+				this.plans.push(ResearchPlan.restore(gameState, dataPlan));
 			else
 				aiWarn("Petra deserialization error: plan unknown " + uneval(dataPlan));
 		}

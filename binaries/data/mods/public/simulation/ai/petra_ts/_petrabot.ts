@@ -4,7 +4,7 @@ import { Config, type SerializedConfig } from "./decision/config.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { analyseMap } from "./world/geography.ts";
-import { QueueManager, configuredQueues } from "./execution/queueManager.ts";
+import { QueueManager, type SerializedQueueManager, configuredQueues } from "./execution/queueManager.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { seconds, secondsOf } from "./adapter/brands.ts";
 
@@ -42,7 +42,7 @@ type PetraBotSavedData = {
 	elapsedTime: GameSeconds;
 	savedEvents: HeadquartersEvents;
 	config: SerializedConfig;
-	queueManager: Parameters<QueueManager["Deserialize"]>[1];
+	queueManager: SerializedQueueManager;
 	/** none when the map could not be read: the bot does not play */
 	HQ: HeadquartersSerializedData | undefined;
 };
@@ -251,10 +251,8 @@ export class PetraBot extends BaseAI
 			// detachSavedEvents walks the 21 buckets of EngineAIEvents explicitly.
 			detachSavedEvents(this.savedEvents);
 
-			this.Config.Deserialize(this.data.config);
-
-			this.queueManager = new QueueManager(this.Config, configuredQueues());
-			this.queueManager.Deserialize(gameState, this.data.queueManager);
+			this.Config = Config.restore(this.data.config);
+			this.queueManager = QueueManager.restore(this.Config, gameState, this.data.queueManager);
 			this.queues = this.queueManager.queues;
 
 			this.HQ = this.data.HQ && Headquarters.restore(this.Config, gameState, this.data.HQ);

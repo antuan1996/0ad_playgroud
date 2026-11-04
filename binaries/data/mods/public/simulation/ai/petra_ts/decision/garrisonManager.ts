@@ -431,7 +431,15 @@ export class GarrisonManager
 		return { "holders": this.holders, "decayingStructures": this.decayingStructures };
 	}
 
-	Deserialize(data: SerializedGarrisonManager): void
+	/** A saved garrison manager: its holders and decaying structures */
+	static restore(Config: Config, data: SerializedGarrisonManager): GarrisonManager
+	{
+		const manager = new GarrisonManager(Config);
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(data: SerializedGarrisonManager): void
 	{
 		this.holders = data.holders;
 		this.decayingStructures = data.decayingStructures;

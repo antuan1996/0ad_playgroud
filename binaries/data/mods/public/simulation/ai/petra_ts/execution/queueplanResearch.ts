@@ -108,7 +108,15 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: ReturnType<ResearchPlan["Serialize"]>): void
+	/** A saved plan: its id, metadata and cost from the save */
+	static restore(gameState: CommonGameState, data: ReturnType<ResearchPlan["Serialize"]>): ResearchPlan
+	{
+		const plan = new ResearchPlan(gameState, data.type);
+		plan.resume(data);
+		return plan;
+	}
+
+	private resume(data: ReturnType<ResearchPlan["Serialize"]>): void
 	{
 		this.type = data.type;
 		this.ID = data.ID;

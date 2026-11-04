@@ -78,7 +78,6 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 
 	/** what a save keeps of the plan: these fields, and each kind's own */
 	abstract Serialize(): SerializedQueuePlan<T>;
-	abstract Deserialize(gameState: CommonGameState, data: ReturnType<this["Serialize"]>): void;
 
 	/** Check the content of this queue */
 	isInvalid(gameState: CommonGameState): boolean

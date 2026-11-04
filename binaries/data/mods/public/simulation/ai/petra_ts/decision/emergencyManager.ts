@@ -21,11 +21,14 @@ export class EmergencyManager
 		this.Config = Config;
 	}
 
-	init(gameState: CommonGameState): void
+	/** At the start of a game: the population, structures and territory roots an emergency is measured against */
+	static start(Config: Config, gameState: CommonGameState): EmergencyManager
 	{
-		this.referencePopulation = gameState.getPopulation();
-		this.referenceStructureCount = gameState.getOwnStructures().length;
-		this.numRoots = this.rootCount(gameState);
+		const manager = new EmergencyManager(Config);
+		manager.referencePopulation = gameState.getPopulation();
+		manager.referenceStructureCount = gameState.getOwnStructures().length;
+		manager.numRoots = manager.rootCount(gameState);
+		return manager;
 	}
 
 	update(gameState: CommonGameState): void
@@ -99,7 +102,15 @@ export class EmergencyManager
 		};
 	}
 
-	Deserialize(data: SerializedEmergencyManager): void
+	/** A saved emergency manager: its references and whether it is in an emergency */
+	static restore(Config: Config, data: SerializedEmergencyManager): EmergencyManager
+	{
+		const manager = new EmergencyManager(Config);
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(data: SerializedEmergencyManager): void
 	{
 		this.referencePopulation = data.referencePopulation;
 		this.referenceStructureCount = data.referenceStructureCount;

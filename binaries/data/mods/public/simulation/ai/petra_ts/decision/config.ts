@@ -375,8 +375,11 @@ export class Config
 		return data;
 	}
 
-	Deserialize(data: SerializedConfig): void
+	/** A saved config: every setting as saved, the drawn personality included */
+	static restore(data: SerializedConfig): Config
 	{
-		Object.assign(this, data);
+		const config = new Config(data.difficulty, data.behavior);
+		Object.assign(config, data);
+		return config;
 	}
 }

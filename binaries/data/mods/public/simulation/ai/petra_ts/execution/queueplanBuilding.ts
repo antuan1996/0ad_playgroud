@@ -1017,7 +1017,15 @@ export class ConstructionPlan extends QueuePlan<CommonTemplate, "building">
 		};
 	}
 
-	Deserialize(gameState: CommonGameState, data: ReturnType<ConstructionPlan["Serialize"]>): void
+	/** A saved plan: its id, metadata and cost from the save */
+	static restore(gameState: CommonGameState, data: ReturnType<ConstructionPlan["Serialize"]>): ConstructionPlan
+	{
+		const plan = new ConstructionPlan(gameState, data.type);
+		plan.resume(data);
+		return plan;
+	}
+
+	private resume(data: ReturnType<ConstructionPlan["Serialize"]>): void
 	{
 		this.type = data.type;
 		this.ID = data.ID;

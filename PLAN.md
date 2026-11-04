@@ -61,7 +61,8 @@ again (stage 5's first change) gives 62.9% against `petra_parity` (CI
    runtime, so no npm libraries in the bot. The bot runs synchronously in the
    simulation turn (200 ms); Petra spreads its work by running the HQ update
    one turn in eight per player.
-4. **Save games.** Every manager has `Serialize`/`Deserialize`. A new bot keeps
+4. **Save games.** Every manager has `Serialize` and a `restore` factory
+   (stage 5; the bot itself keeps the engine's `Serialize`/`Deserialize`). A new bot keeps
    them, versions its saved data, and refuses (with a message, then a fresh
    start) data from a version it cannot read.
 5. **Two shipped bots.** `petra` (original) stays untouched in this repo;
@@ -291,7 +292,11 @@ identical game for game before and after):
    `gameState.ai.HQ` while being built; `gameAnalysis` keeps only the first
    turn's actions; the worker's per-unit fields became a `UnitWork` per unit.
    One `declare` field is left, the bot's `player` (set by `BaseAI`);
-   `SAVE_VERSION` 3.
+   `SAVE_VERSION` 3. Then the rest: every class restores by a `restore`
+   factory (the queues, their plans, the queue manager, the config and the
+   other managers), the start-up `init`s became `start` factories (build,
+   emergency) or named first-turn actions (`answerStartingStances`,
+   `findCriticalEnts`); no `Deserialize` is left but the bot's own.
 
 A third round (done, the same checks, the 24 games identical again):
 `BaseId`, `ArmyId`, `TransportPlanId` brands (with `NO_BASE`, and `NEW_BASE`

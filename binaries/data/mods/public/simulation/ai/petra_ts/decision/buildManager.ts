@@ -44,12 +44,14 @@ export class BuildManager
 	// with time we should wait before trying again to build it.
 	unbuildables = new Map<string, Unbuildable>();
 
-	/** Initialization at start of game */
-	init(gameState: CommonGameState): void
+	/** At the start of a game: the builders our starting units are */
+	static start(gameState: CommonGameState): BuildManager
 	{
+		const manager = new BuildManager();
 		const civ = gameState.getPlayerCiv();
 		for (const ent of gameState.getOwnUnits().values())
-			addBuilder(this.builders, civ, ent);
+			addBuilder(manager.builders, civ, ent);
+		return manager;
 	}
 
 	/** Update the builders counters */
@@ -191,7 +193,15 @@ export class BuildManager
 		};
 	}
 
-	Deserialize(data: SerializedBuildManager): void
+	/** A saved build manager: its builders and what it cannot build yet */
+	static restore(data: SerializedBuildManager): BuildManager
+	{
+		const manager = new BuildManager();
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(data: SerializedBuildManager): void
 	{
 		// The fallbacks keep the value set by the field initializers for fields
 		// absent in savegames written by an older version

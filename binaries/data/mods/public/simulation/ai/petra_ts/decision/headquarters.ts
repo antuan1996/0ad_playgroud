@@ -256,41 +256,28 @@ export class Headquarters
 			this.capturableTargets = properties.capturableTargets;
 			this.capturableTargetsTime = properties.capturableTargetsTime;
 
-			this.gatherEconomy = new GatherEconomy();
-			this.gatherEconomy.Deserialize(saved.gatherEconomy);
+			this.gatherEconomy = GatherEconomy.restore(saved.gatherEconomy);
 
 			this.basesManager = new BasesManager(this.Config, gameState, saved.basesManager);
 			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager);
 			this.attackManager = AttackManager.restore(this.Config, gameState, saved.attackManager, this.canBuildUnits);
 
-			this.buildManager = new BuildManager();
-			this.buildManager.Deserialize(saved.buildManager);
-
-			this.defenseManager = new DefenseManager(this.Config, geography);
-			this.defenseManager.Deserialize(gameState, saved.defenseManager);
+			this.buildManager = BuildManager.restore(saved.buildManager);
+			this.defenseManager = DefenseManager.restore(this.Config, gameState, geography, saved.defenseManager);
 
 			this.tradeManager = TradeManager.restore(this.Config, gameState, geography, saved.tradeManager);
 
-			this.researchManager = new ResearchManager(this.Config);
-			this.researchManager.Deserialize(saved.researchManager);
-
-			this.diplomacyManager = new DiplomacyManager(this.Config, true);
-			this.diplomacyManager.Deserialize(saved.diplomacyManager);
-
-			this.garrisonManager = new GarrisonManager(this.Config);
-			this.garrisonManager.Deserialize(saved.garrisonManager);
-
-			this.victoryManager = new VictoryManager(this.Config);
-			this.victoryManager.Deserialize(saved.victoryManager);
-
-			this.emergencyManager = new EmergencyManager(this.Config);
-			this.emergencyManager.Deserialize(saved.emergencyManager);
+			this.researchManager = ResearchManager.restore(this.Config, saved.researchManager);
+			this.diplomacyManager = DiplomacyManager.restore(this.Config, saved.diplomacyManager);
+			this.garrisonManager = GarrisonManager.restore(this.Config, saved.garrisonManager);
+			this.victoryManager = VictoryManager.restore(this.Config, saved.victoryManager);
+			this.emergencyManager = EmergencyManager.restore(this.Config, saved.emergencyManager);
 			return;
 		}
 
 		this.basesManager = new BasesManager(this.Config, gameState);
 		this.attackManager = new AttackManager(this.Config, gameState);
-		this.buildManager = new BuildManager();
+		this.buildManager = BuildManager.start(gameState);
 		this.defenseManager = new DefenseManager(this.Config, geography);
 		this.tradeManager = new TradeManager(this.Config, gameState, geography);
 		this.navalManager = new NavalManager(this.Config, gameState, geography);
@@ -298,8 +285,7 @@ export class Headquarters
 		this.diplomacyManager = new DiplomacyManager(this.Config, false);
 		this.garrisonManager = new GarrisonManager(this.Config);
 		this.victoryManager = new VictoryManager(this.Config);
-		this.emergencyManager = new EmergencyManager(this.Config);
-		this.emergencyManager.init(gameState);
+		this.emergencyManager = EmergencyManager.start(this.Config, gameState);
 	}
 
 	/** A saved headquarters: its map's regions from the save, its maps read again */

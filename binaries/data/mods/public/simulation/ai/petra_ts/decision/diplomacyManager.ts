@@ -73,9 +73,9 @@ export class DiplomacyManager
 
 	/**
 	 * If there are any players that are allied/neutral with us but we are not allied/neutral with them,
-	 * treat this situation like an ally/neutral request.
+	 * treat this situation like an ally/neutral request. The first turn's diplomacy.
 	 */
-	init(gameState: CommonGameState): void
+	answerStartingStances(gameState: CommonGameState): void
 	{
 		this.lastManStandingCheck(gameState);
 
@@ -632,7 +632,15 @@ export class DiplomacyManager
 		};
 	}
 
-	Deserialize(data: SerializedDiplomacyManager): void
+	/** A saved diplomacy manager: its tributes, betrayals and requests (no random draw: its timings are saved) */
+	static restore(Config: Config, data: SerializedDiplomacyManager): DiplomacyManager
+	{
+		const manager = new DiplomacyManager(Config, true);
+		manager.resume(data);
+		return manager;
+	}
+
+	private resume(data: SerializedDiplomacyManager): void
 	{
 		this.nextTributeUpdate = data.nextTributeUpdate;
 		this.nextTributeRequest = data.nextTributeRequest;
