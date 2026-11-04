@@ -158,6 +158,21 @@ class CellHeap
 	}
 }
 
+/** The sea's grid as the route search reads it. */
+type SeaGrid = {
+	access: Readonly<Accessibility>;
+	sea: SeaIndex;
+	width: number;
+	height: number;
+	/** 1 on the cells within a shooter's range and the margin */
+	danger: Uint8Array;
+};
+
+function onSea(grid: SeaGrid, cell: number): boolean
+{
+	return grid.access.navalPassMap[cell] === grid.sea;
+}
+
 /**
  * Waypoints from `from` to `to` over the cells of sea region `sea`, round the
  * shooters where it can; the last is `to` itself. Undefined when either end is
@@ -167,8 +182,6 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	shooters: readonly Shooter[]): CommonPosition[] | undefined
 {
 	const width = access.width;
-	const height = access.height;
-	const cellSize = access.cellSize;
 	const cellOf = (pos: CommonPosition): number =>
 	{
 		const p = access.gamePosToMapPos(pos);
@@ -176,21 +189,42 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	};
 	const start = cellOf(from);
 	const goal = cellOf(to);
-	const onSea = (cell: number): boolean => access.navalPassMap[cell] === sea;
-	if (!onSea(start) || !onSea(goal))
+	const grid: SeaGrid = { access, sea, width, "height": access.height, "danger": new Uint8Array(width * access.height) };
+	if (!onSea(grid, start) || !onSea(grid, goal))
 		return undefined;
+	markDanger(grid, shooters);
 
-	const danger = new Uint8Array(width * height);
+	const cells = searchPath(grid, start, goal);
+	if (!cells)
+		return undefined;
+	const corners = pathCorners(grid, cells);
+	const every = Math.max(1, Math.ceil((corners.length + 1) / MAX_WAYPOINTS));
+	const route: CommonPosition[] = [];
+	for (let i = every - 1; i < corners.length; i += every)
+		route.push(worldPosOf(corners[i] % width, Math.floor(corners[i] / width), access.cellSize));
+	route.push(to);
+	return route;
+}
+
+/** Marks the cells within each shooter's range, and the margin, as in danger. */
+function markDanger(grid: SeaGrid, shooters: readonly Shooter[]): void
+{
+	const { access, width, height, danger } = grid;
 	for (const shooter of shooters)
 	{
 		const c = access.gamePosToMapPos(shooter.pos);
-		const r = Math.ceil((shooter.range + DANGER_MARGIN) / cellSize);
+		const r = Math.ceil((shooter.range + DANGER_MARGIN) / access.cellSize);
 		for (let y = Math.max(0, c[1] - r); y <= Math.min(height - 1, c[1] + r); ++y)
 			for (let x = Math.max(0, c[0] - r); x <= Math.min(width - 1, c[0] + r); ++x)
 				if ((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1]) <= r * r)
 					danger[x + y * width] = 1;
 	}
+}
 
+/** The cheapest way from cell start to cell goal over the sea (A*, danger costly), start and goal included. */
+function searchPath(grid: SeaGrid, start: number, goal: number): number[] | undefined
+{
+	const { width, height } = grid;
 	const goalX = goal % width;
 	const goalY = Math.floor(goal / width);
 	const estimate = (cell: number): number =>
@@ -208,26 +242,7 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	{
 		if (cell === goal)
 			break;
-		const x = cell % width;
-		const y = Math.floor(cell / width);
-		for (let dy = -1; dy <= 1; ++dy)
-			for (let dx = -1; dx <= 1; ++dx)
-			{
-				const nx = x + dx;
-				const ny = y + dy;
-				if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= width || ny >= height)
-					continue;
-				const next = nx + ny * width;
-				if (!onSea(next))
-					continue;
-				const step = (dx && dy ? Math.SQRT2 : 1) * (danger[next] ? DANGER_COST : 1);
-				const reached = cost[cell] + step;
-				if (reached >= cost[next])
-					continue;
-				cost[next] = reached;
-				cameFrom[next] = cell;
-				heap.push(next, reached + estimate(next));
-			}
+		relaxNeighbours(grid, cell, cost, cameFrom, (next, reached) => heap.push(next, reached + estimate(next)));
 	}
 	if (cameFrom[goal] === -1 && goal !== start)
 		return undefined;
@@ -235,42 +250,79 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	const cells: number[] = [start];
 	for (let cell = goal; cell !== start; cell = cameFrom[cell])
 		cells.splice(1, 0, cell);
+	return cells;
+}
+
+/** Lowers the cost of each sea neighbour of `cell` reached cheaper through it, and queues it. */
+function relaxNeighbours(grid: SeaGrid, cell: number, cost: Float64Array, cameFrom: Int32Array,
+	queue: (next: number, reached: number) => void): void
+{
+	const { width, height, danger } = grid;
+	const x = cell % width;
+	const y = Math.floor(cell / width);
+	for (let dy = -1; dy <= 1; ++dy)
+		for (let dx = -1; dx <= 1; ++dx)
+		{
+			const nx = x + dx;
+			const ny = y + dy;
+			if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= width || ny >= height)
+				continue;
+			const next = nx + ny * width;
+			if (!onSea(grid, next))
+				continue;
+			const step = (dx && dy ? Math.SQRT2 : 1) * (danger[next] ? DANGER_COST : 1);
+			const reached = cost[cell] + step;
+			if (reached >= cost[next])
+				continue;
+			cost[next] = reached;
+			cameFrom[next] = cell;
+			queue(next, reached);
+		}
+}
+
+/** The cells a straight leg from cell a to cell b crosses: all at sea, and how many in danger (undefined: not at sea). */
+function legDanger(grid: SeaGrid, a: number, b: number): number | undefined
+{
+	const width = grid.width;
+	const ax = a % width + 0.5;
+	const ay = Math.floor(a / width) + 0.5;
+	const dx = b % width + 0.5 - ax;
+	const dy = Math.floor(b / width) + 0.5 - ay;
+	const steps = Math.max(1, Math.ceil(2 * Math.max(Math.abs(dx), Math.abs(dy))));
+	let count = 0;
+	let previous = -1;
+	for (let k = 1; k <= steps; ++k)
+	{
+		const cell = Math.floor(ax + dx * k / steps) + Math.floor(ay + dy * k / steps) * width;
+		if (cell === previous)
+			continue;
+		previous = cell;
+		if (!onSea(grid, cell))
+			return undefined;
+		count += grid.danger[cell];
+	}
+	return count;
+}
+
+/**
+ * The corners of a path: from each kept cell, the leg goes on along the path
+ * while the straight way stays at sea with no more danger than the path's own;
+ * the cell before the first that fails is the next corner (a scan forward: its
+ * cost grows with the legs, not the path).
+ */
+function pathCorners(grid: SeaGrid, cells: number[]): number[]
+{
 	// danger cells along the path up to each cell
 	const dangerBefore = new Int32Array(cells.length);
 	for (let i = 1; i < cells.length; ++i)
-		dangerBefore[i] = dangerBefore[i - 1] + danger[cells[i]];
-	/** The cells a straight leg from cell a to cell b crosses: all at sea, and how many in danger (undefined: not at sea). */
-	const legDanger = (a: number, b: number): number | undefined =>
-	{
-		const ax = a % width + 0.5;
-		const ay = Math.floor(a / width) + 0.5;
-		const dx = b % width + 0.5 - ax;
-		const dy = Math.floor(b / width) + 0.5 - ay;
-		const steps = Math.max(1, Math.ceil(2 * Math.max(Math.abs(dx), Math.abs(dy))));
-		let count = 0;
-		let previous = -1;
-		for (let k = 1; k <= steps; ++k)
-		{
-			const cell = Math.floor(ax + dx * k / steps) + Math.floor(ay + dy * k / steps) * width;
-			if (cell === previous)
-				continue;
-			previous = cell;
-			if (!onSea(cell))
-				return undefined;
-			count += danger[cell];
-		}
-		return count;
-	};
-	// the corners: from each kept cell, the leg goes on along the path while the straight way
-	// stays at sea with no more danger than the path's own; the cell before the first that
-	// fails is the next corner (a scan forward: its cost grows with the legs, not the path)
+		dangerBefore[i] = dangerBefore[i - 1] + grid.danger[cells[i]];
 	const corners: number[] = [];
 	for (let anchor = 0; anchor < cells.length - 1;)
 	{
 		let next = anchor + 1;
 		for (let j = anchor + 2; j < cells.length; ++j)
 		{
-			const leg = legDanger(cells[anchor], cells[j]);
+			const leg = legDanger(grid, cells[anchor], cells[j]);
 			if (leg === undefined || leg > dangerBefore[j] - dangerBefore[anchor])
 				break;
 			next = j;
@@ -279,12 +331,7 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 			corners.push(cells[next]);
 		anchor = next;
 	}
-	const every = Math.max(1, Math.ceil((corners.length + 1) / MAX_WAYPOINTS));
-	const route: CommonPosition[] = [];
-	for (let i = every - 1; i < corners.length; i += every)
-		route.push(worldPosOf(corners[i] % width, Math.floor(corners[i] / width), cellSize));
-	route.push(to);
-	return route;
+	return corners;
 }
 
 /** The centre of a grid cell, in world coordinates. */

@@ -12,71 +12,56 @@ import { isPlaced } from "../adapter/placed.ts";
 const TERRITORY_PLAYER_MASK = 0x1F;
 const TERRITORY_BLINKING_MASK = 0x40;
 
+/** Where a template may be built: its placement and the territories it allows (the defaults with none). */
+type BuildRules = { placementType: string; own: boolean; ally: boolean; neutral: boolean; enemy: boolean };
+
+function buildRules(template: CommonTemplate | undefined): BuildRules
+{
+	if (!template)
+		return { "placementType": "land", "own": true, "ally": true, "neutral": true, "enemy": false };
+	// as in the original: a template without BuildRestrictions answers
+	// undefined, which allows no territory at all
+	return {
+		"placementType": template.buildPlacementType() ?? "land",
+		"own": template.hasBuildTerritory("own") === true,
+		"ally": template.hasBuildTerritory("ally") === true,
+		"neutral": template.hasBuildTerritory("neutral") === true,
+		"enemy": template.hasBuildTerritory("enemy") === true
+	};
+}
+
+/** Whether the rules allow building on territory cell k (its owner, and whether it is connected). */
+function territoryAllows(gameState: CommonGameState, rules: BuildRules, cell: number): boolean
+{
+	const territoryMap = gameState.ai.territoryMap;
+	const tilePlayer = playerId(territoryMap.data[cell] & TERRITORY_PLAYER_MASK);
+	const isConnected = (territoryMap.data[cell] & TERRITORY_BLINKING_MASK) === 0;
+	if (tilePlayer === PlayerID)
+		return rules.own && (rules.neutral || isConnected);
+	if (gameState.isPlayerMutualAlly(tilePlayer))
+		return rules.ally && (rules.neutral || isConnected);
+	if (tilePlayer === 0)
+		return rules.neutral;
+	return rules.enemy;
+}
+
 export function createObstructionMap(gameState: CommonGameState, accessIndex: AccessIndex | undefined,
 	template?: CommonTemplate): InfoMap
 {
 	const passabilityMap = gameState.getPassabilityMap();
 	const territoryMap = gameState.ai.territoryMap;
 	const ratio = territoryMap.cellSize / passabilityMap.cellSize;
-
-	// default values
-	let placementType = "land";
-	let buildOwn = true;
-	let buildAlly = true;
-	let buildNeutral = true;
-	let buildEnemy = false;
-	// If there is a template then replace the defaults
-	if (template)
-	{
-		placementType = template.buildPlacementType() ?? placementType;
-		// as in the original: a template without BuildRestrictions answers
-		// undefined, which allows no territory at all
-		buildOwn = template.hasBuildTerritory("own") === true;
-		buildAlly = template.hasBuildTerritory("ally") === true;
-		buildNeutral = template.hasBuildTerritory("neutral") === true;
-		buildEnemy = template.hasBuildTerritory("enemy") === true;
-	}
+	const rules = buildRules(template);
+	const shore = rules.placementType === "shore";
 	const obstructionTiles = new Uint8Array(passabilityMap.data.length);
-
-	let passMap;
-	let obstructionMask;
-	if (placementType === "shore")
-	{
-		passMap = gameState.ai.accessibility.navalPassMap;
-		obstructionMask = gameState.getPassabilityClassMask("building-shore");
-	}
-	else
-	{
-		passMap = gameState.ai.accessibility.landPassMap;
-		obstructionMask = gameState.getPassabilityClassMask("building-land");
-	}
+	const passMap = shore ? gameState.ai.accessibility.navalPassMap : gameState.ai.accessibility.landPassMap;
+	const obstructionMask = gameState.getPassabilityClassMask(shore ? "building-shore" : "building-land");
 
 	// See createTerritoryMap: the engine grid's array is `data`, not `map`.
 	for (let k = 0; k < territoryMap.data.length; ++k)
 	{
-		const tilePlayer = playerId(territoryMap.data[k] & TERRITORY_PLAYER_MASK);
-		const isConnected = (territoryMap.data[k] & TERRITORY_BLINKING_MASK) === 0;
-		if (tilePlayer === PlayerID)
-		{
-			if (!buildOwn || !buildNeutral && !isConnected)
-				continue;
-		}
-		else if (gameState.isPlayerMutualAlly(tilePlayer))
-		{
-			if (!buildAlly || !buildNeutral && !isConnected)
-				continue;
-		}
-		else if (tilePlayer === 0)
-		{
-			if (!buildNeutral)
-				continue;
-		}
-		else
-		{
-			if (!buildEnemy)
-				continue;
-		}
-
+		if (!territoryAllows(gameState, rules, k))
+			continue;
 		const x = ratio * (k % territoryMap.width);
 		const y = ratio * Math.floor(k / territoryMap.width);
 		for (let ix = 0; ix < ratio; ++ix)
@@ -84,7 +69,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 			for (let iy = 0; iy < ratio; ++iy)
 			{
 				const i = x + ix + (y + iy)*passabilityMap.width;
-				if (placementType !== "shore" && accessIndex && accessIndex !== passMap[i])
+				if (!shore && accessIndex && accessIndex !== passMap[i])
 					continue;
 				if (!(passabilityMap.data[i] & obstructionMask))
 					obstructionTiles[i] = 255;
@@ -94,32 +79,35 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 
 	const map = new InfoMap(gameState.sharedScript, "passability", obstructionTiles);
 	map.setMaxVal(255);
-
-	const distance = template ? template.buildDistance() : undefined;
-	if (distance)
-	{
-		let minDist = distance.MinDistance ? +distance.MinDistance : 0;
-		if (minDist)
-		{
-			// a distance requirement is template data, so a template was necessarily passed
-			minDist -= requireValue(template?.obstructionRadius()).min;
-			const fromClass = distance.FromClass;
-			const cellSize = passabilityMap.cellSize;
-			const cellDist = 1 + minDist / cellSize;
-			const structures = fromClass !== undefined ?
-				gameState.getOwnStructures().filter(filters.byClass(fromClass)) :
-				[];
-			for (const ent of structures.values())
-			{
-				const pos = ent.position();
-				const x = Math.round(pos[0] / cellSize);
-				const z = Math.round(pos[1] / cellSize);
-				map.addInfluence(x, z, cellDist, -255, "constant");
-			}
-		}
-	}
-
+	if (template)
+		keepMinDistance(gameState, map, template);
 	return map;
+}
+
+/** Rules out the cells nearer than the template's minimum distance to our structures of its class. */
+function keepMinDistance(gameState: CommonGameState, map: InfoMap, template: CommonTemplate): void
+{
+	const distance = template.buildDistance();
+	if (!distance)
+		return;
+	let minDist = distance.MinDistance ? +distance.MinDistance : 0;
+	if (!minDist)
+		return;
+	// a distance requirement is template data, so a template was necessarily passed
+	minDist -= requireValue(template.obstructionRadius()).min;
+	const fromClass = distance.FromClass;
+	const cellSize = gameState.getPassabilityMap().cellSize;
+	const cellDist = 1 + minDist / cellSize;
+	const structures = fromClass !== undefined ?
+		gameState.getOwnStructures().filter(filters.byClass(fromClass)) :
+		[];
+	for (const ent of structures.values())
+	{
+		const pos = ent.position();
+		const x = Math.round(pos[0] / cellSize);
+		const z = Math.round(pos[1] / cellSize);
+		map.addInfluence(x, z, cellDist, -255, "constant");
+	}
 }
 
 
@@ -174,49 +162,35 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	const border = Math.round(80 / map.cellSize);
 	const passabilityMap = gameState.getPassabilityMap();
 	const obstructionMask = gameState.getPassabilityClassMask("unrestricted");
-	if (gameState.circularMap)
-	{
-		const ic = (width - 1) / 2;
-		const radcut = (ic - border) * (ic - border);
-		for (let jIndex = 0; jIndex < map.length; ++jIndex)
+	const ic = (width - 1) / 2;
+	const radcut = (ic - border) * (ic - border);
+	const borderCut = width - border;
+	const nearEdge = gameState.circularMap ?
+		(j: number): boolean =>
 		{
-			const j = cellIndex(map, jIndex);
 			const dx = j%width - ic;
 			const dy = Math.floor(j/width) - ic;
-			const radius = dx*dx + dy*dy;
-			if (radius < radcut)
-				continue;
-			map.map[j] = mapMask.outside;
-			const ind = getMapIndices(j, map, passabilityMap);
-			for (const k of ind)
-			{
-				if (passabilityMap.data[k] & obstructionMask)
-					continue;
-				map.map[j] = mapMask.border;
-				break;
-			}
-		}
-	}
-	else
-	{
-		const borderCut = width - border;
-		for (let jIndex = 0; jIndex < map.length; ++jIndex)
+			return dx*dx + dy*dy >= radcut;
+		} :
+		(j: number): boolean =>
 		{
-			const j = cellIndex(map, jIndex);
 			const ix = j%width;
 			const iy = Math.floor(j/width);
-			if (ix < border || ix >= borderCut || iy < border || iy >= borderCut)
-			{
-				map.map[j] = mapMask.outside;
-				const ind = getMapIndices(j, map, passabilityMap);
-				for (const k of ind)
-				{
-					if (passabilityMap.data[k] & obstructionMask)
-						continue;
-					map.map[j] = mapMask.border;
-					break;
-				}
-			}
+			return ix < border || ix >= borderCut || iy < border || iy >= borderCut;
+		};
+	for (let jIndex = 0; jIndex < map.length; ++jIndex)
+	{
+		const j = cellIndex(map, jIndex);
+		if (!nearEdge(j))
+			continue;
+		// outside, unless one of its passability cells is open: then border
+		map.map[j] = mapMask.outside;
+		for (const k of getMapIndices(j, map, passabilityMap))
+		{
+			if (passabilityMap.data[k] & obstructionMask)
+				continue;
+			map.map[j] = mapMask.border;
+			break;
 		}
 	}
 

@@ -3,6 +3,7 @@ import type { BasesManager } from "./basesManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
+import { debugWarn } from "../adapter/debug.ts";
 import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireStructureTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
 import { BaseResources } from "../world/baseResources.ts";
@@ -247,9 +248,13 @@ export class BaseManager
 		// a mobile dropsite aboard a ship reaches nothing
 		if (!isPlaced(dropsite))
 			return;
-		const baseless = this.ID === this.basesManager.baselessBase().ID;
-		if (!this.resources.addDropsite(gameState, dropsite, this.accessIndex, baseless, this.maxDistResourceSquare, this.Config.debug))
+		// the baseless pool takes each dropsite's own land
+		const access = this.ID === this.basesManager.baselessBase().ID ? getLandAccess(gameState, dropsite) : this.accessIndex;
+		if (!this.resources.addDropsite(gameState, dropsite, access, this.maxDistResourceSquare))
+		{
+			debugWarn(this.Config, 0, () => "assignResourceToDropsite: dropsite already in the list. Should never happen");
 			return;
+		}
 		if (deserialized)
 			return;
 

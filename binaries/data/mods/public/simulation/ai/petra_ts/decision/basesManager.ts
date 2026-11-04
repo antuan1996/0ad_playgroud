@@ -26,6 +26,31 @@ type BasesManagerTurnCache = {
 	base?: { active: number; potential: number };
 };
 
+/** A trained animal (a supply) walks to the nearest of our dropsites for its resource on its land. */
+function toNearestDropsite(gameState: CommonGameState, ent: CommonPlacedEntity): void
+{
+	const type = ent.resourceSupplyType();
+	if (!type || !type.generic)
+		return;
+	const dropsites = gameState.getOwnDropsites(type.generic);
+	const pos = ent.position();
+	const access = getLandAccess(gameState, ent);
+	let distmin = Math.min();
+	let goal;
+	for (const dropsite of dropsites.values())
+	{
+		if (!isPlaced(dropsite) || getLandAccess(gameState, dropsite) !== access)
+			continue;
+		const dist = SquareVectorDistance(pos, dropsite.position());
+		if (dist > distmin)
+			continue;
+		distmin = dist;
+		goal = dropsite.position();
+	}
+	if (goal)
+		ent.move(goal[0], goal[1]);
+}
+
 /**
  * Bases Manager
  * Manages the list of available bases and queries information from those (e.g. resource levels).
@@ -192,33 +217,29 @@ export class BasesManager
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
 				// Let's get a few units from other bases there to build this. (Soldiers
 				// first on another island lost the island games: FINDINGS §39.)
-				const builders = this.bulkPickWorkers(gameState, newbase, 10);
-				if (builders !== false)
-				{
-					builders.forEach((worker) =>
-					{
-						worker.setMetadata(PlayerID, "base", newbase.ID);
-						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
-						worker.setMetadata(PlayerID, "target-foundation", ent.id());
-					});
-				}
+				this.sendBuilders(gameState, newbase, ent, 10);
 			}
 			else if (ent.getMetadata(PlayerID, "base") === NEW_ANCHORLESS_BASE)	// anchorless base around a dock
 			{
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 				// Let's get a few units from other bases there to build this.
-				const builders = this.bulkPickWorkers(gameState, newbase, 4);
-				if (builders !== false)
-				{
-					builders.forEach((worker) =>
-					{
-						worker.setMetadata(PlayerID, "base", newbase.ID);
-						worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
-						worker.setMetadata(PlayerID, "target-foundation", ent.id());
-					});
-				}
+				this.sendBuilders(gameState, newbase, ent, 4);
 			}
 		}
+	}
+
+	/** Takes up to `count` workers from the other bases to build a new base's foundation. */
+	private sendBuilders(gameState: CommonGameState, newbase: BaseManager, foundation: CommonEntity, count: number): void
+	{
+		const builders = this.bulkPickWorkers(gameState, newbase, count);
+		if (builders === false)
+			return;
+		builders.forEach((worker) =>
+		{
+			worker.setMetadata(PlayerID, "base", newbase.ID);
+			worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
+			worker.setMetadata(PlayerID, "target-foundation", foundation.id());
+		});
 	}
 
 	/** checkEvents: buildings finished.; whether it added a base. */
@@ -259,59 +280,64 @@ export class BasesManager
 		for (const evt of events.OwnershipChanged)
 		{
 			if (evt.from === PlayerID)
-			{
-				const ent = gameState.getEntityById(evt.entity);
-				if (!ent)
-					continue;
-				const baseID = ent.getMetadata(PlayerID, "base");
-				if (baseID === undefined)
-					continue;
-				const base = this.getBaseByID(baseID);
-				if (!base)
-					continue;
-				if (ent.resourceDropsiteTypes() && ent.hasClass("Structure"))
-					base.removeDropsite(gameState, ent.id());
-				if (ent.getMetadata(PlayerID, "baseAnchor") === true)
-					base.anchorLost(gameState);
-			}
-
-			if (evt.to !== PlayerID)
-				continue;
-			const ent = gameState.getEntityById(evt.entity);
-			if (!ent)
-				continue;
-			if (ent.hasClass("Unit"))
-			{
-				const bestBase = getBestBase(gameState, ent);
-				if (bestBase)
-					bestBase.assignEntity(gameState, ent);
-				continue;
-			}
-			if (ent.hasClass("CivCentre"))   // build a new base around it
-			{
-				let newbase;
-				if (ent.foundationProgress() !== undefined)
-					newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
-				else
-				{
-					newbase = this.createBase(gameState, ent, BaseManager.STATE_CAPTURED);
-					addBase = true;
-				}
-				newbase.assignEntity(gameState, ent);
-			}
-			else
-			{
-				let base;
-				// If dropsite on new island, create a base around it
-				if (!ent.decaying() && ent.resourceDropsiteTypes())
-					base = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
-				else
-					base = getBestBase(gameState, ent) || this.noBase;
-				if (base)
-					base.assignEntity(gameState, ent);
-			}
+				this.lostToOther(gameState, evt.entity);
+			if (evt.to === PlayerID && this.gainedFromOther(gameState, evt.entity))
+				addBase = true;
 		}
 		return addBase;
+	}
+
+	/** An entity we lost leaves its base: a dropsite its lists, an anchor its base. */
+	private lostToOther(gameState: CommonGameState, entityId: EntityId): void
+	{
+		const ent = gameState.getEntityById(entityId);
+		if (!ent)
+			return;
+		const baseID = ent.getMetadata(PlayerID, "base");
+		if (baseID === undefined)
+			return;
+		const base = this.getBaseByID(baseID);
+		if (!base)
+			return;
+		if (ent.resourceDropsiteTypes() && ent.hasClass("Structure"))
+			base.removeDropsite(gameState, ent.id());
+		if (ent.getMetadata(PlayerID, "baseAnchor") === true)
+			base.anchorLost(gameState);
+	}
+
+	/**
+	 * An entity we gained joins a base: a unit the best one, a civic centre a
+	 * new base around it, a new island's dropsite an anchorless base; true if a
+	 * built civic centre made a base.
+	 */
+	private gainedFromOther(gameState: CommonGameState, entityId: EntityId): boolean
+	{
+		const ent = gameState.getEntityById(entityId);
+		if (!ent)
+			return false;
+		if (ent.hasClass("Unit"))
+		{
+			const bestBase = getBestBase(gameState, ent);
+			if (bestBase)
+				bestBase.assignEntity(gameState, ent);
+			return false;
+		}
+		if (ent.hasClass("CivCentre"))   // build a new base around it
+		{
+			const built = ent.foundationProgress() === undefined;
+			const newbase = this.createBase(gameState, ent, built ? BaseManager.STATE_CAPTURED : BaseManager.STATE_UNCONSTRUCTED);
+			newbase.assignEntity(gameState, ent);
+			return built;
+		}
+		let base;
+		// If dropsite on new island, create a base around it
+		if (!ent.decaying() && ent.resourceDropsiteTypes())
+			base = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
+		else
+			base = getBestBase(gameState, ent) || this.noBase;
+		if (base)
+			base.assignEntity(gameState, ent);
+		return false;
 	}
 
 	/** checkEvents: units trained. */
@@ -327,49 +353,32 @@ export class BasesManager
 
 				// Assign it immediately to something useful to do.
 				if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER)
-				{
-					let base;
-					if (ent.getMetadata(PlayerID, "base") === undefined)
-					{
-						base = getBestBase(gameState, ent);
-						if (base)
-							base.assignEntity(gameState, ent);
-					}
-					else
-					{
-						const baseID = ent.getMetadata(PlayerID, "base");
-						base = baseID === undefined ? undefined : this.getBaseByID(baseID);
-					}
-					if (!base)
-						continue;
-					base.reassignIdleWorkers(gameState, [ent]);
-					base.workerObject.update(gameState, ent);
-				}
+					this.setNewWorkerToWork(gameState, ent);
 				else if (ent.resourceSupplyType() && isPlaced(ent))
-				{
-					const type = ent.resourceSupplyType();
-					if (!type || !type.generic)
-						continue;
-					const dropsites = gameState.getOwnDropsites(type.generic);
-					const pos = ent.position();
-					const access = getLandAccess(gameState, ent);
-					let distmin = Math.min();
-					let goal;
-					for (const dropsite of dropsites.values())
-					{
-						if (!isPlaced(dropsite) || getLandAccess(gameState, dropsite) !== access)
-							continue;
-						const dist = SquareVectorDistance(pos, dropsite.position());
-						if (dist > distmin)
-							continue;
-						distmin = dist;
-						goal = dropsite.position();
-					}
-					if (goal)
-						ent.move(goal[0], goal[1]);
-				}
+					toNearestDropsite(gameState, ent);
 			}
 		}
+	}
+
+	/** A worker just trained: to its base, or the best one, and to work at once. */
+	private setNewWorkerToWork(gameState: CommonGameState, ent: CommonEntity): void
+	{
+		let base;
+		if (ent.getMetadata(PlayerID, "base") === undefined)
+		{
+			base = getBestBase(gameState, ent);
+			if (base)
+				base.assignEntity(gameState, ent);
+		}
+		else
+		{
+			const baseID = ent.getMetadata(PlayerID, "base");
+			base = baseID === undefined ? undefined : this.getBaseByID(baseID);
+		}
+		if (!base)
+			return;
+		base.reassignIdleWorkers(gameState, [ent]);
+		base.workerObject.update(gameState, ent);
 	}
 
 	/** TODO check if the new anchorless bases should be added to addBase */
@@ -642,25 +651,7 @@ export class BasesManager
 	 */
 	assignEntity(gameState: CommonGameState, ent: CommonEntity, territoryIndex: CellIndex<"territory">): void
 	{
-		let bestbase;
-		for (const base of this.baseManagers)
-		{
-			if ((!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
-			    base.territoryIndices.indexOf(territoryIndex) === -1)
-				continue;
-			base.assignEntity(gameState, ent);
-			bestbase = base;
-			break;
-		}
-		if (!bestbase)	// entity outside our territory
-		{
-			if (ent.hasClass("Structure") && !ent.decaying() && ent.resourceDropsiteTypes())
-				bestbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
-			else
-				bestbase = getBestBase(gameState, ent) || this.noBase;
-			if (bestbase)
-				bestbase.assignEntity(gameState, ent);
-		}
+		const bestbase = this.assignToBase(gameState, ent, territoryIndex);
 		// now assign entities garrisoned inside this entity
 		if (ent.isGarrisonHolder() && ent.garrisoned().length)
 			for (const id of ent.garrisoned())
@@ -679,6 +670,28 @@ export class BasesManager
 				bestbase.workerObject.update(gameState, ent);
 			}
 		}
+	}
+
+	/** Assigns ent to its base, the base of its territory cell, or else the best one; returns that base. */
+	private assignToBase(gameState: CommonGameState, ent: CommonEntity, territoryIndex: CellIndex<"territory">): BaseManager | undefined
+	{
+		for (const base of this.baseManagers)
+		{
+			if ((!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
+			    base.territoryIndices.indexOf(territoryIndex) === -1)
+				continue;
+			base.assignEntity(gameState, ent);
+			return base;
+		}
+		// entity outside our territory
+		let bestbase;
+		if (ent.hasClass("Structure") && !ent.decaying() && ent.resourceDropsiteTypes())
+			bestbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
+		else
+			bestbase = getBestBase(gameState, ent) || this.noBase;
+		if (bestbase)
+			bestbase.assignEntity(gameState, ent);
+		return bestbase;
 	}
 
 	/**

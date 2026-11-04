@@ -26,83 +26,64 @@ export class BaseResources
 
 	/**
 	 * Lists the supplies within reach of a new dropsite of the base, by band of
-	 * distance; false if the dropsite was listed already. `baseAccess` is the
-	 * base's land; the baseless pool (`baseless`) takes each dropsite's own.
+	 * distance; false if the dropsite was listed already. `access` is the land
+	 * the supplies must be on (the base's, or the dropsite's own for the
+	 * baseless pool).
 	 */
-	addDropsite(gameState: CommonGameState, dropsite: CommonPlacedEntity, baseAccess: AccessIndex | undefined, baseless: boolean,
-		maxDistResourceSquare: number, debug: number): boolean
+	addDropsite(gameState: CommonGameState, dropsite: CommonPlacedEntity, access: AccessIndex | undefined,
+		maxDistResourceSquare: number): boolean
 	{
 		if (this.dropsites[dropsite.id()])
-		{
-			if (debug > 0)
-				warn("assignResourceToDropsite: dropsite already in the list. Should never happen");
 			return false;
-		}
-
-		let accessIndex = baseAccess;
-		const dropsitePos = dropsite.position();
-		const dropsiteId = dropsite.id();
-		this.dropsites[dropsiteId] = true;
-
-		if (baseless)
-			accessIndex = getLandAccess(gameState, dropsite);
+		this.dropsites[dropsite.id()] = true;
 
 		const dropsiteTypes = dropsite.resourceDropsiteTypes();
 		if (dropsiteTypes)
 			for (const type of dropsiteTypes)
-			{
-				const resources = gameState.getResourceSupplies(type);
-				if (!resources.length)
-					continue;
-
-				const nearby = this.dropsiteSupplies[type].nearby;
-				const medium = this.dropsiteSupplies[type].medium;
-				const faraway = this.dropsiteSupplies[type].faraway;
-
-				resources.forEach(function(supply: CommonEntity): void 
-				{
-					if (!isPlaced(supply))
-						return;
-					// Moving resources and fields are treated differently.
-					if (supply.hasClasses(["Animal", "Field"]))
-						return;
-					// quick accessibility check
-					if (getLandAccess(gameState, supply) !== accessIndex)
-						return;
-
-					const dist = SquareVectorDistance(supply.position(), dropsitePos);
-					if (dist < maxDistResourceSquare)
-					{
-						if (dist < maxDistResourceSquare/16)        // distmax/4
-							nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-						else if (dist < maxDistResourceSquare/4)    // distmax/2
-							medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-						else
-							faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-					}
-				});
-
-				nearby.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-				medium.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-				faraway.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
-
-				/*
-				let debug = false;
-				if (debug)
-				{
-					faraway.forEach(function(res){
-						debugShade([res.id], [2,0,0]);
-					});
-					medium.forEach(function(res){
-						debugShade([res.id], [0,2,0]);
-					});
-					nearby.forEach(function(res){
-						debugShade([res.id], [0,0,2]);
-					});
-				}
-				*/
-			}
+				this.listSupplies(gameState, dropsite, type, access, maxDistResourceSquare);
 		return true;
+	}
+
+	/** Adds the supplies of one resource within reach of a dropsite to its bands, nearest first. */
+	private listSupplies(gameState: CommonGameState, dropsite: CommonPlacedEntity, type: string,
+		access: AccessIndex | undefined, maxDistResourceSquare: number): void
+	{
+		const resources = gameState.getResourceSupplies(type);
+		if (!resources.length)
+			return;
+
+		const dropsitePos = dropsite.position();
+		const dropsiteId = dropsite.id();
+		const nearby = this.dropsiteSupplies[type].nearby;
+		const medium = this.dropsiteSupplies[type].medium;
+		const faraway = this.dropsiteSupplies[type].faraway;
+
+		resources.forEach(function(supply: CommonEntity): void
+		{
+			if (!isPlaced(supply))
+				return;
+			// Moving resources and fields are treated differently.
+			if (supply.hasClasses(["Animal", "Field"]))
+				return;
+			// quick accessibility check
+			if (getLandAccess(gameState, supply) !== access)
+				return;
+
+			const dist = SquareVectorDistance(supply.position(), dropsitePos);
+			if (dist < maxDistResourceSquare)
+			{
+				if (dist < maxDistResourceSquare/16)        // distmax/4
+					nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+				else if (dist < maxDistResourceSquare/4)    // distmax/2
+					medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+				else
+					faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
+			}
+		});
+
+		nearby.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
+		medium.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
+		faraway.sort((r1: ResourceSupply, r2: ResourceSupply): number => r1.dist - r2.dist);
 	}
 
 	/** Drops a dropsite, and every supply listed for it or whose entity is gone, from all the lists. */

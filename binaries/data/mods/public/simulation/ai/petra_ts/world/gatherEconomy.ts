@@ -47,6 +47,15 @@ export type SerializedGatherEconomy = {
 	lastUpdate: number | undefined;
 };
 
+/** What the gatherers bring in now, counted on one turn. */
+type GathererCensus = {
+	gatherers: Record<string, number>;
+	income: Record<string, number>;
+	idle: Record<string, number>;
+	foodGatherers: Record<FoodSource, number>;
+	foodIncome: Record<FoodSource, number>;
+};
+
 export class GatherEconomy
 {
 	/** Per resource: units per second per gatherer, the walk included, smoothed. */
@@ -104,16 +113,32 @@ export class GatherEconomy
 	/** Counts the gatherers and what they gather now, and folds it into the rates per gatherer. */
 	update(gameState: CommonGameState): void
 	{
-		const gatherers: Record<string, number> = {};
-		const income: Record<string, number> = {};
-		const idle: Record<string, number> = {};
-		const foodGatherers: Record<FoodSource, number> = { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 };
-		const foodIncome: Record<FoodSource, number> = { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 };
+		const census = this.countGatherers(gameState);
+		this.gatherers = census.gatherers;
+		this.income = census.income;
+		this.idle = census.idle;
+		this.foodGatherers = census.foodGatherers;
+
+		const now = gameState.ai.elapsedTime;
+		// the first update only sets the prior: the gatherers have only begun to walk
+		const weight = this.lastUpdate === undefined ? 0 : 1 - Math.exp(-(now - this.lastUpdate) / SMOOTHING);
+		this.lastUpdate = now;
+		this.foldRates(census, weight);
+	}
+
+	/** Each resource's gatherers, what they bring in now and the idle ones; food by its source. */
+	private countGatherers(gameState: CommonGameState): GathererCensus
+	{
+		const census: GathererCensus = {
+			"gatherers": {}, "income": {}, "idle": {},
+			"foodGatherers": { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 },
+			"foodIncome": { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 }
+		};
 		for (const res of Resources.GetCodes())
 		{
-			gatherers[res] = 0;
-			income[res] = 0;
-			idle[res] = 0;
+			census.gatherers[res] = 0;
+			census.income[res] = 0;
+			census.idle[res] = 0;
 		}
 		for (const ent of gameState.getOwnEntitiesByRole("worker", true).values())
 		{
@@ -123,40 +148,37 @@ export class GatherEconomy
 				res = ent.getMetadata(PlayerID, "gather-type");
 			else if (subrole === "hunter" || subrole === "fisher")
 				res = "food";
-			if (res === undefined || !(res in gatherers) || !isPlaced(ent))
+			if (res === undefined || !(res in census.gatherers) || !isPlaced(ent))
 				continue;
-			++gatherers[res];
+			++census.gatherers[res];
 			const rate = isInState(ent, "INDIVIDUAL.GATHER.GATHERING") ? gatherRate(gameState, ent) ?? 0 : 0;
-			income[res] += rate;
+			census.income[res] += rate;
 			if (!rate && ent.isIdle())
-				++idle[res];
+				++census.idle[res];
 			if (res === "food")
 			{
 				const source = this.foodSourceOf(gameState, ent, subrole);
-				++foodGatherers[source];
-				foodIncome[source] += rate;
+				++census.foodGatherers[source];
+				census.foodIncome[source] += rate;
 			}
 		}
-		this.gatherers = gatherers;
-		this.income = income;
-		this.idle = idle;
-		this.foodGatherers = foodGatherers;
+		return census;
+	}
 
-		const now = gameState.ai.elapsedTime;
-		// the first update only sets the prior: the gatherers have only begun to walk
-		const weight = this.lastUpdate === undefined ? 0 : 1 - Math.exp(-(now - this.lastUpdate) / SMOOTHING);
-		this.lastUpdate = now;
-		for (const res in gatherers)
+	/** Moves each rate per gatherer toward what was measured now, by `weight`. */
+	private foldRates(census: GathererCensus, weight: number): void
+	{
+		for (const res in census.gatherers)
 		{
-			if (!gatherers[res])
+			if (!census.gatherers[res])
 				continue;
-			const measured = income[res] / gatherers[res];
+			const measured = census.income[res] / census.gatherers[res];
 			this.perGatherer[res] = this.rateOf(res) * (1 - weight) + measured * weight;
 		}
 		for (const source of FOOD_SOURCES)
-			if (foodGatherers[source])
+			if (census.foodGatherers[source])
 				this.perFoodGatherer[source] = this.foodRateOf(source) * (1 - weight) +
-					foodIncome[source] / foodGatherers[source] * weight;
+					census.foodIncome[source] / census.foodGatherers[source] * weight;
 	}
 
 	Serialize(): SerializedGatherEconomy

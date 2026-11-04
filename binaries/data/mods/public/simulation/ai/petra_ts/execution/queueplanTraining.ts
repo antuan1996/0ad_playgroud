@@ -91,77 +91,64 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		}
 
 		if (trainers.length > 1)
-		{
-			let wantedIndex: number | undefined;
-			if (this.metadata && this.metadata.index)
-				wantedIndex = this.metadata.index;
-			const workerUnit = this.metadata && this.metadata.role &&
-				this.metadata.role === Worker.ROLE_WORKER;
-			const supportUnit = this.template.hasClass("Support");
-			trainers.sort(function(a, b): number
-			{
-				// Prefer training buildings with short queues
-				let aa = a.trainingQueueTime() ?? NaN;
-				let bb = b.trainingQueueTime() ?? NaN;
-				// Give priority to support units in the cc
-				if (a.hasClass("Civic") && !supportUnit)
-					aa += 10;
-				if (b.hasClass("Civic") && !supportUnit)
-					bb += 10;
-				// And support units should not be too near to dangerous place
-				if (supportUnit)
-				{
-					if (hqOf(gameState).isNearInvadingArmy(a.position()))
-						aa += 50;
-					if (hqOf(gameState).isNearInvadingArmy(b.position()))
-						bb += 50;
-				}
-				// Give also priority to buildings with the right accessibility
-				const aBase = a.getMetadata(PlayerID, "base");
-				const bBase = b.getMetadata(PlayerID, "base");
-				if (wantedIndex)
-				{
-					if (!aBase)
-						aa += 30;
-					else
-					{
-						const aBaseManager = hqOf(gameState).getBaseByID(aBase);
-						if (!aBaseManager || aBaseManager.accessIndex !== wantedIndex)
-							aa += 30;
-					}
-					if (!bBase)
-						bb += 30;
-					else
-					{
-						const bBaseManager = hqOf(gameState).getBaseByID(bBase);
-						if (!bBaseManager || bBaseManager.accessIndex !== wantedIndex)
-							bb += 30;
-					}
-				}
-				// Then, if workers, small preference for bases with less workers
-				if (workerUnit && aBase && bBase && aBase !== bBase)
-				{
-					const aBaseManager = hqOf(gameState).getBaseByID(aBase);
-					const bBaseManager = hqOf(gameState).getBaseByID(bBase);
-					if (aBaseManager && bBaseManager)
-					{
-						const apop = aBaseManager.workers.length;
-						const bpop = bBaseManager.workers.length;
-						if (apop > bpop)
-							aa++;
-						else if (bpop > apop)
-							bb++;
-					}
-				}
-				return aa - bb;
-			});
-		}
+			trainers.sort(this.trainerOrder(gameState));
 
 		if (this.metadata && this.metadata.base !== undefined && this.metadata.base === 0)
 			this.metadata.base = trainers[0].getMetadata(PlayerID, "base");
 		trainers[0].train(gameState.getPlayerCiv(), this.type, this.number, this.metadata);
 
 		this.onStart(gameState);
+	}
+
+	/**
+	 * Which building trains first: the shortest queue, a barracks before the
+	 * civic centre for soldiers, support units away from an invading army,
+	 * the wanted land, and for workers the town with fewer of them.
+	 */
+	private trainerOrder(gameState: CommonGameState): (a: CommonPlacedEntity, b: CommonPlacedEntity) => number
+	{
+		const wantedIndex = this.metadata && this.metadata.index ? this.metadata.index : undefined;
+		const workerUnit = this.metadata && this.metadata.role && this.metadata.role === Worker.ROLE_WORKER;
+		const supportUnit = this.template.hasClass("Support");
+		const hq = hqOf(gameState);
+		// a building's own score: its queue, raised for the civic centre, danger and the wrong land
+		const score = (ent: CommonPlacedEntity): number =>
+		{
+			let value = ent.trainingQueueTime() ?? NaN;
+			if (ent.hasClass("Civic") && !supportUnit)
+				value += 10;
+			if (supportUnit && hq.isNearInvadingArmy(ent.position()))
+				value += 50;
+			if (wantedIndex)
+			{
+				const base = ent.getMetadata(PlayerID, "base");
+				const baseManager = base ? hq.getBaseByID(base) : undefined;
+				if (!baseManager || baseManager.accessIndex !== wantedIndex)
+					value += 30;
+			}
+			return value;
+		};
+		return (a, b): number =>
+		{
+			let aa = score(a);
+			let bb = score(b);
+			// Then, if workers, small preference for bases with less workers
+			const aBase = a.getMetadata(PlayerID, "base");
+			const bBase = b.getMetadata(PlayerID, "base");
+			if (workerUnit && aBase && bBase && aBase !== bBase)
+			{
+				const apop = hq.getBaseByID(aBase)?.workers.length;
+				const bpop = hq.getBaseByID(bBase)?.workers.length;
+				if (apop !== undefined && bpop !== undefined)
+				{
+					if (apop > bpop)
+						aa++;
+					else if (bpop > apop)
+						bb++;
+				}
+			}
+			return aa - bb;
+		};
 	}
 
 	addItem(amount: number = 1): void

@@ -86,12 +86,25 @@ function* queueEntries(queues: PetraRuntime.QueueCollection): Generator<[PetraRu
 	}
 }
 
+/** The queues that want more of one resource: their priority now, and how much they still want. */
+type QueueNeeds = { totalPriority: number; tempPrio: Record<string, number>; maxNeed: Record<string, number> };
+
 /** What the queue manager saves */
 export type SerializedQueueManager = {
 	priorities: Record<string, number>;
 	queues: Record<string, SerializedQueue>;
 	accounts: Record<string, Parameters<ResourcesManager["Deserialize"]>[0]>;
 };
+
+/** The queues that go on without a base to build in. */
+const RUN_WITHOUT_BASE: ReadonlySet<string> = new Set(["dock", "civilCentre"]);
+/** The queues that go on with under a third of the workers wanted. */
+const RUN_WITH_VERY_FEW_WORKERS: ReadonlySet<string> = new Set(["citizenSoldier", "villager", "emergency"]);
+/** The queues (besides the attacks') that wait with under two thirds of the workers wanted. */
+const WAIT_WITH_FEW_WORKERS: ReadonlySet<string> = new Set(["civilCentre", "economicBuilding", "militaryBuilding",
+	"defenseBuilding", "healer", "majorTech", "minorTech"]);
+/** The queues (besides champions and siege) that wait short of the workers wanted. */
+const WAIT_SHORT_OF_WORKERS: ReadonlySet<string> = new Set(["civilCentre", "defenseBuilding", "majorTech"]);
 
 export class QueueManager
 {
@@ -221,16 +234,7 @@ export class QueueManager
 			return { costs, floors };
 		}
 		const stock = gameState.getResources();
-		const totalShort: Record<string, number> = {};
-		const totalMedium: Record<string, number> = {};
-		const totalLong: Record<string, number> = {};
-		for (const res of Resources.GetCodes())
-		{
-			totalShort[res] = 0;
-			totalMedium[res] = 0;
-			totalLong[res] = 0;
-		}
-		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
+		const { totalShort, totalMedium, totalLong } = this.queuedTotals(gameState, () => [0, 0, 0]);
 		for (const res of Resources.GetCodes())
 		{
 			let left = Math.max(0, stock[res]);
@@ -245,6 +249,19 @@ export class QueueManager
 			floors[res] = Math.max(0, reserve - left) / 30;
 		}
 		return { costs, floors };
+	}
+
+	/** What the queues hold, by horizon (short, medium, long), on top of `initial`'s amounts per resource. */
+	private queuedTotals(gameState: CommonGameState, initial: (res: string) => [number, number, number]):
+		{ totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number> }
+	{
+		const totalShort: Record<string, number> = {};
+		const totalMedium: Record<string, number> = {};
+		const totalLong: Record<string, number> = {};
+		for (const res of Resources.GetCodes())
+			[totalShort[res], totalMedium[res], totalLong[res]] = initial(res);
+		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
+		return { totalShort, totalMedium, totalLong };
 	}
 
 	// calculate the gather rates we'd want to be able to start all elements in our queues
@@ -265,16 +282,11 @@ export class QueueManager
 		// short queue is the first item of a queue, assumed to be ready in 30s
 		// medium queue is the second item of a queue, assumed to be ready in 60s
 		// long queue contains the isGo=false items, assumed to be ready in 300s
-		const totalShort: Record<string, number> = {};
-		const totalMedium: Record<string, number> = {};
-		const totalLong: Record<string, number> = {};
-		for (const res of Resources.GetCodes())
-		{
-			totalShort[res] = this.Config.queues.short[res] || this.Config.queues.short.default;
-			totalMedium[res] = this.Config.queues.medium[res] || this.Config.queues.medium.default;
-			totalLong[res] = this.Config.queues.long[res] || this.Config.queues.long.default;
-		}
-		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
+		const { totalShort, totalMedium, totalLong } = this.queuedTotals(gameState, (res) => [
+			this.Config.queues.short[res] || this.Config.queues.short.default,
+			this.Config.queues.medium[res] || this.Config.queues.medium.default,
+			this.Config.queues.long[res] || this.Config.queues.long.default
+		]);
 		// global rates
 		const rates: Record<string, number> = {};
 		let diff;
@@ -384,88 +396,107 @@ export class QueueManager
 		for (const res of Resources.GetCodes())
 		{
 			if (availableRes[res] < 0)    // rescale the accounts if we've spent resources already accounted (e.g. by bartering)
-			{
-				const total = gameState.getResources()[res];
-				const scale = total / (total - availableRes[res]);
-				availableRes[res] = total;
-				for (const j in this.queues)
-				{
-					this.accounts[j][res] = Math.floor(scale * this.accounts[j][res]);
-					availableRes[res] -= this.accounts[j][res];
-				}
-			}
+				this.rescaleAccounts(gameState, res, availableRes);
 
 			if (!availableRes[res])
 			{
 				this.switchResource(gameState, res);
 				continue;
 			}
+			const needs = this.queueNeeds(gameState, res, availableRes);
+			this.allot(res, availableRes[res], needs);
+		}
+	}
 
-			let totalPriority = 0;
-			const tempPrio: Record<string, number> = {};
-			const maxNeed: Record<string, number> = {};
-			// Okay so this is where it gets complicated.
-			// If a queue requires "res" for the next elements (in the queue)
-			// And the account is not high enough for it.
-			// Then we add it to the total priority.
-			// To try and be clever, we don't want a long queue to hog all resources. So two things:
-			//	-if a queue has enough of resource X for the 1st element, its priority is decreased (factor 2).
-			//	-queues accounts are capped at "resources for the first + 60% of the next"
-			// This avoids getting a high priority queue with many elements hogging all of one resource
-			// uselessly while it awaits for other resources.
-			for (const [j, queue] of queueEntries(this.queues))
+	/** Scales every account of `res` down to what we really hold, the rest left available. */
+	private rescaleAccounts(gameState: CommonGameState, res: string, availableRes: ResourcesManager): void
+	{
+		const total = gameState.getResources()[res];
+		const scale = total / (total - availableRes[res]);
+		availableRes[res] = total;
+		for (const j in this.queues)
+		{
+			this.accounts[j][res] = Math.floor(scale * this.accounts[j][res]);
+			availableRes[res] -= this.accounts[j][res];
+		}
+	}
+
+	/**
+	 * The queues wanting more of `res`, by priority, and how much more.
+	 * Okay so this is where it gets complicated.
+	 * If a queue requires "res" for the next elements (in the queue)
+	 * And the account is not high enough for it.
+	 * Then we add it to the total priority.
+	 * To try and be clever, we don't want a long queue to hog all resources. So two things:
+	 *	-if a queue has enough of resource X for the 1st element, its priority is decreased (factor 2).
+	 *	-queues accounts are capped at "resources for the first + 60% of the next"
+	 * This avoids getting a high priority queue with many elements hogging all of one resource
+	 * uselessly while it awaits for other resources. An account over its cap gives the rest back.
+	 */
+	private queueNeeds(gameState: CommonGameState, res: string, availableRes: ResourcesManager): QueueNeeds
+	{
+		const needs: QueueNeeds = { "totalPriority": 0, "tempPrio": {}, "maxNeed": {} };
+		for (const [j, queue] of queueEntries(this.queues))
+		{
+			// returns exactly the correct amount, ie 0 if we're not go.
+			const queueCost = queue.maxAccountWanted(gameState, 0.6);
+			if (queue.hasQueuedUnits() && this.accounts[j][res] < queueCost[res] && !queue.paused)
 			{
-				// returns exactly the correct amount, ie 0 if we're not go.
-				const queueCost = queue.maxAccountWanted(gameState, 0.6);
-				if (queue.hasQueuedUnits() && this.accounts[j][res] < queueCost[res] && !queue.paused)
-				{
-					// adding us to the list of queues that need an update.
-					tempPrio[j] = this.priorities[j];
-					maxNeed[j] = queueCost[res] - this.accounts[j][res];
-					// if we have enough of that resource for our first item in the queue, diminish our priority.
-					const nextPlan = queue.getNext();
-					if (nextPlan && this.accounts[j][res] >= nextPlan.getCost()[res])
-						tempPrio[j] /= 2;
+				// adding us to the list of queues that need an update.
+				needs.tempPrio[j] = this.priorities[j];
+				needs.maxNeed[j] = queueCost[res] - this.accounts[j][res];
+				// if we have enough of that resource for our first item in the queue, diminish our priority.
+				const nextPlan = queue.getNext();
+				if (nextPlan && this.accounts[j][res] >= nextPlan.getCost()[res])
+					needs.tempPrio[j] /= 2;
 
-					if (tempPrio[j])
-						totalPriority += tempPrio[j];
-				}
-				else if (this.accounts[j][res] > queueCost[res])
-				{
-					availableRes[res] += this.accounts[j][res] - queueCost[res];
-					this.accounts[j][res] = queueCost[res];
-				}
+				if (needs.tempPrio[j])
+					needs.totalPriority += needs.tempPrio[j];
 			}
-			// Now we allow resources to the accounts. We can at most allow "TempPriority/totalpriority*available"
-			// But we'll sometimes allow less if that would overflow.
-			let available = availableRes[res];
-			let missing = false;
+			else if (this.accounts[j][res] > queueCost[res])
+			{
+				availableRes[res] += this.accounts[j][res] - queueCost[res];
+				this.accounts[j][res] = queueCost[res];
+			}
+		}
+		return needs;
+	}
+
+	/**
+	 * Gives the queues in need their share of `availableRes`: at most
+	 * tempPrio / totalPriority of it, less if that would overflow their need;
+	 * what flooring leaves goes to any queue still short.
+	 */
+	private allot(res: string, availableRes: number, needs: QueueNeeds): void
+	{
+		const { totalPriority, tempPrio, maxNeed } = needs;
+		let available = availableRes;
+		let missing = false;
+		for (const j in tempPrio)
+		{
+			// we'll add at much what can be allowed to this queue.
+			let toAdd = Math.floor(availableRes * tempPrio[j]/totalPriority);
+			if (toAdd >= maxNeed[j])
+				toAdd = maxNeed[j];
+			else
+				missing = true;
+			this.accounts[j][res] += toAdd;
+			maxNeed[j] -= toAdd;
+			available -= toAdd;
+		}
+		if (missing && available > 0)   // distribute the rest (due to floor) in any queue
+		{
 			for (const j in tempPrio)
 			{
-				// we'll add at much what can be allowed to this queue.
-				let toAdd = Math.floor(availableRes[res] * tempPrio[j]/totalPriority);
-				if (toAdd >= maxNeed[j])
-					toAdd = maxNeed[j];
-				else
-					missing = true;
+				const toAdd = Math.min(maxNeed[j], available);
 				this.accounts[j][res] += toAdd;
-				maxNeed[j] -= toAdd;
 				available -= toAdd;
+				if (available <= 0)
+					break;
 			}
-			if (missing && available > 0)   // distribute the rest (due to floor) in any queue
-			{
-				for (const j in tempPrio)
-				{
-					const toAdd = Math.min(maxNeed[j], available);
-					this.accounts[j][res] += toAdd;
-					available -= toAdd;
-					if (available <= 0)
-						break;
-				}
-			}
-			if (available < 0)
-				aiWarn("Petra: problem with remaining " + res + " in queueManager " + available);
 		}
+		if (available < 0)
+			aiWarn("Petra: problem with remaining " + res + " in queueManager " + available);
 	}
 
 	switchResource(gameState: CommonGameState, res: string): void
@@ -622,44 +653,7 @@ export class QueueManager
 		const workersMin = Math.min(Math.max(12, 24 * this.Config.popScaling), this.Config.Economy.popPhase2);
 		for (const [q, queue] of queueEntries(this.queues))
 		{
-			let toBePaused = false;
-			if (!hqOf(gameState).hasPotentialBase())
-				toBePaused = q !== "dock" && q !== "civilCentre";
-			else if (numWorkers < workersMin / 3)
-				toBePaused = q !== "citizenSoldier" && q !== "villager" && q !== "emergency";
-			else if (numWorkers < workersMin * 2 / 3)
-				toBePaused = q === "civilCentre" || q === "economicBuilding" ||
-					q === "militaryBuilding" || q === "defenseBuilding" || q === "healer" ||
-					q === "majorTech" || q === "minorTech" || q.indexOf("plan_") !== -1;
-			else if (numWorkers < workersMin)
-				toBePaused = q === "civilCentre" || q === "defenseBuilding" ||
-					q === "majorTech" || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
-
-			if (toBePaused)
-			{
-				if (q === "field" && hqOf(gameState).needFarm &&
-					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
-				{
-					toBePaused = false;
-				}
-				if (q === "corral" && hqOf(gameState).needCorral &&
-					!gameState.getOwnStructures().filter(filters.byClass("Field")).hasEntities())
-				{
-					toBePaused = false;
-				}
-				if (q === "dock" && hqOf(gameState).needFish &&
-					!gameState.getOwnStructures().filter(filters.byClass("Dock")).hasEntities())
-				{
-					toBePaused = false;
-				}
-				if (q === "ships" && hqOf(gameState).needFish &&
-					!hqOf(gameState).navalManager.ships.filter(filters.byClass("FishingBoat"))
-						.hasEntities())
-				{
-					toBePaused = false;
-				}
-			}
-
+			const toBePaused = this.pausedForWorkers(gameState, q, numWorkers, workersMin) && !this.feedsTheTown(gameState, q);
 			if (!queue.paused && toBePaused)
 			{
 				queue.paused = true;
@@ -676,6 +670,37 @@ export class QueueManager
 					queue.plans[1].number = 1;
 			}
 		}
+	}
+
+	/** Whether queue q waits while we are short of workers: the fewer, the more queues wait. */
+	private pausedForWorkers(gameState: CommonGameState, q: PetraRuntime.QueueName, numWorkers: number, workersMin: number): boolean
+	{
+		if (!hqOf(gameState).hasPotentialBase())
+			return !RUN_WITHOUT_BASE.has(q);
+		if (numWorkers < workersMin / 3)
+			return !RUN_WITH_VERY_FEW_WORKERS.has(q);
+		if (numWorkers < workersMin * 2 / 3)
+			return WAIT_WITH_FEW_WORKERS.has(q) || q.indexOf("plan_") !== -1;
+		if (numWorkers < workersMin)
+			return WAIT_SHORT_OF_WORKERS.has(q) || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
+		return false;
+	}
+
+	/** The first field, corral, dock or fishing boat of a town that needs it never waits. */
+	private feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): boolean
+	{
+		const hq = hqOf(gameState);
+		const hasNone = (className: string): boolean =>
+			!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
+		if (q === "field")
+			return hq.needFarm && hasNone("Field");
+		if (q === "corral")
+			return hq.needCorral && hasNone("Field");
+		if (q === "dock")
+			return hq.needFish && hasNone("Dock");
+		if (q === "ships")
+			return hq.needFish && !hq.navalManager.ships.filter(filters.byClass("FishingBoat")).hasEntities();
+		return false;
 	}
 
 	canAfford(queue: PetraRuntime.QueueName, cost: ResourcesManager | Record<string, number>): boolean

@@ -78,11 +78,13 @@ export function seaBetween(gameState: CommonGameState, index1: AccessIndex, inde
 	return undefined;
 }
 
-/**
- * The land regions we can use (ours, and the big ones a sea away) and the
- * seas worth sailing; undefined when we stand on no land and no sea.
- */
-function analyseRegions(gameState: CommonGameState, debug: number): MapRegions | undefined
+/** The sizes a region must pass, in passability cells (cellArea: the area of one). */
+type RegionSizes = { minLand: number; minWater: number; cellArea: number };
+/** Where we stand, the sizes and the debug level, as the regions are classed. */
+type RegionAnalysis = { landIndex: AccessIndex | undefined; seaIndex: SeaIndex | undefined; sizes: RegionSizes; debug: number };
+
+/** Where we stand: the land of a civic centre, else of a unit or trainer, else the sea one of them is on. */
+function homeRegions(gameState: CommonGameState): { landIndex: AccessIndex | undefined; seaIndex: SeaIndex | undefined }
 {
 	const accessibility = gameState.ai.accessibility;
 	let landIndex;
@@ -115,6 +117,17 @@ function analyseRegions(gameState: CommonGameState, debug: number): MapRegions |
 				seaIndex = sea;
 		}
 	}
+	return { landIndex, seaIndex };
+}
+
+/**
+ * The land regions we can use (ours, and the big ones a sea away) and the
+ * seas worth sailing; undefined when we stand on no land and no sea.
+ */
+function analyseRegions(gameState: CommonGameState, debug: number): MapRegions | undefined
+{
+	const home = homeRegions(gameState);
+	const { landIndex, seaIndex } = home;
 	if (!landIndex && !seaIndex)
 	{
 		aiWarn("Petra error: it does not know how to interpret this map");
@@ -122,51 +135,66 @@ function analyseRegions(gameState: CommonGameState, debug: number): MapRegions |
 	}
 
 	const regions: MapRegions = { "landRegions": {}, "navalRegions": {}, "navalMap": false };
+	const accessibility = gameState.ai.accessibility;
 	const passabilityMap = gameState.getPassabilityMap();
 	const totalSize = passabilityMap.width * passabilityMap.width;
-	const minLandSize = Math.floor(0.1*totalSize);
-	const minWaterSize = Math.floor(0.2*totalSize);
-	const cellArea = passabilityMap.cellSize * passabilityMap.cellSize;
+	const sizes: RegionSizes = {
+		"minLand": Math.floor(0.1*totalSize),
+		"minWater": Math.floor(0.2*totalSize),
+		"cellArea": passabilityMap.cellSize * passabilityMap.cellSize
+	};
 	for (let i = 0; i < accessibility.regionSize.length; ++i)
 	{
 		if (landIndex && i === landIndex)
 			regions.landRegions[i] = true;
-		else if (accessibility.regionType[i] === "land" && cellArea*accessibility.regionSize[i] > 320)
-		{
-			if (landIndex)
-			{
-				const sea = seaBetween(gameState, landIndex, landRegion(i), debug);
-				if (sea && (accessibility.regionSize[i] > minLandSize || accessibility.regionSize[sea] > minWaterSize))
-				{
-					regions.navalMap = true;
-					regions.landRegions[i] = true;
-					regions.navalRegions[sea] = true;
-				}
-			}
-			else
-			{
-				if (seaIndex === undefined)
-					continue;
-				const traject = accessibility.getTrajectToIndex(seaIndex, landRegion(i));
-				if (traject && traject.length === 2)
-				{
-					regions.navalMap = true;
-					regions.landRegions[i] = true;
-					regions.navalRegions[seaIndex] = true;
-				}
-			}
-		}
-		else if (accessibility.regionType[i] === "water" && accessibility.regionSize[i] > minWaterSize)
+		else if (accessibility.regionType[i] === "land" && sizes.cellArea*accessibility.regionSize[i] > 320)
+			addLandOverseas(gameState, regions, landRegion(i), { ...home, sizes, debug });
+		else if (accessibility.regionType[i] === "water" && accessibility.regionSize[i] > sizes.minWater)
 		{
 			regions.navalMap = true;
 			regions.navalRegions[i] = true;
 		}
-		else if (accessibility.regionType[i] === "water" && cellArea*accessibility.regionSize[i] > 3600)
+		else if (accessibility.regionType[i] === "water" && sizes.cellArea*accessibility.regionSize[i] > 3600)
 			regions.navalRegions[i] = true;
 	}
 
-	if (debug < 3)
-		return regions;
+	if (debug >= 3)
+		warnRegions(gameState, regions, sizes.cellArea);
+	return regions;
+}
+
+/**
+ * Another land: ours, with the sea to it, when a sea joins it to our land and
+ * either is big; or, standing on a sea, when the sea touches it.
+ */
+function addLandOverseas(gameState: CommonGameState, regions: MapRegions, land: AccessIndex, analysis: RegionAnalysis): void
+{
+	const { landIndex, seaIndex, sizes, debug } = analysis;
+	const accessibility = gameState.ai.accessibility;
+	if (landIndex)
+	{
+		const sea = seaBetween(gameState, landIndex, land, debug);
+		if (sea && (accessibility.regionSize[land] > sizes.minLand || accessibility.regionSize[sea] > sizes.minWater))
+		{
+			regions.navalMap = true;
+			regions.landRegions[land] = true;
+			regions.navalRegions[sea] = true;
+		}
+		return;
+	}
+	if (seaIndex === undefined)
+		return;
+	const traject = accessibility.getTrajectToIndex(seaIndex, land);
+	if (traject && traject.length === 2)
+	{
+		regions.navalMap = true;
+		regions.landRegions[land] = true;
+		regions.navalRegions[seaIndex] = true;
+	}
+}
+
+function warnRegions(gameState: CommonGameState, regions: MapRegions, cellArea: number): void
+{
 	for (const region in regions.landRegions)
 	{
 		aiWarn(" >>> zone " + region + " taille " +
@@ -175,5 +203,4 @@ function analyseRegions(gameState: CommonGameState, debug: number): MapRegions |
 	aiWarn(" navalMap " + regions.navalMap);
 	aiWarn(" landRegions " + uneval(regions.landRegions));
 	aiWarn(" navalRegions " + uneval(regions.navalRegions));
-	return regions;
 }

@@ -233,30 +233,7 @@ export class Config
 	setConfig(gameState: CommonGameState): void
 	{
 		if (this.difficulty > difficultyLevel.SANDBOX)
-		{
-			// Setup personality traits according to the user choice:
-			// The parameter used to define the personality is basically the aggressivity or (1-defensiveness)
-			// as they are anticorrelated, although some small smearing to decorelate them will be added.
-			// And for each user choice, this parameter can vary between min and max
-			const personalityList: Record<string, { min: number; max: number }> = {
-				"random": { "min": 0, "max": 1 },
-				"defensive": { "min": 0, "max": 0.27 },
-				"balanced": { "min": 0.37, "max": 0.63 },
-				"aggressive": { "min": 0.73, "max": 1 }
-			};
-			const behavior = randFloat(-0.5, 0.5);
-			// make agressive and defensive quite anticorrelated (aggressive ~ 1 - defensive) but not completelety
-			const variation = 0.15 * randFloat(-1, 1) * Math.sqrt(Math.square(0.5) - Math.square(behavior));
-			const aggressive = Math.max(Math.min(behavior + variation, 0.5), -0.5) + 0.5;
-			const defensive = Math.max(Math.min(-behavior + variation, 0.5), -0.5) + 0.5;
-			const min = personalityList[this.behavior].min;
-			const max = personalityList[this.behavior].max;
-			this.personality = {
-				"aggressive": min + aggressive * (max - min),
-				"defensive": 1 - max + defensive * (max - min),
-				"cooperative": randFloat(0, 1)
-			};
-		}
+			this.drawPersonality();
 		// Petra usually uses the continuous values of personality.aggressive and personality.defensive
 		// to define its behavior according to personality. But when discontinuous behavior is needed,
 		// it uses the following personalityCut which should be set such that:
@@ -275,6 +252,74 @@ export class Config
 		this.Military.fortressLapseTime = Math.round(this.Military.fortressLapseTime * (1.1 - 0.2 * this.personality.defensive));
 		this.priorities.defenseBuilding = Math.round(this.priorities.defenseBuilding * (0.9 + 0.2 * this.personality.defensive));
 
+		this.setByDifficulty();
+
+		const maxPop = gameState.getPopulationMax();
+		if (this.difficulty < difficultyLevel.EASY)
+			this.Economy.targetNumWorkers = Math.max(1, Math.min(40, maxPop));
+		else if (this.difficulty < difficultyLevel.MEDIUM)
+			this.Economy.targetNumWorkers = Math.max(1, Math.min(60, Math.floor(maxPop/2)));
+		else
+			this.Economy.targetNumWorkers = Math.max(1, Math.min(120, Math.floor(maxPop/3)));
+		this.Economy.targetNumTraders = 2 + this.difficulty;
+
+
+		if (gameState.getVictoryConditions().has("wonder"))
+		{
+			this.Economy.workPhase3 = Math.floor(0.9 * this.Economy.workPhase3);
+			this.Economy.workPhase4 = Math.floor(0.9 * this.Economy.workPhase4);
+		}
+
+		this.scaleToPopulation(maxPop);
+
+		this.emergencyValues = {
+			"population": this.criticalPopulationFactors[this.difficulty],
+			"structures": this.criticalStructureFactors[this.difficulty],
+			"roots": this.criticalRootFactors[this.difficulty],
+		};
+
+		this.Cheat(gameState);
+
+		if (this.debug < 2)
+			return;
+		aiWarn(" >>>  Petra bot: personality = " + uneval(this.personality));
+	}
+
+	/**
+	 * The personality's traits by the user's choice: the parameter is basically
+	 * the aggressivity, or 1 - defensiveness, as they are anticorrelated, with
+	 * some smearing to decorrelate them; for each choice it varies between a
+	 * min and a max.
+	 */
+	private drawPersonality(): void
+	{
+		// Setup personality traits according to the user choice:
+		// The parameter used to define the personality is basically the aggressivity or (1-defensiveness)
+		// as they are anticorrelated, although some small smearing to decorelate them will be added.
+		// And for each user choice, this parameter can vary between min and max
+		const personalityList: Record<string, { min: number; max: number }> = {
+			"random": { "min": 0, "max": 1 },
+			"defensive": { "min": 0, "max": 0.27 },
+			"balanced": { "min": 0.37, "max": 0.63 },
+			"aggressive": { "min": 0.73, "max": 1 }
+		};
+		const behavior = randFloat(-0.5, 0.5);
+		// make agressive and defensive quite anticorrelated (aggressive ~ 1 - defensive) but not completelety
+		const variation = 0.15 * randFloat(-1, 1) * Math.sqrt(Math.square(0.5) - Math.square(behavior));
+		const aggressive = Math.max(Math.min(behavior + variation, 0.5), -0.5) + 0.5;
+		const defensive = Math.max(Math.min(-behavior + variation, 0.5), -0.5) + 0.5;
+		const min = personalityList[this.behavior].min;
+		const max = personalityList[this.behavior].max;
+		this.personality = {
+			"aggressive": min + aggressive * (max - min),
+			"defensive": 1 - max + defensive * (max - min),
+			"cooperative": randFloat(0, 1)
+		};
+	}
+
+	/** The sentry towers, the support ratio, the provision of fields and the aggressive's early army by difficulty. */
+	private setByDifficulty(): void
+	{
 		if (this.difficulty < difficultyLevel.EASY)
 		{
 			this.popScaling = 0.5;
@@ -307,23 +352,11 @@ export class Config
 				this.priorities.healer = 10;
 			}
 		}
+	}
 
-		const maxPop = gameState.getPopulationMax();
-		if (this.difficulty < difficultyLevel.EASY)
-			this.Economy.targetNumWorkers = Math.max(1, Math.min(40, maxPop));
-		else if (this.difficulty < difficultyLevel.MEDIUM)
-			this.Economy.targetNumWorkers = Math.max(1, Math.min(60, Math.floor(maxPop/2)));
-		else
-			this.Economy.targetNumWorkers = Math.max(1, Math.min(120, Math.floor(maxPop/3)));
-		this.Economy.targetNumTraders = 2 + this.difficulty;
-
-
-		if (gameState.getVictoryConditions().has("wonder"))
-		{
-			this.Economy.workPhase3 = Math.floor(0.9 * this.Economy.workPhase3);
-			this.Economy.workPhase4 = Math.floor(0.9 * this.Economy.workPhase4);
-		}
-
+	/** The thresholds scaled to the population the map allows. */
+	private scaleToPopulation(maxPop: number): void
+	{
 		if (maxPop < 300)
 			this.popScaling *= Math.sqrt(maxPop / 300);
 
@@ -339,18 +372,6 @@ export class Config
 		this.Economy.workPhase4 = Math.min(this.Economy.workPhase4, this.Economy.targetNumWorkers);
 		if (this.difficulty < difficultyLevel.EASY)
 			this.Economy.workPhase3 = Infinity;	// prevent the phasing to city phase
-
-		this.emergencyValues = {
-			"population": this.criticalPopulationFactors[this.difficulty],
-			"structures": this.criticalStructureFactors[this.difficulty],
-			"roots": this.criticalRootFactors[this.difficulty],
-		};
-
-		this.Cheat(gameState);
-
-		if (this.debug < 2)
-			return;
-		aiWarn(" >>>  Petra bot: personality = " + uneval(this.personality));
 	}
 
 	Cheat(gameState: CommonGameState): void

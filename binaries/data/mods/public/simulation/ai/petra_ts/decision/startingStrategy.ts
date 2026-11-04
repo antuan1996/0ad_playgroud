@@ -130,60 +130,104 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 {
 	if (gameState.ai.queues.civilCentre.hasQueuedUnits())
 		return;
-	let templateName = gameState.applyCiv("structures/{civ}/civil_centre");
-	if (gameState.isTemplateDisabled(templateName))
+	const first = firstBaseGoal(HQ, gameState);
+	if (!first || !HQ.canBuild(gameState, first.templateName))
 		return;
-	let template = gameState.getTemplate(templateName);
-	if (!template)
+
+	const startingPoint = startingPoints(gameState);
+	if (!startingPoint.length)
 		return;
-	const total = gameState.getResources();
-	let goal = "civil_centre";
-	if (!total.canAfford(new ResourcesManager(template.cost())))
+
+	let imax = 0;
+	for (let i = 1; i < startingPoint.length; ++i)
+		if (startingPoint[i].weight > startingPoint[imax].weight)
+			imax = i;
+
+	if (first.goal === "dock")
 	{
-		const totalExpected = gameState.getResources();
-		// Check for treasures around available in some maps at startup
-		for (const ent of gameState.getOwnUnits().values())
-		{
-			if (!isPlaced(ent))
-				continue;
-			// If we can get a treasure around, just do it
-			if (ent.isIdle())
-				gatherTreasure(gameState, ent);
-			// Then count the resources from the treasures being collected
-			const treasureId = ent.getMetadata(PlayerID, "treasure");
-			if (!treasureId)
-				continue;
-			const treasure = gameState.getEntityById(treasureId);
-			if (!treasure)
-				continue;
-			const types = treasure.treasureResources();
-			for (const type in types)
-				if (type in totalExpected)
-					totalExpected[type] += types[type];
-			// If we can collect enough resources from these treasures, wait for them.
-			if (totalExpected.canAfford(new ResourcesManager(template.cost())))
-				return;
-		}
-
-		// not enough resource to build a cc, try with a dock to accumulate resources if none yet
-		if (!HQ.navalManager.docks.filter(filters.byClass("Dock")).hasEntities())
-		{
-			if (gameState.ai.queues.dock.hasQueuedUnits())
-				return;
-			templateName = gameState.applyCiv("structures/{civ}/dock");
-			if (gameState.isTemplateDisabled(templateName))
-				return;
-			template = gameState.getTemplate(templateName);
-			if (!template || !total.canAfford(new ResourcesManager(template.cost())))
-				return;
-			goal = "dock";
-		}
+		const sea = startingPoint[imax].sea > 1 ? startingPoint[imax].sea : undefined;
+		gameState.ai.queues.dock.addPlan(new ConstructionPlan(gameState, "structures/{civ}/dock",
+			{ "sea": sea, "proximity": startingPoint[imax].pos }));
 	}
-	if (!HQ.canBuild(gameState, templateName))
-		return;
+	else
+	{
+		gameState.ai.queues.civilCentre.addPlan(new ConstructionPlan(gameState,
+			"structures/{civ}/civil_centre",
+			{ "base": NEW_BASE, "resource": "wood", "proximity": startingPoint[imax].pos }));
+	}
+}
 
-	// We first choose as startingPoint the point where we have the more units
-	const startingPoint: Array<{ pos: CommonPosition, land: AccessIndex, sea: SeaIndex, weight: number }> = [];
+/**
+ * What to build first: a civic centre we can pay for; else nothing while
+ * treasures being collected would pay for it; else a dock if we have none
+ * and can pay for it. Undefined: nothing now.
+ */
+function firstBaseGoal(HQ: Headquarters, gameState: CommonGameState): { templateName: string; goal: "civil_centre" | "dock" } | undefined
+{
+	const ccName = gameState.applyCiv("structures/{civ}/civil_centre");
+	if (gameState.isTemplateDisabled(ccName))
+		return undefined;
+	const cc = gameState.getTemplate(ccName);
+	if (!cc)
+		return undefined;
+	const total = gameState.getResources();
+	if (total.canAfford(new ResourcesManager(cc.cost())))
+		return { "templateName": ccName, "goal": "civil_centre" };
+	if (treasuresWillPay(gameState, cc))
+		return undefined;
+
+	// not enough resource to build a cc, try with a dock to accumulate resources if none yet
+	if (HQ.navalManager.docks.filter(filters.byClass("Dock")).hasEntities())
+		return { "templateName": ccName, "goal": "civil_centre" };
+	if (gameState.ai.queues.dock.hasQueuedUnits())
+		return undefined;
+	const dockName = gameState.applyCiv("structures/{civ}/dock");
+	if (gameState.isTemplateDisabled(dockName))
+		return undefined;
+	const dock = gameState.getTemplate(dockName);
+	if (!dock || !total.canAfford(new ResourcesManager(dock.cost())))
+		return undefined;
+	return { "templateName": dockName, "goal": "dock" };
+}
+
+/**
+ * Sends idle units to the treasures around (some maps have them at the
+ * start); true when the treasures being collected will pay for the template.
+ */
+function treasuresWillPay(gameState: CommonGameState, template: CommonTemplate): boolean
+{
+	const totalExpected = gameState.getResources();
+	for (const ent of gameState.getOwnUnits().values())
+	{
+		if (!isPlaced(ent))
+			continue;
+		// If we can get a treasure around, just do it
+		if (ent.isIdle())
+			gatherTreasure(gameState, ent);
+		// Then count the resources from the treasures being collected
+		const treasureId = ent.getMetadata(PlayerID, "treasure");
+		if (!treasureId)
+			continue;
+		const treasure = gameState.getEntityById(treasureId);
+		if (!treasure)
+			continue;
+		const types = treasure.treasureResources();
+		for (const type in types)
+			if (type in totalExpected)
+				totalExpected[type] += types[type];
+		// If we can collect enough resources from these treasures, wait for them.
+		if (totalExpected.canAfford(new ResourcesManager(template.cost())))
+			return true;
+	}
+	return false;
+}
+
+type StartingPoint = { pos: CommonPosition, land: AccessIndex, sea: SeaIndex, weight: number };
+
+/** Our workers grouped by land and sea and within 50 m, each group weighed by its workers. */
+function startingPoints(gameState: CommonGameState): StartingPoint[]
+{
+	const startingPoint: StartingPoint[] = [];
 	for (const ent of gameState.getOwnUnits().values())
 	{
 		if (!ent.hasClass("Worker"))
@@ -202,40 +246,13 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
 		const index = gamepos[0] + gamepos[1] * gameState.ai.accessibility.width;
 		const land = gameState.ai.accessibility.landPassMap[index];
 		const sea = gameState.ai.accessibility.navalPassMap[index];
-		let found = false;
-		for (const point of startingPoint)
-		{
-			if (land !== point.land || sea !== point.sea)
-				continue;
-			if (SquareVectorDistance(point.pos, pos) > 2500)
-				continue;
+		const point = startingPoint.find((p) => land === p.land && sea === p.sea && SquareVectorDistance(p.pos, pos) <= 2500);
+		if (point)
 			point.weight += 1;
-			found = true;
-			break;
-		}
-		if (!found)
+		else
 			startingPoint.push({ "pos": pos, "land": land, "sea": sea, "weight": 1 });
 	}
-	if (!startingPoint.length)
-		return;
-
-	let imax = 0;
-	for (let i = 1; i < startingPoint.length; ++i)
-		if (startingPoint[i].weight > startingPoint[imax].weight)
-			imax = i;
-
-	if (goal === "dock")
-	{
-		const sea = startingPoint[imax].sea > 1 ? startingPoint[imax].sea : undefined;
-		gameState.ai.queues.dock.addPlan(new ConstructionPlan(gameState, "structures/{civ}/dock",
-			{ "sea": sea, "proximity": startingPoint[imax].pos }));
-	}
-	else
-	{
-		gameState.ai.queues.civilCentre.addPlan(new ConstructionPlan(gameState,
-			"structures/{civ}/civil_centre",
-			{ "base": NEW_BASE, "resource": "wood", "proximity": startingPoint[imax].pos }));
-	}
+	return startingPoint;
 }
 
 /**
@@ -247,79 +264,62 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 {
 	const allycc = gameState.getExclusiveAllyEntities().filter(filters.byClass("CivCentre"))
 		.toEntityArray();
-	if (allycc.length)
+	if (!allycc.length)
+		return;
+	debugWarn(HQ.Config, 1, () => " We have allied cc " + allycc.length + " and " + gameState.getOwnUnits().length +
+		" units ");
+	const units = gameState.getOwnUnits();
+	let num = Math.max(Math.min(Math.round(0.08 * (1 + HQ.Config.personality.cooperative) *
+		units.length), 20), 5);
+	let num1 = Math.floor(num / 2);
+	let num2 = num1;
+	// first pass to affect ranged infantry
+	units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent) =>
 	{
-		debugWarn(HQ.Config, 1, () => " We have allied cc " + allycc.length + " and " + gameState.getOwnUnits().length +
-			" units ");
-		const units = gameState.getOwnUnits();
-		let num = Math.max(Math.min(Math.round(0.08 * (1 + HQ.Config.personality.cooperative) *
-			units.length), 20), 5);
-		let num1 = Math.floor(num / 2);
-		let num2 = num1;
-		// first pass to affect ranged infantry
-		units.filter(filters.byClasses(["Infantry+Ranged"])).forEach((ent) =>
+		if (!num || !num1)
+			return;
+		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc))
 		{
-			if (!num || !num1)
-				return;
-			if (ent.getMetadata(PlayerID, "allied"))
-				return;
-			const access = getLandAccess(gameState, ent);
-			for (const cc of allycc)
-			{
-				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
-					continue;
-				const ccPos = cc.position();
-				--num;
-				--num1;
-				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
-				break;
-			}
-		});
-		// second pass to affect melee infantry
-		units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent) =>
+			--num;
+			--num1;
+		}
+	});
+	// second pass to affect melee infantry
+	units.filter(filters.byClasses(["Infantry+Melee"])).forEach((ent) =>
+	{
+		if (!num || !num2)
+			return;
+		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc))
 		{
-			if (!num || !num2)
-				return;
-			if (ent.getMetadata(PlayerID, "allied"))
-				return;
-			const access = getLandAccess(gameState, ent);
-			for (const cc of allycc)
-			{
-				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
-					continue;
-				const ccPos = cc.position();
-				--num;
-				--num2;
-				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
-				break;
-			}
-		});
-		// and now complete the affectation, including all support units
-		units.forEach((ent) =>
-		{
-			if (!num && !ent.hasClass("Support"))
-				return;
-			if (ent.getMetadata(PlayerID, "allied"))
-				return;
-			const access = getLandAccess(gameState, ent);
-			for (const cc of allycc)
-			{
-				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
-					continue;
-				const ccPos = cc.position();
-				if (!ent.hasClass("Support"))
-					--num;
-				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * cc.footprintRadius();
-				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
-				break;
-			}
-		});
+			--num;
+			--num2;
+		}
+	});
+	// and now complete the affectation, including all support units
+	units.forEach((ent) =>
+	{
+		if (!num && !ent.hasClass("Support"))
+			return;
+		if (!ent.getMetadata(PlayerID, "allied") && guardAllyCentre(gameState, ent, allycc) && !ent.hasClass("Support"))
+			--num;
+	});
+}
+
+/** Sends a unit to the first allied civic centre on its land, marked as the ally's; false if none is. */
+function guardAllyCentre(gameState: CommonGameState, ent: CommonEntity, allycc: CommonEntity[]): boolean
+{
+	const access = getLandAccess(gameState, ent);
+	for (const cc of allycc)
+	{
+		if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
+			continue;
+		const ccPos = cc.position();
+		ent.setMetadata(PlayerID, "allied", true);
+		const range = 1.5 * cc.footprintRadius();
+		ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
+		return true;
 	}
+	return false;
 }
 
 /**
@@ -334,21 +334,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 
 	HQ.firstBaseConfig = true;
 
-	let startingSize = 0;
-	const startingLand = [];
-	for (const region in HQ.geography.landRegions)
-	{
-		for (const base of HQ.baseManagers())
-		{
-			if (!base.anchor || base.accessIndex !== +region)
-				continue;
-			startingSize += gameState.ai.accessibility.regionSize[region];
-			startingLand.push(base.accessIndex);
-			break;
-		}
-	}
-	const cell = gameState.getPassabilityMap().cellSize;
-	startingSize = startingSize * cell * cell;
+	const { startingSize, startingLand } = startingLandSize(HQ, gameState);
 	debugWarn(HQ.Config, 1, () => "starting size " + startingSize + "(cut at 24000 for fish pushing)");
 	if (startingSize < 25000)
 	{
@@ -383,7 +369,44 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		else
 			HQ.needFarm = true;
 	}
-	// - count the available wood resource, and allow rushes only if enough (we should otherwise favor expansion)
+	configByWood(HQ, gameState);
+	queueFirstDropsite(HQ, gameState);
+	// and build immediately a corral if needed
+	if (HQ.needCorral)
+	{
+		const template = gameState.applyCiv("structures/{civ}/corral");
+		if (!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
+			HQ.canBuild(gameState, template))
+		{
+			gameState.ai.queues.corral.addPlan(
+				new ConstructionPlan(gameState, template, { "base": HQ.baseManagers()[0].ID }));
+		}
+	}
+}
+
+/** The area of the lands our anchored bases stand on, and those lands. */
+function startingLandSize(HQ: Headquarters, gameState: CommonGameState): { startingSize: number; startingLand: AccessIndex[] }
+{
+	let startingSize = 0;
+	const startingLand = [];
+	for (const region in HQ.geography.landRegions)
+	{
+		for (const base of HQ.baseManagers())
+		{
+			if (!base.anchor || base.accessIndex !== +region)
+				continue;
+			startingSize += gameState.ai.accessibility.regionSize[region];
+			startingLand.push(base.accessIndex);
+			break;
+		}
+	}
+	const cell = gameState.getPassabilityMap().cellSize;
+	return { "startingSize": startingSize * cell * cell, startingLand };
+}
+
+/** Count the available wood: save resources when short, allow rushes only if enough (otherwise favor expansion). */
+function configByWood(HQ: Headquarters, gameState: CommonGameState): void
+{
 	let startingWood = gameState.getResources().wood;
 	startingWood += HQ.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood;
 
@@ -413,37 +436,27 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		}
 		HQ.attackManager.setRushes(allowed);
 	}
+}
 
-	// immediatly build a wood dropsite if possible.
-	if (!gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
+/** Immediately a wood dropsite if possible, paid at once when we start with many workers or over the limit. */
+function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
+{
+	if (gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
+		return;
+	const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
+	// templateName is only "" when quality is 0, which the > 40 check rejects.
+	if (newDP.quality <= 40 || !HQ.canBuild(gameState, newDP.templateName))
+		return;
+	// if we start with enough workers, put our available resources in this first dropsite
+	// same thing if our pop exceed the allowed one, as we will need several houses
+	const numWorkers = gameState.getOwnUnits().filter(filters.byClass("Worker")).length;
+	if (numWorkers > 12 && newDP.quality > 60 ||
+		gameState.getPopulation() > gameState.getPopulationLimit() + 20)
 	{
-		const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
-		// templateName is only "" when quality is 0, which the > 40 check rejects.
-		if (newDP.quality > 40 && HQ.canBuild(gameState, newDP.templateName))
-		{
-			// if we start with enough workers, put our available resources in this first dropsite
-			// same thing if our pop exceed the allowed one, as we will need several houses
-			const numWorkers = gameState.getOwnUnits().filter(filters.byClass("Worker")).length;
-			if (numWorkers > 12 && newDP.quality > 60 ||
-				gameState.getPopulation() > gameState.getPopulationLimit() + 20)
-			{
-				// canBuild() above already verified that the template exists.
-				const cost = new ResourcesManager(requireTemplate(gameState, newDP.templateName).cost());
-				gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
-			}
-			gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
-				{ "base": HQ.baseManagers()[0].ID }, newDP.pos));
-		}
+		// canBuild() above already verified that the template exists.
+		const cost = new ResourcesManager(requireTemplate(gameState, newDP.templateName).cost());
+		gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 	}
-	// and build immediately a corral if needed
-	if (HQ.needCorral)
-	{
-		const template = gameState.applyCiv("structures/{civ}/corral");
-		if (!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
-			HQ.canBuild(gameState, template))
-		{
-			gameState.ai.queues.corral.addPlan(
-				new ConstructionPlan(gameState, template, { "base": HQ.baseManagers()[0].ID }));
-		}
-	}
+	gameState.ai.queues.dropsites.addPlan(new ConstructionPlan(gameState, newDP.templateName,
+		{ "base": HQ.baseManagers()[0].ID }, newDP.pos));
 }

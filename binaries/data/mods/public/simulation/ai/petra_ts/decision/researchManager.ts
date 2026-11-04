@@ -5,6 +5,34 @@ import { PAYBACK_HORIZON, incomeGain, paybackSeconds } from "./economyScore.ts";
 import { techName } from "../adapter/brands.ts";
 
 /**
+ * Whether a tech with these modifications is wanted as soon as available:
+ * undefined if not, else whether it is urgent (the cheap gather rates).
+ */
+function wantedModification(modifications: Array<{ value: string }>, cheap: boolean, naval: boolean): boolean | undefined
+{
+	for (const modification of modifications)
+	{
+		const value = modification.value;
+		if (naval && value === "ResourceGatherer/Rates/food.fish" || value === "ResourceGatherer/Rates/food.fruit" ||
+			value === "ResourceGatherer/Rates/wood.tree")
+			return cheap;
+		if (value === "ResourceGatherer/Rates/food.grain" || value.startsWith("ResourceGatherer/Capacities") ||
+			value === "Attack/Ranged/MaxRange")
+			return false;
+	}
+	return undefined;
+}
+
+/** A tech the stock cannot pay for that ten resources a worker would not cover: wait for it. */
+function tooDearForWorkers(cost: CommonResourceAmounts | undefined, available: Record<string, number> | null, numWorkers: number): boolean
+{
+	let costMax = 0;
+	for (const res in cost)
+		costMax = Math.max(costMax, Math.max(cost[res]-(available ? available[res] : 0), 0));
+	return 10*numWorkers < costMax;
+}
+
+/**
  * Manage the research
  */
 export class ResearchManager
@@ -113,29 +141,12 @@ export class ResearchManager
 			if (!modifications)
 				continue;
 			const cost = tech[1].cost();
-			if (phase1)
-			{
-				let costMax = 0;
-				for (const res in cost)
-					costMax = Math.max(costMax, Math.max(cost[res]-(available ? available[res] : 0), 0));
-				if (10*numWorkers < costMax)
-					continue;
-			}
-			for (const modification of modifications)
-			{
-				if (gameState.ai.HQ.geography.navalMap && modification.value === "ResourceGatherer/Rates/food.fish")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value === "ResourceGatherer/Rates/food.fruit")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value === "ResourceGatherer/Rates/food.grain")
-					return { "name": tech[0], "increasePriority": false };
-				else if (modification.value === "ResourceGatherer/Rates/wood.tree")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value.startsWith("ResourceGatherer/Capacities"))
-					return { "name": tech[0], "increasePriority": false };
-				else if (modification.value === "Attack/Ranged/MaxRange")
-					return { "name": tech[0], "increasePriority": false };
-			}
+			if (phase1 && tooDearForWorkers(cost, available, numWorkers))
+				continue;
+			const increasePriority = wantedModification(modifications, this.CostSum(cost) < 400,
+				gameState.ai.HQ.geography.navalMap);
+			if (increasePriority !== undefined)
+				return { "name": tech[0], increasePriority };
 		}
 		return undefined;
 	}
@@ -180,25 +191,16 @@ export class ResearchManager
 			if (!modifications)
 				continue;
 			const cost = tech[1].cost();
-			if (phase2)
-			{
-				let costMax = 0;
-				for (const res in cost)
-					costMax = Math.max(costMax, Math.max(cost[res]-(available ? available[res] : 0), 0));
-				if (10*numWorkers < costMax)
-					continue;
-			}
+			if (phase2 && tooDearForWorkers(cost, available, numWorkers))
+				continue;
+			const cheap = this.CostSum(cost) < 400;
 			for (const modification of modifications)
 			{
-				if (modification.value === "ResourceGatherer/Rates/stone.rock")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value === "ResourceGatherer/Rates/metal.ore")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value === "BuildingAI/DefaultArrowCount")
-					return { "name": tech[0], "increasePriority": this.CostSum(cost) < 400 };
-				else if (modification.value === "Health/RegenRate")
-					return { "name": tech[0], "increasePriority": false };
-				else if (modification.value === "Health/IdleRegenRate")
+				const value = modification.value;
+				if (value === "ResourceGatherer/Rates/stone.rock" || value === "ResourceGatherer/Rates/metal.ore" ||
+					value === "BuildingAI/DefaultArrowCount")
+					return { "name": tech[0], "increasePriority": cheap };
+				if (value === "Health/RegenRate" || value === "Health/IdleRegenRate")
 					return { "name": tech[0], "increasePriority": false };
 			}
 		}
@@ -228,44 +230,55 @@ export class ResearchManager
 		if (queues.minorTech.hasQueuedUnits())
 			return;
 
-		let techName = this.researchWantedTechs(gameState, techs);
-		if (techName)
+		const wanted = this.researchWantedTechs(gameState, techs);
+		if (wanted)
 		{
-			if (techName.increasePriority)
-			{
-				gameState.ai.queueManager.changePriority("minorTech", 2*this.Config.priorities.minorTech);
-				const plan = new ResearchPlan(gameState, techName.name);
-				plan.queueToReset = "minorTech";
-				queues.minorTech.addPlan(plan);
-			}
-			else
-				queues.minorTech.addPlan(new ResearchPlan(gameState, techName.name));
+			this.queueTech(gameState, queues, wanted);
 			return;
 		}
 
 		if (gameState.currentPhase() < 2)
 			return;
 
-		techName = this.researchPreferredTechs(gameState, techs);
-		if (techName)
+		const preferred = this.researchPreferredTechs(gameState, techs);
+		if (preferred)
 		{
-			if (techName.increasePriority)
-			{
-				gameState.ai.queueManager.changePriority("minorTech", 2*this.Config.priorities.minorTech);
-				const plan = new ResearchPlan(gameState, techName.name);
-				plan.queueToReset = "minorTech";
-				queues.minorTech.addPlan(plan);
-			}
-			else
-				queues.minorTech.addPlan(new ResearchPlan(gameState, techName.name));
+			this.queueTech(gameState, queues, preferred);
 			return;
 		}
 
 		if (gameState.currentPhase() < 3)
 			return;
 
-		// remove some techs not yet used by this AI
-		// remove also sharedLos if we have no ally
+		this.dropUnusedTechs(gameState, techs);
+		if (!techs.length)
+			return;
+
+		// randomly pick one. No worries about pairs in that case.
+		const pickedTech = pickRandom(techs);
+		if (!pickedTech)
+			return;
+		queues.minorTech.addPlan(new ResearchPlan(gameState, pickedTech[0]));
+	}
+
+	/** Queues a chosen tech; one wanted soon raises the minor techs' priority until it starts. */
+	private queueTech(gameState: CommonGameState, queues: PetraRuntime.QueueCollection,
+		choice: { name: TechName; increasePriority: boolean }): void
+	{
+		if (!choice.increasePriority)
+		{
+			queues.minorTech.addPlan(new ResearchPlan(gameState, choice.name));
+			return;
+		}
+		gameState.ai.queueManager.changePriority("minorTech", 2*this.Config.priorities.minorTech);
+		const plan = new ResearchPlan(gameState, choice.name);
+		plan.queueToReset = "minorTech";
+		queues.minorTech.addPlan(plan);
+	}
+
+	/** Removes the techs this AI does not use yet, and the shared line of sight without an ally. */
+	private dropUnusedTechs(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): void
+	{
 		for (let i = 0; i < techs.length; ++i)
 		{
 			const affects = techs[i][1].affects();
@@ -286,14 +299,6 @@ export class ResearchManager
 				continue;
 			}
 		}
-		if (!techs.length)
-			return;
-
-		// randomly pick one. No worries about pairs in that case.
-		const pickedTech = pickRandom(techs);
-		if (!pickedTech)
-			return;
-		queues.minorTech.addPlan(new ResearchPlan(gameState, pickedTech[0]));
 	}
 
 	/** A tech without a cost (the civ bonuses researched automatically) sums to 0, as in the original. */
