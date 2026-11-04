@@ -294,6 +294,12 @@ export class TransportPlan
 		return true;
 	}
 
+	/** Where a unit of the plan goes: its own destination, else the plan's (FINDINGS §32: a unit without one) */
+	destinationOf(ent: CommonEntity): CommonPosition
+	{
+		return ent.getMetadata(PlayerID, "endPos") ?? this.endPos;
+	}
+
 	/** add a unit to this plan */
 	addUnit(unit: CommonEntity, endPos: CommonPosition): void
 	{
@@ -845,8 +851,9 @@ export class TransportPlan
 		if (!ship.isIdle() || !isPlaced(ship))
 			return;
 		const shipId = ship.id();
-		// set for every ship of the plan when it set sail
-		const bp = requireValue(this.boardingPos[shipId]);
+		// set for every ship of the plan when it set sail; a ship that joined since has none yet
+		const bp = this.boardingPos[shipId] ?? this.getBoardingPos(gameState, ship, this.endIndex, this.sea, this.endPos, true);
+		this.boardingPos[shipId] = bp;
 		const dist = SquareVectorDistance(ship.position(), bp);
 		let remaining = 0;
 		for (const entId of ship.garrisoned())

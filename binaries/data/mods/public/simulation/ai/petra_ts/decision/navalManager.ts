@@ -380,7 +380,7 @@ export class NavalManager
 					if (!isPlaced(ent))  // unit from another ship of this plan ... do nothing
 						continue;
 					const access = getLandAccess(gameState, ent);
-					const endPos = requireMetadata(ent, "endPos");
+					const endPos = plan.destinationOf(ent);
 					ent.setMetadata(PlayerID, "transport", undefined);
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 					ent.setMetadata(PlayerID, "endPos", undefined);
@@ -484,7 +484,7 @@ export class NavalManager
 		{
 			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
 				continue;
-			newplan.addUnit(ent, requireMetadata(ent, "endPos"));
+			newplan.addUnit(ent, plan.destinationOf(ent));
 			plan.units.updateEnt(ent);
 		}
 

@@ -230,6 +230,15 @@ type AttackPlanSetup = { canBuildUnits: boolean } & (
 /** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
 export type AttackAim = { target: CommonEntity; pos: CommonPosition };
 
+/**
+ * An attack plan's state and what the state holds. Walking holds the path the
+ * plan walks, made when it sets off (StartAttack); the other states hold
+ * nothing more, so the path cannot be read outside walking.
+ */
+export type AttackStage =
+	| { state: Exclude<AttackPlanState, "walking"> }
+	| { state: "walking"; path: CommonPosition[] };
+
 export class AttackPlan
 {
 	Config: Config;
@@ -255,8 +264,17 @@ export class AttackPlan
 	requested: boolean | undefined = undefined;
 	siegeState: number;
 	startingAttack = false;
-	/** Changed only by changeState, and restored by Deserialize. */
-	state: AttackPlanState;
+	/** The plan's state and what the state holds: changed only by changeState and startWalking, and restored from a save. */
+	stage: AttackStage;
+	get state(): AttackPlanState
+	{
+		return this.stage.state;
+	}
+	/** a state that holds nothing (walking holds its path: startWalking) */
+	set state(state: Exclude<AttackPlanState, "walking">)
+	{
+		this.stage = { state };
+	}
 	target: CommonEntity | undefined;
 	targetPlayer: PlayerId | undefined;
 	targetPos: CommonPosition | undefined;
@@ -380,13 +398,17 @@ export class AttackPlan
 			const saved = setup.saved;
 			this.type = saved.properties.type;
 			const state = saved.properties.state;
-			if (isAttackPlanState(state))
-				this.state = state;
+			const savedPath = saved.properties.path;
+			// a walking plan walks its saved path; one saved without (never written) sets off again
+			if (state === AttackPlan.STATE_WALKING)
+				this.stage = savedPath ? { state, "path": savedPath } : { "state": AttackPlan.STATE_COMPLETING };
+			else if (isAttackPlanState(state) && state !== AttackPlan.STATE_WALKING)
+				this.stage = { state };
 			else
 			{
 				aiWarn("Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
 					"\": it prepares again");
-				this.state = AttackPlan.STATE_UNEXECUTED;
+				this.stage = { "state": AttackPlan.STATE_UNEXECUTED };
 			}
 			this.forced = saved.properties.forced;
 			this.rallyPoint = saved.properties.rallyPoint;
@@ -413,7 +435,7 @@ export class AttackPlan
 		{
 			const data = setup.data;
 			this.type = setup.type;
-			this.state = AttackPlan.STATE_UNEXECUTED;
+			this.stage = { "state": AttackPlan.STATE_UNEXECUTED };
 			this.forced = false;  // true when this attacked has been forced to help an ally
 
 			if (data && data.target)
@@ -576,12 +598,21 @@ export class AttackPlan
 	 * stands; a plan elsewhere makes the move anyway, as Petra always did, and
 	 * says so (a bug in the caller's reasoning, not in the game).
 	 */
-	changeState<From extends AttackPlanState>(from: From, to: AttackTransitions[From]): void
+	changeState<From extends AttackPlanState>(from: From, to: Exclude<AttackTransitions[From], "walking">): void
 	{
 		if (this.state !== from)
 			aiWarn("Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
 				"\", not from \"" + from + "\"");
-		this.state = to;
+		this.stage = { "state": to };
+	}
+
+	/** The plan sets off from completing on its path, walking it (the only way into walking). */
+	startWalking(path: CommonPosition[]): void
+	{
+		if (this.state !== AttackPlan.STATE_COMPLETING)
+			aiWarn("Petra: attack plan " + this.name + " moved to \"walking\" from \"" + this.state +
+				"\", not from \"completing\"");
+		this.stage = { "state": AttackPlan.STATE_WALKING, path };
 	}
 
 	isPaused(): boolean
@@ -1752,11 +1783,12 @@ export class AttackPlan
 		{
 			if (!this.path)
 				this.getPathToTarget(gameState, { target, "pos": targetPos }, true);
-			if (!this.path || !this.path[0][0] || !this.path[0][1])
+			const path = this.path;
+			if (!path || !path[0][0] || !path[0][1])
 				return false;
 			this.overseas = 0;
-			this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_WALKING);
-			this.unitCollection.moveToRange(this.path[0][0], this.path[0][1], 0, 15);
+			this.startWalking(path);
+			this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
 		}
 		else
 		{
@@ -1815,7 +1847,8 @@ export class AttackPlan
 			return this.unitCollection.length;
 		}
 
-		if (this.state === AttackPlan.STATE_WALKING && !this.UpdateWalking(gameState, events))
+		const stage = this.stage;
+		if (stage.state === AttackPlan.STATE_WALKING && !this.UpdateWalking(gameState, events, stage.path))
 		{
 			Engine.ProfileStop();
 			return 0;
@@ -2464,10 +2497,9 @@ export class AttackPlan
 		}
 	}
 
-	UpdateWalking(gameState: CommonGameState, events: EngineAIEvents): boolean
+	/** A walking turn, on the path the plan sets off on (StartAttack) or was saved walking. */
+	UpdateWalking(gameState: CommonGameState, events: EngineAIEvents, path: CommonPosition[]): boolean
 	{
-		// made by StartAttack, the only way into walking, or restored with a walking plan
-		const path = requireValue(this.path);
 		const pos = this.position;
 		if (!pos)
 			return false;
