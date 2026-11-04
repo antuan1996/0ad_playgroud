@@ -1652,7 +1652,7 @@ describe("obstructions along the path", () =>
 
 		withPath([{ "x": 24, "y": 26 }, { "x": 14, "y": 14 }, { "x": 12, "y": 12 }], () =>
 		{
-			assert.equal(plan.getPathToTarget(world.gameState), true, "the path was built");
+			assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim())), true, "the path was built");
 		});
 		assert.deepEqual(plan.path, [[12, 12], [14, 14], [24, 26], [30, 40]],
 			"the rally was cut back to before the danger");
@@ -1672,7 +1672,7 @@ describe("obstructions along the path", () =>
 
 		withPath([{ "x": 24, "y": 26 }, { "x": 14, "y": 14 }, { "x": 12, "y": 12 }], () =>
 		{
-			assert.equal(plan.getPathToTarget(world.gameState), true, "the path was built");
+			assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim())), true, "the path was built");
 		});
 		assert.deepEqual(plan.path, [[14, 14], [24, 26], [30, 40]], "the safe part is kept");
 		assert.deepEqual(plan.rallyPoint, [14, 14], "the rally sits at our border");
@@ -1685,7 +1685,7 @@ describe("obstructions along the path", () =>
 		world.accessAt.set("30,40", 3);
 		const plan = makePlan(world, { name: 1, data: { target: islandTarget } });
 
-		assert.equal(plan.getPathToTarget(world.gameState), false, "no path across water");
+		assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim())), false, "no path across water");
 		assert.ok(plan.path === undefined || plan.path.length === 0, "nothing was built");
 	});
 });
@@ -1705,7 +1705,7 @@ describe("starting the attack", () =>
 
 		withPath([{ "x": 32, "y": 44 }], () =>
 		{
-			assert.equal(plan.getPathToTarget(world.gameState, true), true, "the path was built");
+			assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim()), true), true, "the path was built");
 			assert.equal(plan.StartAttack(world.gameState), true, "the attack began");
 		});
 		assert.equal(plan.state, "walking", "the plan marches");
@@ -1764,7 +1764,7 @@ describe("starting the attack", () =>
 
 		withPath([{ "x": 32, "y": 44 }], () =>
 		{
-			assert.equal(plan.getPathToTarget(world.gameState, true), true, "the path was built");
+			assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim()), true), true, "the path was built");
 			assert.equal(plan.StartAttack(world.gameState), true, "the attack began");
 		});
 		assert.deepEqual(stances, ["standground"], "packable units stand ground");
@@ -2142,7 +2142,7 @@ describe("chasing a target during execution", () =>
 		const moving = world.ents.get(3000)!;
 		moving.position = (() => [42, 42]) as never;
 
-		assert.equal(plan.UpdateTarget(world.gameState), true, "the target is kept");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, true, "the target is kept");
 		assert.deepEqual(plan.targetPos, [42, 42], "the chase followed");
 	});
 
@@ -2160,7 +2160,7 @@ describe("chasing a target during execution", () =>
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
-			assert.equal(plan.UpdateTarget(world.gameState), true, "a new target was picked");
+			assert.equal(plan.UpdateTarget(world.gameState) !== undefined, true, "a new target was picked");
 		});
 		assert.equal(plan.target, next, "the next centre");
 		assert.deepEqual(plan.targetPos, [30, 40], "at its place");
@@ -2177,7 +2177,7 @@ describe("chasing a target during execution", () =>
 		plan.position = worldPos(11, 12);
 		world.removeEntity(deadTarget.id());
 
-		assert.equal(plan.UpdateTarget(world.gameState), false, "nothing left to chase");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, false, "nothing left to chase");
 	});
 
 	it("siege units go for the gates first", () =>
@@ -2530,7 +2530,7 @@ describe("rare target finders", () =>
 		plan.position = worldPos(11, 12);
 		resetRecorder();
 
-		assert.equal(plan.UpdateTarget(world.gameState), false, "there is nowhere else to go");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, false, "there is nowhere else to go");
 		assert.ok(logs.some((entry) => /Seems like our target for plan 1/.test(entry)),
 			"the switching warning was logged");
 	});
@@ -2772,7 +2772,7 @@ describe("attacking miscellany", () =>
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
-			assert.equal(plan.UpdateTarget(world.gameState), true, "the fresh enemy was groomed");
+			assert.equal(plan.UpdateTarget(world.gameState) !== undefined, true, "the fresh enemy was groomed");
 		});
 		assert.equal(plan.targetPlayer, ENEMY, "the plan joined the only enemy");
 		assert.equal(plan.target, target, "the enemy centre was the target");
@@ -2786,7 +2786,7 @@ describe("attacking miscellany", () =>
 		plan.position = worldPos(11, 12);
 		resetRecorder();
 
-		assert.equal(plan.UpdateTarget(world.gameState), false, "nothing was found");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, false, "nothing was found");
 		assert.equal(plan.targetPlayer, ENEMY, "the plan joined the only enemy");
 		assert.ok(logs.some((entry) => /No new target found. Remaining units /.test(entry)),
 			"the giving-up warning was logged");
@@ -3519,7 +3519,7 @@ describe("directing the swarm", () =>
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
-			assert.equal(plan.UpdateTarget(world.gameState), true, "the plan joined the brother");
+			assert.equal(plan.UpdateTarget(world.gameState) !== undefined, true, "the plan joined the brother");
 		});
 		assert.equal(plan.target, good, "the brother's prey was adopted");
 		assert.equal(plan.targetPlayer, ENEMY, "the brother's enemy was adopted");
@@ -3567,7 +3567,7 @@ describe("directing the swarm", () =>
 		plan.target = world.ents.get(2602);
 		plan.targetPlayer = ENEMY;
 
-		assert.equal(plan.UpdateTarget(world.gameState), true, "the keeper took over");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, true, "the keeper took over");
 		assert.equal(plan.target, holder, "the keeper was adopted as the target");
 		assert.deepEqual(plan.targetPos, [30, 40], "at the keeper");
 	});
@@ -3587,7 +3587,7 @@ describe("directing the swarm", () =>
 		plan.targetPlayer = ENEMY;
 		resetRecorder();
 
-		assert.equal(plan.UpdateTarget(world.gameState), false, "nothing remained to attack");
+		assert.equal(plan.UpdateTarget(world.gameState) !== undefined, false, "nothing remained to attack");
 		assert.equal(plan.target, undefined, "the prey was dropped");
 		assert.ok(logs.some((entry) => /No new target found. Remaining units/.test(entry)),
 			"the surrender was logged");
@@ -3959,7 +3959,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		const target = makeTarget(world, {}, 2005);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		world.territory.set("10,10", 0);
-		withPath([{ "x": 24, "y": 26 }], () => assert.equal(plan.getPathToTarget(world.gameState), true));
+		withPath([{ "x": 24, "y": 26 }], () => assert.equal(plan.getPathToTarget(world.gameState, requireValue(plan.aim())), true));
 		assert.deepEqual(plan.rallyPoint, [10, 10]);
 	});
 
