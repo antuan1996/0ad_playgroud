@@ -789,7 +789,7 @@ export class AttackPlan
 		// Petra, waiting before it drafted, left 147 idle citizen soldiers out of
 		// an attack waiting for its ships on a dry island (FINDINGS §40); the
 		// ship queue is raised meanwhile (NavalManager.shipPriority)
-		if (this.overseas && !hqOf(gameState).navalManager.seaTransportShips[this.overseas]?.length)
+		if (this.overseas && !hqOf(gameState).navalManager.fleet(this.overseas)?.transports.length)
 			return AttackPlan.PREPARATION_KEEP_GOING;
 		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
 			this.reassignFastUnit(gameState);    // reassign some fast units (if any) to fasten raid preparations

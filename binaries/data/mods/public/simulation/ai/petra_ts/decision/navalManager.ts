@@ -37,20 +37,26 @@ import { isPlaced } from "../adapter/placed.ts";
  * -Scouting, ultimately.
  * Also deals with handling docks, making sure we have access and stuffs like that.
  */
+/** The ships we have on one sea, by kind (a transport may be a warship too) */
+export type SeaFleet = {
+	ships: CommonEntityCollection;
+	transports: CommonEntityCollection;
+	warShips: CommonEntityCollection;
+	fishers: CommonEntityCollection;
+};
+
 export class NavalManager
 {
 	Config: Config;
-	docks: CommonEntityCollection;
+	docks: CommonEntityCollection<CommonStructureEntity>;
 	fishShips: CommonEntityCollection;
 	ships: CommonEntityCollection;
 	transportShips: CommonEntityCollection;
 	warShips: CommonEntityCollection;
 
 	// ship subCollections. Also exist for land zones, idem, not caring.
-	seaShips: Array<CommonEntityCollection | undefined> = [];
-	seaTransportShips: Array<CommonEntityCollection | undefined> = [];
-	seaWarShips: Array<CommonEntityCollection | undefined> = [];
-	seaFishShips: Array<CommonEntityCollection | undefined> = [];
+	/** Each sea's ships, for the naval regions only (in their order) */
+	fleets = new Map<number, SeaFleet>();
 
 	// wanted NB per zone.
 	wantedTransportShips: number[] = [];
@@ -100,11 +106,7 @@ export class NavalManager
 		{
 			if (!geography.navalRegions[i])
 			{
-				// push dummies
-				this.seaShips.push(undefined);
-				this.seaTransportShips.push(undefined);
-				this.seaWarShips.push(undefined);
-				this.seaFishShips.push(undefined);
+				// a land, or a sea too small to sail: no fleet
 				this.wantedTransportShips.push(0);
 				this.wantedWarShips.push(0);
 				this.wantedFishShips.push(0);
@@ -113,18 +115,14 @@ export class NavalManager
 			}
 			else
 			{
-				let collec = this.ships.filter(filters.byMetadata(PlayerID, "sea", i));
-				collec.registerUpdates();
-				this.seaShips.push(collec);
-				collec = this.transportShips.filter(filters.byMetadata(PlayerID, "sea", i));
-				collec.registerUpdates();
-				this.seaTransportShips.push(collec);
-				collec = this.warShips.filter(filters.byMetadata(PlayerID, "sea", i));
-				collec.registerUpdates();
-				this.seaWarShips.push(collec);
-				collec = this.fishShips.filter(filters.byMetadata(PlayerID, "sea", i));
-				collec.registerUpdates();
-				this.seaFishShips.push(collec);
+				const onSea = (collection: CommonEntityCollection): CommonEntityCollection =>
+				{
+					const collec = collection.filter(filters.byMetadata(PlayerID, "sea", i));
+					collec.registerUpdates();
+					return collec;
+				};
+				this.fleets.set(i, { "ships": onSea(this.ships), "transports": onSea(this.transportShips),
+					"warShips": onSea(this.warShips), "fishers": onSea(this.fishShips) });
 				this.wantedTransportShips.push(0);
 				this.wantedWarShips.push(0);
 				if (availableFishes[i] && availableFishes[i] > 1000)
@@ -183,6 +181,12 @@ export class NavalManager
 				}
 			}
 		}
+	}
+
+	/** The ships on a sea, undefined for a land or a sea too small to sail (no naval region) */
+	fleet(sea: number): SeaFleet | undefined
+	{
+		return this.fleets.get(sea);
 	}
 
 	/** A saved naval manager: its wishes, landing zones and transports from the save */
@@ -314,7 +318,7 @@ export class NavalManager
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) !== region)
 				return;
-			const i = seas.indexOf(requireValue(getSeaAccess(gameState, dock)));
+			const i = seas.indexOf(getSeaAccess(gameState, dock));
 			if (i !== -1)
 				seas.splice(i, 1);
 		});
@@ -540,7 +544,7 @@ export class NavalManager
 			if (!plan.needTransportShips || plan.units.length < 2)
 				continue;
 			const sea = plan.sea;
-			const seaTransports = requireValue(this.seaTransportShips[sea]).length;
+			const seaTransports = plan.seaFleet.transports.length;
 			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 || seaTransports < this.wantedTransportShips[sea])
 				continue;
 			++this.neededTransportShips[sea];
@@ -568,7 +572,7 @@ export class NavalManager
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
 		const waiting = this.transportPlans.some(plan => plan.needTransportShips && plan.units.length > 0) ||
 			[...plansIn(gameState.ai.HQ.attackManager.upcomingAttacks)].some(plan =>
-				plan.overseas !== 0 && plan.unitCollection.hasEntities() && !this.seaTransportShips[plan.overseas]?.length);
+				plan.overseas !== 0 && plan.unitCollection.hasEntities() && !this.fleet(plan.overseas)?.transports.length);
 		const priority = waiting ? Math.max(priorities.villager, priorities.citizenSoldier) + 2 : priorities.ships;
 		if (gameState.ai.queueManager.getPriority("ships") !== priority)
 			gameState.ai.queueManager.changePriority("ships", priority);
@@ -582,14 +586,11 @@ export class NavalManager
 		if (!this.docks.filter(filters.isBuilt()).hasEntities())
 			return;
 		// check if we have enough transport ships per region.
-		for (let seaNumber = 0; seaNumber < this.seaShips.length; ++seaNumber)
+		for (const [seaNumber, fleet] of this.fleets)
 		{
 			const sea = seaRegion(seaNumber);
-			const transports = this.seaTransportShips[sea];
-			const fishers = this.seaFishShips[sea];
-			// the sea collections are created together, for naval regions only
-			if (!transports || !fishers)
-				continue;
+			const transports = fleet.transports;
+			const fishers = fleet.fishers;
 			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0)
 				continue;
 
@@ -615,8 +616,8 @@ export class NavalManager
 				}
 			}
 
-			const warShips = this.seaWarShips[sea];
-			if (warShips && warShips.length < this.wantedWarShips[sea])
+			const warShips = fleet.warShips;
+			if (warShips.length < this.wantedWarShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "attack");
 				if (template)
@@ -797,8 +798,12 @@ export class NavalManager
 		{
 			const shipPosition = ship.position();
 			// our transport ships always have their sea set (see init and checkEvents)
-			const sea = requireMetadata(ship, "sea");
-			for (const blockingShip of requireValue(this.seaShips[sea]).values())
+			const sea = getSeaAccess(gameState, ship);
+			const fleet = this.fleet(sea);
+			// a ship on a sea too small to sail has none to move away from
+			if (!fleet)
+				continue;
+			for (const blockingShip of fleet.ships.values())
 			{
 				if (blockedIds.indexOf(blockingShip.id()) !== -1 || !isPlaced(blockingShip))
 					continue;
@@ -838,7 +843,7 @@ export class NavalManager
 	}
 
 	/** A ship idle where it was last turn: it gathers treasure nearby, or leaves the docks' waters to other ships */
-	moveIdleShipApart(gameState: CommonGameState, ship: CommonEntity, shipPosition: CommonPosition): void
+	moveIdleShipApart(gameState: CommonGameState, ship: CommonPlacedEntity, shipPosition: CommonPosition): void
 	{
 		const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
 		if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
@@ -856,7 +861,7 @@ export class NavalManager
 			return;
 		// Do not stay idle near a dock to not disturb other ships
 		// our transport and trader ships always have their sea set (see init and checkEvents)
-		const sea = requireMetadata(ship, "sea");
+		const sea = getSeaAccess(gameState, ship);
 		for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
 		{
 			if (getSeaAccess(gameState, dock) !== sea)
@@ -928,7 +933,7 @@ export class NavalManager
 			if (base.anchor)
 				wantedLand[requireValue(base.accessIndex)] = true;
 		// our docks always have their sea set (see init and checkEvents)
-		const sea = requireMetadata(this.docks.toEntityArray()[0], "sea");
+		const sea = getSeaAccess(gameState, this.docks.toEntityArray()[0]);
 		queues.militaryBuilding.addPlan(
 			new ConstructionPlan(gameState, template, { "land": wantedLand, "sea": sea }));
 	}
@@ -1067,7 +1072,10 @@ export class NavalManager
 		for (const i in data.transports)
 		{
 			const dataPlan = data.transports[i];
-			this.transportPlans.push(TransportPlan.restore(gameState, this, dataPlan));
+			// a saved plan whose sea has no fleet (a sea too small to sail) is left
+			const plan = TransportPlan.restore(gameState, this, dataPlan);
+			if (plan)
+				this.transportPlans.push(plan);
 		}
 	}
 }

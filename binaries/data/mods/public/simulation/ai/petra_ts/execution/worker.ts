@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, gatherTreasure, getBuiltEntity, getLandAccess, getSeaAccess, isFastMoving,
-	isSupplyFull, requireValue, returnResources } from "../adapter/entityExtend.ts";
+	isSupplyFull, returnResources } from "../adapter/entityExtend.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import type { ResourceSupply } from "../decision/baseManager.ts";
 import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
@@ -612,12 +612,14 @@ export class UnitWork
 		if (resource === "food" && this.startHunting(gameState))
 			return true;
 
-		if (this.gatherInOwnBase(gameState, resource) ||
-		    this.gatherInReachableBases(gameState, resource) ||
+		// a unit that gathers nothing (a worker elephant builds) finds nothing to gather
+		const gatherRates = this.ent.resourceGatherRates();
+		if (gatherRates && (this.gatherInOwnBase(gameState, resource, gatherRates) ||
+		    this.gatherInReachableBases(gameState, resource, gatherRates) ||
 		    this.buildReachableDropsite(gameState, resource) ||
-		    this.gatherOverseas(gameState, resource) ||
+		    this.gatherOverseas(gameState, resource, gatherRates) ||
 		    this.buildOverseasDropsite(gameState, resource) ||
-		    this.gatherFaraway(gameState, resource))
+		    this.gatherFaraway(gameState, resource, gatherRates)))
 			return true;
 
 		// If we are here, we have nothing left to gather ... certainly no more resources of this type
@@ -628,12 +630,12 @@ export class UnitWork
 	}
 
 	/** The first supply of a base's band that is worth one more gatherer, booked for this worker. */
-	findSupply(gameState: CommonGameState, base: BaseView & SupplyUpkeep, resource: string, band: string): CommonSupplyEntity | false
+	findSupply(gameState: CommonGameState, base: BaseView & SupplyUpkeep, resource: string, band: string,
+		gatherRates: Readonly<Record<string, number>>): CommonSupplyEntity | false
 	{
 		const supplies = base.resources.dropsiteSupplies[resource][band];
 		const ent = this.ent;
 		let ret: CommonSupplyEntity | false = false;
-		const gatherRates = requireValue(ent.resourceGatherRates());
 		for (let i = 0; i < supplies.length; ++i)
 		{
 			const entity = gameState.getEntityById(supplies[i].id);
@@ -672,13 +674,13 @@ export class UnitWork
 	}
 
 	/** startGathering: the nearby and medium supplies of its own base, fields for food. Whether the worker was given work. */
-	gatherInOwnBase(gameState: CommonGameState, resource: string): boolean
+	gatherInOwnBase(gameState: CommonGameState, resource: string, gatherRates: Readonly<Record<string, number>>): boolean
 	{
 		let supply;
 		// first look in our own base if accessible from our present position
 		if (this.baseAccess === this.entAccess)
 		{
-			supply = this.findSupply(gameState, this.base, resource, "nearby");
+			supply = this.findSupply(gameState, this.base, resource, "nearby", gatherRates);
 			if (supply)
 			{
 				this.ent.gather(supply);
@@ -687,7 +689,7 @@ export class UnitWork
 			// --> for food, try to gather from fields if any, otherwise build one if any
 			if (resource === "food")
 			{
-				supply = this.gatherNearestField(gameState, this.baseID);
+				supply = this.gatherNearestField(gameState, this.baseID, gatherRates);
 				if (supply)
 				{
 					this.ent.gather(supply);
@@ -700,7 +702,7 @@ export class UnitWork
 					return true;
 				}
 			}
-			supply = this.findSupply(gameState, this.base, resource, "medium");
+			supply = this.findSupply(gameState, this.base, resource, "medium", gatherRates);
 			if (supply)
 			{
 				this.ent.gather(supply);
@@ -711,7 +713,7 @@ export class UnitWork
 	}
 
 	/** startGathering: the other bases on its land, nearby, fields for food, then medium. Whether the worker was given work. */
-	gatherInReachableBases(gameState: CommonGameState, resource: string): boolean
+	gatherInReachableBases(gameState: CommonGameState, resource: string, gatherRates: Readonly<Record<string, number>>): boolean
 	{
 		let supply;
 		// So if we're here we have checked our whole base for a proper resource (or it was not accessible)
@@ -722,7 +724,7 @@ export class UnitWork
 				continue;
 			if (base.accessIndex !== this.entAccess)
 				continue;
-			supply = this.findSupply(gameState, base, resource, "nearby");
+			supply = this.findSupply(gameState, base, resource, "nearby", gatherRates);
 			if (supply)
 			{
 				this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -738,7 +740,7 @@ export class UnitWork
 					continue;
 				if (base.accessIndex !== this.entAccess)
 					continue;
-				supply = this.gatherNearestField(gameState, base.ID);
+				supply = this.gatherNearestField(gameState, base.ID, gatherRates);
 				if (supply)
 				{
 					this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -760,7 +762,7 @@ export class UnitWork
 				continue;
 			if (base.accessIndex !== this.entAccess)
 				continue;
-			supply = this.findSupply(gameState, base, resource, "medium");
+			supply = this.findSupply(gameState, base, resource, "medium", gatherRates);
 			if (supply)
 			{
 				this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -801,7 +803,7 @@ export class UnitWork
 	}
 
 	/** startGathering: the bases across the sea, by a transport. Whether the worker was given work. */
-	gatherOverseas(gameState: CommonGameState, resource: string): boolean
+	gatherOverseas(gameState: CommonGameState, resource: string, gatherRates: Readonly<Record<string, number>>): boolean
 	{
 		let supply;
 		const navalManager = hqOf(gameState).navalManager;
@@ -810,7 +812,7 @@ export class UnitWork
 		{
 			if (base.accessIndex === this.entAccess)
 				continue;
-			supply = this.findSupply(gameState, base, resource, "nearby");
+			supply = this.findSupply(gameState, base, resource, "nearby", gatherRates);
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID !== this.baseID)
@@ -824,7 +826,7 @@ export class UnitWork
 			{
 				if (base.accessIndex === this.entAccess)
 					continue;
-				supply = this.gatherNearestField(gameState, base.ID);
+				supply = this.gatherNearestField(gameState, base.ID, gatherRates);
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID !== this.baseID)
@@ -844,7 +846,7 @@ export class UnitWork
 		{
 			if (base.accessIndex === this.entAccess)
 				continue;
-			supply = this.findSupply(gameState, base, resource, "medium");
+			supply = this.findSupply(gameState, base, resource, "medium", gatherRates);
 			if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 			{
 				if (base.ID !== this.baseID)
@@ -888,7 +890,7 @@ export class UnitWork
 	}
 
 	/** startGathering: the faraway supplies, on its land then across the sea, unless food may not be fetched far. Whether the worker was given work. */
-	gatherFaraway(gameState: CommonGameState, resource: string): boolean
+	gatherFaraway(gameState: CommonGameState, resource: string, gatherRates: Readonly<Record<string, number>>): boolean
 	{
 		let supply;
 		const navalManager = hqOf(gameState).navalManager;
@@ -903,7 +905,7 @@ export class UnitWork
 		{
 			if (this.baseAccess === this.entAccess)
 			{
-				supply = this.findSupply(gameState, this.base, resource, "faraway");
+				supply = this.findSupply(gameState, this.base, resource, "faraway", gatherRates);
 				if (supply)
 				{
 					this.ent.gather(supply);
@@ -916,7 +918,7 @@ export class UnitWork
 					continue;
 				if (base.accessIndex !== this.entAccess)
 					continue;
-				supply = this.findSupply(gameState, base, resource, "faraway");
+				supply = this.findSupply(gameState, base, resource, "faraway", gatherRates);
 				if (supply)
 				{
 					this.ent.setMetadata(PlayerID, "base", base.ID);
@@ -928,7 +930,7 @@ export class UnitWork
 			{
 				if (base.accessIndex === this.entAccess)
 					continue;
-				supply = this.findSupply(gameState, base, resource, "faraway");
+				supply = this.findSupply(gameState, base, resource, "faraway", gatherRates);
 				if (supply && navalManager.requireTransport(gameState, this.ent, this.entAccess, base.accessIndex ?? NO_REGION, supply.position()))
 				{
 					if (base.ID !== this.baseID)
@@ -983,7 +985,10 @@ export class UnitWork
 			return false;
 		};
 
-		const gatherRates = requireValue(this.ent.resourceGatherRates());
+		const gatherRates = this.ent.resourceGatherRates();
+		// a unit that gathers nothing (a worker elephant builds) has no game to hunt
+		if (!gatherRates)
+			return false;
 		for (const supply of resources.values())
 		{
 			const supplyPos = supply.position();
@@ -1092,7 +1097,10 @@ export class UnitWork
 		};
 
 		let exhausted = true;
-		const gatherRates = requireValue(this.ent.resourceGatherRates());
+		const gatherRates = this.ent.resourceGatherRates();
+		// a unit that gathers nothing (a worker elephant builds) has no fish to catch
+		if (!gatherRates)
+			return false;
 		resources.forEach((supply) =>
 		{
 
@@ -1146,13 +1154,12 @@ export class UnitWork
 		return false;
 	}
 
-	gatherNearestField(gameState: CommonGameState, baseID: BaseId): CommonPlacedEntity | false
+	gatherNearestField(gameState: CommonGameState, baseID: BaseId, gatherRates: Readonly<Record<string, number>>): CommonPlacedEntity | false
 	{
 		const ownFields = gameState.getOwnEntitiesByClass("Field", true).filter(filters.isBuilt())
 			.filter(filters.byMetadata(PlayerID, "base", baseID));
 		let bestFarm;
 
-		const gatherRates = requireValue(this.ent.resourceGatherRates());
 		for (const field of ownFields.values())
 		{
 			// a built field: a supply

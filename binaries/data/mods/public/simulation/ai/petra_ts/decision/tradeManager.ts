@@ -120,7 +120,7 @@ export class TradeManager
 			// and the naval manager will train now more appropriate ships.
 			let already = false;
 			let shipToSwitch: CommonEntity | undefined;
-			gameState.ai.HQ.navalManager.seaTransportShips[route.sea ?? -1]?.forEach(function(ship: CommonEntity): void 
+			gameState.ai.HQ.navalManager.fleet(route.sea ?? -1)?.transports.forEach(function(ship: CommonEntity): void 
 			{
 				if (already || !ship.hasClass("Trader"))
 					return;

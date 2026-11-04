@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { getLandAccess, requireMetadata, requireValue } from "../adapter/entityExtend.ts";
+import { getLandAccess, getSeaAccess, requireValue } from "../adapter/entityExtend.ts";
 import { Worker } from "./worker.ts";
 import { transportPlanId, worldPos } from "../adapter/brands.ts";
 import { stateIs, unitState } from "../adapter/unitState.ts";
@@ -9,6 +9,7 @@ import { hqOf } from "./hq.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { SeaFleet } from "../decision/navalManager.ts";
 
 /**
  * Describes a transport plan
@@ -33,7 +34,8 @@ import { isPlaced } from "../adapter/placed.ts";
  */
 
 /** The naval manager's ships, from which a plan picks its own by their metadata */
-export type TransportFleet = { ships: CommonEntityCollection; transportShips: CommonEntityCollection };
+export type TransportFleet = { ships: CommonEntityCollection; transportShips: CommonEntityCollection;
+	fleet(sea: number): SeaFleet | undefined };
 
 export interface SerializedTransportPlan {
 	ID: TransportPlanId;
@@ -74,6 +76,8 @@ const LANDING_THREAT_COST = 1000;
 export class TransportPlan
 {
 	ID: TransportPlanId;
+	/** The ships on the plan's sea */
+	seaFleet: SeaFleet;
 	boardingPos: Record<string, CommonPosition | undefined>;
 	boardingRange = 18*18;	// TODO compute it from the ship clearance and garrison range
 	canceled: boolean | undefined = undefined;
@@ -110,7 +114,7 @@ export class TransportPlan
 	{
 		if (startIndex === 1)
 			// our ships always have their sea set (see NavalManager init and checkEvents)
-			return ship && requireMetadata(ship, "sea");
+			return ship && getSeaAccess(gameState, ship);
 		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, startIndex, endIndex);
 		if (!sea)
 		{
@@ -121,28 +125,37 @@ export class TransportPlan
 		return sea;
 	}
 
-	/** A new transport, or undefined when there is no sea to cross (findSea); the plan's ID is used up either way. */
+	/**
+	 * A new transport, or undefined when there is no sea to cross (findSea) or
+	 * no fleet on it (a sea too small to sail); the plan's ID is used up either way.
+	 */
 	static create(gameState: CommonGameState, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
 		endPos: CommonPosition, ship?: CommonEntity): TransportPlan | undefined
 	{
 		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
 		const sea = TransportPlan.findSea(gameState, startIndex, endIndex, ship);
-		return sea === undefined ? undefined :
-			new TransportPlan(gameState, hqOf(gameState).navalManager, id, units, startIndex, endIndex, endPos, sea, ship);
+		const fleet = hqOf(gameState).navalManager;
+		const seaFleet = sea === undefined ? undefined : fleet.fleet(sea);
+		return sea === undefined || !seaFleet ? undefined :
+			new TransportPlan(gameState, fleet, seaFleet, id, units, startIndex, endIndex, endPos, sea, ship);
 	}
 
-	/** A saved transport, as it was saved: its units and ships found again by their metadata. */
-	static restore(gameState: CommonGameState, fleet: TransportFleet, data: SerializedTransportPlan): TransportPlan
+	/** A saved transport, as it was saved: its units and ships found again by their metadata; none when its sea has no fleet. */
+	static restore(gameState: CommonGameState, fleet: TransportFleet, data: SerializedTransportPlan): TransportPlan | undefined
 	{
-		const plan = new TransportPlan(gameState, fleet, data.ID, [], data.startIndex, data.endIndex, data.endPos, data.sea);
+		const seaFleet = fleet.fleet(data.sea);
+		if (!seaFleet)
+			return undefined;
+		const plan = new TransportPlan(gameState, fleet, seaFleet, data.ID, [], data.startIndex, data.endIndex, data.endPos, data.sea);
 		plan.resume(data);
 		return plan;
 	}
 
-	constructor(gameState: CommonGameState, fleet: TransportFleet, id: TransportPlanId, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
+	constructor(gameState: CommonGameState, fleet: TransportFleet, seaFleet: SeaFleet, id: TransportPlanId, units: CommonEntity[], startIndex: AccessIndex, endIndex: AccessIndex,
 		endPos: CommonPosition, sea: SeaIndex, ship?: CommonEntity)
 	{
 		this.ID = id;
+		this.seaFleet = seaFleet;
 		this.debug = gameState.ai.Config.debug;
 		this.flotilla = false;   // when false, only one ship per transport ... not yet tested when true
 		this.needSplit = [];
@@ -255,7 +268,7 @@ export class TransportPlan
 		// and choose the nearest available ship from this unit
 		let distmin = Math.min();
 		let nearest: CommonEntity | undefined;
-		requireValue(hqOf(gameState).navalManager.seaTransportShips[this.sea]).forEach((ship) =>
+		this.seaFleet.transports.forEach((ship) =>
 		{
 			if (ship.getMetadata(PlayerID, "transporter") || !isPlaced(ship))
 				return;
