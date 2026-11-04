@@ -66,7 +66,9 @@ least 60 tokens over 6 lines found twice or more (imports left out;
 `--renamed` also catches copies over other names). It prints the functions
 over the thresholds (lines 80, cyclomatic 15, cognitive 25, depth 4, params
 5), the worst functions, modules and classes, and each clone with every
-place it occurs. Half a second for the port.
+place it occurs. Half a second for the port. The port has no function over
+the thresholds and no clone: keep it so (split by extract-method, the games
+identical, checked by the smoke test).
 
 The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
 `tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only

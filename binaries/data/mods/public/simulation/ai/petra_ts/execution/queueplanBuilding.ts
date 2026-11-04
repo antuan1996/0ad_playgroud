@@ -446,11 +446,11 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const HQ = hqOf(gameState);
 		let pos;
 		if (this.metadata && this.metadata.room)
-			pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
+			pos = HQ.findEconomicCCLocation(gameState, template, "wood", { "fromStrategic": true, "forRoom": true });
 		else if (this.metadata && this.metadata.resource)
 		{
 			const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
-			pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);
+			pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, { proximity });
 		}
 		else
 			pos = HQ.findStrategicCCLocation(gameState, template);
