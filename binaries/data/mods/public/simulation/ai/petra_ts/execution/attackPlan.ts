@@ -107,14 +107,6 @@ type AttackerContext = {
 	targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
 };
 
-const ATTACK_PLAN_STATES: readonly AttackPlanState[] = ["unexecuted", "completing", "walking", "transporting", "arrived", ""];
-
-/** Whether a value read back from a save is one of the attack's states. */
-function isAttackPlanState(value: unknown): value is AttackPlanState
-{
-	return ATTACK_PLAN_STATES.some((state: AttackPlanState): boolean => state === value);
-}
-
 /** The four kinds of attack plan, in the order the attack manager keeps them. */
 export type AttackType = "Rush" | "Raid" | "Attack" | "HugeAttack";
 export const ATTACK_TYPES: readonly AttackType[] = ["Rush", "Raid", "Attack", "HugeAttack"];
@@ -236,13 +228,27 @@ export type AttackAim = { target: CommonEntity; pos: CommonPosition };
  * nothing more, so the path cannot be read outside walking.
  */
 export type AttackStage =
-	| { state: Exclude<AttackPlanState, "walking"> }
-	| { state: "walking"; path: CommonPosition[] };
+	| { state: "unexecuted" | "completing"; prep: AttackPreparation }
+	| { state: "walking"; path: CommonPosition[] }
+	| { state: "transporting" | "arrived" | "" };
+
+/**
+ * What a preparing plan trains with: its three queues (removed from the
+ * queue manager when it sets off), its build orders and whether siege was
+ * tried. A completing plan keeps it: it goes back to preparing when its
+ * target is lost.
+ */
+export type AttackPreparation = {
+	queue: Queue;
+	queueChamp: Queue;
+	queueSiege: Queue;
+	buildOrders: AttackBuildOrder[];
+	siegeState: number;
+};
 
 export class AttackPlan
 {
 	Config: Config;
-	buildOrders: AttackBuildOrder[];
 	canBuildUnits: boolean;
 	forced: boolean;
 	isBlocked: boolean;
@@ -256,13 +262,9 @@ export class AttackPlan
 	paused: boolean;
 	position: CommonPosition | undefined;
 	position5TurnsAgo: CommonPosition;
-	queue: Queue;
-	queueChamp: Queue;
-	queueSiege: Queue;
 	rallyPoint: CommonPosition;
 	/** Set when an ally asked for this attack: it does not ask its allies in turn */
 	requested: boolean | undefined = undefined;
-	siegeState: number;
 	startingAttack = false;
 	/** The plan's state and what the state holds: changed only by changeState and startWalking, and restored from a save. */
 	stage: AttackStage;
@@ -270,10 +272,31 @@ export class AttackPlan
 	{
 		return this.stage.state;
 	}
-	/** a state that holds nothing (walking holds its path: startWalking) */
+	/**
+	 * A state for a test's set-up: a preparing one keeps the plan's
+	 * preparation, the others hold nothing (walking holds its path: startWalking).
+	 */
 	set state(state: Exclude<AttackPlanState, "walking">)
 	{
-		this.stage = { state };
+		this.stage = this.stageFor(state);
+	}
+
+	/** The plan's training while it prepares, none once it has set off */
+	preparation(): AttackPreparation | undefined
+	{
+		const stage = this.stage;
+		return stage.state === AttackPlan.STATE_UNEXECUTED || stage.state === AttackPlan.STATE_COMPLETING ? stage.prep : undefined;
+	}
+
+	/** The stage of a state that holds no path: a preparing one takes the plan's preparation along */
+	private stageFor(state: Exclude<AttackPlanState, "walking">): AttackStage
+	{
+		if (state !== AttackPlan.STATE_UNEXECUTED && state !== AttackPlan.STATE_COMPLETING)
+			return { state };
+		const prep = this.preparation();
+		if (!prep)
+			throw new Error("Petra error: attack plan " + this.name + " back to \"" + state + "\" after it set off");
+		return { state, prep };
 	}
 	target: CommonEntity | undefined;
 	targetPlayer: PlayerId | undefined;
@@ -393,22 +416,34 @@ export class AttackPlan
 	{
 		this.Config = config;
 		this.name = attackPlanId(uniqueID);
+		// the plan's stage, once its build orders are known (made below for every plan)
+		let makeStage: (buildOrders: AttackBuildOrder[]) => AttackStage;
 		if (setup.kind === "saved")
 		{
 			const saved = setup.saved;
 			this.type = saved.properties.type;
 			const state = saved.properties.state;
 			const savedPath = saved.properties.path;
-			// a walking plan walks its saved path; one saved without (never written) sets off again
+			// a preparing plan's queues were restored with the queue manager; a plan that set off has none
+			const preparing = (prepState: "unexecuted" | "completing") =>
+			{
+				const queues = this.savedQueues(gameState);
+				return (buildOrders: AttackBuildOrder[]): AttackStage =>
+					({ "state": prepState, "prep": { ...queues, buildOrders, "siegeState": saved.properties.siegeState } });
+			};
+			// a walking plan walks its saved path; one saved without (never written) attacks where it stands
 			if (state === AttackPlan.STATE_WALKING)
-				this.stage = savedPath ? { state, "path": savedPath } : { "state": AttackPlan.STATE_COMPLETING };
-			else if (isAttackPlanState(state) && state !== AttackPlan.STATE_WALKING)
-				this.stage = { state };
+				makeStage = () => savedPath ? { state, "path": savedPath } : { "state": AttackPlan.STATE_ARRIVED };
+			else if (state === AttackPlan.STATE_UNEXECUTED || state === AttackPlan.STATE_COMPLETING)
+				makeStage = preparing(state);
+			else if (state === AttackPlan.STATE_TRANSPORTING || state === AttackPlan.STATE_ARRIVED ||
+				state === AttackPlan.STATE_ATTACKING)
+				makeStage = () => ({ state });
 			else
 			{
 				aiWarn("Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
 					"\": it prepares again");
-				this.stage = { "state": AttackPlan.STATE_UNEXECUTED };
+				makeStage = preparing(AttackPlan.STATE_UNEXECUTED);
 			}
 			this.forced = saved.properties.forced;
 			this.rallyPoint = saved.properties.rallyPoint;
@@ -417,7 +452,6 @@ export class AttackPlan
 			this.maxCompletingTime = saved.properties.maxCompletingTime;
 			this.neededShips = saved.properties.neededShips;
 			this.unitStat = saved.properties.unitStat;
-			this.siegeState = saved.properties.siegeState;
 			this.position5TurnsAgo = saved.properties.position5TurnsAgo;
 			this.lastPosition = saved.properties.lastPosition;
 			this.position = saved.properties.position;
@@ -435,7 +469,6 @@ export class AttackPlan
 		{
 			const data = setup.data;
 			this.type = setup.type;
-			this.stage = { "state": AttackPlan.STATE_UNEXECUTED };
 			this.forced = false;  // true when this attacked has been forced to help an ally
 
 			if (data && data.target)
@@ -504,11 +537,11 @@ export class AttackPlan
 			}
 
 			// TODO: there should probably be one queue per type of training building
-			gameState.ai.queueManager.addQueue(`plan_${this.name}`, priority);
-			gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority+1);
-			gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
-
-			this.siegeState = AttackPlan.SIEGE_NOT_TESTED;
+			const queue = gameState.ai.queueManager.addQueue(`plan_${this.name}`, priority);
+			const queueChamp = gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority+1);
+			const queueSiege = gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
+			makeStage = (buildOrders: AttackBuildOrder[]): AttackStage => ({ "state": AttackPlan.STATE_UNEXECUTED,
+				"prep": { queue, queueChamp, queueSiege, buildOrders, "siegeState": AttackPlan.SIEGE_NOT_TESTED } });
 
 			// some variables used during the attack
 			this.position5TurnsAgo = worldPos(0, 0);
@@ -518,13 +551,8 @@ export class AttackPlan
 		}
 
 		// each array is [ratio, [associated classes], associated EntityColl, associated unitStat, name ]
-		this.buildOrders = [];
+		const buildOrders: AttackBuildOrder[] = [];
 		this.canBuildUnits = setup.canBuildUnits;
-
-		// added by the constructor, or restored with the queue manager before a saved plan
-		this.queue = requireValue(gameState.ai.queues[`plan_${this.name}`]);
-		this.queueChamp = requireValue(gameState.ai.queues[`plan_${this.name}_champ`]);
-		this.queueSiege = requireValue(gameState.ai.queues[`plan_${this.name}_siege`]);
 
 		this.unitCollection = gameState.getOwnUnits().filter(
 			filters.byMetadata(PlayerID, "plan", this.name));
@@ -540,8 +568,19 @@ export class AttackPlan
 			this.unit[cat] = this.unitCollection.filter(filters.byClasses(Unit.classes));
 			this.unit[cat].registerUpdates();
 			if (this.canBuildUnits)
-				this.buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
+				buildOrders.push([0, Unit.classes, this.unit[cat], Unit, cat]);
 		}
+		this.stage = makeStage(buildOrders);
+	}
+
+	/** A preparing plan's queues from a save, restored with the queue manager before the plan */
+	private savedQueues(gameState: CommonGameState): Pick<AttackPreparation, "queue" | "queueChamp" | "queueSiege">
+	{
+		return {
+			"queue": requireValue(gameState.ai.queues[`plan_${this.name}`]),
+			"queueChamp": requireValue(gameState.ai.queues[`plan_${this.name}_champ`]),
+			"queueSiege": requireValue(gameState.ai.queues[`plan_${this.name}_siege`])
+		};
 	}
 
 	/** The target and its position together, when the plan has both (none before a target is chosen, or once it is lost). */
@@ -603,7 +642,7 @@ export class AttackPlan
 		if (this.state !== from)
 			aiWarn("Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
 				"\", not from \"" + from + "\"");
-		this.stage = { "state": to };
+		this.stage = this.stageFor(to);
 	}
 
 	/** The plan sets off from completing on its path, walking it (the only way into walking). */
@@ -687,11 +726,11 @@ export class AttackPlan
 		this.forced = true;
 	}
 
-	emptyQueues(): void
+	emptyQueues(prep: AttackPreparation): void
 	{
-		this.queue.empty();
-		this.queueChamp.empty();
-		this.queueSiege.empty();
+		prep.queue.empty();
+		prep.queueChamp.empty();
+		prep.queueSiege.empty();
 	}
 
 	removeQueues(gameState: CommonGameState): void
@@ -704,23 +743,27 @@ export class AttackPlan
 	/** Adds a build order. If resetQueue is true, this will reset the queue. */
 	addBuildOrder(gameState: CommonGameState, name: string, unitStats: AttackUnitStat, resetQueue: boolean): void
 	{
-		if (!this.isStarted())
+		// while it prepares (not started)
+		const prep = this.preparation();
+		if (prep)
 		{
 			// no minsize as we don't want the plan to fail at the last minute though.
 			this.unitStat[name] = unitStats;
 			const Unit = this.unitStat[name];
 			this.unit[name] = this.unitCollection.filter(filters.byClasses(Unit.classes));
 			this.unit[name].registerUpdates();
-			this.buildOrders.push([0, Unit.classes, this.unit[name], Unit, name]);
+			prep.buildOrders.push([0, Unit.classes, this.unit[name], Unit, name]);
 			if (resetQueue)
-				this.emptyQueues();
+				this.emptyQueues(prep);
 		}
 	}
 
 	addSiegeUnits(gameState: CommonGameState): boolean
 	{
-		if (this.siegeState === AttackPlan.SIEGE_ADDED || this.state !== AttackPlan.STATE_UNEXECUTED)
+		const stage = this.stage;
+		if (stage.state !== AttackPlan.STATE_UNEXECUTED || stage.prep.siegeState === AttackPlan.SIEGE_ADDED)
 			return false;
+		const prep = stage.prep;
 
 		const civ = gameState.getPlayerCiv();
 		const classes = [["Siege+Melee"], ["Siege+Ranged"], ["Elephant+Melee"]];
@@ -744,7 +787,7 @@ export class AttackPlan
 		}
 		if (hasTrainer.every((e: boolean): boolean => !e))
 		{
-			this.siegeState = AttackPlan.SIEGE_NO_TRAINER;
+			prep.siegeState = AttackPlan.SIEGE_NO_TRAINER;
 			return false;
 		}
 		let i = this.name % classes.length;
@@ -755,7 +798,7 @@ export class AttackPlan
 			i = (i + 1) % classes.length;
 		}
 
-		this.siegeState = AttackPlan.SIEGE_ADDED;
+		prep.siegeState = AttackPlan.SIEGE_ADDED;
 		let targetSize;
 		if (this.Config.difficulty < difficulty.MEDIUM)
 			targetSize = this.type === AttackPlan.TYPE_HUGE_ATTACK ? Math.max(this.Config.difficulty, 1) : Math.max(this.Config.difficulty - 1, 0);
@@ -831,6 +874,11 @@ export class AttackPlan
 		if (gameState.ai.playedTurn % 5 === 0 && this.hasSiegeUnits())
 			this.fastenEndGame(gameState);
 
+		// the training below is a preparing plan's: one that set off has none to train with
+		const prep = this.preparation();
+		if (!prep)
+			return AttackPlan.PREPARATION_KEEP_GOING;
+
 		// special case: if we've reached max pop, and we can start the plan, start it;
 		// so too at our population limit with no room for a house: it cannot grow
 		// (FINDINGS §40: a huge attack of 136 waited for good on a full island)
@@ -841,7 +889,7 @@ export class AttackPlan
 				lengthMin -= Math.floor(8 * (300 - gameState.getPopulationMax()) / 300);
 			if (this.canStart() || this.unitCollection.length > lengthMin)
 			{
-				this.emptyQueues();
+				this.emptyQueues(prep);
 			}
 			// Short of men at the cap: wait, gathering the reserve as below it. The
 			// original aborted the plan so that its units would serve other plans,
@@ -855,7 +903,7 @@ export class AttackPlan
 			if (gameState.countOwnQueuedEntitiesWithMetadata("plan", +this.name) > 0)
 			{
 				// keep on while the units finish being trained, then we'll start
-				this.emptyQueues();
+				this.emptyQueues(prep);
 				return AttackPlan.PREPARATION_KEEP_GOING;
 			}
 		}
@@ -864,12 +912,12 @@ export class AttackPlan
 			if (this.canBuildUnits)
 			{
 				// We still have time left to recruit units and do stuffs.
-				if (this.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
-					this.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0)
+				if (prep.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
+					prep.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0)
 					this.addSiegeUnits(gameState);
-				this.trainMoreUnits(gameState);
+				this.trainMoreUnits(gameState, prep);
 				// may happen if we have no more training facilities and build orders are canceled
-				if (!this.buildOrders.length)
+				if (!prep.buildOrders.length)
 					return AttackPlan.PREPARATION_FAILED;	// will abort the plan
 			}
 			return AttackPlan.PREPARATION_KEEP_GOING;
@@ -965,21 +1013,21 @@ export class AttackPlan
 		}
 	}
 
-	trainMoreUnits(gameState: CommonGameState): void
+	trainMoreUnits(gameState: CommonGameState, prep: AttackPreparation): void
 	{
 		// let's sort by training advancement, ie 'current size / target size'
 		// count the number of queued units too.
 		// substract priority.
-		for (const order of this.buildOrders)
+		for (const order of prep.buildOrders)
 		{
 			const special = "Plan_" + this.name + "_" + order[4];
 			let aQueued = gameState.countOwnQueuedEntitiesWithMetadata("special", special);
-			aQueued += this.queue.countQueuedUnitsWithMetadata("special", special);
-			aQueued += this.queueChamp.countQueuedUnitsWithMetadata("special", special);
-			aQueued += this.queueSiege.countQueuedUnitsWithMetadata("special", special);
+			aQueued += prep.queue.countQueuedUnitsWithMetadata("special", special);
+			aQueued += prep.queueChamp.countQueuedUnitsWithMetadata("special", special);
+			aQueued += prep.queueSiege.countQueuedUnitsWithMetadata("special", special);
 			order[0] = order[2].length + aQueued;
 		}
-		this.buildOrders.sort((a: AttackBuildOrder, b: AttackBuildOrder): number =>
+		prep.buildOrders.sort((a: AttackBuildOrder, b: AttackBuildOrder): number =>
 		{
 			let va = a[0]/a[3].targetSize - a[3].priority;
 			if (a[0] >= a[3].targetSize)
@@ -1003,30 +1051,30 @@ export class AttackPlan
 		{
 			aiWarn("====================================");
 			aiWarn("======== build order for plan " + this.name);
-			for (const order of this.buildOrders)
+			for (const order of prep.buildOrders)
 			{
 				const specialData = "Plan_"+this.name+"_"+order[4];
 				const inTraining = gameState.countOwnQueuedEntitiesWithMetadata("special", specialData);
-				const queue1 = this.queue.countQueuedUnitsWithMetadata("special", specialData);
-				const queue2 = this.queueChamp.countQueuedUnitsWithMetadata("special", specialData);
-				const queue3 = this.queueSiege.countQueuedUnitsWithMetadata("special", specialData);
+				const queue1 = prep.queue.countQueuedUnitsWithMetadata("special", specialData);
+				const queue2 = prep.queueChamp.countQueuedUnitsWithMetadata("special", specialData);
+				const queue3 = prep.queueSiege.countQueuedUnitsWithMetadata("special", specialData);
 				aiWarn(" >>> " + order[4] + " done " + order[2].length + " training " + inTraining +
 					  " queue " + queue1 + " champ " + queue2 + " siege " + queue3 + " >> need " + order[3].targetSize);
 			}
 			aiWarn("====================================");
 		}
 
-		const firstOrder = this.buildOrders[0];
+		const firstOrder = prep.buildOrders[0];
 		if (firstOrder[0] < firstOrder[3].targetSize)
 		{
 			// find the actual queue we want
-			let queue = this.queue;
+			let queue = prep.queue;
 			if (firstOrder[4] === "Siege")
-				queue = this.queueSiege;
+				queue = prep.queueSiege;
 			else if (firstOrder[3].classes.indexOf("Hero") !== -1)
-				queue = this.queueSiege;
+				queue = prep.queueSiege;
 			else if (firstOrder[3].classes.indexOf("Champion") !== -1)
-				queue = this.queueChamp;
+				queue = prep.queueChamp;
 
 			if (queue.length() <= 5)
 			{
@@ -1040,7 +1088,7 @@ export class AttackPlan
 				{
 					debugWarn(this.Config, 1, () => "attack no template found " + firstOrder[1]);
 					delete this.unitStat[firstOrder[4]];	// deleting the associated unitstat.
-					this.buildOrders.splice(0, 1);
+					prep.buildOrders.splice(0, 1);
 				}
 				else
 				{
@@ -2896,7 +2944,7 @@ export class AttackPlan
 			"maxCompletingTime": this.maxCompletingTime,
 			"neededShips": this.neededShips,
 			"unitStat": this.unitStat,
-			"siegeState": this.siegeState,
+			"siegeState": this.preparation()?.siegeState ?? AttackPlan.SIEGE_NOT_TESTED,
 			"position5TurnsAgo": this.position5TurnsAgo,
 			"lastPosition": this.lastPosition,
 			"position": this.position !== undefined ? clone(this.position) : undefined,

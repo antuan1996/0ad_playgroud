@@ -728,16 +728,20 @@ export class QueueManager
 	}
 
 
-	addQueue(queueName: PetraRuntime.AttackQueueName, priority: number): void
+	/** An attack plan's queue at this priority, made unless it exists (then it keeps its priority) */
+	addQueue(queueName: PetraRuntime.AttackQueueName, priority: number): Queue
 	{
-		if (this.queues[queueName] !== undefined)
-			return;
+		const existing = this.queues[queueName];
+		if (existing !== undefined)
+			return existing;
 
-		this.queues[queueName] = new Queue();
+		const queue = new Queue();
+		this.queues[queueName] = queue;
 		this.priorities[queueName] = priority;
 		this.accounts[queueName] = new ResourcesManager();
 
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
+		return queue;
 	}
 
 	removeQueue(queueName: PetraRuntime.AttackQueueName): void
