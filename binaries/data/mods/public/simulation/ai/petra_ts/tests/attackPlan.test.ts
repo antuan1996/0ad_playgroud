@@ -2234,6 +2234,24 @@ describe("chasing a target during execution", () =>
 		assert.deepEqual(plan.targetPos, [30, 40], "at its place");
 	});
 
+	// only the port passes: the original made and registered a new unit
+	// collection on every turn's events, never unregistering the last, so the
+	// shared script updated thousands of them on every plan change by minute
+	// 30 (FINDINGS §48)
+	it("keeps the one unit collection it registered, turn after turn", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1 });
+		const registered = world.collections.registered.length;
+		const collection = plan.unitCollection;
+
+		for (let turn = 0; turn < 10; ++turn)
+			plan.checkEvents(world.gameState, emptyEvents());
+
+		assert.equal(world.collections.registered.length, registered, "no collection added on its turns");
+		assert.equal(plan.unitCollection, collection, "the one the shared script keeps up to date");
+	});
+
 	it("drops the target of an unstarted raid when it is renamed", () =>
 	{
 		const world = makeWorld();
