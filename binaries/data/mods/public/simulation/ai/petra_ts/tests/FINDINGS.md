@@ -2034,3 +2034,37 @@ every two game minutes; 598 sides of decided games):
 
 So the lever is the first big army and when to fight it (stage 6's fight
 estimator), not the workforce cap, the phases or the late army's mix.
+
+## 47. Stage 5's turn time, and an army held at the rally point (2026-11-04)
+
+The turn budget at stage 5's close (PLAN.md §4), `petra_out` (tag
+`petra-ts-stage5`) against `petra_parity` on 10 fresh mainland pairs from
+both slots (pool seed 61, `stage5-aitimes`, `-P`, 4 jobs; 17 of 20 won,
+149,648 turns per bot): each bot's own script time per turn, mean 1.30 ms
+against 0.25, 90th percentile 1.55 against 0.89, 99th 15.8 against 4.0,
+99.9th 150 against 11, worst 489 against 86. The whole turn (shared
+component and both bots) averages 2.75 ms, 99th 20.8, 99.9th 150 (stage 2's
+mirror games: 1.96, 12.5, 68). The games differ, so the ratio is not the
+paired check of a refactor: `petra_out` has more of everything (458 units
+trained to 316) and wins.
+
+The 99.9th is not spread over the games: in 16 of 20 `petra_out` has at most
+10 turns over 50 ms, in four (8, 15, 17, 19) 139-323, every HQ turn (one in
+eight) at 50-470 ms for 5-10 game minutes on end, between minutes 13 and 29.
+Game 19 replayed with `-b -P -l` (the same fingerprint, `0acbe1aef30477e4`),
+its slow turns at minutes 13.5-19:
+
+- A Rush plan (1) could start (`canStart` true) from minute 12.6 and did not
+  for five minutes, still `unexecuted`; units joined it all the while:
+  infantry 21 of a maximum 22 at 12.6, 134 at 14.6, 152 at 16.6 (the targets
+  read 0 then), set off at 17.3 with 6.
+- From 17.7 to 19.2 HugeAttack plans were created and aborted one after
+  another, 55 in 90 s, each holding about 154 units (`completing`) for 2-3 s
+  before it aborted: the HugeAttack churn of §6.1's table, here with the
+  whole army in it. The command log's flood (8307 commands at minute 18,
+  7754 of them `walk-to-range`) is those armies sent and called back.
+
+So an army of 150 stood at a rally point for five minutes in a game it won,
+and its plans' per-unit work is the turn's cost. Not fixed: it is the
+attack's handling, stage 6's first item (the turn budget's 99.9th, and the
+army's use).

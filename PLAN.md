@@ -12,7 +12,7 @@ project are referenced to the files that hold them.
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
 | Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex`, `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<Grid>` are branded (stage 2; conversions in `petra_ts/brands.ts`); commands are a union by `type` |
-| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1568 tests on the sources and the built bot, importing and typed by the port; 29 pin a bug of the original the port fixes (it failed the first 20 when it was last a target, stage 3) |
+| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1704 tests on the sources and the built bot, importing and typed by the port; 72 pin a bug of the original or a fix of stages 4-5 (the original failed the first 20 when it was last a target, stage 3) |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
 | Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |
@@ -39,6 +39,12 @@ the start, amplified by the first fight (§16): stage 5. Its first measurement
 of a unit's orders failed and the gather-rate estimate was 0. Reading them
 again (stage 5's first change) gives 62.9% against `petra_parity` (CI
 57.3-68.2%, 150 fresh seed pairs, SPRT accepts 55%).
+
+Stage 5 is closed (2026-11-04, tag `petra-ts-stage5`, §6.1): the economy's
+blocks on growth removed one measured change at a time, islands played to a
+decision, and the port's types and structure finished (3.1, 3.5): 95.0%
+against `petra_parity` at the last checkpoint. What decides a mainland game
+now is the first big army and when it fights (`FINDINGS.md` §46): stage 6.
 
 ## 1. Constraints that shape every stage
 
@@ -362,6 +368,16 @@ imports, a loop the original also left doing nothing, unused test names).
   1.011, 0.997 and 0.989 (99.9th). So the check catches a few percent.
   Once the bot plays differently (stage 4 on), the games are no longer the
   same and the comparison needs more games.
+- **At stage 5's close** (2026-11-04, `FINDINGS.md` §47; 20 games against
+  `petra_parity`, different games now, so absolute figures): each bot's own
+  time per turn, mean 1.30 ms against 0.25, 99th 15.8 against 4.0, 99.9th
+  150 against 11; the whole turn 2.75 ms mean, 99th 20.8, 99.9th 150 (stage
+  2: 1.96, 12.5, 68). The 99.9th comes from four games of 20 where every HQ
+  turn costs 50-470 ms for 5-10 minutes: an attack plan holding about 150
+  units at its rally point, then HugeAttack plans made and aborted every
+  1.5 s with the whole army in them. This is stage 6's reference: its
+  planner and estimator are measured against `petra_prev` (the stage 5
+  bot) with `ai-times.ts --compare`, and the held army is fixed first.
 - **Optimise only what the profile shows.** Likely candidates, from the code:
   `updatingCollection` filters re-evaluated per call, entity scans per turn,
   repeated territory/accessibility lookups. Object pooling is not planned:
@@ -472,16 +488,38 @@ Each stage ends on a measurable exit criterion; strength claims use 5.3.
 | 2. Types in place (**done** 2026-10-25) | Brands (3.3) through the port, starting with `EntityId`/`PlayerId`/`WorldPos`; attack-plan typestate (3.1) | Typecheck clean, tests green, fingerprint of the integration match unchanged (pure refactor). Met: fingerprint `2164cc14d7c5e28f` before and after; 1533 tests pass. Every brand of 3.3: `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex` (`RegionIndex` for either), `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<"territory" \| "passability">`; the attack plan's state kind is a typestate (3.1); the data-carrying states move to stage 4, records keyed by `for...in` keys to stage 3 |
 | 3. Layers (**done** 2026-10-26, `FINDINGS.md` §15) | Adapter and observation parsing (3.2), world model, execution; decisions still Petra's logic | Same fingerprint as stage 2, or every change explained; AI time per turn within budget (4). Met: the layer folders; `unitState.ts`, `commands.ts`, `SAVE_VERSION`; the execution layer reaches the HQ only through a read-only view (`execution/hq.ts`) and reads bases as `BaseView`s; the maps and regions (`world/geography.ts`) and the bases' resource model (`world/baseResources.ts`) moved out of the managers. Fingerprint unchanged throughout; the same games as `petra_parity` in every paired check, within the budget. The decision layer still changes the world objects it owns; read-only views for decisions come with stages 4–5, as they are rewritten |
 | 4. Fix the known weaknesses (**done** 2026-10-27, `FINDINGS.md` §16) | In order of what each costs, as replays showed it: withdrawal to a reachable point (**done**: past the anchor's footprint); idle workers (**done**: they were mercenaries, booked as workers by class though they cannot gather); attacks that never end (**done**: units garrisoned in our buildings leave the plan; a stuck plan held up every later attack); attacks that cannot fill (**done**, measured with an attack lifecycle log: the plans that never fill belong to a side that already lost, its queues paused for want of workers; what churned was a winner at the population cap, whose plans the cap rule aborted and recreated, 124 times in 200 games; now they wait: 21 of the 22 games it moved ended sooner, 50.3% as before); first field by food income, not fruit left, and the town-phase population: not what loses games (`FINDINGS.md` §16: in 139 of 196 games the loser was beaten in a fight at minutes 10-15, far below the threshold, starving after it). Measured with the four fixes: 50.3% vs `petra_parity` (CI 43-57%): the fixes help the economy (+12% gathered), not the result. Games are decided by a border skirmish at minutes 1-11 that both bots fight with the same opening, so the start decides; an earlier army (`alpha` 0.6) gave 52.2% (CI 49.1-55.3%, 975 games) and was reverted; calling back workers that chase into enemy land, 47.7% (reverted: the chases hurt the enemy's economy); six small original bugs fixed (`FINDINGS.md` §1, stage-4 rows), 50.5%. The first fight is stage 5's first domain. Type hygiene (3.5): items 1-4 and 6-8 done, without a change to any game | Each: an integration check or property test that fails before and passes after; then win-rate vs `petra_parity` > 50% at 95% (SPRT). Met for the first: every fix has a test the original fails. The second is not met (50.3%, CI 43-57%, 200 games) and moves to stage 5: every measurement places what decides a game in the economy of minutes 2-8 and the first fight, which are stage 5's domains, not in the weaknesses fixed here |
-| 5. Utility decisions | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data. Where to start, from stage 4's logs (`FINDINGS.md` §16): the two games of a seed pair are the same until minute 6, and the side that wins is a few units ahead at minutes 7-8 (wood: its food comes faster, so fewer gatherers go to food), a lead the first fight at minute 9 amplifies; so first the gatherer split of minutes 2-8 by how fast each resource comes in, then when to take a fight. Measured (`FINDINGS.md` §18): the split's rate estimate is always 0 since an engine change to `unitAIOrderData()` (orders, not their data), so the split follows the queues' wishes alone; food is the slow resource (about 22 per gatherer-minute at minutes 4-10 against wood's 51), and a long food trip is what the lost game of a pair has. First change, **done** 2026-10-27: the orders' data read again (`adapter/orders.ts`): 62.9% vs `petra_parity` on 150 fresh seed pairs (CI 57.3-68.2%, SPRT accepts 55%), 58.1% on stage 4's pairs. The split by measured income per gatherer (`world/gatherEconomy.ts`, `decision/gatherSplit.ts`; `FINDINGS.md` §19): four variants, 42-52% against `petra_prev` (the best: 52.0% over 494 games, 48.6% on fresh pairs, 2-3% more food, and women idle on full fields): dropped, Petra's order kept; the measured rates stay as the next domain's measurement. The domains in order, each measured against `petra_prev` on fresh seed pairs: (1) the split (tried, dropped); (2) where food comes from (**done**, `FINDINGS.md` §20: a field as soon as a gatherer brings in less at the berries than at a field, measured; 56.3% against `petra_prev` on 150 fresh pairs, CI 50.7-61.8%, 13% more gathered); (3) the houses (**done**, `FINDINGS.md` §22: a needed house before the training queues; 56.0% against `petra_prev` on 150 fresh pairs, CI 50.4-61.6%, 8% more gathered; the first fights, tried three ways, are decided by the soldiers a side has when the raid comes: §21); (3b) funding (**done**, `FINDINGS.md` §24: the best plan the stock can complete is paid from the split accounts; 61.0% against `petra_prev` on 150 fresh pairs, CI 55.4-66.3%; then the women's queue above the soldiers', §25: 74.2%, CI 68.9-78.8%; then the women's share 0.5, §26: 61.3%, CI 55.7-66.7%); (4) dropsite placement by the trips it saves; (5) the worker/soldier mix and the population targets; (6) when to fight (stage 6's fight estimator). Tools: `economy-log.ts`, and `pair-score.ts`, the early proxy (§5.3). Measure on the paired games (`attack-log.ts`, the replays' 30 s statistics), and position logging for the start's layout; with each rewritten class, its remaining `declare` fields (3.5: the 18 set on some paths, the 12 in subclasses, the 57 set outside the constructor) and long functions | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed`, and win-rate vs `petra_parity` > 50% at 95% (SPRT; carried over from stage 4). **Met** 2026-10-28 (§6.1): 78.7% against both on 150 fresh pairs (CI 73.7-83.0%); later comparisons use `petra_parity` alone (§2) |
+| 5. Utility decisions (**done** 2026-11-04, `FINDINGS.md` §18-46, tag `petra-ts-stage5`) | Replace threshold rules with utility scores, one domain at a time (economy mix, build order, attack timing), tuned on match data. Where to start, from stage 4's logs (`FINDINGS.md` §16): the two games of a seed pair are the same until minute 6, and the side that wins is a few units ahead at minutes 7-8 (wood: its food comes faster, so fewer gatherers go to food), a lead the first fight at minute 9 amplifies; so first the gatherer split of minutes 2-8 by how fast each resource comes in, then when to take a fight. Measured (`FINDINGS.md` §18): the split's rate estimate is always 0 since an engine change to `unitAIOrderData()` (orders, not their data), so the split follows the queues' wishes alone; food is the slow resource (about 22 per gatherer-minute at minutes 4-10 against wood's 51), and a long food trip is what the lost game of a pair has. First change, **done** 2026-10-27: the orders' data read again (`adapter/orders.ts`): 62.9% vs `petra_parity` on 150 fresh seed pairs (CI 57.3-68.2%, SPRT accepts 55%), 58.1% on stage 4's pairs. The split by measured income per gatherer (`world/gatherEconomy.ts`, `decision/gatherSplit.ts`; `FINDINGS.md` §19): four variants, 42-52% against `petra_prev` (the best: 52.0% over 494 games, 48.6% on fresh pairs, 2-3% more food, and women idle on full fields): dropped, Petra's order kept; the measured rates stay as the next domain's measurement. The domains in order, each measured against `petra_prev` on fresh seed pairs: (1) the split (tried, dropped); (2) where food comes from (**done**, `FINDINGS.md` §20: a field as soon as a gatherer brings in less at the berries than at a field, measured; 56.3% against `petra_prev` on 150 fresh pairs, CI 50.7-61.8%, 13% more gathered); (3) the houses (**done**, `FINDINGS.md` §22: a needed house before the training queues; 56.0% against `petra_prev` on 150 fresh pairs, CI 50.4-61.6%, 8% more gathered; the first fights, tried three ways, are decided by the soldiers a side has when the raid comes: §21); (3b) funding (**done**, `FINDINGS.md` §24: the best plan the stock can complete is paid from the split accounts; 61.0% against `petra_prev` on 150 fresh pairs, CI 55.4-66.3%; then the women's queue above the soldiers', §25: 74.2%, CI 68.9-78.8%; then the women's share 0.5, §26: 61.3%, CI 55.7-66.7%); (4) dropsite placement by the trips it saves; (5) the worker/soldier mix and the population targets; (6) when to fight (stage 6's fight estimator). Tools: `economy-log.ts`, and `pair-score.ts`, the early proxy (§5.3). Measure on the paired games (`attack-log.ts`, the replays' 30 s statistics), and position logging for the start's layout; with each rewritten class, its remaining `declare` fields (3.5: the 18 set on some paths, the 12 in subclasses, the 57 set outside the constructor) and long functions | Each domain: no win-rate loss vs the previous stage; together: a significant gain vs `petra_fixed`, and win-rate vs `petra_parity` > 50% at 95% (SPRT; carried over from stage 4). **Met** 2026-10-28 (§6.1): 78.7% against both on 150 fresh pairs (CI 73.7-83.0%); later comparisons use `petra_parity` alone (§2) |
 | 6. Narrow search | Build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
 
 Running throughout: determinism and save/load checks (5.2), `FINDINGS.md`
 for what each stage finds, and upstream reports for bugs that are the
 original's or the game's (`build/petra_ts/upstream/`).
 
-### 6.1 Stage 5: where it stands, and what is left
+### 6.1 Stage 5: what it did, and what it leaves
 
-**Where it stands** (2026-10-28). Three changes kept, each measured against
+**Closed** (2026-11-04, tag `petra-ts-stage5`, which `petra-ts-prev` names
+as stage 6 begins). Kept, each measured against the version before it on
+fresh seed pairs: the units' orders read again (§18), the first field by
+what berries bring in (§20), the house before the training queues (§22),
+the best plan paid from the split accounts, the women before the soldiers
+and their share 0.5 (§24-26), research by payback and one more barracks
+while the barracks are busy (§28-29), then the islands: naval attacks,
+routes and landings, dry towns, towers over the enemy's sea passages, a
+hunting fleet (§34-45). Checkpoints against `petra_parity`: 78.7%, 92.3%,
+95.0% (pool seed 43, CI 91.9-96.9%). Not done of the plan below: the
+economy scoring module covers research only; the workers' target by payback
+was tried and reverted (§46: 50.2%), and the same 300 games show why the
+rest of it waits: the two sides are equal at minute 9, the winner has some
+20 soldiers more at 13 and the loser has collapsed by 17, so the lever is
+the first big army and when it fights, stage 6's fight estimator. The
+port's structure was finished alongside (3.1's data per state where it
+moves no game, 3.5's long methods and two-step set-up). The turn time at
+the close is in §4.
+
+The rest of this section is the stage as it was planned and measured on
+the way (from 2026-10-28), kept for the reasons it gives.
+
+**Where it stood** (2026-10-28). Three changes kept, each measured against
 the version before it on fresh seed pairs: the units' orders read as the
 engine hands them over (62.9% against `petra_parity`, `FINDINGS.md` §18), a
 field as soon as the berries bring in less (56.3%, §20), a needed house before
@@ -507,7 +545,11 @@ sizes, `targetNumWorkers`, `supportRatio`), dropsites and research. The
 military side (when and how big to attack, how to defend) waits for stage
 6's fight estimator.
 
-**What the measurements point at, not yet acted on:**
+**What the measurements pointed at** (2026-10-28; since: housing blocks
+1-7% after §22 and §31; hunting and the gatherers' time leave little, §28;
+the berries' walk went with the first field, §20; a dropsite rule by the
+woodcutters' walk lost, 45.0%, §31; rush timing tested, §27; the soldiers
+away when raided and the HugeAttack churn are left for stage 6's fights):
 
 | What | Evidence | Lever |
 |---|---|---|
