@@ -12,7 +12,7 @@ import * as difficulty from "./difficultyLevel.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { allowCapture, getAttackBonus, getLandAccess, getMaxStrength, isLineInsideEnemyTerritory,
-	requireTemplate, requireValue, getSeaAccess, setSeaAccess } from "../adapter/entityExtend.ts";
+	requireTemplate, getSeaAccess, setSeaAccess } from "../adapter/entityExtend.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
@@ -1751,7 +1751,7 @@ export class Headquarters
 			if (base === NO_BASE)
 				continue;
 			obstructions ??= createObstructionMap(gameState, NO_LAND, template);
-			const radius = Math.ceil(requireValue(template.obstructionRadius()).max / obstructions.cellSize);
+			const radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
 			const i = map.getNonObstructedTile(j, radius, obstructions);
 			if (i < 0)
 				continue;

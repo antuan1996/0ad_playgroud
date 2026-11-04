@@ -2,13 +2,14 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import * as difficulty from "./difficultyLevel.ts";
-import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate, requireValue } from
+import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate } from
 	"../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Headquarters } from "./headquarters.ts";
 import { NEW_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { isStructure } from "../adapter/placed.ts";
 
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -265,13 +266,13 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) !== access)
+				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
 					continue;
+				const ccPos = cc.position();
 				--num;
 				--num1;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * requireValue(cc.footprintRadius());
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -286,13 +287,13 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) !== access)
+				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
 					continue;
+				const ccPos = cc.position();
 				--num;
 				--num2;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * requireValue(cc.footprintRadius());
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}
@@ -307,13 +308,13 @@ function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
 			const access = getLandAccess(gameState, ent);
 			for (const cc of allycc)
 			{
-				const ccPos = cc.position();
-				if (!ccPos || getLandAccess(gameState, cc) !== access)
+				if (!isStructure(cc) || getLandAccess(gameState, cc) !== access)
 					continue;
+				const ccPos = cc.position();
 				if (!ent.hasClass("Support"))
 					--num;
 				ent.setMetadata(PlayerID, "allied", true);
-				const range = 1.5 * requireValue(cc.footprintRadius());
+				const range = 1.5 * cc.footprintRadius();
 				ent.moveToRange(ccPos[0], ccPos[1], range, range + 5);
 				break;
 			}

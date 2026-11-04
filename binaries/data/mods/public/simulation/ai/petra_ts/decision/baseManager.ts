@@ -3,7 +3,7 @@ import type { BasesManager } from "./basesManager.ts";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { Config } from "./config.ts";
 import * as difficulty from "./difficultyLevel.ts";
-import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireTemplate, requireValue } from
+import { getBestBase, getBuiltEntity, getLandAccess, isFastMoving, isNotWorthBuilding, requireStructureTemplate, requireValue } from
 	"../adapter/entityExtend.ts";
 import { BaseResources } from "../world/baseResources.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
@@ -300,7 +300,7 @@ export class BaseManager
 	{
 		// Callers pass a template name from findStructuresByFilter(), which only
 		// returns names whose template exists and is available.
-		const template = requireTemplate(gameState, gameState.applyCiv(templateName));
+		const template = requireStructureTemplate(gameState, gameState.applyCiv(templateName));
 
 		// CCs and Docks are handled elsewhere.
 		if (template.hasClasses(["CivCentre", "Dock"]))
@@ -325,7 +325,7 @@ export class BaseManager
 		let bestIdx;
 		let bestVal = 0;
 		// dropsite templates always have an obstruction
-		const obstructionRadius = requireValue(template.obstructionRadius());
+		const obstructionRadius = template.obstructionRadius();
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
 		const territoryMap = gameState.ai.HQ.geography.territoryMap;

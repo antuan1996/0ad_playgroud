@@ -19,7 +19,7 @@ export interface BaseView
 	readonly ID: BaseId;
 	/** The land the base stands on; undefined for the baseless pool. */
 	readonly accessIndex: AccessIndex | undefined;
-	readonly anchor: CommonEntity | undefined;
+	readonly anchor: CommonStructureEntity | undefined;
 	/** The supplies within reach of its dropsites (world/baseResources.ts), read-only. */
 	readonly resources: { readonly dropsiteSupplies: SupplyBands };
 	/** How many of our gatherers this turn are booked on `supply` beyond what the engine counts. */

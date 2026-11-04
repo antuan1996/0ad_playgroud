@@ -2704,8 +2704,7 @@ export class AttackPlan
 						continue;
 					dist = newdist;
 					rallyPoint = anchorPos;
-					// anchors always have an obstruction
-					withdrawRange = requireValue(anchor.obstructionRadius()).max + WITHDRAW_RANGE;
+					withdrawRange = anchor.obstructionRadius().max + WITHDRAW_RANGE;
 				}
 			}
 
