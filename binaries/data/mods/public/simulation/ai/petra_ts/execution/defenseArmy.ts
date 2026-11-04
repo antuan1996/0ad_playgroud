@@ -205,72 +205,7 @@ export class DefenseArmy
 			this.removeFoe(gameState, this.foeEntities[0]);
 
 		// Go back to our or allied territory if needed
-		const posOwn = [0, 0];
-		let nOwn = 0;
-		const posAlly = [0, 0];
-		let nAlly = 0;
-		const posOther: CommonPosition = worldPos(0, 0);
-		let nOther = 0;
-		for (const entId of this.ownEntities)
-		{
-			const ent = gameState.getEntityById(entId);
-			if (!ent || !isPlaced(ent))
-				continue;
-			const pos = ent.position();
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
-			if (territoryOwner === PlayerID)
-			{
-				posOwn[0] += pos[0];
-				posOwn[1] += pos[1];
-				++nOwn;
-			}
-			else if (gameState.isPlayerMutualAlly(territoryOwner))
-			{
-				posAlly[0] += pos[0];
-				posAlly[1] += pos[1];
-				++nAlly;
-			}
-			else
-			{
-				posOther[0] += pos[0];
-				posOther[1] += pos[1];
-				++nOther;
-			}
-		}
-		let destination;
-		let defensiveFound;
-		let distmin;
-		let radius = 0;
-		if (nOwn > 0)
-			destination = [posOwn[0]/nOwn, posOwn[1]/nOwn];
-		else if (nAlly > 0)
-			destination = [posAlly[0]/nAlly, posAlly[1]/nAlly];
-		else
-		{
-			posOther[0] /= nOther;
-			posOther[1] /= nOther;
-			const armyAccess = gameState.ai.accessibility.getAccessValue(posOther);
-			for (const struct of gameState.getAllyStructures().values())
-			{
-				const pos = struct.position();
-				if (!pos || !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(pos)))
-					continue;
-				if (getLandAccess(gameState, struct) !== armyAccess)
-					continue;
-				const defensiveStruct = struct.hasDefensiveFire();
-				if (defensiveFound && !defensiveStruct)
-					continue;
-				const dist = SquareVectorDistance(posOther, pos);
-				if (distmin && dist > distmin && (defensiveFound || !defensiveStruct))
-					continue;
-				if (defensiveStruct)
-					defensiveFound = true;
-				distmin = dist;
-				destination = pos;
-				// ally structures always have an obstruction
-				radius = struct.obstructionRadius().max;
-			}
-		}
+		const { destination, radius } = this.retreatPoint(gameState);
 		while (this.ownEntities.length > 0)
 		{
 			const entId = this.ownEntities[0];
@@ -278,19 +213,7 @@ export class DefenseArmy
 			const ent = gameState.getEntityById(entId);
 			this.removeOwn(gameState, entId, ent);
 			if (ent)
-			{
-				if (!isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined ||
-					                 ent.getMetadata(PlayerID, "transporter") !== undefined)
-					continue;
-				if (ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
-				    hqOf(gameState).defenseManager.garrisonAttackedUnit(gameState, ent))
-					continue;
-
-				if (destination && !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(ent.position())))
-					ent.moveToRange(destination[0], destination[1], radius, radius + 5);
-				else
-					ent.stopMoving();
-			}
+				this.sendBack(gameState, ent, destination, radius);
 		}
 
 		this.assignedAgainst = {};
@@ -298,6 +221,59 @@ export class DefenseArmy
 
 		this.recalculateStrengths(gameState);
 		this.recalculatePosition(gameState);
+	}
+
+	/** Where the army goes back to: the middle of its units on our territory, else on an ally's, else the nearest ally structure. */
+	private retreatPoint(gameState: CommonGameState): { destination: number[] | undefined; radius: number }
+	{
+		const { own, ally, other } = this.positionsByTerritory(gameState);
+		if (own.n > 0)
+			return { "destination": [own.pos[0]/own.n, own.pos[1]/own.n], "radius": 0 };
+		if (ally.n > 0)
+			return { "destination": [ally.pos[0]/ally.n, ally.pos[1]/ally.n], "radius": 0 };
+		other.pos[0] /= other.n;
+		other.pos[1] /= other.n;
+		return nearestAllyStructure(gameState, other.pos);
+	}
+
+	/** The sums of the army's unit positions on our territory, on our allies' and elsewhere, with their counts. */
+	private positionsByTerritory(gameState: CommonGameState): Record<"own" | "ally" | "other", { pos: CommonPosition; n: number }>
+	{
+		const sums = {
+			"own": { "pos": worldPos(0, 0), "n": 0 },
+			"ally": { "pos": worldPos(0, 0), "n": 0 },
+			"other": { "pos": worldPos(0, 0), "n": 0 }
+		};
+		for (const entId of this.ownEntities)
+		{
+			const ent = gameState.getEntityById(entId);
+			if (!ent || !isPlaced(ent))
+				continue;
+			const pos = ent.position();
+			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
+			const sum = territoryOwner === PlayerID ? sums.own :
+				gameState.isPlayerMutualAlly(territoryOwner) ? sums.ally : sums.other;
+			sum.pos[0] += pos[0];
+			sum.pos[1] += pos[1];
+			++sum.n;
+		}
+		return sums;
+	}
+
+	/** A released unit not being shipped heals in a garrison, or goes back to our territory, or stops. */
+	private sendBack(gameState: CommonGameState, ent: CommonEntity, destination: number[] | undefined, radius: number): void
+	{
+		if (!isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined ||
+			                 ent.getMetadata(PlayerID, "transporter") !== undefined)
+			return;
+		if (ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
+		    hqOf(gameState).defenseManager.garrisonAttackedUnit(gameState, ent))
+			return;
+
+		if (destination && !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(ent.position())))
+			ent.moveToRange(destination[0], destination[1], radius, radius + 5);
+		else
+			ent.stopMoving();
 	}
 
 	assignUnit(gameState: CommonGameState, entID: EntityId): boolean
@@ -312,65 +288,10 @@ export class DefenseArmy
 		// try to return its resources, and if any, the attack order will be queued
 		const queued = returnResources(gameState, ent);
 
-		let idMin;
-		let foeMin;
-		let distMin = Infinity;
-		let idMinAll;
-		let foeMinAll;
-		let distMinAll = Infinity;
-		for (const id of this.foeEntities)
-		{
-			const eEnt = gameState.getEntityById(id);
-			if (!eEnt || !isPlaced(eEnt))	// probably can't happen.
-				continue;
-
-			if (!ent.canAttackTarget(eEnt, allowCapture(gameState, ent, eEnt)))
-				continue;
-
-			if (eEnt.hasClass("Unit") && ordersOf(eEnt) && ordersOf(eEnt).length &&
-				ordersOf(eEnt)[0].target && ordersOf(eEnt)[0].target === entID)
-			{   // being attacked  >>> target the unit
-				idMin = id;
-				foeMin = eEnt;
-				break;
-			}
-
-			// already enough units against it
-			if (this.assignedAgainst[id].length > 8 ||
-				this.assignedAgainst[id].length > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt))
-				continue;
-
-			const dist = SquareVectorDistance(ent.position(), eEnt.position());
-			if (idMinAll === undefined || dist < distMinAll)
-			{
-				idMinAll = id;
-				foeMinAll = eEnt;
-				distMinAll = dist;
-			}
-			if (this.assignedAgainst[id].length > 2)
-				continue;
-			if (idMin === undefined || dist < distMin)
-			{
-				idMin = id;
-				foeMin = eEnt;
-				distMin = dist;
-			}
-		}
-
-		let idFoe;
-		let foeEnt;
-		if (idMin !== undefined && foeMin)
-		{
-			idFoe = idMin;
-			foeEnt = foeMin;
-		}
-		else if (idMinAll !== undefined && foeMinAll)
-		{
-			idFoe = idMinAll;
-			foeEnt = foeMinAll;
-		}
-		else
+		const target = this.chooseFoe(gameState, ent, entID);
+		if (!target)
 			return false;
+		const { idFoe, foeEnt } = target;
 
 		const ownIndex = getLandAccess(gameState, ent);
 		const foePosition = foeEnt.position();
@@ -384,6 +305,53 @@ export class DefenseArmy
 		else
 			hqOf(gameState).navalManager.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
 		return true;
+	}
+
+	/**
+	 * The foe ent should attack: the one attacking it, else the nearest with at most two of ours on it,
+	 * else the nearest not yet fought by enough of ours.
+	 */
+	private chooseFoe(gameState: CommonGameState, ent: CommonPlacedEntity, entID: EntityId):
+		{ idFoe: EntityId; foeEnt: CommonPlacedEntity } | undefined
+	{
+		type Choice = { idFoe: EntityId; foeEnt: CommonPlacedEntity; dist: number };
+		let best: Choice | undefined;
+		let bestAll: Choice | undefined;
+		for (const id of this.foeEntities)
+		{
+			const eEnt = gameState.getEntityById(id);
+			if (!eEnt || !isPlaced(eEnt))	// probably can't happen.
+				continue;
+
+			if (!ent.canAttackTarget(eEnt, allowCapture(gameState, ent, eEnt)))
+				continue;
+
+			if (isAttacking(eEnt, entID))
+			{   // being attacked  >>> target the unit
+				best = { "idFoe": id, "foeEnt": eEnt, "dist": 0 };
+				break;
+			}
+
+			// already enough units against it
+			if (this.enoughAgainst(id, eEnt))
+				continue;
+
+			const dist = SquareVectorDistance(ent.position(), eEnt.position());
+			if (!bestAll || dist < bestAll.dist)
+				bestAll = { "idFoe": id, "foeEnt": eEnt, dist };
+			if (this.assignedAgainst[id].length > 2)
+				continue;
+			if (!best || dist < best.dist)
+				best = { "idFoe": id, "foeEnt": eEnt, dist };
+		}
+		return best ?? bestAll;
+	}
+
+	/** Whether enough of ours fight foe id already: 9, or 6 unless a hero or siege. */
+	private enoughAgainst(id: EntityId, eEnt: CommonEntity): boolean
+	{
+		return this.assignedAgainst[id].length > 8 ||
+			this.assignedAgainst[id].length > 5 && !eEnt.hasClass("Hero") && !isSiegeUnit(eEnt);
 	}
 
 	getType(): string
@@ -534,35 +502,9 @@ export class DefenseArmy
 		for (const evt of events.EntityRenamed)	// take care of promoted and packed units
 		{
 			if (this.foeEntities.indexOf(evt.entity) !== -1)
-			{
-				const ent = gameState.getEntityById(evt.newentity);
-				if (ent && ent.templateName().indexOf("resource|") !== -1)  // corpse of animal killed
-					continue;
-				const idx = this.foeEntities.indexOf(evt.entity);
-				this.foeEntities[idx] = evt.newentity;
-				this.assignedAgainst[evt.newentity] = this.assignedAgainst[evt.entity];
-				delete this.assignedAgainst[evt.entity];
-				for (const to in this.assignedTo)
-					if (this.assignedTo[to] === evt.entity)
-						this.assignedTo[to] = evt.newentity;
-			}
+				this.renameFoe(gameState, evt.entity, evt.newentity);
 			else if (this.ownEntities.indexOf(evt.entity) !== -1)
-			{
-				const newEnt = gameState.getEntityById(evt.newentity);
-				if (newEnt && (!newEnt.hasUnitAI() || !newEnt.attackTypes()))
-					continue;
-				const idx = this.ownEntities.indexOf(evt.entity);
-				this.ownEntities[idx] = evt.newentity;
-				this.assignedTo[evt.newentity] = this.assignedTo[evt.entity];
-				this.assignedTo[evt.entity] = 0;
-				for (const against in this.assignedAgainst)
-				{
-					if (!this.assignedAgainst[against])
-						continue;
-					if (this.assignedAgainst[against].indexOf(evt.entity) !== -1)
-						this.assignedAgainst[against][this.assignedAgainst[against].indexOf(evt.entity)] = evt.newentity;
-				}
-			}
+				this.renameOwn(gameState, evt.entity, evt.newentity);
 		}
 
 		for (const evt of events.Garrison)
@@ -584,38 +526,52 @@ export class DefenseArmy
 		}
 	}
 
+	/** A foe promoted or packed: the army follows it under its new id, unless it became a corpse. */
+	private renameFoe(gameState: CommonGameState, entity: EntityId, newentity: EntityId): void
+	{
+		const ent = gameState.getEntityById(newentity);
+		if (ent && ent.templateName().indexOf("resource|") !== -1)  // corpse of animal killed
+			return;
+		const idx = this.foeEntities.indexOf(entity);
+		this.foeEntities[idx] = newentity;
+		this.assignedAgainst[newentity] = this.assignedAgainst[entity];
+		delete this.assignedAgainst[entity];
+		for (const to in this.assignedTo)
+			if (this.assignedTo[to] === entity)
+				this.assignedTo[to] = newentity;
+	}
+
+	/** A defender promoted or packed: the army keeps it under its new id if it can still fight. */
+	private renameOwn(gameState: CommonGameState, entity: EntityId, newentity: EntityId): void
+	{
+		const newEnt = gameState.getEntityById(newentity);
+		if (newEnt && (!newEnt.hasUnitAI() || !newEnt.attackTypes()))
+			return;
+		const idx = this.ownEntities.indexOf(entity);
+		this.ownEntities[idx] = newentity;
+		this.assignedTo[newentity] = this.assignedTo[entity];
+		this.assignedTo[entity] = 0;
+		for (const against in this.assignedAgainst)
+		{
+			if (!this.assignedAgainst[against])
+				continue;
+			if (this.assignedAgainst[against].indexOf(entity) !== -1)
+				this.assignedAgainst[against][this.assignedAgainst[against].indexOf(entity)] = newentity;
+		}
+	}
+
 	update(gameState: CommonGameState): EntityId[]
 	{
 		for (const entId of this.ownEntities)
 		{
 			const ent = gameState.getEntityById(entId);
-			if (!ent)
-				continue;
-			const orderData = ordersOf(ent);
-			if (!orderData.length && !ent.getMetadata(PlayerID, "transport"))
-				this.assignUnit(gameState, entId);
-			else if (orderData.length && orderData[0].target && orderData[0].attackType && orderData[0].attackType === "Capture")
-			{
-				const target = gameState.getEntityById(orderData[0].target);
-				if (target && !allowCapture(gameState, ent, target))
-					ent.attack(orderData[0].target, false);
-			}
+			if (ent)
+				this.keepFighting(gameState, ent, entId);
 		}
 
 		if (this.type === "capturing")
 		{
-			const firstFoe = gameState.getEntityById(this.foeEntities[0]);
-			if (this.foeEntities.length && firstFoe)
-			{
-				// Check if we still still some capturePoints to recover
-				// and if not, remove this foe from the list (capture army have only one foe)
-				const capture = firstFoe.capturePoints();
-				if (capture)
-					for (let j = 0; j < capture.length; ++j)
-						if (gameState.isPlayerEnemy(playerId(j)) && capture[j] > 0)
-							return [];
-				this.removeFoe(gameState, this.foeEntities[0], firstFoe);
-			}
+			this.checkRecaptured(gameState);
 			return [];
 		}
 
@@ -635,18 +591,45 @@ export class DefenseArmy
 			{
 				const id = this.foeEntities[i];
 				const ent = gameState.getEntityById(id);
-				if (!ent || !isPlaced(ent))
+				if (!ent || !isPlaced(ent) || !(SquareVectorDistance(ent.position(), this.foePosition) > this.breakawaySize))
 					continue;
-				if (SquareVectorDistance(ent.position(), this.foePosition) > this.breakawaySize)
-				{
-					breakaways.push(id);
-					if (this.removeFoe(gameState, id, ent))
-						i--;
-				}
+				breakaways.push(id);
+				if (this.removeFoe(gameState, id, ent))
+					i--;
 			}
 		}
 
 		return breakaways;
+	}
+
+	/** An idle defender is given a foe; one capturing what it had better destroy attacks it instead. */
+	private keepFighting(gameState: CommonGameState, ent: CommonEntity, entId: EntityId): void
+	{
+		const orderData = ordersOf(ent);
+		if (!orderData.length && !ent.getMetadata(PlayerID, "transport"))
+			this.assignUnit(gameState, entId);
+		else if (orderData.length && orderData[0].target && orderData[0].attackType && orderData[0].attackType === "Capture")
+		{
+			const target = gameState.getEntityById(orderData[0].target);
+			if (target && !allowCapture(gameState, ent, target))
+				ent.attack(orderData[0].target, false);
+		}
+	}
+
+	/** A capturing army's one foe leaves the army once no enemy holds capture points of it. */
+	private checkRecaptured(gameState: CommonGameState): void
+	{
+		const firstFoe = gameState.getEntityById(this.foeEntities[0]);
+		if (!this.foeEntities.length || !firstFoe)
+			return;
+		// Check if we still still some capturePoints to recover
+		// and if not, remove this foe from the list (capture army have only one foe)
+		const capture = firstFoe.capturePoints();
+		if (capture)
+			for (let j = 0; j < capture.length; ++j)
+				if (gameState.isPlayerEnemy(playerId(j)) && capture[j] > 0)
+					return;
+		this.removeFoe(gameState, this.foeEntities[0], firstFoe);
 	}
 
 	Serialize(): SerializedDefenseArmy
@@ -686,4 +669,42 @@ export class DefenseArmy
 		this.ownEntities = data.ownEntities;
 		this.ownStrength = data.ownStrength;
 	}
+}
+
+/** The nearest ally structure on the army's land, a defensive one first, and its obstruction radius. */
+function nearestAllyStructure(gameState: CommonGameState, position: CommonPosition): { destination: number[] | undefined; radius: number }
+{
+	let destination: number[] | undefined;
+	let defensiveFound;
+	let distmin;
+	let radius = 0;
+	const armyAccess = gameState.ai.accessibility.getAccessValue(position);
+	for (const struct of gameState.getAllyStructures().values())
+	{
+		const pos = struct.position();
+		if (!pos || !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(pos)))
+			continue;
+		if (getLandAccess(gameState, struct) !== armyAccess)
+			continue;
+		const defensiveStruct = struct.hasDefensiveFire();
+		if (defensiveFound && !defensiveStruct)
+			continue;
+		const dist = SquareVectorDistance(position, pos);
+		if (distmin && dist > distmin && (defensiveFound || !defensiveStruct))
+			continue;
+		if (defensiveStruct)
+			defensiveFound = true;
+		distmin = dist;
+		destination = pos;
+		// ally structures always have an obstruction
+		radius = struct.obstructionRadius().max;
+	}
+	return { destination, radius };
+}
+
+/** Whether the foe is a unit attacking entID */
+function isAttacking(eEnt: CommonEntity, entID: EntityId): boolean
+{
+	return !!eEnt.hasClass("Unit") && !!ordersOf(eEnt) && ordersOf(eEnt).length > 0 &&
+		!!ordersOf(eEnt)[0].target && ordersOf(eEnt)[0].target === entID;
 }

@@ -21,6 +21,16 @@ type GarrisonThreats = {
 /** The fields a save keeps. */
 export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decayingStructures">;
 
+/** Whether an enemy entity can threaten a holder: a structure that shoots, a unit, gaia's only while fighting. */
+function mayThreaten(ent: CommonEntity): boolean
+{
+	if (ent.hasClass("Structure"))
+		return !!ent.attackRange("Ranged");
+	if (ent.hasClass("Unit"))
+		return ent.owner() !== 0 || hasActivity(ent, "COMBAT");
+	return false;
+}
+
 /**
  * Manage the garrisonHolders
  * When a unit is ordered to garrison, it must be done through this.garrison() function so that
@@ -59,14 +69,7 @@ export class GarrisonManager
 			if (!holder || !gameState.isPlayerAlly(holder.owner()))
 			{
 				// this holder was certainly destroyed or captured. Let's remove it
-				for (const entId of list)
-				{
-					const ent = gameState.getEntityById(entId);
-					if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
-						continue;
-					this.leaveGarrison(ent);
-					ent.stopMoving();
-				}
+				this.releaseAll(gameState, id, list);
 				this.holders.delete(id);
 				continue;
 			}
@@ -78,38 +81,7 @@ export class GarrisonManager
 				continue;
 
 			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
-			{
-				const around = this.threatsAround(gameState, holder);
-				// Keep defenseManager.garrisonUnitsInside in sync to avoid garrisoning-ungarrisoning some units
-				data.allowMelee = around.defenseStructure || around.unit;
-
-				for (const entId of holder.garrisoned())
-				{
-					const ent = gameState.getEntityById(entId);
-					if (!ent)
-						continue;
-					if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
-						holder.unload(entId);
-				}
-				for (let j = 0; j < list.length; ++j)
-				{
-					const ent = gameState.getEntityById(list[j]);
-					if (!ent)
-						continue;
-					if (this.keepGarrisoned(ent, holder, around))
-						continue;
-					if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
-					{
-						this.leaveGarrison(ent);
-						ent.stopMoving();
-					}
-					list.splice(j--, 1);
-				}
-				if (this.numberOfGarrisonedSlots(holder) === 0)
-					this.holders.delete(id);
-				else
-					holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
-			}
+				this.reviewHolder(gameState, holder, data);
 		}
 
 		// Warning new garrison orders (as in the following lines) should be done after having updated the holders
@@ -125,51 +97,84 @@ export class GarrisonManager
 		}
 	}
 
+	/** The units on their way to holder id stop going there. */
+	private releaseAll(gameState: CommonGameState, id: EntityId, list: EntityId[]): void
+	{
+		for (const entId of list)
+		{
+			const ent = gameState.getEntityById(entId);
+			if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
+				continue;
+			this.leaveGarrison(ent);
+			ent.stopMoving();
+		}
+	}
+
+	/** Unloads the units the threats around holder no longer keep inside, and drops those on their way. */
+	private reviewHolder(gameState: CommonGameState, holder: CommonPlacedEntity, data: GarrisonHolderData): void
+	{
+		const id = holder.id();
+		const list = data.list;
+		const around = this.threatsAround(gameState, holder);
+		// Keep defenseManager.garrisonUnitsInside in sync to avoid garrisoning-ungarrisoning some units
+		data.allowMelee = around.defenseStructure || around.unit;
+
+		for (const entId of holder.garrisoned())
+		{
+			const ent = gameState.getEntityById(entId);
+			if (!ent)
+				continue;
+			if (ent.owner() === PlayerID && !this.keepGarrisoned(ent, holder, around))
+				holder.unload(entId);
+		}
+		for (let j = 0; j < list.length; ++j)
+		{
+			const ent = gameState.getEntityById(list[j]);
+			if (!ent)
+				continue;
+			if (this.keepGarrisoned(ent, holder, around))
+				continue;
+			if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
+			{
+				this.leaveGarrison(ent);
+				ent.stopMoving();
+			}
+			list.splice(j--, 1);
+		}
+		if (this.numberOfGarrisonedSlots(holder) === 0)
+			this.holders.delete(id);
+		else
+			holder.setMetadata(PlayerID, "holderTimeUpdate", gameState.ai.elapsedTime);
+	}
+
 	/** A holder or a decaying structure was upgraded or replaced */
 	onEntityRenamed(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		for (const evt of events.EntityRenamed)
 		{
-			for (const id of this.holders.keys())
+			const data = this.holders.get(evt.entity);
+			if (data)
 			{
-				if (id !== evt.entity)
-					continue;
-				const data = this.holders.get(id);
-				if (!data)
-					continue;
 				const newHolder = gameState.getEntityById(evt.newentity);
 				if (newHolder && newHolder.isGarrisonHolder())
 				{
-					this.holders.delete(id);
+					this.holders.delete(evt.entity);
 					this.holders.set(evt.newentity, data);
 				}
 				else
 				{
-					for (const entId of data.list)
-					{
-						const ent = gameState.getEntityById(entId);
-						if (!ent || ent.getMetadata(PlayerID, "garrisonHolder") !== id)
-							continue;
-						this.leaveGarrison(ent);
-						ent.stopMoving();
-					}
-					this.holders.delete(id);
+					this.releaseAll(gameState, evt.entity, data.list);
+					this.holders.delete(evt.entity);
 				}
 			}
 
-			for (const id of this.decayingStructures.keys())
-			{
-				if (id !== evt.entity)
-					continue;
-				this.decayingStructures.delete(id);
-				if (this.decayingStructures.has(evt.newentity))
-					continue;
-				const ent = gameState.getEntityById(evt.newentity);
-				if (!ent || !ent.territoryDecayRate() || !ent.garrisonRegenRate())
-					continue;
-				const gmin = Math.ceil((ent.territoryDecayRate() - ent.defaultRegenRate()) / ent.garrisonRegenRate());
-				this.decayingStructures.set(evt.newentity, gmin);
-			}
+			if (!this.decayingStructures.delete(evt.entity) || this.decayingStructures.has(evt.newentity))
+				continue;
+			const ent = gameState.getEntityById(evt.newentity);
+			if (!ent || !ent.territoryDecayRate() || !ent.garrisonRegenRate())
+				continue;
+			const gmin = Math.ceil((ent.territoryDecayRate() - ent.defaultRegenRate()) / ent.garrisonRegenRate());
+			this.decayingStructures.set(evt.newentity, gmin);
 		}
 	}
 
@@ -225,22 +230,7 @@ export class GarrisonManager
 		const around: GarrisonThreats = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
 		for (const ent of gameState.getEnemyEntities().values())
 		{
-			if (ent.hasClass("Structure"))
-			{
-				if (!ent.attackRange("Ranged"))
-					continue;
-			}
-			else if (ent.hasClass("Unit"))
-			{
-				if (ent.owner() === 0)
-				{
-					if (!hasActivity(ent, "COMBAT"))
-						continue;
-				}
-			}
-			else
-				continue;
-			if (!isPlaced(ent))
+			if (!mayThreaten(ent) || !isPlaced(ent))
 				continue;
 			const dist = SquareVectorDistance(ent.position(), holder.position());
 			if (dist > range*range)
@@ -346,38 +336,11 @@ export class GarrisonManager
 		case GarrisonManager.TYPE_TRADE:		// trader garrisoned in ship
 			return true;
 		case GarrisonManager.TYPE_PROTECTION:	// hurt unit for healing or infantry for defense
-		{
-			if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
-				return true;
-			const capture = ent.capturePoints();
-			if (capture && capture[PlayerID] / capture.reduce((a: number, b: number): number => a + b) < 0.8)
-				return true;
-			if (ent.hasClasses(holder.getGarrisonArrowClasses()))
-			{
-				if (around.unit || around.defenseStructure)
-					return true;
-				if (around.meleeSiege || around.rangeSiege)
-					return ent.attackTypes()?.indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
-				return false;
-			}
-			const entAttackTypes = ent.attackTypes();
-			if (entAttackTypes && entAttackTypes.indexOf("Melee") !== -1)
-				return false;
-			if (around.unit)
-				return ent.hasClass("Support") || isSiegeUnit(ent);	// only ranged siege here and below as melee siege already released above
-			if (isSiegeUnit(ent))
-				return around.meleeSiege;
-			return !!holder.buffHeal() && ent.needsHeal();
-		}
+			return this.keepProtected(ent, holder, around);
 		case GarrisonManager.TYPE_DECAY:
 			return !!ent.captureStrength() && this.decayingStructures.has(holder.id());
 		case GarrisonManager.TYPE_EMERGENCY: // f.e. hero in regicide mode
-			if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
-				return true;
-			if (around.unit || around.defenseStructure || around.meleeSiege ||
-				around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
-				return true;
-			return !!holder.buffHeal() && ent.needsHeal();
+			return this.keepInEmergency(ent, holder, around);
 		default:
 			if (ent.getMetadata(PlayerID, "onBoard") === "onBoard")  // transport is not (yet ?) managed by garrisonManager
 				return true;
@@ -387,6 +350,47 @@ export class GarrisonManager
 			ent.setMetadata(PlayerID, "garrisonType", GarrisonManager.TYPE_PROTECTION);
 			return true;
 		}
+	}
+
+	/** Whether a unit adding arrows to its holder stays in: against units, structures, or siege when it cannot fight siege. */
+	private keepShooting(ent: CommonEntity, around: GarrisonThreats): boolean
+	{
+		if (around.unit || around.defenseStructure)
+			return true;
+		if (around.meleeSiege || around.rangeSiege)
+			return ent.attackTypes()?.indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
+		return false;
+	}
+
+	/** Whether a unit garrisoned in an emergency (a hero in regicide) stays in. */
+	private keepInEmergency(ent: CommonEntity, holder: CommonEntity, around: GarrisonThreats): boolean
+	{
+		if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+			return true;
+		if (around.unit || around.defenseStructure || around.meleeSiege ||
+			around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+			return true;
+		return !!holder.buffHeal() && ent.needsHeal();
+	}
+
+	/** Whether a unit garrisoned for protection, to heal or to defend, stays in. */
+	private keepProtected(ent: CommonEntity, holder: CommonEntity, around: GarrisonThreats): boolean
+	{
+		if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+			return true;
+		const capture = ent.capturePoints();
+		if (capture && capture[PlayerID] / capture.reduce((a: number, b: number): number => a + b) < 0.8)
+			return true;
+		if (ent.hasClasses(holder.getGarrisonArrowClasses()))
+			return this.keepShooting(ent, around);
+		const entAttackTypes = ent.attackTypes();
+		if (entAttackTypes && entAttackTypes.indexOf("Melee") !== -1)
+			return false;
+		if (around.unit)
+			return ent.hasClass("Support") || isSiegeUnit(ent);	// only ranged siege here and below as melee siege already released above
+		if (isSiegeUnit(ent))
+			return around.meleeSiege;
+		return !!holder.buffHeal() && ent.needsHeal();
 	}
 
 	/** Add this holder in the list managed by the garrisonManager, and return its (existing or new) data */
