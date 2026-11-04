@@ -29,3 +29,12 @@ export function isSupply(ent: CommonEntity): ent is SupplyEntity
 {
 	return ent.resourceSupplyType() !== undefined && isPlaced(ent);
 }
+
+/** A structure on the map (CommonStructureEntity, common-api.d.ts). */
+export type StructureEntity = CommonStructureEntity;
+
+/** Whether the entity is a structure on the map, with its obstruction and footprint, narrowing it to one. */
+export function isStructure(ent: CommonEntity): ent is StructureEntity
+{
+	return ent.obstructionRadius() !== undefined && ent.footprintRadius() !== undefined && isPlaced(ent);
+}

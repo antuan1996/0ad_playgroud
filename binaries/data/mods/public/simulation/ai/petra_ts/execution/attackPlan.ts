@@ -1278,7 +1278,7 @@ export class AttackPlan
 			.filter(enemy => enemy.hasClass("Structure"));
 		if (!buildings.length)
 			return undefined;
-		const distance = (enemy: CommonEntity): number => SquareVectorDistance(requireValue(enemy.position()), this.rallyPoint);
+		const distance = (enemy: CommonPlacedEntity): number => SquareVectorDistance(enemy.position(), this.rallyPoint);
 		const owners = new Set([...buildings].sort((a, b) => distance(a) - distance(b)).map(enemy => enemy.owner()));
 		const targetPlayer = this.targetPlayer;
 		for (const owner of owners)

@@ -791,7 +791,7 @@ declare module "simulation/ai/common-api/gamestate.js"
 /** Supplies of one resource (auto-updating collection over all entities). */
 		getResourceSupplies(resource: string): CommonEntityCollection<CommonSupplyEntity>;
 /** Animal resource supplies ("huntable" — non-defensive, killable prey). */
-		getHuntableSupplies(): CommonEntityCollection;
+		getHuntableSupplies(): CommonEntityCollection<CommonSupplyEntity>;
 /** Fish resource supplies. */
 		getFishableSupplies(): CommonEntityCollection<CommonSupplyEntity>;
 /**

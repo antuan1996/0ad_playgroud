@@ -445,12 +445,8 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
 
-		let bestIdx;
-		let bestJdx;
-		let bestAngle;
-		let bestLand;
-		let bestWater;
-		let bestVal = -1;
+		// the best spot so far: its value (the lower the better), cells, angle, land and water
+		let best: { val: number; idx: number; jdx: CellIndex<"territory">; angle: number; land: AccessIndex; water: number } | undefined;
 		const navalPassMap = gameState.ai.accessibility.navalPassMap;
 
 		const width = hqOf(gameState).geography.territoryMap.width;
@@ -525,7 +521,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 				score += 20;
 
 			// Do a pre-selection, supposing we will have the best possible water
-			if (bestIdx !== undefined && score > bestVal + 5 * maxWater)
+			if (best !== undefined && score > best.val + 5 * maxWater)
 				continue;
 
 			const x = (i % obstructions.width + 0.5) * obstructions.cellSize;
@@ -538,39 +534,31 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			if (!ret || !hqOf(gameState).geography.landRegions[ret.land] || wantedLand && !wantedLand[ret.land])
 				continue;
 			// Final selection now that the checkDockPlacement water is known
-			if (bestIdx !== undefined && score + 5 * (maxWater - ret.water) > bestVal)
+			if (best !== undefined && score + 5 * (maxWater - ret.water) > best.val)
 				continue;
 			if (dockProximity && gameState.ai.accessibility.regionSize[ret.land] < 4000)
 				continue;
 			if (hqOf(gameState).isDangerousLocation(gameState, pos, halfSize))
 				continue;
 
-			bestVal = score + maxWater - ret.water;
-			bestIdx = i;
-			bestJdx = j;
-			bestAngle = angle;
-			bestLand = ret.land;
-			bestWater = ret.water;
+			best = { "val": score + maxWater - ret.water, "idx": i, "jdx": j, angle, "land": ret.land, "water": ret.water };
 		}
-		if (bestVal < 0)
+		if (!best || best.val < 0)
 			return false;
-		bestIdx = requireValue(bestIdx);
-		bestJdx = requireValue(bestJdx);
-		bestAngle = requireValue(bestAngle);
 
 		// if no good place with enough water around and still in first phase, wait for expansion at the next phase
-		if (!dockProximity && bestWater !== undefined && bestWater < 10 && gameState.currentPhase() === 1)
+		if (!dockProximity && best.water < 10 && gameState.currentPhase() === 1)
 			return false;
 
-		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
-		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
+		const x = (best.idx % obstructions.width + 0.5) * obstructions.cellSize;
+		const z = (Math.floor(best.idx / obstructions.width) + 0.5) * obstructions.cellSize;
 
 		// Assign this dock to a base
-		let baseIndex = hqOf(gameState).baseAtIndex(bestJdx);
+		let baseIndex = hqOf(gameState).baseAtIndex(best.jdx);
 		if (!baseIndex)
 			baseIndex = NEW_ANCHORLESS_BASE;	// We'll do an anchorless base around it
 
-		return { "x": x, "z": z, "angle": bestAngle, "base": baseIndex, "access": bestLand };
+		return { "x": x, "z": z, "angle": best.angle, "base": baseIndex, "access": best.land };
 	}
 
 	/**

@@ -18,7 +18,7 @@ import { gatherRate } from "../adapter/orders.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
-import { isPlaced } from "../adapter/placed.ts";
+import { isPlaced, isStructure } from "../adapter/placed.ts";
 
 /**
  * Base Manager
@@ -65,7 +65,7 @@ export class BaseManager
 	Config: Config;
 	ID: BaseId;
 	accessIndex: AccessIndex | undefined;
-	anchor: CommonPlacedEntity | undefined;
+	anchor: CommonStructureEntity | undefined;
 	anchorId: EntityId | undefined;
 	basesManager: BasesManager;
 	buildings: CommonEntityCollection<CommonPlacedEntity>;
@@ -183,8 +183,8 @@ export class BaseManager
 
 	setAnchor(gameState: CommonGameState, anchorEntity: CommonEntity, deserialize: boolean = false): boolean
 	{
-		// a civic centre, a structure: always on the map
-		if (!anchorEntity.hasClass("CivCentre") || !isPlaced(anchorEntity))
+		// a civic centre, a structure: always on the map, with its obstruction and footprint
+		if (!anchorEntity.hasClass("CivCentre") || !isStructure(anchorEntity))
 		{
 			aiWarn("Error: Petra base " + this.ID + " has been assigned " + anchorEntity.templateName() +
 				" as anchor.");
@@ -1220,6 +1220,6 @@ export class BaseManager
 
 		const anchor = this.anchorId !== undefined ? gameState.getEntityById(this.anchorId) : undefined;
 		// a civic centre: on the map
-		this.anchor = anchor && isPlaced(anchor) ? anchor : undefined;
+		this.anchor = anchor && isStructure(anchor) ? anchor : undefined;
 	}
 }

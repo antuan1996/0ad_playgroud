@@ -32,13 +32,13 @@ export type SerializedAttackManager = {
 export const LOCAL_FIGHT_MIN = 4;
 
 /** Where a group stands: the mean of its positions. */
-function centreOf(units: readonly CommonEntity[]): CommonPosition
+function centreOf(units: readonly CommonPlacedEntity[]): CommonPosition
 {
 	let x = 0;
 	let z = 0;
 	for (const ent of units)
 	{
-		const pos = requireValue(ent.position());
+		const pos = ent.position();
 		x += pos[0];
 		z += pos[1];
 	}
@@ -46,15 +46,15 @@ function centreOf(units: readonly CommonEntity[]): CommonPosition
 }
 
 /** The enemy building nearest to a position, else the nearest enemy unit (the list holds one or the other). */
-function nearestLocalTarget(enemies: readonly CommonEntity[], from: CommonPosition): CommonEntity
+function nearestLocalTarget(enemies: readonly CommonPlacedEntity[], from: CommonPosition): CommonPlacedEntity
 {
 	const structures = enemies.filter(enemy => enemy.hasClass("Structure"));
 	const pool = structures.length ? structures : enemies;
 	let best = pool[0];
-	let bestDist = SquareVectorDistance(requireValue(best.position()), from);
+	let bestDist = SquareVectorDistance(best.position(), from);
 	for (const enemy of pool)
 	{
-		const dist = SquareVectorDistance(requireValue(enemy.position()), from);
+		const dist = SquareVectorDistance(enemy.position(), from);
 		if (dist < bestDist)
 		{
 			best = enemy;
@@ -83,7 +83,7 @@ export class AttackManager
 	currentEnemyPlayer: PlayerId | undefined = undefined; // enemy player we are currently targeting
 	defeated: Record<number, boolean> = {};
 	/** enemiesByLand's answer and the turn it was counted on (not saved). */
-	enemyLands = new Map<AccessIndex, CommonEntity[]>();
+	enemyLands = new Map<AccessIndex, CommonPlacedEntity[]>();
 	enemyLandsTurn = -1;
 
 	constructor(config: Config, gameState: CommonGameState)
@@ -800,7 +800,7 @@ export class AttackManager
 	 * gaia's, no ships), counted once a turn: where our soldiers have enemies
 	 * beside them (FINDINGS §34).
 	 */
-	enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonEntity[]>
+	enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonPlacedEntity[]>
 	{
 		if (this.enemyLandsTurn === gameState.ai.playedTurn)
 			return this.enemyLands;
@@ -836,10 +836,13 @@ export class AttackManager
 	splitLocalFights(gameState: CommonGameState, leaving: AttackPlan, targetLand: AccessIndex | undefined): void
 	{
 		const enemiesByLand = this.enemiesByLand(gameState);
-		const soldiersByLand = new Map<AccessIndex, CommonEntity[]>();
+		const soldiersByLand = new Map<AccessIndex, CommonPlacedEntity[]>();
 		for (const ent of leaving.unitCollection.values())
 		{
-			const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
+			// a soldier aboard a ship is on no land
+			if (!isPlaced(ent))
+				continue;
+			const land = getLandAccess(gameState, ent);
 			if (land === undefined || land === targetLand || !enemiesByLand.has(land))
 				continue;
 			const list = soldiersByLand.get(land);

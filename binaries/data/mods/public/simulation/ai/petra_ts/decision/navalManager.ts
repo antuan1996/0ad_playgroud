@@ -642,12 +642,12 @@ export class NavalManager
 		if (!gameState.ai.HQ.navalMap)
 			return;
 		const access = gameState.ai.accessibility;
-		const prey = new Map<number, CommonEntity[]>();
+		const prey = new Map<number, CommonPlacedEntity[]>();
 		for (const ship of gameState.getEnemyUnits().values())
 		{
-			const pos = ship.position();
-			if (!pos || ship.owner() === GAIA || !ship.hasClasses(["FishingBoat", "Trader+Ship"]))
+			if (!isPlaced(ship) || ship.owner() === GAIA || !ship.hasClasses(["FishingBoat", "Trader+Ship"]))
 				continue;
+			const pos = ship.position();
 			const sea = access.getAccessValue(pos, true);
 			const list = prey.get(sea);
 			if (list)
@@ -677,7 +677,7 @@ export class NavalManager
 			let bestDist = HUNT_RANGE * HUNT_RANGE;
 			for (const target of list)
 			{
-				const at = requireValue(target.position());
+				const at = target.position();
 				const dist = SquareVectorDistance(at, pos);
 				if (dist >= bestDist || threatsAt(at, towers) > 0)
 					continue;

@@ -8,8 +8,8 @@
  */
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import type { ResourceSupply } from "../decision/baseManager.ts";
-import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
-import { isPlaced } from "../adapter/placed.ts";
+import { getLandAccess } from "../adapter/entityExtend.ts";
+import { isPlaced, isSupply } from "../adapter/placed.ts";
 
 export class BaseResources
 {
@@ -148,8 +148,8 @@ export class BaseResources
 					continue;
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);
-				if (supplyEntity)
-					count += requireValue(supplyEntity.resourceSupplyAmount());
+				if (supplyEntity && isSupply(supplyEntity))
+					count += supplyEntity.resourceSupplyAmount();
 			}
 		return count;
 	}

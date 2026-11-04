@@ -393,11 +393,11 @@ export class UnitWork
 				const supply = gameState.getEntityById(supplyId);
 				// While returning resources UnitAI targets the dropsite, which is no supply:
 				// the return trip is checked below, the supply once the unit is back at work
-				if (supply && supply.resourceSupplyType() && !supply.hasClasses(["Field", "Animal"]) &&
+				if (supply && isSupply(supply) && !supply.hasClasses(["Field", "Animal"]) &&
 					supplyId !== ent.getMetadata(PlayerID, "supply"))
 				{
-					const nbGatherers = requireValue(supply.resourceSupplyNumGatherers()) + this.base.GetTCGatherer(supplyId);
-					if (nbGatherers > 1 && requireValue(supply.resourceSupplyAmount())/nbGatherers < 30)
+					const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supplyId);
+					if (nbGatherers > 1 && supply.resourceSupplyAmount()/nbGatherers < 30)
 					{
 						this.base.RemoveTCGatherer(supplyId);
 						this.startGathering(gameState);
@@ -782,7 +782,7 @@ export class UnitWork
 		{
 			if (!foundation || getLandAccess(gameState, foundation) !== this.entAccess)
 				return false;
-			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
+			const dropsiteTypes = getBuiltEntity(gameState, foundation).resourceDropsiteTypes();
 			if (dropsiteTypes && dropsiteTypes.indexOf(resource) !== -1)
 			{
 				if (foundation.getMetadata(PlayerID, "base") !== this.baseID)
@@ -866,7 +866,7 @@ export class UnitWork
 		{
 			if (!foundation || getLandAccess(gameState, foundation) === this.entAccess)
 				return false;
-			const dropsiteTypes = requireValue(gameState.getBuiltTemplate(foundation.templateName())).resourceDropsiteTypes();
+			const dropsiteTypes = getBuiltEntity(gameState, foundation).resourceDropsiteTypes();
 			if (dropsiteTypes && dropsiteTypes.indexOf(resource) !== -1)
 			{
 				const foundationAccess = getLandAccess(gameState, foundation);
@@ -986,8 +986,6 @@ export class UnitWork
 		const gatherRates = requireValue(this.ent.resourceGatherRates());
 		for (const supply of resources.values())
 		{
-			if (!isPlaced(supply))
-				continue;
 			const supplyPos = supply.position();
 
 			const inaccessibleTime = supply.getMetadata(PlayerID, "inaccessibleTime");
@@ -1001,8 +999,8 @@ export class UnitWork
 			if (isSupplyFull(gameState, supply))
 				continue;
 			// Check if available resource is worth one additionnal gatherer (except for farms).
-			const nbGatherers = requireValue(supply.resourceSupplyNumGatherers()) + this.base.GetTCGatherer(supply.id());
-			if (nbGatherers > 0 && requireValue(supply.resourceSupplyAmount())/(1+nbGatherers) < 30)
+			const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supply.id());
+			if (nbGatherers > 0 && supply.resourceSupplyAmount()/(1+nbGatherers) < 30)
 				continue;
 
 			const canFlee = !supply.hasClass("Domestic") && supply.templateName().indexOf("resource|") === -1;
@@ -1205,7 +1203,7 @@ export class UnitWork
 			if (found.getMetadata(PlayerID, "base") !== baseID || !found.hasClass("Field"))
 				continue;
 			const current = found.getBuildersNb();
-			const template = requireValue(gameState.getBuiltTemplate(found.templateName()));
+			const template = getBuiltEntity(gameState, found);
 			if (current === undefined || current >= template.maxGatherers())
 				continue;
 			const dist = SquareVectorDistance(found.position(), pos);

@@ -597,7 +597,7 @@ export class VictoryManager
 				// anchors always have an obstruction
 				if (bestBasePos)
 					criticalEnt.moveToRange(bestBasePos[0], bestBasePos[1],
-						0, requireValue(bestBaseAnchor.obstructionRadius()).max);
+						0, bestBaseAnchor.obstructionRadius().max);
 			}
 		}
 	}

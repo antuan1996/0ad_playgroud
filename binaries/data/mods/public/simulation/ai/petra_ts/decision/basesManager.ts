@@ -9,7 +9,7 @@ import { Worker } from "../execution/worker.ts";
 import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
 import { requireStateName } from "../adapter/unitState.ts";
 import { ordersOf } from "../adapter/orders.ts";
-import { isPlaced } from "../adapter/placed.ts";
+import { isPlaced, isStructure } from "../adapter/placed.ts";
 
 export interface SerializedBasesManager {
 	properties: {
@@ -171,7 +171,7 @@ export class BasesManager
 			if (!base.anchorId || base.anchorId !== evt.entity)
 				continue;
 			base.anchorId = evt.newentity;
-			base.anchor = ent && isPlaced(ent) ? ent : undefined;
+			base.anchor = ent && isStructure(ent) ? ent : undefined;
 		}
 	}
 

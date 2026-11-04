@@ -341,10 +341,10 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 }
 
 /** is supply full taking into account gatherers affected during this turn */
-export function isSupplyFull(gameState: CommonGameState, ent: CommonEntity): boolean
+export function isSupplyFull(gameState: CommonGameState, ent: CommonSupplyEntity): boolean
 {
 	return ent.isFull() === true ||
-		requireValue(ent.resourceSupplyNumGatherers()) + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		ent.resourceSupplyNumGatherers() + gameState.ai.HQ.basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
 }
 
 /**
