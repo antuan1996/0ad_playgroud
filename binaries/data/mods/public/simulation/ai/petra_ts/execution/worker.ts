@@ -8,7 +8,7 @@ import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../w
 import { GAIA, INVALID_ENTITY, NO_REGION, seconds } from "../adapter/brands.ts";
 import { type UnitState, requireActivity, stateIs, unitState } from "../adapter/unitState.ts";
 import { hqOf } from "./hq.ts";
-import { isLent } from "./unitPlan.ts";
+import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { type PlacedEntity, isPlaced, isSupply } from "../adapter/placed.ts";
@@ -1295,4 +1295,15 @@ export class UnitWork
 		}
 		return false;
 	}
+}
+
+/** Whether a unit marches or fights with an attack plan: in a plan, completing it, walking or attacking */
+export function marchesWithAttack(ent: CommonEntity): boolean
+{
+	const plan = ent.getMetadata(PlayerID, "plan");
+	if (plan === undefined || plan === PLAN_RESERVE)
+		return false;
+	const subrole = ent.getMetadata(PlayerID, "subrole");
+	return !!subrole && (subrole === Worker.SUBROLE_COMPLETING || subrole === Worker.SUBROLE_WALKING ||
+		subrole === Worker.SUBROLE_ATTACKING);
 }
