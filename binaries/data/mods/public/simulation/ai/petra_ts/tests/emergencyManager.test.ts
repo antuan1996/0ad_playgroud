@@ -12,20 +12,20 @@ import { describe, it } from "node:test";
 
 import { resetRecorder, sent } from "./harness/engine.ts";
 import { makeEntity } from "./harness/fakes.ts";
-import { makeWorld, PLAYER, type World } from "./harness/world.ts";
+import { PLAYER, makeWorld, type World } from "./harness/world.ts";
 
-import { Config } from "../world/config.ts";
 import { EmergencyManager } from "../decision/emergencyManager.ts";
+import { Config } from "../world/config.ts";
 
 /** the chat lines setConfig's factors lead to, as chatHelper lists them */
 const ENTER_LINES = [
 	"My armies failed while defending my empire. Please honor our alliance and send help!",
 	"My humble armies feel weak and tired. My civilization depends on our alliance, please send help!",
-	"I need your help. Please do not let my armies fall!"
+	"I need your help. Please do not let my armies fall!",
 ];
 const EXIT_LINES = [
 	"My empire regained its old strength, now it is time to seek revenge together!",
-	"My civilization raised from the ashes. Now my armies feel stronger and eager to fight for our alliance."
+	"My civilization raised from the ashes. Now my armies feel stronger and eager to fight for our alliance.",
 ];
 
 interface Town
@@ -56,16 +56,22 @@ function town(population: number, roots: number, others: number): Town
 	const add = (root: boolean) =>
 	{
 		const id = nextId++;
-		world.addEntity(makeEntity({
-			id, "owner": PLAYER, "position": [100, 100],
-			"classes": root ? ["Structure", "CivCentre"] : ["Structure", "House"],
-			"templateName": root ? "structures/athen/civil_centre" : "structures/athen/house"
-		}, {
-			// as the parsed template gives it: every structure has a
-			// TerritoryInfluence node; only the roots say Root "true"
-			"get": (path: string) => path === "TerritoryInfluence" ?
-				{ "Root": root ? "true" : "false", "Radius": root ? "140" : "20", "Weight": "30000" } : undefined
-		}));
+		world.addEntity(
+			makeEntity({
+				id,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": root ? ["Structure", "CivCentre"] : ["Structure", "House"],
+				"templateName": root ? "structures/athen/civil_centre" : "structures/athen/house",
+			}, {
+				// as the parsed template gives it: every structure has a
+				// TerritoryInfluence node; only the roots say Root "true"
+				"get": (path: string) =>
+					path === "TerritoryInfluence" ?
+						{ "Root": root ? "true" : "false", "Radius": root ? "140" : "20", "Weight": "30000" } :
+						undefined,
+			}),
+		);
 		(root ? rootIds : otherIds).push(id);
 	};
 	const build = (r: number, o: number) =>
@@ -92,13 +98,12 @@ function town(population: number, roots: number, others: number): Town
 /** the ally chats the manager posted, as their message text */
 function chats(): string[]
 {
-	return sent("aichat")
-		.map((c) =>
-		{
-			assert.equal(c.translateMessage, true);
-			assert.ok(c.message.startsWith("/allies "));
-			return c.message.slice("/allies ".length);
-		});
+	return sent("aichat").map(c =>
+	{
+		assert.equal(c.translateMessage, true);
+		assert.ok(c.message.startsWith("/allies "));
+		return c.message.slice("/allies ".length);
+	});
 }
 
 describe("emergency manager: when the town calls for help", () =>
@@ -115,8 +120,8 @@ describe("emergency manager: when the town calls for help", () =>
 	it("ordinary losses are no emergency", () =>
 	{
 		const t = town(20, 1, 9);
-		t.population.value = 13;	// 0.65 of the reference
-		t.lose(0, 3);				// 7 of 10 structures left
+		t.population.value = 13; // 0.65 of the reference
+		t.lose(0, 3); // 7 of 10 structures left
 		t.manager.update(t.world.gameState);
 		assert.equal(t.manager.hasEmergency, false);
 		assert.deepEqual(chats(), []);
@@ -133,8 +138,8 @@ describe("emergency manager: when the town calls for help", () =>
 	it("losing most people and most buildings: the allies are asked for help", () =>
 	{
 		const t = town(20, 1, 9);
-		t.population.value = 11;	// 0.55
-		t.lose(0, 5);				// 5 of 10
+		t.population.value = 11; // 0.55
+		t.lose(0, 5); // 5 of 10
 		t.manager.update(t.world.gameState);
 
 		assert.equal(t.manager.hasEmergency, true);
@@ -220,8 +225,8 @@ describe("emergency manager: the way out", () =>
 	it("a modest recovery is not enough", () =>
 	{
 		const t = fallen();
-		t.population.value = 12;	// exactly 1.2 times: not above
-		t.build(0, 2);				// 7 of 5
+		t.population.value = 12; // exactly 1.2 times: not above
+		t.build(0, 2); // 7 of 5
 		t.manager.update(t.world.gameState);
 		assert.equal(t.manager.hasEmergency, true);
 		assert.deepEqual(chats(), []);

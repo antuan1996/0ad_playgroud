@@ -104,11 +104,13 @@ function samplesOf(lines: EconLine[], player: number, metadata: Metadata | undef
 		if (sequences)
 		{
 			// the statistics are sampled at 0.2 s, then every 30 s
-			const i = sequences.time.findIndex((time) => Math.abs(time - line.t) < 1);
+			const i = sequences.time.findIndex(time => Math.abs(time - line.t) < 1);
 			if (i > 0)
+			{
 				for (const res of RESOURCES)
 					income[res] = (sequences.resourcesGathered[res][i] - sequences.resourcesGathered[res][i - 1]) /
 						(sequences.time[i] - sequences.time[i - 1]);
+			}
 		}
 		samples.push({ "t": line.t, line, income });
 	}
@@ -128,7 +130,7 @@ function readMetadata(dir: string): Metadata | undefined
 
 function playersOf(lines: EconLine[]): number[]
 {
-	return [...new Set(lines.map((line) => line.player))].sort();
+	return [...new Set(lines.map(line => line.player))].sort();
 }
 
 /** The sides of a batch folder or of one match folder. */
@@ -137,8 +139,9 @@ function readSides(dir: string): Side[]
 	const sides: Side[] = [];
 	if (existsSync(join(dir, "results.jsonl")))
 	{
-		const rows = readFileSync(join(dir, "results.jsonl"), "utf8").split("\n").filter(Boolean)
-			.map((line): BatchRow => JSON.parse(line));
+		const rows = readFileSync(join(dir, "results.jsonl"), "utf8").split("\n").filter(Boolean).map((
+			line,
+		): BatchRow => JSON.parse(line));
 		for (const row of rows)
 		{
 			const gameDir = join(dir, "games", String(row.game).padStart(4, "0"));
@@ -150,9 +153,18 @@ function readSides(dir: string): Side[]
 			{
 				// blue is player 1 unless the slots were swapped
 				const color = (player === 1) !== row.swapped ? "blue" : "red";
-				const result = row.outcome === "draw" || row.outcome === "failed" ? "draw" : row.outcome === color ? "won" : "lost";
-				sides.push({ "game": `${dir}#${row.game}`, player, result, "pair": `${row.mapSeed}/${row.aiSeed}`,
-					"samples": samplesOf(lines, player, metadata) });
+				const result = row.outcome === "draw" || row.outcome === "failed" ?
+					"draw" :
+					row.outcome === color ?
+					"won" :
+					"lost";
+				sides.push({
+					"game": `${dir}#${row.game}`,
+					player,
+					result,
+					"pair": `${row.mapSeed}/${row.aiSeed}`,
+					"samples": samplesOf(lines, player, metadata),
+				});
 			}
 		}
 		return sides;
@@ -164,12 +176,18 @@ function readSides(dir: string): Side[]
 	if (existsSync(join(dir, "result.json")))
 	{
 		const result = JSON.parse(readFileSync(join(dir, "result.json"), "utf8"));
-		winners = (result.players ?? []).filter((p: { state: string }) => p.state === "won").map((p: { id: number }) => p.id);
+		winners = (result.players ?? []).filter((p: { state: string }) => p.state === "won").map((p: { id: number }) =>
+			p.id
+		);
 	}
 	const metadata = readMetadata(dir);
 	for (const player of playersOf(lines))
-		sides.push({ "game": dir, player, "result": winners.length ? winners.includes(player) ? "won" : "lost" : "?",
-			"samples": samplesOf(lines, player, metadata) });
+		sides.push({
+			"game": dir,
+			player,
+			"result": winners.length ? winners.includes(player) ? "won" : "lost" : "?",
+			"samples": samplesOf(lines, player, metadata),
+		});
 	return sides;
 }
 
@@ -208,34 +226,40 @@ function figures(sides: Side[], res: Res, from: number, to: number): Figures | u
 	const perSide: Figures[] = [];
 	for (const side of sides)
 	{
-		const samples = side.samples.filter((s) => s.t > from * 60 && s.t <= to * 60);
+		const samples = side.samples.filter(s => s.t > from * 60 && s.t <= to * 60);
 		if (!samples.length)
 			continue;
-		const gatherers = samples.map((s) => gatherersOf(s.line, res));
-		const states = samples.map((s) => s.line.states[res]);
+		const gatherers = samples.map(s => gatherersOf(s.line, res));
+		const states = samples.map(s => s.line.states[res]);
 		perSide.push({
-			"income": mean(samples.map((s) => s.income[res])),
-			"estimate": mean(samples.map((s) => s.line.estimate[res])),
-			"wanted": mean(samples.map((s) => s.line.wanted[res])),
-			"rawRate": mean(samples.map((s) => s.line.rawRate[res])),
+			"income": mean(samples.map(s => s.income[res])),
+			"estimate": mean(samples.map(s => s.line.estimate[res])),
+			"wanted": mean(samples.map(s => s.line.wanted[res])),
+			"rawRate": mean(samples.map(s => s.line.rawRate[res])),
 			"gatherers": mean(gatherers),
 			"perGatherer": mean(samples.map((s, i) => gatherers[i] ? 60 * s.income[res] / gatherers[i] : NaN)),
-			"gathering": mean(states.map((st) =>
+			"gathering": mean(states.map(st =>
 			{
 				const all = st.gathering + st.approaching + st.returning + st.other;
 				return all ? st.gathering / all : NaN;
 			})),
-			"trip": median(samples.map((s) => s.line.tripDist[res] ?? NaN)),
-			"first": mean(samples.map((s) => s.line.order[0] === res ? 1 : 0))
+			"trip": median(samples.map(s => s.line.tripDist[res] ?? NaN)),
+			"first": mean(samples.map(s => s.line.order[0] === res ? 1 : 0)),
 		});
 	}
 	if (!perSide.length)
 		return undefined;
-	const over = (key: keyof Figures): number => mean(perSide.map((f) => f[key]));
+	const over = (key: keyof Figures): number => mean(perSide.map(f => f[key]));
 	return {
-		"income": over("income"), "estimate": over("estimate"), "wanted": over("wanted"), "rawRate": over("rawRate"),
-		"gatherers": over("gatherers"), "perGatherer": over("perGatherer"), "gathering": over("gathering"),
-		"trip": over("trip"), "first": over("first")
+		"income": over("income"),
+		"estimate": over("estimate"),
+		"wanted": over("wanted"),
+		"rawRate": over("rawRate"),
+		"gatherers": over("gatherers"),
+		"perGatherer": over("perGatherer"),
+		"gathering": over("gathering"),
+		"trip": over("trip"),
+		"first": over("first"),
 	};
 }
 
@@ -253,18 +277,28 @@ function bands(until: number): Array<[number, number]>
 
 function table(title: string, sides: Side[], until: number, resources: readonly Res[] = RESOURCES): string[]
 {
-	const out = [`${title} (${sides.length} sides; means per side, then over the sides):`,
-		"  minutes  res      income  estimate  rawRate  wanted  gatherers  per-gath-min  gathering  trip  first"];
+	const out = [
+		`${title} (${sides.length} sides; means per side, then over the sides):`,
+		"  minutes  res      income  estimate  rawRate  wanted  gatherers  per-gath-min  gathering  trip  first",
+	];
 	for (const [from, to] of bands(until))
 		for (const res of resources)
 		{
 			const f = figures(sides, res, from, to);
 			if (!f || !f.gatherers && !f.income)
 				continue;
-			out.push(`  ${`${from}-${to}`.padEnd(7)}  ${res.padEnd(6)} ${fmt(f.income, 2).padStart(7)} ${fmt(f.estimate, 2).padStart(9)}` +
-				` ${fmt(f.rawRate, 2).padStart(8)} ${fmt(f.wanted, 1).padStart(7)} ${fmt(f.gatherers).padStart(10)}` +
-				` ${fmt(f.perGatherer).padStart(13)} ${fmt(100 * f.gathering, 0).padStart(9)}% ${fmt(f.trip, 0).padStart(5)}` +
-				` ${fmt(100 * f.first, 0).padStart(5)}%`);
+			out.push(
+				`  ${`${from}-${to}`.padEnd(7)}  ${res.padEnd(6)} ${fmt(f.income, 2).padStart(7)} ${
+					fmt(f.estimate, 2).padStart(9)
+				}` +
+					` ${fmt(f.rawRate, 2).padStart(8)} ${fmt(f.wanted, 1).padStart(7)} ${
+						fmt(f.gatherers).padStart(10)
+					}` +
+					` ${fmt(f.perGatherer).padStart(13)} ${fmt(100 * f.gathering, 0).padStart(9)}% ${
+						fmt(f.trip, 0).padStart(5)
+					}` +
+					` ${fmt(100 * f.first, 0).padStart(5)}%`,
+			);
 		}
 	return out;
 }
@@ -276,8 +310,10 @@ function table(title: string, sides: Side[], until: number, resources: readonly 
  */
 function foodTable(title: string, sides: Side[], until: number): string[]
 {
-	const out = [`food by source, ${title} (means per side, then over the sides):`,
-		"  minutes  source  gatherers  gathering  rate/gatherer  trip"];
+	const out = [
+		`food by source, ${title} (means per side, then over the sides):`,
+		"  minutes  source  gatherers  gathering  rate/gatherer  trip",
+	];
 	const sources = ["fruit", "grain", "meat", "fish", "none"];
 	for (const [from, to] of bands(until))
 		for (const source of sources)
@@ -285,24 +321,28 @@ function foodTable(title: string, sides: Side[], until: number): string[]
 			const perSide: Array<{ gatherers: number; gathering: number; rate: number; trip: number }> = [];
 			for (const side of sides)
 			{
-				const samples = side.samples.filter((s) => s.t > from * 60 && s.t <= to * 60);
+				const samples = side.samples.filter(s => s.t > from * 60 && s.t <= to * 60);
 				if (!samples.length)
 					continue;
-				const entries = samples.map((s) => s.line.foodSources?.[source]);
-				const n = entries.map((e) => e?.gatherers ?? 0);
+				const entries = samples.map(s => s.line.foodSources?.[source]);
+				const n = entries.map(e => e?.gatherers ?? 0);
 				perSide.push({
 					"gatherers": mean(n),
-					"gathering": mean(entries.map((e) => e && e.gatherers ? e.gathering / e.gatherers : NaN)),
-					"rate": mean(entries.map((e) => e && e.gatherers ? e.rate / e.gatherers : NaN)),
-					"trip": median(entries.map((e) => e?.trip ?? NaN))
+					"gathering": mean(entries.map(e => e && e.gatherers ? e.gathering / e.gatherers : NaN)),
+					"rate": mean(entries.map(e => e && e.gatherers ? e.rate / e.gatherers : NaN)),
+					"trip": median(entries.map(e => e?.trip ?? NaN)),
 				});
 			}
-			const gatherers = mean(perSide.map((p) => p.gatherers));
+			const gatherers = mean(perSide.map(p => p.gatherers));
 			if (!(gatherers >= 0.05))
 				continue;
-			out.push(`  ${`${from}-${to}`.padEnd(7)}  ${source.padEnd(6)} ${fmt(gatherers).padStart(10)}` +
-				` ${fmt(100 * mean(perSide.map((p) => p.gathering)), 0).padStart(9)}%` +
-				` ${fmt(mean(perSide.map((p) => p.rate)), 3).padStart(14)} ${fmt(median(perSide.map((p) => p.trip)), 0).padStart(5)}`);
+			out.push(
+				`  ${`${from}-${to}`.padEnd(7)}  ${source.padEnd(6)} ${fmt(gatherers).padStart(10)}` +
+					` ${fmt(100 * mean(perSide.map(p => p.gathering)), 0).padStart(9)}%` +
+					` ${fmt(mean(perSide.map(p => p.rate)), 3).padStart(14)} ${
+						fmt(median(perSide.map(p => p.trip)), 0).padStart(5)
+					}`,
+			);
 		}
 	return out;
 }
@@ -317,29 +357,37 @@ function splitPairs(sides: Side[], until: number): string[]
 	const split: Array<{ won: Side; lost: Side }> = [];
 	for (const pairSides of byPair.values())
 	{
-		const won = pairSides.find((s) => s.result === "won");
-		const lost = pairSides.find((s) => s.result === "lost");
+		const won = pairSides.find(s => s.result === "won");
+		const lost = pairSides.find(s => s.result === "lost");
 		if (won && lost && pairSides.length === 2)
 			split.push({ won, lost });
 	}
 	if (!split.length)
 		return [];
-	const out = [`seed pairs won from one slot, lost from the other (${split.length}): won minus lost,`,
+	const out = [
+		`seed pairs won from one slot, lost from the other (${split.length}): won minus lost,`,
 		"mean difference and the pairs where the won game is ahead:",
-		"  minutes  res      income       gatherers    per-gath-min  gathering    trip"];
+		"  minutes  res      income       gatherers    per-gath-min  gathering    trip",
+	];
 	const keys: Array<keyof Figures> = ["income", "gatherers", "perGatherer", "gathering", "trip"];
 	for (const [from, to] of bands(until))
 		for (const res of RESOURCES)
 		{
-			const diffs = keys.map((key) => split.map(({ won, lost }) =>
-				(figures([won], res, from, to)?.[key] ?? NaN) - (figures([lost], res, from, to)?.[key] ?? NaN))
-				.filter(Number.isFinite));
-			if (!diffs[1].length || diffs[1].every((d) => d === 0) && diffs[0].every((d) => d === 0))
+			const diffs = keys.map(key =>
+				split.map(({ won, lost }) =>
+					(figures([won], res, from, to)?.[key] ?? NaN) - (figures([lost], res, from, to)?.[key] ?? NaN)
+				).filter(Number.isFinite)
+			);
+			if (!diffs[1].length || diffs[1].every(d => d === 0) && diffs[0].every(d => d === 0))
 				continue;
 			const cell = (values: number[], scale = 1, digits = 1): string =>
-				`${fmt(scale * mean(values), digits)} (${values.filter((d) => d > 0).length}/${values.length})`.padStart(12);
-			out.push(`  ${`${from}-${to}`.padEnd(7)}  ${res.padEnd(6)} ${cell(diffs[0], 1, 2)} ${cell(diffs[1])}` +
-				` ${cell(diffs[2])} ${cell(diffs[3], 100, 0)} ${cell(diffs[4], 1, 0)}`);
+				`${fmt(scale * mean(values), digits)} (${values.filter(d => d > 0).length}/${values.length})`.padStart(
+					12,
+				);
+			out.push(
+				`  ${`${from}-${to}`.padEnd(7)}  ${res.padEnd(6)} ${cell(diffs[0], 1, 2)} ${cell(diffs[1])}` +
+					` ${cell(diffs[2])} ${cell(diffs[3], 100, 0)} ${cell(diffs[4], 1, 0)}`,
+			);
 		}
 	return out;
 }
@@ -363,16 +411,19 @@ function main(args: string[]): void
 	if (!sides.length)
 		throw new Error("no economy.txt in these folders (play with match.sh -b or batch.ts --bot-state)");
 	const samples = sides.reduce((n, side) => n + side.samples.length, 0);
-	const out = [`${sides.length} sides in ${new Set(sides.map((s) => s.game)).size} games, ${samples} samples`,
+	const out = [
+		`${sides.length} sides in ${new Set(sides.map(s => s.game)).size} games, ${samples} samples`,
 		"income: gathered per second (statistics); estimate: the bot's (GetCurrentGatherRates); rawRate: the sum",
 		"of the gathering units' rates; per-gath-min: income per gatherer-minute; gathering: share of the",
-		"gatherers gathering; trip: median supply-dropsite distance; first: share heading pickMostNeededResources", ""];
+		"gatherers gathering; trip: median supply-dropsite distance; first: share heading pickMostNeededResources",
+		"",
+	];
 	out.push(...table("all sides", sides, until), "");
-	if (sides.some((side) => side.samples.some((s) => s.line.foodSources)))
+	if (sides.some(side => side.samples.some(s => s.line.foodSources)))
 		out.push(...foodTable("all sides", sides, until), "");
 	for (const result of ["won", "lost"] as const)
 	{
-		const some = sides.filter((s) => s.result === result);
+		const some = sides.filter(s => s.result === result);
 		if (some.length)
 			out.push(...table(`sides that ${result}`, some, Math.min(until, 10), ["food", "wood"]), "");
 	}

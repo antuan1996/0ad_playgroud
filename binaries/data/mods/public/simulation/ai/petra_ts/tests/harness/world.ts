@@ -12,9 +12,9 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { byClass } from "simulation/ai/common-api/filters.js";
 
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
-import { Config } from "../../world/config.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
+import { Config } from "../../world/config.ts";
 
 /** A base as the stub HQ hands them out: an anchor structure and the land it sits on. */
 export interface BaseLike
@@ -132,9 +132,7 @@ export interface World
 	/** resetCaptureGaiaRelic calls the victoryManager saw */
 	relicResets: unknown[];
 	/** the collections the plan asked the sharedScript to keep updated */
-	collections: {
-		registered: CommonEntityCollection[];
-	};
+	collections: { registered: CommonEntityCollection[] };
 }
 
 export const PLAYER = playerId(1);
@@ -151,8 +149,11 @@ export function mapOf(items: Iterable<CommonEntity>): Map<EntityId, CommonEntity
 }
 
 /** A real EntityCollection over `items`, kept by the world's shared script. */
-export function collectionOf(world: { gameState: CommonGameState }, items: Iterable<CommonEntity> = [],
-	filters?: CommonEntityFilter[]): CommonEntityCollection
+export function collectionOf(
+	world: { gameState: CommonGameState },
+	items: Iterable<CommonEntity> = [],
+	filters?: CommonEntityFilter[],
+): CommonEntityCollection
 {
 	return new EntityCollection(world.gameState.sharedScript, mapOf(items), filters);
 }
@@ -172,7 +173,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		phase: options.phase ?? 1,
 		phaseName: options.phaseName,
 		researching: [...(options.researching ?? [])],
-		hasPotentialBase: options.hasPotentialBase ?? true
+		hasPotentialBase: options.hasPotentialBase ?? true,
 	};
 	const territory = options.territory ?? new Map<string, number>();
 	const blinking = options.blinking ?? new Map<string, boolean>();
@@ -203,8 +204,10 @@ export function makeWorld(options: WorldOptions = {}): World
 
 	const collections: World["collections"] = { registered: [] };
 	const sharedAI = fake<CommonSharedScript>({
-		registerUpdatingEntityCollection: (collection: CommonEntityCollection) => collections.registered.push(collection),
-		removeUpdatingEntityCollection: (collection: CommonEntityCollection) => {
+		registerUpdatingEntityCollection: (collection: CommonEntityCollection) =>
+			collections.registered.push(collection),
+		removeUpdatingEntityCollection: (collection: CommonEntityCollection) =>
+		{
 			const index = collections.registered.indexOf(collection);
 			if (index !== -1)
 				collections.registered.splice(index, 1);
@@ -213,11 +216,10 @@ export function makeWorld(options: WorldOptions = {}): World
 		// (the enemy) and skips our own player 1. Each row carries the per-player
 		// diplomacy the engine fills (PlayerManager): a player is always its own
 		// ally, nobody else by default.
-		playersData: [
-			{ "state": "active", "isAlly": [true, false, false, false] },
-			{ "state": "active", "isAlly": [false, true, false, false] },
-			{ "state": "active", "isAlly": [false, false, true, false] }
-		]
+		playersData: [{ "state": "active", "isAlly": [true, false, false, false] }, {
+			"state": "active",
+			"isAlly": [false, true, false, false],
+		}, { "state": "active", "isAlly": [false, false, true, false] }],
 	});
 	const collect = (items: Iterable<CommonEntity> = [], filters?: CommonEntityFilter[]) =>
 		new EntityCollection(sharedAI, mapOf(items), filters);
@@ -238,10 +240,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		queues,
 		queueManager: new QueueManager(config, queues),
 		Config: config,
-		accessibility: {
-			getAccessValue: accessOf,
-			regionSize: { 2: 100, 3: 400 }
-		}
+		accessibility: { getAccessValue: accessOf, regionSize: { 2: 100, 3: 400 } },
 	});
 
 	const world: World = {
@@ -281,18 +280,23 @@ export function makeWorld(options: WorldOptions = {}): World
 			// a destroyed entity leaves every entity collection that follows the world
 			const gone = ents.get(id);
 			if (gone)
+			{
 				for (const collection of collections.registered)
 					collection.removeEnt(gone);
+			}
 			ents.delete(id);
 			for (const list of [units, structures])
 				for (let i = list.length - 1; i >= 0; --i)
 					if (list[i].id() === id)
 						list.splice(i, 1);
-		}
+		},
 	};
 
 	const HQ = {
-		get geography() { return HQ; },
+		get geography()
+		{
+			return HQ;
+		},
 		baseManagers: () => bases,
 		navalMap: knobs.navalMap,
 		canBuildUnits: knobs.canBuildUnits,
@@ -300,12 +304,26 @@ export function makeWorld(options: WorldOptions = {}): World
 		getSeaBetweenIndices: () => knobs.sea,
 		navalManager: {
 			// the fleet per sea: none on sea 4
-			fleets: new Map([[4, { "ships": collect(), "transports": collect(), "warShips": collect(), "fishers": collect() }]]),
-			fleet(this: { fleets: Map<number, unknown> }, sea: number) { return this.fleets.get(sea); },
-			setMinimalTransportShips: (_gs: CommonGameState, sea: number, needed: number) => minimalShipCalls.push([sea, needed]),
-			requireTransport: (_gs: CommonGameState, ent: CommonEntity, from: number, to: number, toPos: [number, number] | undefined) =>
-				transportCalls.push([ent, from, to, toPos]),
-			getPlan: () => undefined
+			fleets: new Map([[4, {
+				"ships": collect(),
+				"transports": collect(),
+				"warShips": collect(),
+				"fishers": collect(),
+			}]]),
+			fleet(this: { fleets: Map<number, unknown> }, sea: number)
+			{
+				return this.fleets.get(sea);
+			},
+			setMinimalTransportShips: (_gs: CommonGameState, sea: number, needed: number) =>
+				minimalShipCalls.push([sea, needed]),
+			requireTransport: (
+				_gs: CommonGameState,
+				ent: CommonEntity,
+				from: number,
+				to: number,
+				toPos: [number, number] | undefined,
+			) => transportCalls.push([ent, from, to, toPos]),
+			getPlan: () => undefined,
 		},
 		// the houses have room (AttackPlan.cannotGrow reads it)
 		buildManager: { isUnbuildable: () => false },
@@ -326,11 +344,15 @@ export function makeWorld(options: WorldOptions = {}): World
 			splitLocalFights: (_gs: CommonGameState, plan: { name: number }, targetLand: number | undefined) =>
 				leavingPlans.push([plan.name, targetLand]),
 			// the lands named in enemyLands, each with the world's enemies standing on it
-			enemiesByLand: () => new Map([...enemyLands].map(land => [land, [...ents.values()].filter(ent =>
-			{
-				const pos = ent.position();
-				return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
-			})]))
+			enemiesByLand: () =>
+				new Map([...enemyLands].map(land => [
+					land,
+					[...ents.values()].filter(ent =>
+					{
+						const pos = ent.position();
+						return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
+					}),
+				])),
 		},
 		defenseManager: {
 			targetList: [],
@@ -340,7 +362,7 @@ export function makeWorld(options: WorldOptions = {}): World
 			garrisonUnitsInside: (_gs: CommonGameState, target: CommonEntity, data: Record<string, unknown>) =>
 			{
 				decayGarrisonCalls.push([target, data]);
-			}
+			},
 		},
 		garrisonManager: {
 			// like the engine: garrisoning fills the target's slots
@@ -350,34 +372,44 @@ export function makeWorld(options: WorldOptions = {}): World
 				garrisonCounts.set(target.id(), (garrisonCounts.get(target.id()) ?? 0) + 1);
 			},
 			numberOfGarrisonedSlots: (target: CommonEntity) => garrisonCounts.get(target.id()) ?? 0,
-			allowMelee: () => undefined
+			allowMelee: () => undefined,
 		},
 		victoryManager: {
 			criticalEnts: new Map(),
 			targetedGaiaRelics,
 			isRelicRaided: (relicId: number) => targetedGaiaRelics.has(relicId),
-			planRelicRaid: (relicId: number, plan: number) => { targetedGaiaRelics.set(relicId, [plan]); },
+			planRelicRaid: (relicId: number, plan: number) =>
+			{
+				targetedGaiaRelics.set(relicId, [plan]);
+			},
 			tryCaptureGaiaRelic: false,
-			resetCaptureGaiaRelic: (gs: CommonGameState) => relicResets.push(gs)
+			resetCaptureGaiaRelic: (gs: CommonGameState) => relicResets.push(gs),
 		},
 		territoryMap: {
 			getOwner: (pos: [number, number]) => territory.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? PLAYER,
-			isBlinking: (pos: [number, number]) => blinking.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? false
+			isBlinking: (pos: [number, number]) => blinking.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? false,
 		},
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
 		capturableTargets: new Map(),
-		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
+		getBaseByID: (id: number) => bases.find(b => b.ID === id),
 		isDefendable: () => false,
 		hasActiveBase: () => true,
-		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) => emergencyCalls.push([gs, positions])
+		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>
+			emergencyCalls.push([gs, positions]),
 	};
 	// the stub HQ is its own geography: a test that sets `HQ.navalMap` or
 	// `HQ.territoryMap` sets what the port reads through `HQ.geography`
 	ai.HQ = fake<Headquarters>(HQ);
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
-	const anchor = makeEntity({ id: 1000, owner: PLAYER, position: [10, 10], classes: ["Structure", "CivCentre"], templateName: "structures/athen_civil_centre" });
+	const anchor = makeEntity({
+		id: 1000,
+		owner: PLAYER,
+		position: [10, 10],
+		classes: ["Structure", "CivCentre"],
+		templateName: "structures/athen_civil_centre",
+	});
 	world.addEntity(anchor);
 	bases.push({ "ID": 1, anchor, accessIndex: 2 });
 
@@ -388,11 +420,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		hasSharedDropsites: false,
 		isAlly: [false, true, false, false],
 		isMutualAlly: [false, true, false, false],
-		isEnemy: [true, false, true, true]
+		isEnemy: [true, false, true, true],
 	};
 	const isEnemy = (owner: number) => playerData.isEnemy[owner];
 	const ownedBy = (owner: number | undefined) => (ent: CommonEntity) => owner === undefined || ent.owner() === owner;
-	const trainingFacilities = () => structures.filter((s) => s.trainingQueue());
+	const trainingFacilities = () => structures.filter(s => s.trainingQueue());
 
 	world.gameState = fake<CommonGameState>({
 		ai,
@@ -411,8 +443,10 @@ export function makeWorld(options: WorldOptions = {}): World
 		// the facilities able to train a given template, as the real
 		// GameState.findTrainers does: it runs over the training-facilities
 		// collection (see below), so membership is a truthy trainingQueue
-		findTrainers: (template: string) => collect(trainingFacilities().filter((s) =>
-			(s.trainableEntities("athen") ?? []).includes(templateName(template)))),
+		findTrainers: (template: string) =>
+			collect(
+				trainingFacilities().filter(s => (s.trainableEntities("athen") ?? []).includes(templateName(template))),
+			),
 		getNumPlayerEnemies: () => knobs.enemyPlayer === undefined ? 0 : 1,
 		getEntityById: (id: number | string) => ents.get(+id),
 		getEntities: (owner?: number) => collect([...ents.values()].filter(ownedBy(owner))),
@@ -423,17 +457,18 @@ export function makeWorld(options: WorldOptions = {}): World
 		getOwnEntities: () => collect([...units, ...structures.filter(ownedBy(PLAYER))]),
 		// as GameState.prototype.getEnemyStructures: with no owner, the
 		// structures of every player the diplomacy row calls an enemy
-		getEnemyStructures: (owner?: number) => collect(structures.filter((s) =>
-			owner === undefined ? isEnemy(s.owner()) : s.owner() === owner)),
+		getEnemyStructures: (owner?: number) =>
+			collect(structures.filter(s => owner === undefined ? isEnemy(s.owner()) : s.owner() === owner)),
 		// every entity of a player the diplomacy row calls an enemy, as the
 		// common-api byOwners(getEnemies()) does
-		getEnemyEntities: () => collect([...ents.values()].filter((e) => isEnemy(e.owner()))),
+		getEnemyEntities: () => collect([...ents.values()].filter(e => isEnemy(e.owner()))),
 		getOwnStructures: () => collect(structures.filter(ownedBy(PLAYER)), [byClass("Structure")]),
-		getEnemyUnits: (owner?: number) => collect(units.filter((u) =>
-			owner === undefined ? u.owner() !== PLAYER : u.owner() === owner)),
+		getEnemyUnits: (owner?: number) =>
+			collect(units.filter(u => owner === undefined ? u.owner() !== PLAYER : u.owner() === owner)),
 		getStructures: () => collect(structures),
-		getOwnEntitiesByRole: (role: string | undefined) => collect(units.filter((u) => u.getMetadata(PLAYER, "role") == role)),
-		getOwnEntitiesByClass: (cls: string) => collect(structures.filter((s) => s.hasClass(cls))),
+		getOwnEntitiesByRole: (role: string | undefined) =>
+			collect(units.filter(u => u.getMetadata(PLAYER, "role") == role)),
+		getOwnEntitiesByClass: (cls: string) => collect(structures.filter(s => s.hasClass(cls))),
 		// as GameState.prototype.getOwnTrainingFacilities: facilities are the
 		// own entities a truthy trainingQueue answers for (filters.byTrainingQueue),
 		// not a class test
@@ -455,8 +490,8 @@ export function makeWorld(options: WorldOptions = {}): World
 		isEntityEnemy: (ent: CommonEntity) => isEnemy(ent.owner()),
 		isEntityExclusiveAlly: (ent: CommonEntity) => playerData.isAlly[ent.owner()] && ent.owner() !== PLAYER,
 		/** structures of everyone we and they consider an ally, as the game defines ally collections */
-		getAllyStructures: () => collect(structures.filter((s) => playerData.isMutualAlly[s.owner()])),
-		getPassabilityClassMask: () => 0
+		getAllyStructures: () => collect(structures.filter(s => playerData.isMutualAlly[s.owner()])),
+		getPassabilityClassMask: () => 0,
 	});
 	return world;
 }

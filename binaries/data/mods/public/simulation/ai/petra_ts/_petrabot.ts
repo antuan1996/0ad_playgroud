@@ -1,17 +1,14 @@
 import { BaseAI } from "simulation/ai/common-api/baseAI.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
-import { Config, type SerializedConfig } from "./world/config.ts";
+import { seconds, secondsOf } from "./adapter/brands.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
-import { analyseMap } from "./world/geography.ts";
-import { QueueManager, type SerializedQueueManager, configuredQueues } from "./execution/queueManager.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
-import { seconds, secondsOf } from "./adapter/brands.ts";
+import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
+import { Config, type SerializedConfig } from "./world/config.ts";
+import { analyseMap } from "./world/geography.ts";
 
-type PetraBotSettings = Record<string, unknown> & {
-	difficulty: number;
-	behavior?: string;
-};
+type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior?: string };
 
 /**
  * The version of what the bot saves (constraint 4, PLAN.md §1). Raise it with
@@ -48,19 +45,19 @@ type PetraBotSavedData = {
 };
 
 /** Engine events come as a fixed set of named buckets, and EngineAIEvents has no index
-	 *  signature: the bot walks its buckets explicitly instead of iterating over keys.
-	 *  The helpers below are generic over a bucket's element type, which keeps every
-	 *  bucket's concrete event type, so no cast is needed anywhere.
-	 *
-	 *  VESTIGIAL - kept only to stay 1:1 with the current JS reference. It used to convert
-	 *  the "entityObj" property of each event between its saved form (raw entity data) and
-	 *  its live form (an API3.Entity proxy), which the engine cannot rebuild on load; a fresh
-	 *  object was needed to swap that property in. entityObj was removed from events upstream
-	 *  in 2025 ("Remove usage of entityObj from Destroy event", "Remove remanents of entityObj"),
-	 *  which deleted the conversion and left this loop behind. It now has no observable effect:
-	 *  the engine deserializer already rebuilds plain objects (JS_NewPlainObject in
-	 *  StdDeserializer.cpp), and nothing in the bot mutates an event or keeps a reference to
-	 *  one across turns. */
+ *  signature: the bot walks its buckets explicitly instead of iterating over keys.
+ *  The helpers below are generic over a bucket's element type, which keeps every
+ *  bucket's concrete event type, so no cast is needed anywhere.
+ *
+ *  VESTIGIAL - kept only to stay 1:1 with the current JS reference. It used to convert
+ *  the "entityObj" property of each event between its saved form (raw entity data) and
+ *  its live form (an API3.Entity proxy), which the engine cannot rebuild on load; a fresh
+ *  object was needed to swap that property in. entityObj was removed from events upstream
+ *  in 2025 ("Remove usage of entityObj from Destroy event", "Remove remanents of entityObj"),
+ *  which deleted the conversion and left this loop behind. It now has no observable effect:
+ *  the engine deserializer already rebuilds plain objects (JS_NewPlainObject in
+ *  StdDeserializer.cpp), and nothing in the bot mutates an event or keeps a reference to
+ *  one across turns. */
 function detachEvents<T>(events: Array<T>): void
 {
 	for (let i = 0; i < events.length; ++i)
@@ -112,7 +109,7 @@ function createEmptyEvents(): HeadquartersEvents
 		AttackRequest: [],
 		CeasefireEnded: [],
 		DiplomacyRequest: [],
-		TributeRequest: []
+		TributeRequest: [],
 	};
 }
 
@@ -143,7 +140,7 @@ function detachSavedEvents(events: HeadquartersEvents): void
 }
 
 /** Appends the events of the shared script to the saved ones.
-	 *  AIMetadata is not used inside petra, so it is not merged. */
+ *  AIMetadata is not used inside petra, so it is not merged. */
 function mergeSharedEvents(saved: HeadquartersEvents, shared: HeadquartersEvents): void
 {
 	saved.Create = saved.Create.concat(shared.Create);
@@ -192,7 +189,7 @@ function copySavedEvents(events: HeadquartersEvents): HeadquartersEvents
 		"AttackRequest": detachEventsCopy(events.AttackRequest),
 		"CeasefireEnded": detachEventsCopy(events.CeasefireEnded),
 		"DiplomacyRequest": detachEventsCopy(events.DiplomacyRequest),
-		"TributeRequest": detachEventsCopy(events.TributeRequest)
+		"TributeRequest": detachEventsCopy(events.TributeRequest),
 	};
 }
 
@@ -223,10 +220,10 @@ export class PetraBot extends BaseAI
 		this.elapsedTime = seconds(0);
 
 		this.uniqueIDs = {
-			"armies": 1,	// starts at 1 to allow easier tests on armies ID existence
-			"bases": 1,	// base manager ID starts at one because "0" means "no base" on the map
-			"plans": 0,	// training/building/research plans
-			"transports": 1	// transport plans start at 1 because 0 might be used as none
+			"armies": 1, // starts at 1 to allow easier tests on armies ID existence
+			"bases": 1, // base manager ID starts at one because "0" means "no base" on the map
+			"plans": 0, // training/building/research plans
+			"transports": 1, // transport plans start at 1 because 0 might be used as none
 		};
 
 		this.Config = new Config(settings.difficulty, settings.behavior);
@@ -292,7 +289,7 @@ export class PetraBot extends BaseAI
 		this.elapsedTime = secondsOf(this.gameState.getTimeElapsed());
 		if (!this.playedTurn || (this.turn + this.player) % 8 === 5)
 		{
-			Engine.ProfileStart("PetraBot bot (player " + this.player +")");
+			Engine.ProfileStart("PetraBot bot (player " + this.player + ")");
 
 			this.playedTurn++;
 
@@ -339,7 +336,7 @@ export class PetraBot extends BaseAI
 			"savedEvents": copySavedEvents(this.savedEvents),
 			"config": this.Config.Serialize(),
 			"queueManager": this.queueManager.Serialize(),
-			"HQ": this.HQ?.Serialize()
+			"HQ": this.HQ?.Serialize(),
 		};
 	}
 
@@ -349,8 +346,10 @@ export class PetraBot extends BaseAI
 		// from another bot: neither is a shape this code knows.
 		if (!isCurrentSave(data))
 		{
-			aiWarn("Petra: this save is of version " + String(savedVersion(data)) + " and the bot reads version " +
-				SAVE_VERSION + ": it starts afresh from the game as it stands");
+			aiWarn(
+				"Petra: this save is of version " + String(savedVersion(data)) + " and the bot reads version " +
+					SAVE_VERSION + ": it starts afresh from the game as it stands",
+			);
 			// the old save's notes on our units name bases and plans that no longer exist
 			sharedScript._entityMetadata[this.player] = {};
 			return;

@@ -18,13 +18,15 @@ import { Config } from "../world/config.ts";
 const PLAYER_ENTITY = 7;
 
 /** the game settings setConfig reads */
-function game(options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[] } = {}): CommonGameState
+function game(
+	options: { maxPop?: number; teamLocked?: boolean; alliedVictory?: boolean; victory?: string[] } = {},
+): CommonGameState
 {
 	return fake<CommonGameState>({
 		"playerData": { "teamLocked": options.teamLocked ?? false, "entity": PLAYER_ENTITY },
 		"getAlliedVictory": () => options.alliedVictory ?? false,
 		"getPopulationMax": () => options.maxPop ?? 300,
-		"getVictoryConditions": () => new Set(options.victory ?? ["conquest"])
+		"getVictoryConditions": () => new Set(options.victory ?? ["conquest"]),
 	});
 }
 
@@ -43,8 +45,10 @@ beforeEach(() =>
 		"QueryInterface": (entity: number, iid: number) =>
 		{
 			assert.deepEqual([entity, iid], [1, 61]);
-			return { "AddModifiers": (name: string, mods: never, target: number) => modifiers.push([name, mods, target]) };
-		}
+			return {
+				"AddModifiers": (name: string, mods: never, target: number) => modifiers.push([name, mods, target]),
+			};
+		},
 	});
 });
 
@@ -169,7 +173,11 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.workPhase4, 150);
 		assert.equal(config.Economy.targetNumTraders, 6);
 		assert.deepEqual(config.emergencyValues, { "population": 0.5, "structures": 0.5, "roots": 0.35 });
-		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 1.25, "Trader/GainMultiplier": 1.25, "Cost/BuildTime": 1 });
+		assert.deepEqual(bonus(), {
+			"ResourceGatherer/BaseSpeed": 1.25,
+			"Trader/GainMultiplier": 1.25,
+			"Cost/BuildTime": 1,
+		});
 	});
 
 	it("a big cap: workers are capped at 120, but never fewer than the town phase wants", () =>
@@ -189,7 +197,11 @@ describe("config: settings by difficulty", () =>
 		config.setConfig(game());
 		assert.equal(config.Military.numSentryTowers, 3);
 		assert.deepEqual(config.emergencyValues, { "population": 0.35, "structures": 0.35, "roots": 0.2 });
-		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 1.56, "Trader/GainMultiplier": 1.56, "Cost/BuildTime": 1 });
+		assert.deepEqual(bonus(), {
+			"ResourceGatherer/BaseSpeed": 1.56,
+			"Trader/GainMultiplier": 1.56,
+			"Cost/BuildTime": 1,
+		});
 	});
 
 	it("easy, small population cap: everything scaled down to the cap", () =>
@@ -203,16 +215,20 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.provisionFields, 1);
 		// a defensive bot still builds its tower at easy
 		assert.equal(config.Military.numSentryTowers, 1);
-		assert.equal(config.Military.popForBarracks1, 12);			// floor(25 * 0.49) = 12
-		assert.equal(config.Military.popForBarracks2, 45);			// raised to the floor of 45
-		assert.equal(config.Military.popForForge, 32);				// floor(65 * 0.495)
-		assert.equal(config.Economy.popPhase2, 74);					// floor(150 * 0.49)
+		assert.equal(config.Military.popForBarracks1, 12); // floor(25 * 0.49) = 12
+		assert.equal(config.Military.popForBarracks2, 45); // raised to the floor of 45
+		assert.equal(config.Military.popForForge, 32); // floor(65 * 0.495)
+		assert.equal(config.Economy.popPhase2, 74); // floor(150 * 0.49)
 		// min(60, half the cap) = 60 workers, raised to the town phase's 74
 		assert.equal(config.Economy.targetNumWorkers, 74);
-		assert.equal(config.Economy.workPhase3, 74);				// floor(180 * 0.495) = 89, capped by the workers
+		assert.equal(config.Economy.workPhase3, 74); // floor(180 * 0.495) = 89, capped by the workers
 		assert.equal(config.Economy.workPhase4, 74);
 		assert.equal(config.Economy.targetNumTraders, Math.round(4 * scaling));
-		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 0.75, "Trader/GainMultiplier": 0.75, "Cost/BuildTime": 1.1 });
+		assert.deepEqual(bonus(), {
+			"ResourceGatherer/BaseSpeed": 0.75,
+			"Trader/GainMultiplier": 0.75,
+			"Cost/BuildTime": 1.1,
+		});
 	});
 
 	it("very easy: never leaves the town phase, and an undefended bot builds no tower", () =>
@@ -228,9 +244,13 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.popPhase2, 75);
 		assert.equal(config.Economy.targetNumWorkers, 75);
 		assert.equal(config.Economy.workPhase3, Infinity);
-		assert.equal(config.Economy.targetNumTraders, 2);			// round(3 * 0.5)
+		assert.equal(config.Economy.targetNumTraders, 2); // round(3 * 0.5)
 		assert.deepEqual(config.emergencyValues, { "population": 0.8, "structures": 0.8, "roots": 0.8 });
-		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 0.56, "Trader/GainMultiplier": 0.56, "Cost/BuildTime": 1.25 });
+		assert.deepEqual(bonus(), {
+			"ResourceGatherer/BaseSpeed": 0.56,
+			"Trader/GainMultiplier": 0.56,
+			"Cost/BuildTime": 1.25,
+		});
 	});
 
 	it("very easy and defensive keeps one tower", () =>
@@ -248,7 +268,11 @@ describe("config: settings by difficulty", () =>
 		assert.equal(config.Economy.popPhase2, 0);
 		assert.equal(config.Economy.targetNumWorkers, 1);
 		assert.equal(config.Economy.workPhase3, Infinity);
-		assert.deepEqual(bonus(), { "ResourceGatherer/BaseSpeed": 0.42, "Trader/GainMultiplier": 0.42, "Cost/BuildTime": 1.4 });
+		assert.deepEqual(bonus(), {
+			"ResourceGatherer/BaseSpeed": 0.42,
+			"Trader/GainMultiplier": 0.42,
+			"Cost/BuildTime": 1.4,
+		});
 	});
 
 	it("at debug level 2 the drawn personality is written to the log", () =>
@@ -256,11 +280,11 @@ describe("config: settings by difficulty", () =>
 		const config = new Config(3, "balanced");
 		config.debug = 2;
 		config.setConfig(game());
-		assert.ok(logs.some((line) => line.includes("Petra bot: personality")));
+		assert.ok(logs.some(line => line.includes("Petra bot: personality")));
 
 		resetRecorder();
 		const quiet = new Config(3, "balanced");
 		quiet.setConfig(game());
-		assert.ok(!logs.some((line) => line.includes("Petra bot: personality")));
+		assert.ok(!logs.some(line => line.includes("Petra bot: personality")));
 	});
 });

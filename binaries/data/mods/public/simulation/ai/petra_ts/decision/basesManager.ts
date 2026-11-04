@@ -2,20 +2,18 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
-import { BaseManager, type SerializedBaseManager, getBestBase } from "./baseManager.ts";
-import type { Config } from "../world/config.ts";
-import { getLandAccess } from
-	"../adapter/entityExtend.ts";
-import { Worker } from "../execution/worker.ts";
 import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
-import { requireStateName } from "../adapter/unitState.ts";
+import { getLandAccess } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced, isStructure } from "../adapter/placed.ts";
+import { requireStateName } from "../adapter/unitState.ts";
+import { Worker } from "../execution/worker.ts";
+import type { Config } from "../world/config.ts";
+import { BaseManager, getBestBase, type SerializedBaseManager } from "./baseManager.ts";
 
-export interface SerializedBasesManager {
-	properties: {
-		currentBase: number;
-	};
+export interface SerializedBasesManager
+{
+	properties: { currentBase: number };
 	noBase: SerializedBaseManager;
 	baseManagers: SerializedBaseManager[];
 }
@@ -111,7 +109,12 @@ export class BasesManager
 	 * Otherwise create a new one.
 	 * TODO when buildings, criteria should depend on distance
 	 */
-	createBase(gameState: CommonGameState, ent: CommonEntity, type: string = BaseManager.STATE_WITH_ANCHOR, deserialize: boolean = false): BaseManager
+	createBase(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		type: string = BaseManager.STATE_WITH_ANCHOR,
+		deserialize: boolean = false,
+	): BaseManager
 	{
 		const access = getLandAccess(gameState, ent);
 		let newbase;
@@ -143,9 +146,12 @@ export class BasesManager
 		{
 			aiWarn(" ----------------------------------------------------------");
 			aiWarn(" BasesManager createBase entrance avec access " + access + " and type " + type);
-			aiWarn(" with access " + uneval(this.baseManagers.map((base: BaseManager): number | undefined => base.accessIndex)) +
-				  " and base nbr " + uneval(this.baseManagers.map((base: BaseManager): number => base.ID)) +
-				  " and anchor " + uneval(this.baseManagers.map((base: BaseManager): boolean => !!base.anchor)));
+			aiWarn(
+				" with access " + uneval(this.baseManagers.map((base: BaseManager): number | undefined =>
+					base.accessIndex
+				)) + " and base nbr " + uneval(this.baseManagers.map((base: BaseManager): number => base.ID)) +
+					" and anchor " + uneval(this.baseManagers.map((base: BaseManager): boolean => !!base.anchor)),
+			);
 		}
 
 		if (!newbase)
@@ -212,16 +218,16 @@ export class BasesManager
 			if (!ent || ent.owner() !== PlayerID || ent.foundationProgress() === undefined)
 				continue;
 
-			if (ent.getMetadata(PlayerID, "base") === NEW_BASE)	// Standard base around a cc
-			{
+			if (ent.getMetadata(PlayerID, "base") === NEW_BASE)
+			{ // Standard base around a cc
 				// Okay so let's try to create a new base around this.
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_UNCONSTRUCTED);
 				// Let's get a few units from other bases there to build this. (Soldiers
 				// first on another island lost the island games: FINDINGS §39.)
 				this.sendBuilders(gameState, newbase, ent, 10);
 			}
-			else if (ent.getMetadata(PlayerID, "base") === NEW_ANCHORLESS_BASE)	// anchorless base around a dock
-			{
+			else if (ent.getMetadata(PlayerID, "base") === NEW_ANCHORLESS_BASE)
+			{ // anchorless base around a dock
 				const newbase = this.createBase(gameState, ent, BaseManager.STATE_ANCHORLESS);
 				// Let's get a few units from other bases there to build this.
 				this.sendBuilders(gameState, newbase, ent, 4);
@@ -230,12 +236,17 @@ export class BasesManager
 	}
 
 	/** Takes up to `count` workers from the other bases to build a new base's foundation. */
-	private sendBuilders(gameState: CommonGameState, newbase: BaseManager, foundation: CommonEntity, count: number): void
+	private sendBuilders(
+		gameState: CommonGameState,
+		newbase: BaseManager,
+		foundation: CommonEntity,
+		count: number,
+	): void
 	{
 		const builders = this.bulkPickWorkers(gameState, newbase, count);
 		if (builders === false)
 			return;
-		builders.forEach((worker) =>
+		builders.forEach(worker =>
 		{
 			worker.setMetadata(PlayerID, "base", newbase.ID);
 			worker.setMetadata(PlayerID, "subrole", Worker.SUBROLE_BUILDER);
@@ -249,7 +260,7 @@ export class BasesManager
 		let addBase = false;
 		for (const evt of events.ConstructionFinished)
 		{
-			if (evt.newentity === evt.entity)  // repaired building
+			if (evt.newentity === evt.entity) // repaired building
 				continue;
 			const ent = gameState.getEntityById(evt.newentity);
 			if (!ent || ent.owner() !== PlayerID)
@@ -323,10 +334,14 @@ export class BasesManager
 				bestBase.assignEntity(gameState, ent);
 			return false;
 		}
-		if (ent.hasClass("CivCentre"))   // build a new base around it
-		{
+		if (ent.hasClass("CivCentre"))
+		{ // build a new base around it
 			const built = ent.foundationProgress() === undefined;
-			const newbase = this.createBase(gameState, ent, built ? BaseManager.STATE_CAPTURED : BaseManager.STATE_UNCONSTRUCTED);
+			const newbase = this.createBase(
+				gameState,
+				ent,
+				built ? BaseManager.STATE_CAPTURED : BaseManager.STATE_UNCONSTRUCTED,
+			);
 			newbase.assignEntity(gameState, ent);
 			return built;
 		}
@@ -461,7 +476,11 @@ export class BasesManager
 	/**
 	 * @return {Object} - Resources (estimation) still gatherable in our territory.
 	 */
-	getTotalResourceLevel(gameState: CommonGameState, resources: string[] = Resources.GetCodes(), proximity: string[] = ["nearby", "medium"]): Record<string, number>
+	getTotalResourceLevel(
+		gameState: CommonGameState,
+		resources: string[] = Resources.GetCodes(),
+		proximity: string[] = ["nearby", "medium"],
+	): Record<string, number>
 	{
 		const total: Record<string, number> = {};
 		for (const res of resources)
@@ -579,8 +598,8 @@ export class BasesManager
 
 	/**
 	 * Updates the number of active and potential bases.
-	 *		.potential {number} - Bases that may or may not still be a foundation.
-	 *		.active {number} - Usable bases.
+	 * 		.potential {number} - Bases that may or may not still be a foundation.
+	 * 		.active {number} - Usable bases.
 	 */
 	updateBaseCache(): void
 	{
@@ -624,7 +643,8 @@ export class BasesManager
 		return this.baseManagers.every((base: BaseManager): boolean =>
 			!base.dropsiteSupplies[resource].nearby.length &&
 			!base.dropsiteSupplies[resource].medium.length &&
-			!base.dropsiteSupplies[resource].faraway.length);
+			!base.dropsiteSupplies[resource].faraway.length
+		);
 	}
 
 	/**
@@ -640,7 +660,10 @@ export class BasesManager
 				if (aiState.split(".").indexOf("RETURNRESOURCE") === -1)
 					continue;
 				const orders = ordersOf(worker);
-				if (orders.length < 2 || !orders[1].target || orders[1].target !== worker.getMetadata(PlayerID, "supply"))
+				if (
+					orders.length < 2 || !orders[1].target ||
+					orders[1].target !== worker.getMetadata(PlayerID, "supply")
+				)
 					continue;
 				this.AddTCGatherer(orders[1].target);
 			}
@@ -655,12 +678,14 @@ export class BasesManager
 		const bestbase = this.assignToBase(gameState, ent, territoryIndex);
 		// now assign entities garrisoned inside this entity
 		if (ent.isGarrisonHolder() && ent.garrisoned().length)
+		{
 			for (const id of ent.garrisoned())
 			{
 				const garrisoned = gameState.getEntityById(id);
 				if (bestbase && garrisoned)
 					bestbase.assignEntity(gameState, garrisoned);
 			}
+		}
 		// and find something useful to do if we already have a base
 		if (isPlaced(ent) && bestbase && bestbase.ID !== this.noBase.ID)
 		{
@@ -674,12 +699,18 @@ export class BasesManager
 	}
 
 	/** Assigns ent to its base, the base of its territory cell, or else the best one; returns that base. */
-	private assignToBase(gameState: CommonGameState, ent: CommonEntity, territoryIndex: CellIndex<"territory">): BaseManager | undefined
+	private assignToBase(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		territoryIndex: CellIndex<"territory">,
+	): BaseManager | undefined
 	{
 		for (const base of this.baseManagers)
 		{
-			if ((!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
-			    base.territoryIndices.indexOf(territoryIndex) === -1)
+			if (
+				(!ent.getMetadata(PlayerID, "base") || ent.getMetadata(PlayerID, "base") !== base.ID) &&
+				base.territoryIndices.indexOf(territoryIndex) === -1
+			)
 				continue;
 			base.assignEntity(gameState, ent);
 			return base;
@@ -741,7 +772,11 @@ export class BasesManager
 	/**
 	 * @return {boolean} - Whether the index was added to a base.
 	 */
-	addTerritoryIndexToBase(gameState: CommonGameState, territoryIndex: CellIndex<"territory">, passabilityMap: CommonPassabilityMap): boolean
+	addTerritoryIndexToBase(
+		gameState: CommonGameState,
+		territoryIndex: CellIndex<"territory">,
+		passabilityMap: CommonPassabilityMap,
+	): boolean
 	{
 		if (this.baseAtIndex(territoryIndex) !== 0)
 			return false;
@@ -760,7 +795,12 @@ export class BasesManager
 			return false;
 		let distmin = Math.min();
 		let baseID;
-		const pos: CommonPosition = worldPos(gameState.ai.HQ.geography.territoryMap.cellSize * (territoryIndex % gameState.ai.HQ.geography.territoryMap.width + 0.5), gameState.ai.HQ.geography.territoryMap.cellSize * (Math.floor(territoryIndex / gameState.ai.HQ.geography.territoryMap.width) + 0.5));
+		const pos: CommonPosition = worldPos(
+			gameState.ai.HQ.geography.territoryMap.cellSize *
+				(territoryIndex % gameState.ai.HQ.geography.territoryMap.width + 0.5),
+			gameState.ai.HQ.geography.territoryMap.cellSize *
+				(Math.floor(territoryIndex / gameState.ai.HQ.geography.territoryMap.width) + 0.5),
+		);
 		for (const base of this.baseManagers)
 		{
 			if (!base.anchor)
@@ -805,19 +845,12 @@ export class BasesManager
 
 	Serialize(): SerializedBasesManager
 	{
-		const properties = {
-			"currentBase": this.currentBase
-		};
+		const properties = { "currentBase": this.currentBase };
 
 		const baseManagers = [];
 		for (const base of this.baseManagers)
 			baseManagers.push(base.Serialize());
 
-		return {
-			"properties": properties,
-			"noBase": this.noBase.Serialize(),
-			"baseManagers": baseManagers
-		};
+		return { "properties": properties, "noBase": this.noBase.Serialize(), "baseManagers": baseManagers };
 	}
-
 }

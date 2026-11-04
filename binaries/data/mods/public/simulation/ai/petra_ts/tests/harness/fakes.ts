@@ -27,7 +27,7 @@ export function fake<T>(value: unknown): T
  */
 export function orders(...data: CommonUnitOrderData[]): CommonUnitOrder[]
 {
-	return data.map((order) => ({ "type": "Order", "data": order }));
+	return data.map(order => ({ "type": "Order", "data": order }));
 }
 
 /**
@@ -38,7 +38,8 @@ export function orders(...data: CommonUnitOrderData[]): CommonUnitOrder[]
  */
 function gathers(classes: readonly string[]): boolean
 {
-	return ["Worker", "CitizenSoldier", "FishingBoat"].some((cls) => classes.includes(cls)) && !classes.includes("Mercenary");
+	return ["Worker", "CitizenSoldier", "FishingBoat"].some(cls => classes.includes(cls)) &&
+		!classes.includes("Mercenary");
 }
 
 /** Method overrides a test supplies on top of the neutral entity defaults. */
@@ -103,11 +104,27 @@ export function withPath(path: Array<{ "x": number; "y": number }> | null, body:
 export function emptyEvents(): EngineAIEvents
 {
 	return {
-		"Create": [], "Destroy": [], "Attacked": [], "ConstructionFinished": [], "DiplomacyChanged": [],
-		"TrainingStarted": [], "TrainingFinished": [], "AIMetadata": [], "PlayerDefeated": [], "EntityRenamed": [],
-		"ValueModification": [], "OwnershipChanged": [], "Garrison": [], "UnGarrison": [], "TerritoriesChanged": [],
-		"TerritoryDecayChanged": [], "TributeExchanged": [], "AttackRequest": [], "CeasefireEnded": [],
-		"DiplomacyRequest": [], "TributeRequest": []
+		"Create": [],
+		"Destroy": [],
+		"Attacked": [],
+		"ConstructionFinished": [],
+		"DiplomacyChanged": [],
+		"TrainingStarted": [],
+		"TrainingFinished": [],
+		"AIMetadata": [],
+		"PlayerDefeated": [],
+		"EntityRenamed": [],
+		"ValueModification": [],
+		"OwnershipChanged": [],
+		"Garrison": [],
+		"UnGarrison": [],
+		"TerritoriesChanged": [],
+		"TerritoryDecayChanged": [],
+		"TributeExchanged": [],
+		"AttackRequest": [],
+		"CeasefireEnded": [],
+		"DiplomacyRequest": [],
+		"TributeRequest": [],
 	};
 }
 
@@ -123,13 +140,17 @@ export function eventsWith(extra: Partial<EngineAIEvents>): EngineAIEvents
  * missing answer quietly returned undefined. Method answers go in `methods`;
  * a test that wants to see a call turns the method into its own recorder.
  */
-export function makeEntity(spec: {
-	id: number;
-	owner: number;
-	position?: [number, number] | undefined;
-	classes?: string[];
-	templateName?: string;
-}, methods: Methods = {}, metadata: Record<string, unknown> = {}): CommonEntity
+export function makeEntity(
+	spec: {
+		id: number;
+		owner: number;
+		position?: [number, number] | undefined;
+		classes?: string[];
+		templateName?: string;
+	},
+	methods: Methods = {},
+	metadata: Record<string, unknown> = {},
+): CommonEntity
 {
 	const classes = [...(spec.classes ?? [])];
 	const store = { metadata };
@@ -143,7 +164,8 @@ export function makeEntity(spec: {
 		hasClass: (cls: string) => classes.includes(cls),
 		hasClasses: (list: string[]) => MatchesClassList(classes, list),
 		getMetadata: (_player: number, key: string) => store.metadata[key],
-		setMetadata: (_player: number, key: string, value: unknown) => {
+		setMetadata: (_player: number, key: string, value: unknown) =>
+		{
 			// Petra clears roles by writing undefined; drop the key so
 			// "no metadata" answers stay truthful.
 			if (value === undefined)
@@ -237,28 +259,30 @@ export function makeEntity(spec: {
 		// a live answer so guard code stays on the game path; a test that wants
 		// a non-attacker overrides it together with attackTypes
 		hasUnitAI: () => true,
-		...methods
+		...methods,
 	};
 
-	return fake<CommonEntity>(new Proxy(store, {
-		get(target, property)
-		{
-			if (typeof property === "symbol")
-				return Reflect.get(target, property);
-			if (property in target)
-				return Reflect.get(target, property);
-			const value = defaults[String(property)];
-			if (value === undefined && !(String(property) in defaults))
-				throw new Error(`fake entity ${spec.id} has no "${String(property)}" — declare it in the test`);
-			return value;
-		},
-		set(target, property, value)
-		{
-			if (typeof property !== "symbol")
-				defaults[String(property)] = value;
-			return true;
-		}
-	}));
+	return fake<CommonEntity>(
+		new Proxy(store, {
+			get(target, property)
+			{
+				if (typeof property === "symbol")
+					return Reflect.get(target, property);
+				if (property in target)
+					return Reflect.get(target, property);
+				const value = defaults[String(property)];
+				if (value === undefined && !(String(property) in defaults))
+					throw new Error(`fake entity ${spec.id} has no "${String(property)}" — declare it in the test`);
+				return value;
+			},
+			set(target, property, value)
+			{
+				if (typeof property !== "symbol")
+					defaults[String(property)] = value;
+				return true;
+			},
+		}),
+	);
 }
 
 /**
@@ -332,7 +356,11 @@ export function makeTemplate(name: string, detail: {
 	const getPaths = detail.getPaths ? { ...detail.getPaths } : {};
 	const available = detail.available ?? true;
 	// a gatherer whose rates the test does not name still has the component
-	const gatherRates = detail.resourceGatherRates ? { ...detail.resourceGatherRates } : gathers(classes) ? {} : undefined;
+	const gatherRates = detail.resourceGatherRates ?
+		{ ...detail.resourceGatherRates } :
+		gathers(classes) ?
+		{} :
+		undefined;
 	// the template walk the `get` method below reads leaves from
 	const getTemplateValue = (path: string): unknown => templateValue(getPaths, path);
 	return fake<CommonTemplate>({
@@ -363,12 +391,15 @@ export function makeTemplate(name: string, detail: {
 		// as common-api template.attackTimes reads PrepareTime and RepeatTime
 		attackTimes: (type: string) =>
 			detail.attackTimes?.[type] ?
-				{ "prepare": detail.attackTimes[type].prepare ?? 0,
-					"repeat": detail.attackTimes[type].repeat ?? 1000 } :
+				{
+					"prepare": detail.attackTimes[type].prepare ?? 0,
+					"repeat": detail.attackTimes[type].repeat ?? 1000,
+				} :
 				undefined,
 		// as common-api template.resistanceStrengths reads Resistance/Entity: the
 		// damage resistances under its Damage key
-		resistanceStrengths: () => detail.resistanceStrengths ? { "Damage": { ...detail.resistanceStrengths } } : undefined,
+		resistanceStrengths: () =>
+			detail.resistanceStrengths ? { "Damage": { ...detail.resistanceStrengths } } : undefined,
 		maxHitpoints: () => detail.maxHitpoints ?? 100,
 		maxGatherers: () => detail.maxGatherers ?? 0,
 		researchTime: detail.researchTime,
@@ -389,7 +420,7 @@ export function makeTemplate(name: string, detail: {
 				return undefined;
 			const territory = getTemplateValue("BuildRestrictions/Territory");
 			return territory === undefined ? undefined : String(territory).split(/\s+/);
-		}
+		},
 	});
 }
 

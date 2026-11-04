@@ -1,7 +1,7 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { worldPos } from "./brands.ts";
-import { attackBonuses, footprintHalves, isStructureTemplate } from "./templateData.ts";
 import { isPlaced } from "./placed.ts";
+import { attackBonuses, footprintHalves, isStructureTemplate } from "./templateData.ts";
 
 /** returns true if this unit should be considered as a siege unit */
 export function isSiegeUnit(ent: CommonEntity): boolean
@@ -17,12 +17,20 @@ export function isFastMoving(ent: CommonEntity): boolean
 }
 
 /** returns some sort of DPS * health factor. If you specify a class, it'll use the modifiers against that class too. */
-export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
-	DamageTypeImportance: Record<string, number>, againstClass?: string): number
+export function getMaxStrength(
+	ent: CommonTemplate,
+	debugLevel: number,
+	DamageTypeImportance: Record<string, number>,
+	againstClass?: string,
+): number
 {
 	let strength = 0;
 	const attackTypes = ent.attackTypes();
-	const weights = { "importance": DamageTypeImportance, "count": Object.keys(DamageTypeImportance).length, debugLevel };
+	const weights = {
+		"importance": DamageTypeImportance,
+		"count": Object.keys(DamageTypeImportance).length,
+		debugLevel,
+	};
 	if (!attackTypes)
 		return strength;
 
@@ -33,8 +41,10 @@ export function getMaxStrength(ent: CommonTemplate, debugLevel: number,
 	const resistanceStrength = ent.resistanceStrengths();
 
 	if (resistanceStrength && resistanceStrength.Damage)
+	{
 		for (const str in resistanceStrength.Damage)
 			strength = addDamageStrength(strength, weights, str, +resistanceStrength.Damage[str], "resistanceStrength");
+	}
 
 	// ToDo: Add support for StatusEffects and Capture.
 
@@ -56,13 +66,20 @@ function addDamageStrength(strength: number, weights: DamageWeights, str: string
 	if (weights.importance[str])
 		return strength + weights.importance[str] * val / weights.count;
 	if (weights.debugLevel > 0)
-		aiWarn("Petra: " + str + " unknown " + what + " in getMaxStrength " +
-			"(please add " + str + "  to config.js).");
+		aiWarn(
+			"Petra: " + str + " unknown " + what + " in getMaxStrength " + "(please add " + str + "  to config.js).",
+		);
 	return strength;
 }
 
 /** strength with an attack type's damage, range and times added */
-function addAttackStrength(strength: number, ent: CommonTemplate, type: string, weights: DamageWeights, againstClass?: string): number
+function addAttackStrength(
+	strength: number,
+	ent: CommonTemplate,
+	type: string,
+	weights: DamageWeights,
+	againstClass?: string,
+): number
 {
 	const attackStrength = ent.attackStrengths(type);
 	for (const str in attackStrength)
@@ -83,14 +100,14 @@ function addAttackStrength(strength: number, ent: CommonTemplate, type: string, 
 		const val = parseFloat(String(attackTimes[str]));
 		switch (str)
 		{
-		case "repeat":
-			strength += val / 100000;
-			break;
-		case "prepare":
-			strength -= val / 100000;
-			break;
-		default:
-			aiWarn("Petra: " + str + " unknown attackTimes in getMaxStrength");
+			case "repeat":
+				strength += val / 100000;
+				break;
+			case "prepare":
+				strength -= val / 100000;
+				break;
+			default:
+				aiWarn("Petra: " + str + " unknown attackTimes in getMaxStrength");
 		}
 	}
 	return strength;
@@ -135,8 +152,7 @@ export function getLandAccess(gameState: CommonGameState, ent: CommonEntity): Ac
 			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < halfDepth; d += 3)
 			{
-				const pos: CommonPosition = worldPos(entPos[0] - d * sina,
-					entPos[1] - d * cosa);
+				const pos: CommonPosition = worldPos(entPos[0] - d * sina, entPos[1] - d * cosa);
 				access = gameState.ai.accessibility.getAccessValue(pos);
 				if (access > 1)
 					break;
@@ -165,8 +181,7 @@ export function getSeaAccess(gameState: CommonGameState, ent: CommonEntity): Sea
 			const sina = Math.sin(entAngle ?? NaN);
 			for (let d = 3; d < 15; d += 3)
 			{
-				const pos: CommonPosition = worldPos(entPos[0] + d * sina,
-					entPos[1] + d * cosa);
+				const pos: CommonPosition = worldPos(entPos[0] + d * sina, entPos[1] + d * cosa);
 				sea = gameState.ai.accessibility.getAccessValue(pos, true);
 				if (sea > 1)
 					break;
@@ -207,7 +222,8 @@ export function requireStructureTemplate(gameState: CommonGameState, type: Templ
 	const template = requireTemplate(gameState, type);
 	if (!isStructureTemplate(template))
 	{
-		const message = "Petra error: template " + type + " has no obstruction or footprint although it is a structure's.";
+		const message = "Petra error: template " + type +
+			" has no obstruction or footprint although it is a structure's.";
 		aiWarn(message);
 		throw new Error(message);
 	}
@@ -264,12 +280,12 @@ export function allowCapture(gameState: CommonGameState, ent: CommonEntity, targ
 		return !target.decaying();
 
 	const antiCapture = antiCaptureOf(gameState, target);
-	const capture = jointCaptureStrength(gameState, ent, target) * (1 / (0.1 + 0.9*target.healthLevel()));
+	const capture = jointCaptureStrength(gameState, ent, target) * (1 / (0.1 + 0.9 * target.healthLevel()));
 	const capturePoints = target.capturePoints();
 	const sumCapturePoints = capturePoints ? capturePoints.reduce((a: number, b: number): number => a + b) : 0;
 	if (target.hasDefensiveFire() && target.isGarrisonHolder() && target.garrisoned())
-		return capture > antiCapture + sumCapturePoints/50;
-	return capture > antiCapture + sumCapturePoints/80;
+		return capture > antiCapture + sumCapturePoints / 50;
+	return capture > antiCapture + sumCapturePoints / 80;
 }
 
 /** How fast target regains its capture points: its regeneration, its garrison's, less its decay. */
@@ -337,7 +353,8 @@ export function returnResources(gameState: CommonGameState, ent: CommonEntity): 
 	let distmin = Math.min();
 	const access = getLandAccess(gameState, ent);
 	const dropsiteCollection = gameState.playerData.hasSharedDropsites ?
-		gameState.getAnyDropsites(resource) : gameState.getOwnDropsites(resource);
+		gameState.getAnyDropsites(resource) :
+		gameState.getOwnDropsites(resource);
 	for (const dropsite of dropsiteCollection.values())
 	{
 		if (!isPlaced(dropsite))
@@ -397,7 +414,10 @@ export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonPlaced
 	if (gameState.ai.HQ.geography.territoryMap.getOwner(ent.position()) !== PlayerID)
 	{
 		const buildTerritories = ent.buildTerritories();
-		if (buildTerritories && (!buildTerritories.length || buildTerritories.length === 1 && buildTerritories[0] === "own"))
+		if (
+			buildTerritories &&
+			(!buildTerritories.length || buildTerritories.length === 1 && buildTerritories[0] === "own")
+		)
 			return true;
 	}
 	return false;
@@ -406,15 +426,19 @@ export function isNotWorthBuilding(gameState: CommonGameState, ent: CommonPlaced
 /**
  * Check if the straight line between the two positions crosses an enemy territory
  */
-export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: CommonPosition, pos2: CommonPosition,
-	step: number = 70): boolean
+export function isLineInsideEnemyTerritory(
+	gameState: CommonGameState,
+	pos1: CommonPosition,
+	pos2: CommonPosition,
+	step: number = 70,
+): boolean
 {
-	const n = Math.floor(Math.sqrt(SquareVectorDistance(pos1, pos2))/step) + 1;
+	const n = Math.floor(Math.sqrt(SquareVectorDistance(pos1, pos2)) / step) + 1;
 	const stepx = (pos2[0] - pos1[0]) / n;
 	const stepy = (pos2[1] - pos1[1]) / n;
 	for (let i = 1; i < n; ++i)
 	{
-		const pos: CommonPosition = worldPos(pos1[0]+i*stepx, pos1[1]+i*stepy);
+		const pos: CommonPosition = worldPos(pos1[0] + i * stepx, pos1[1] + i * stepy);
 		const owner = gameState.ai.HQ.geography.territoryMap.getOwner(pos);
 		if (owner && gameState.isPlayerEnemy(owner))
 			return true;
@@ -422,7 +446,11 @@ export function isLineInsideEnemyTerritory(gameState: CommonGameState, pos1: Com
 	return false;
 }
 
-export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | undefined, water: boolean = false): boolean
+export function gatherTreasure(
+	gameState: CommonGameState,
+	ent: CommonEntity | undefined,
+	water: boolean = false,
+): boolean
 {
 	if (!gameState.ai.HQ.treasures.hasEntities())
 		return false;
@@ -450,8 +478,13 @@ export function gatherTreasure(gameState: CommonGameState, ent: CommonEntity | u
 }
 
 /** The square distance from ent to a treasure it may go for, or undefined. */
-function treasureDistance(gameState: CommonGameState, ent: CommonPlacedEntity, treasure: CommonPlacedEntity,
-	access: number | undefined, water: boolean): number | undefined
+function treasureDistance(
+	gameState: CommonGameState,
+	ent: CommonPlacedEntity,
+	treasure: CommonPlacedEntity,
+	access: number | undefined,
+	water: boolean,
+): number | undefined
 {
 	// let some time for the previous gatherer to reach the treasure before trying again
 	const lastGathered = treasure.getMetadata(PlayerID, "lastGathered");
@@ -474,17 +507,26 @@ export function dumpEntity(ent: CommonEntity | undefined): void
 {
 	if (!ent)
 		return;
-	aiWarn(" >>> id " + ent.id() + " name " + ent.genericName() + " pos " + ent.position() + " state " +
-		ent.unitAIState());
-	aiWarn(" base " + ent.getMetadata(PlayerID, "base") + " >>> role " +
-		ent.getMetadata(PlayerID, "role") + " subrole " + ent.getMetadata(PlayerID, "subrole"));
-	aiWarn("owner " + ent.owner() + " health " + ent.hitpoints() + " healthMax " + ent.maxHitpoints() +
-		" foundationProgress " + ent.foundationProgress());
-	aiWarn(" garrisoning " + ent.getMetadata(PlayerID, "garrisoning") + " garrisonHolder " +
-		ent.getMetadata(PlayerID, "garrisonHolder") + " plan " + ent.getMetadata(PlayerID, "plan") +
-		" transport " + ent.getMetadata(PlayerID, "transport"));
-	aiWarn(" stance " + ent.getStance() + " transporter " + ent.getMetadata(PlayerID, "transporter") +
-		" gather-type " + ent.getMetadata(PlayerID, "gather-type") + " target-foundation " +
-		ent.getMetadata(PlayerID, "target-foundation") + " PartOfArmy " +
-		ent.getMetadata(PlayerID, "PartOfArmy"));
+	aiWarn(
+		" >>> id " + ent.id() + " name " + ent.genericName() + " pos " + ent.position() + " state " + ent.unitAIState(),
+	);
+	aiWarn(
+		" base " + ent.getMetadata(PlayerID, "base") + " >>> role " +
+			ent.getMetadata(PlayerID, "role") + " subrole " + ent.getMetadata(PlayerID, "subrole"),
+	);
+	aiWarn(
+		"owner " + ent.owner() + " health " + ent.hitpoints() + " healthMax " + ent.maxHitpoints() +
+			" foundationProgress " + ent.foundationProgress(),
+	);
+	aiWarn(
+		" garrisoning " + ent.getMetadata(PlayerID, "garrisoning") + " garrisonHolder " +
+			ent.getMetadata(PlayerID, "garrisonHolder") + " plan " + ent.getMetadata(PlayerID, "plan") +
+			" transport " + ent.getMetadata(PlayerID, "transport"),
+	);
+	aiWarn(
+		" stance " + ent.getStance() + " transporter " + ent.getMetadata(PlayerID, "transporter") +
+			" gather-type " + ent.getMetadata(PlayerID, "gather-type") + " target-foundation " +
+			ent.getMetadata(PlayerID, "target-foundation") + " PartOfArmy " +
+			ent.getMetadata(PlayerID, "PartOfArmy"),
+	);
 }

@@ -28,7 +28,11 @@ export interface BaseView
 	/** The base's workers (a live collection the base keeps up to date). */
 	readonly workers: CommonEntityCollection;
 	/** Where a dropsite for `resource` of this template would serve the base best (a search; it changes nothing). */
-	findBestDropsiteLocation(gameState: CommonGameState, resource: string, templateName: TemplateName): { quality: number; pos: CommonPosition };
+	findBestDropsiteLocation(
+		gameState: CommonGameState,
+		resource: string,
+		templateName: TemplateName,
+	): { quality: number; pos: CommonPosition };
 }
 
 /** Booking a supply for a gatherer this turn, so the next one counts it as taken. */

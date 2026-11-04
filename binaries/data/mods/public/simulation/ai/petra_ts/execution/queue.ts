@@ -1,21 +1,20 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
+import { samePlanType, type PlanStart } from "./queueplan.ts";
 import { ConstructionPlan } from "./queueplanBuilding.ts";
 import { ResearchPlan } from "./queueplanResearch.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
-import { type PlanStart, samePlanType } from "./queueplan.ts";
 
-export type PlanSerialize = ReturnType<ConstructionPlan["Serialize"]> | ReturnType<ResearchPlan["Serialize"]> | ReturnType<TrainingPlan["Serialize"]>;
+export type PlanSerialize =
+	| ReturnType<ConstructionPlan["Serialize"]>
+	| ReturnType<ResearchPlan["Serialize"]>
+	| ReturnType<TrainingPlan["Serialize"]>;
 
 /**
  * Holds a list of wanted plans to train or construct
  */
 /** What a queue saves: its plans, and whether it is paused or switched */
-export type SerializedQueue = {
-	plans: Array<PlanSerialize>;
-	paused: boolean;
-	switched: number;
-};
+export type SerializedQueue = { plans: Array<PlanSerialize>; paused: boolean; switched: number };
 
 export class Queue
 {
@@ -41,8 +40,10 @@ export class Queue
 	{
 		for (const plan of this.plans)
 		{
-			if (newPlan.category === "unit" && samePlanType(plan, newPlan) &&
-				plan.number + newPlan.number <= plan.maxMerge)
+			if (
+				newPlan.category === "unit" && samePlanType(plan, newPlan) &&
+				plan.number + newPlan.number <= plan.maxMerge
+			)
 			{
 				plan.addItem(newPlan.number);
 				return;
@@ -63,7 +64,10 @@ export class Queue
 				return;
 			this.plans.shift();
 			if (plan.queueToReset)
-				gameState.ai.queueManager.changePriority(plan.queueToReset, gameState.ai.Config.priorities[plan.queueToReset]);
+				gameState.ai.queueManager.changePriority(
+					plan.queueToReset,
+					gameState.ai.Config.priorities[plan.queueToReset],
+				);
 		}
 	}
 
@@ -156,11 +160,7 @@ export class Queue
 		return count;
 	}
 
-	Serialize(): {
-		plans: Array<PlanSerialize>;
-		paused: boolean;
-		switched: number;
-	}
+	Serialize(): { plans: Array<PlanSerialize>; paused: boolean; switched: number }
 	{
 		const plans: PlanSerialize[] = [];
 		for (const plan of this.plans)

@@ -6,8 +6,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake } from "./harness/fakes.ts";
 import { seconds } from "../adapter/brands.ts";
+import { fake } from "./harness/fakes.ts";
 
 import { ProductionLoad } from "../world/production.ts";
 
@@ -16,17 +16,21 @@ function trainer(training: boolean, built = true): CommonEntity
 {
 	return fake<CommonEntity>({
 		"foundationProgress": () => built ? undefined : 40,
-		"trainingQueue": () => training ? [{ "unitTemplate": "units/athen/infantry_spearman_b", "count": 2 }] : []
+		"trainingQueue": () => training ? [{ "unitTemplate": "units/athen/infantry_spearman_b", "count": 2 }] : [],
 	});
 }
 
 /** a town with these barracks and ranges (and a stable, which the load leaves out) at game second `time` */
 function town(barracks: CommonEntity[], ranges: CommonEntity[], time: number): CommonGameState
 {
-	const byClass: Record<string, CommonEntity[]> = { "Barracks": barracks, "Range": ranges, "Stable": [trainer(false)] };
+	const byClass: Record<string, CommonEntity[]> = {
+		"Barracks": barracks,
+		"Range": ranges,
+		"Stable": [trainer(false)],
+	};
 	return fake<CommonGameState>({
 		"ai": { "elapsedTime": seconds(time) },
-		"getOwnEntitiesByClass": (cls: string) => ({ "values": () => (byClass[cls] ?? []).values() })
+		"getOwnEntitiesByClass": (cls: string) => ({ "values": () => (byClass[cls] ?? []).values() }),
 	});
 }
 

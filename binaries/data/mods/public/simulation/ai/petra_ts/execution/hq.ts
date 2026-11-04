@@ -12,27 +12,58 @@ import type { Headquarters } from "../decision/headquarters.ts";
 import type { BaseView, SupplyUpkeep } from "../world/bases.ts";
 import type { Geography } from "../world/geography.ts";
 
-type ExecutionHQ = {
-	readonly turnCache: Readonly<Headquarters["turnCache"]>;
-	/** the maps and the regions (world/geography.ts), read-only */
-	readonly geography: Readonly<Geography>;
-	// bases are read through their view (world/bases.ts)
-	getBaseByID(baseID: BaseId): BaseView | undefined;
-	baseManagers(): ReadonlyArray<BaseView & SupplyUpkeep>;
-} & Readonly<Pick<Headquarters,
-	// the managers they ask
-	| "attackManager" | "basesManager" | "buildManager" | "defenseManager" | "navalManager" | "tradeManager"
-	| "victoryManager"
-	// maps and flags they read
-	| "canBuildUnits" | "needCorral" | "needFarm" | "needFish" | "requireHouses" | "saveResources"
-	// questions and searches
-	| "baseAtIndex" | "canBuild" | "findBestBaseForMilitary" | "findBestTrainableUnit"
-	| "findDefensiveLocation" | "findEconomicCCLocation" | "findMarketLocation" | "findStrategicCCLocation"
-	| "GetCurrentGatherRates" | "getSeaBetweenIndices" | "GetWantedGatherRates"
-	| "hasPotentialBase" | "houseNeeded" | "isDangerousLocation" | "isNearInvadingArmy" | "pickMostNeededResources"
-	// what they report
-	| "allowsDistantFood" | "markBuildingStarted" | "noteCivCentreOrdered" | "noteNothingToGather" | "phaseResearched"
->>;
+type ExecutionHQ =
+	& {
+		readonly turnCache: Readonly<Headquarters["turnCache"]>;
+		/** the maps and the regions (world/geography.ts), read-only */
+		readonly geography: Readonly<Geography>;
+		// bases are read through their view (world/bases.ts)
+		getBaseByID(baseID: BaseId): BaseView | undefined;
+		baseManagers(): ReadonlyArray<BaseView & SupplyUpkeep>;
+	}
+	& Readonly<
+		Pick<
+			Headquarters,
+			// the managers they ask
+			| "attackManager"
+			| "basesManager"
+			| "buildManager"
+			| "defenseManager"
+			| "navalManager"
+			| "tradeManager"
+			| "victoryManager"
+			// maps and flags they read
+			| "canBuildUnits"
+			| "needCorral"
+			| "needFarm"
+			| "needFish"
+			| "requireHouses"
+			| "saveResources"
+			// questions and searches
+			| "baseAtIndex"
+			| "canBuild"
+			| "findBestBaseForMilitary"
+			| "findBestTrainableUnit"
+			| "findDefensiveLocation"
+			| "findEconomicCCLocation"
+			| "findMarketLocation"
+			| "findStrategicCCLocation"
+			| "GetCurrentGatherRates"
+			| "getSeaBetweenIndices"
+			| "GetWantedGatherRates"
+			| "hasPotentialBase"
+			| "houseNeeded"
+			| "isDangerousLocation"
+			| "isNearInvadingArmy"
+			| "pickMostNeededResources"
+			// what they report
+			| "allowsDistantFood"
+			| "markBuildingStarted"
+			| "noteCivCentreOrdered"
+			| "noteNothingToGather"
+			| "phaseResearched"
+		>
+	>;
 
 /** The headquarters, through the execution layer's view of it. */
 export function hqOf(gameState: CommonGameState): ExecutionHQ

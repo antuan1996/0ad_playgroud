@@ -54,11 +54,11 @@
  * interval, SPRT, slot advantage, errors, determinism).
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MatchResult } from "./match-report.ts";
 import { summarise, type BatchRow } from "./batch-stats.ts";
+import type { MatchResult } from "./match-report.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const matchScript = join(repoRoot, "build/petra_ts/match.sh");
@@ -111,8 +111,24 @@ function parseOptions(args: string[]): Options
 			keepReplays = true;
 		else if (arg == "--bot-state")
 			botState = true;
-		else if (["--blue", "--red", "--games", "--slots", "--seed", "--jobs", "--map", "--civ",
-			"--difficulty", "--victory", "--out", "--twice", "--pairs", "--game-timeout"].includes(arg) && i + 1 < own.length)
+		else if (
+			[
+				"--blue",
+				"--red",
+				"--games",
+				"--slots",
+				"--seed",
+				"--jobs",
+				"--map",
+				"--civ",
+				"--difficulty",
+				"--victory",
+				"--out",
+				"--twice",
+				"--pairs",
+				"--game-timeout",
+			].includes(arg) && i + 1 < own.length
+		)
 			values.set(arg.slice(2), own[++i]);
 		else
 			fail(`unknown option ${arg} (see the header of build/petra_ts/batch.ts)`);
@@ -160,7 +176,7 @@ function parseOptions(args: string[]): Options
 		"gameTimeout": count("game-timeout", 15),
 		"twice": count("twice", 0, 0),
 		pairs,
-		extra
+		extra,
 	};
 }
 
@@ -197,8 +213,12 @@ function bash(command: string): string
 /** The same hash as match.sh prints for a bot's build. */
 function botHash(bot: string): string
 {
-	return bot == "petra" ? "(the original, in git)" : bash(`cd ${JSON.stringify(join(aiDir, bot))} && ` +
-		"find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1");
+	return bot == "petra" ?
+		"(the original, in git)" :
+		bash(
+			`cd ${JSON.stringify(join(aiDir, bot))} && ` +
+				"find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1",
+		);
 }
 
 function build(options: Options): void
@@ -206,7 +226,8 @@ function build(options: Options): void
 	const bots = new Set([options.blue, options.red]);
 	const steps: [string, string[]][] = [["npm", ["run", "--silent", "build:petra:out"]]];
 	const baselines = [...bots].flatMap(bot =>
-		bot == "petra_parity" ? ["parity"] : bot == "petra_prev" ? ["prev"] : bot == "petra_fixed" ? ["fixed"] : []);
+		bot == "petra_parity" ? ["parity"] : bot == "petra_prev" ? ["prev"] : bot == "petra_fixed" ? ["fixed"] : []
+	);
 	if (baselines.length)
 		steps.push([process.execPath, [join(repoRoot, "build/petra_ts/baselines.ts"), ...baselines]]);
 	if (options.botState)
@@ -220,8 +241,12 @@ export function workerEnv(job: number | string): { env: NodeJS.ProcessEnv; root:
 {
 	const root = join(repoRoot, "build/petra_ts/workers", String(job));
 	const env: NodeJS.ProcessEnv = { ...process.env };
-	for (const [name, sub] of [["XDG_DATA_HOME", "data"], ["XDG_CONFIG_HOME", "config"],
-		["XDG_CACHE_HOME", "cache"], ["XDG_STATE_HOME", "state"]])
+	for (
+		const [name, sub] of [["XDG_DATA_HOME", "data"], ["XDG_CONFIG_HOME", "config"], ["XDG_CACHE_HOME", "cache"], [
+			"XDG_STATE_HOME",
+			"state",
+		]]
+	)
 	{
 		env[name] = join(root, sub);
 		mkdirSync(env[name], { "recursive": true });
@@ -237,22 +262,42 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 	if (!options.keepReplays)
 		rmSync(join(root, "data/0ad/replays"), { "recursive": true, "force": true });
 	const args = [
-		"-n", "-T", "-B",
-		"-m", options.map, "-s", String(game.mapSeed), "-a", String(game.aiSeed),
-		"-d", options.difficulty, "-c", options.civ, "-w", options.victory,
-		"-o", options.blue, "-p", options.red,
+		"-n",
+		"-T",
+		"-B",
+		"-m",
+		options.map,
+		"-s",
+		String(game.mapSeed),
+		"-a",
+		String(game.aiSeed),
+		"-d",
+		options.difficulty,
+		"-c",
+		options.civ,
+		"-w",
+		options.victory,
+		"-o",
+		options.blue,
+		"-p",
+		options.red,
 		...(game.swapped ? ["-x"] : []),
 		...(options.botState ? ["-b"] : []),
-		"-K", String(options.gameTimeout),
+		"-K",
+		String(options.gameTimeout),
 		...options.extra,
-		"-r", game.dir
+		"-r",
+		game.dir,
 	];
 	const started = Date.now();
 	return new Promise(done =>
 	{
 		const child = spawn(matchScript, args, { env, "cwd": repoRoot, "stdio": ["ignore", "ignore", "pipe"] });
 		let stderr = "";
-		child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-20000); });
+		child.stderr.on("data", (chunk: Buffer) =>
+		{
+			stderr = (stderr + chunk.toString()).slice(-20000);
+		});
 		let hung = false;
 		const timer = setTimeout(() =>
 		{
@@ -268,8 +313,12 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 			const wall = (Date.now() - started) / 1000;
 			if (hung)
 			{
-				done({ ...row(options, game, status, wall, job, root), "outcome": "failed",
-					"problem": `the engine hung: still running after ${options.gameTimeout} minutes, killed (resume the batch to play it again)` });
+				done({
+					...row(options, game, status, wall, job, root),
+					"outcome": "failed",
+					"problem":
+						`the engine hung: still running after ${options.gameTimeout} minutes, killed (resume the batch to play it again)`,
+				});
 			}
 			else
 				done(row(options, game, status, wall, job, root));
@@ -280,8 +329,8 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 /** Kills a process and everything it started (match.sh runs the engine as its child). */
 function killTree(pid: number): void
 {
-	const children = spawnSync("ps", ["-o", "pid=", "--ppid", String(pid)], { "encoding": "utf8" }).stdout
-		.split("\n").map(Number).filter((child) => child > 0);
+	const children = spawnSync("ps", ["-o", "pid=", "--ppid", String(pid)], { "encoding": "utf8" }).stdout.split("\n")
+		.map(Number).filter(child => child > 0);
 	for (const child of children)
 		killTree(child);
 	try
@@ -294,7 +343,14 @@ function killTree(pid: number): void
 	}
 }
 
-function row(options: Options, game: Game, status: number | null, wall: number, job: number, workerRoot: string): BatchRow
+function row(
+	options: Options,
+	game: Game,
+	status: number | null,
+	wall: number,
+	job: number,
+	workerRoot: string,
+): BatchRow
 {
 	const blueId = game.swapped ? 2 : 1;
 	const redId = game.swapped ? 1 : 2;
@@ -310,11 +366,14 @@ function row(options: Options, game: Game, status: number | null, wall: number, 
 		"wall": Math.round(wall),
 		"worker": job,
 		"errors": 0,
-		"warnings": 0
+		"warnings": 0,
 	};
 	const resultFile = join(game.dir, "result.json");
 	if (status !== 0 || !existsSync(resultFile))
-		return { ...base, "problem": `match.sh exit status ${status}${existsSync(resultFile) ? "" : ", no result.json"}` };
+		return {
+			...base,
+			"problem": `match.sh exit status ${status}${existsSync(resultFile) ? "" : ", no result.json"}`,
+		};
 	let result: MatchResult;
 	try
 	{
@@ -335,13 +394,21 @@ function row(options: Options, game: Game, status: number | null, wall: number, 
 	const engineStatus = Number(/game exit status (\d+)/.exec(report)?.[1] ?? "0");
 	const watchdog = /^watchdog: (.*)$/m.exec(report)?.[1];
 	if (watchdog)
-		return { ...base, "fingerprint": result.fingerprint, "problem": `${watchdog} by match.sh's watchdog, at ` +
-			`${Math.round(result.played / 60000)} game min (resume the batch to play it again)` };
+		return {
+			...base,
+			"fingerprint": result.fingerprint,
+			"problem": `${watchdog} by match.sh's watchdog, at ` +
+				`${Math.round(result.played / 60000)} game min (resume the batch to play it again)`,
+		};
 	if (engineStatus != 0 || result.decided === undefined)
 	{
 		const crash = engineStatus != 0 ? `the engine exited with status ${engineStatus}` : "the game was not decided";
-		return { ...base, "fingerprint": result.fingerprint, "problem": `${crash} at ${Math.round(result.played / 60000)} game min` +
-			" (resume the batch to play it again)" };
+		return {
+			...base,
+			"fingerprint": result.fingerprint,
+			"problem": `${crash} at ${Math.round(result.played / 60000)} game min` +
+				" (resume the batch to play it again)",
+		};
 	}
 	const player = (id: number) => result.players.find(p => p.id == id);
 	const blue = player(blueId);
@@ -359,14 +426,36 @@ function row(options: Options, game: Game, status: number | null, wall: number, 
 		"warnings": result.warnings,
 		"blueStats": blue?.statistics,
 		"redStats": red?.statistics,
-		...(problems.length ? { "problem": problems.join("; ") } : {})
+		...(problems.length ? { "problem": problems.join("; ") } : {}),
 	};
 }
 
-const TSV_COLUMNS = ["game", "map", "mapSeed", "aiSeed", "blue", "red", "swapped", "outcome", "reason", "decided",
-	"fingerprint", "errors", "warnings", "wall", "worker", "problem"];
-const TSV_STATS = ["unitsTrained", "unitsLost", "enemyUnitsKilled", "resourcesGathered", "resourcesUsed",
-	"peakPercentMapControlled"];
+const TSV_COLUMNS = [
+	"game",
+	"map",
+	"mapSeed",
+	"aiSeed",
+	"blue",
+	"red",
+	"swapped",
+	"outcome",
+	"reason",
+	"decided",
+	"fingerprint",
+	"errors",
+	"warnings",
+	"wall",
+	"worker",
+	"problem",
+];
+const TSV_STATS = [
+	"unitsTrained",
+	"unitsLost",
+	"enemyUnitsKilled",
+	"resourcesGathered",
+	"resourcesUsed",
+	"peakPercentMapControlled",
+];
 
 function writeTables(out: string, rows: BatchRow[]): void
 {
@@ -374,11 +463,13 @@ function writeTables(out: string, rows: BatchRow[]): void
 	writeFileSync(join(out, "results.jsonl"), rows.map(r => JSON.stringify(r)).join("\n") + "\n");
 	const header = [...TSV_COLUMNS, ...TSV_STATS.map(s => `blue.${s}`), ...TSV_STATS.map(s => `red.${s}`)];
 	const cell = (value: unknown): string => value === undefined ? "" : String(value).replace(/[\t\n]/g, " ");
-	const lines = rows.map(r => [
-		...TSV_COLUMNS.map(c => cell((r as unknown as Record<string, unknown>)[c])),
-		...TSV_STATS.map(s => cell(r.blueStats?.[s])),
-		...TSV_STATS.map(s => cell(r.redStats?.[s]))
-	].join("\t"));
+	const lines = rows.map(r =>
+		[
+			...TSV_COLUMNS.map(c => cell((r as unknown as Record<string, unknown>)[c])),
+			...TSV_STATS.map(s => cell(r.blueStats?.[s])),
+			...TSV_STATS.map(s => cell(r.redStats?.[s])),
+		].join("\t")
+	);
 	writeFileSync(join(out, "results.tsv"), [header.join("\t"), ...lines].join("\n") + "\n");
 }
 
@@ -411,23 +502,31 @@ async function main(): Promise<void>
 	const settings = [
 		`blue ${options.blue} ${botHash(options.blue)}`,
 		`red ${options.red} ${botHash(options.red)}`,
-		...(options.blue == "petra_parity" || options.red == "petra_parity"
-			? [`petra_parity from tag petra-ts-parity ${bash("git rev-parse --short=10 'petra-ts-parity^{commit}'")}`] : []),
-		...(options.blue == "petra_prev" || options.red == "petra_prev"
-			? [`petra_prev from tag petra-ts-prev ${bash("git rev-parse --short=10 'petra-ts-prev^{commit}'")}`] : []),
-		`games ${games.length} (${options.pairs ? `the seed pairs ${options.pairs.map(p => p.join("/")).join(",")}` :
-			`${options.games} seed pairs, pool seed ${options.seed}`}, slots ${options.slots}` +
-		`${options.twice ? `, the first ${options.twice} played twice` : ""})`,
+		...(options.blue == "petra_parity" || options.red == "petra_parity" ?
+			[`petra_parity from tag petra-ts-parity ${bash("git rev-parse --short=10 'petra-ts-parity^{commit}'")}`] :
+			[]),
+		...(options.blue == "petra_prev" || options.red == "petra_prev" ?
+			[`petra_prev from tag petra-ts-prev ${bash("git rev-parse --short=10 'petra-ts-prev^{commit}'")}`] :
+			[]),
+		`games ${games.length} (${
+			options.pairs ?
+				`the seed pairs ${options.pairs.map(p => p.join("/")).join(",")}` :
+				`${options.games} seed pairs, pool seed ${options.seed}`
+		}, slots ${options.slots}` + `${options.twice ? `, the first ${options.twice} played twice` : ""})`,
 		`map ${options.map}, civ ${options.civ}, difficulty ${options.difficulty}, victory ${options.victory}`,
 		`match.sh -n -T -B${options.extra.length ? " " + options.extra.join(" ") : ""}, ${options.jobs} at a time`,
-		`commit ${commit}`
+		`commit ${commit}`,
 	];
 	const batchFile = join(options.out, "batch.txt");
 	if (existsSync(batchFile))
 	{
 		const before = readFileSync(batchFile, "utf8").split("\n").slice(0, 2).join("\n");
 		if (before != settings.slice(0, 2).join("\n"))
-			console.warn(`batch: resuming with other bot builds than before:\n${before}\nnow:\n${settings.slice(0, 2).join("\n")}`);
+			console.warn(
+				`batch: resuming with other bot builds than before:\n${before}\nnow:\n${
+					settings.slice(0, 2).join("\n")
+				}`,
+			);
 	}
 	writeFileSync(batchFile, settings.join("\n") + `\nstarted ${new Date().toISOString()}\n`);
 	console.log(settings.join("\n"));
@@ -441,11 +540,13 @@ async function main(): Promise<void>
 	const done = new Set<number>();
 	const before = new Map<number, BatchRow>();
 	if (existsSync(previous))
+	{
 		for (const line of readFileSync(previous, "utf8").split("\n").filter(Boolean))
 		{
 			const old: BatchRow = JSON.parse(line);
 			before.set(old.game, old);
 		}
+	}
 	for (const game of games)
 	{
 		const old = before.get(game.index);
@@ -472,11 +573,19 @@ async function main(): Promise<void>
 			writeTables(options.out, rows);
 			++finished;
 			const elapsed = (Date.now() - startTime) / 1000;
-			console.log(`[${finished + done.size}/${games.length}] ` +
-				`game ${result.game} (${result.swapped ? "red" : "blue"} is player 1, seeds ${result.mapSeed}/${result.aiSeed}): ` +
-				`${result.outcome}${result.reason ? ` (${result.reason})` : ""}` +
-				`${result.decided !== undefined ? ` at ${Math.round(result.decided / 60000)} min` : ""}, ${result.wall} s` +
-				`${result.problem ? `, PROBLEM: ${result.problem}` : ""}  [${Math.round(elapsed)} s elapsed]`);
+			console.log(
+				`[${finished + done.size}/${games.length}] ` +
+					`game ${result.game} (${
+						result.swapped ? "red" : "blue"
+					} is player 1, seeds ${result.mapSeed}/${result.aiSeed}): ` +
+					`${result.outcome}${result.reason ? ` (${result.reason})` : ""}` +
+					`${
+						result.decided !== undefined ?
+							` at ${Math.round(result.decided / 60000)} min` :
+							""
+					}, ${result.wall} s` +
+					`${result.problem ? `, PROBLEM: ${result.problem}` : ""}  [${Math.round(elapsed)} s elapsed]`,
+			);
 		}
 	};
 	await Promise.all(Array.from({ "length": Math.min(options.jobs, queue.length) }, (_, job) => worker(job)));

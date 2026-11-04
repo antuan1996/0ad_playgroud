@@ -198,7 +198,7 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 		forgotten.length,
 		0,
 		`${rt.label}: set, but never written to the save — ${forgotten.join(", ")}` +
-			`. Add them to Serialize, or to notSaved with a reason`
+			`. Add them to Serialize, or to notSaved with a reason`,
 	);
 
 	let restored: T;
@@ -217,6 +217,6 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 	assert.deepStrictEqual(
 		reloaded,
 		saved,
-		`${rt.label}: saving and reloading changed the data` + (detail ? ` — ${detail}` : "")
+		`${rt.label}: saving and reloading changed the data` + (detail ? ` — ${detail}` : ""),
 	);
 }

@@ -80,12 +80,15 @@ export function stats(milliseconds: number[]): TimeStats
 		"p90": percentile(sorted, 0.9),
 		"p99": percentile(sorted, 0.99),
 		"p999": percentile(sorted, 0.999),
-		"max": sorted[sorted.length - 1] ?? NaN
+		"max": sorted[sorted.length - 1] ?? NaN,
 	};
 }
 
 /** Per AI (by player, 0 = shared) and for whole turns: milliseconds per turn. */
-export function series(samples: TimeSample[], runs: number[]): { byPlayer: Map<number, number[]>; turn: number[]; minute: number[] }
+export function series(
+	samples: TimeSample[],
+	runs: number[],
+): { byPlayer: Map<number, number[]>; turn: number[]; minute: number[] }
 {
 	const byPlayer = new Map<number, number[]>();
 	const turnTotal = new Map<string, number>();
@@ -103,7 +106,9 @@ export function series(samples: TimeSample[], runs: number[]): { byPlayer: Map<n
 
 const fmt = (x: number): string => Number.isFinite(x) ? x.toFixed(2).padStart(8) : "       -";
 const row = (label: string, s: TimeStats): string =>
-	`${label.padEnd(18)} ${String(s.turns).padStart(7)} ${fmt(s.mean)} ${fmt(s.p50)} ${fmt(s.p90)} ${fmt(s.p99)} ${fmt(s.p999)} ${fmt(s.max)}`;
+	`${label.padEnd(18)} ${String(s.turns).padStart(7)} ${fmt(s.mean)} ${fmt(s.p50)} ${fmt(s.p90)} ${fmt(s.p99)} ${
+		fmt(s.p999)
+	} ${fmt(s.max)}`;
 
 export function summarise(dirs: string[]): string
 {
@@ -120,8 +125,12 @@ export function summarise(dirs: string[]): string
 	if (!samples.length)
 		return "no aitimes.txt (record the match with match.sh -P)";
 	const { byPlayer, turn, minute } = series(samples, runs);
-	const out = [`AI script time per turn, milliseconds (${dirs.length} match${dirs.length > 1 ? "es" : ""})`,
-		`${"".padEnd(18)} ${"turns".padStart(7)} ${"mean".padStart(8)} ${"median".padStart(8)} ${"p90".padStart(8)} ${"p99".padStart(8)} ${"p99.9".padStart(8)} ${"max".padStart(8)}`];
+	const out = [
+		`AI script time per turn, milliseconds (${dirs.length} match${dirs.length > 1 ? "es" : ""})`,
+		`${"".padEnd(18)} ${"turns".padStart(7)} ${"mean".padStart(8)} ${"median".padStart(8)} ${"p90".padStart(8)} ${
+			"p99".padStart(8)
+		} ${"p99.9".padStart(8)} ${"max".padStart(8)}`,
+	];
 	for (const [player, ms] of [...byPlayer].sort((a, b) => a[0] - b[0]))
 		out.push(row(player == 0 ? "shared component" : `player ${player}`, stats(ms)));
 	out.push(row("whole turn", stats(turn)));
@@ -140,8 +149,10 @@ export function summarise(dirs: string[]): string
 /** Each bot's script time per turn over a batch, and blue's figures over red's. */
 export function compareBots(batchDir: string): string
 {
-	const rows: Array<{ game: number; blue: string; red: string; swapped: boolean; outcome: string }> =
-		readFileSync(join(batchDir, "results.jsonl"), "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+	const rows: Array<{ game: number; blue: string; red: string; swapped: boolean; outcome: string }> = readFileSync(
+		join(batchDir, "results.jsonl"),
+		"utf8",
+	).split("\n").filter(Boolean).map(line => JSON.parse(line));
 	const byBot = new Map<string, number[]>();
 	let games = 0;
 	for (const row of rows)
@@ -154,19 +165,27 @@ export function compareBots(batchDir: string): string
 			(player == 1) != row.swapped ? `${row.blue} (blue)` : `${row.red} (red)`;
 		for (const sample of times)
 			if (sample.player != 0)
-				(byBot.get(botOf(sample.player)) ?? byBot.set(botOf(sample.player), []).get(botOf(sample.player)))?.push(sample.microseconds / 1000);
+				(byBot.get(botOf(sample.player)) ?? byBot.set(botOf(sample.player), []).get(botOf(sample.player)))
+					?.push(sample.microseconds / 1000);
 	}
 	if (byBot.size != 2)
 		return `need two bots with times, found ${byBot.size} (play the batch with -- -P)`;
-	const [[nameA, msA], [nameB, msB]] = [...byBot].sort((a, b) => a[0].endsWith("(blue)") ? -1 : b[0].endsWith("(blue)") ? 1 : 0);
+	const [[nameA, msA], [nameB, msB]] = [...byBot].sort((a, b) =>
+		a[0].endsWith("(blue)") ? -1 : b[0].endsWith("(blue)") ? 1 : 0
+	);
 	const a = stats(msA);
 	const b = stats(msB);
 	const ratio = (x: number, y: number): string => `${(x / y).toFixed(3)}`.padStart(8);
-	return [`each bot's script time per turn, milliseconds (${games} games)`,
-		`${"".padEnd(26)} ${"turns".padStart(7)} ${"mean".padStart(8)} ${"median".padStart(8)} ${"p90".padStart(8)} ${"p99".padStart(8)} ${"p99.9".padStart(8)} ${"max".padStart(8)}`,
+	return [
+		`each bot's script time per turn, milliseconds (${games} games)`,
+		`${"".padEnd(26)} ${"turns".padStart(7)} ${"mean".padStart(8)} ${"median".padStart(8)} ${"p90".padStart(8)} ${
+			"p99".padStart(8)
+		} ${"p99.9".padStart(8)} ${"max".padStart(8)}`,
 		row(nameA.slice(0, 26), a),
 		row(nameB.slice(0, 26), b),
-		`${"blue / red".padEnd(18)} ${"".padStart(7)} ${ratio(a.mean, b.mean)} ${ratio(a.p50, b.p50)} ${ratio(a.p90, b.p90)} ${ratio(a.p99, b.p99)} ${ratio(a.p999, b.p999)} ${ratio(a.max, b.max)}`
+		`${"blue / red".padEnd(18)} ${"".padStart(7)} ${ratio(a.mean, b.mean)} ${ratio(a.p50, b.p50)} ${
+			ratio(a.p90, b.p90)
+		} ${ratio(a.p99, b.p99)} ${ratio(a.p999, b.p999)} ${ratio(a.max, b.max)}`,
 	].join("\n");
 }
 

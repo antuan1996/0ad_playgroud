@@ -3,20 +3,21 @@
  *
  *   node --test build/petra_ts/quality.test.ts
  */
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { duplicatedLinesByFile, findClones, measureSource, type FunctionMetrics } from "./quality.ts";
 
 function only(text: string, name: string): FunctionMetrics
 {
-	const found = measureSource("m.ts", text).functions.find((f) => f.name === name);
+	const found = measureSource("m.ts", text).functions.find(f => f.name === name);
 	assert.ok(found, `${name} measured`);
 	return found;
 }
 
 test("SonarSource's labelled-loop example: cognitive 7, cyclomatic 4", () =>
 {
-	const f = only(`
+	const f = only(
+		`
 function sumOfPrimes(max: number): number
 {
 	let total = 0;
@@ -30,14 +31,17 @@ function sumOfPrimes(max: number): number
 		total += i;
 	}
 	return total;
-}`, "sumOfPrimes");
+}`,
+		"sumOfPrimes",
+	);
 	// the loops +1 and +2 (nested), the if +3, the labelled continue +1
 	assert.deepEqual([f.cognitive, f.cyclomatic, f.depth, f.params, f.lines], [7, 4, 3, 1, 14]);
 });
 
 test("a switch costs 1 for the reader and each case 1 for the paths", () =>
 {
-	const f = only(`
+	const f = only(
+		`
 function getWords(n: number): string
 {
 	switch (n)
@@ -47,13 +51,16 @@ function getWords(n: number): string
 	case 3: return "a few";
 	default: return "lots";
 	}
-}`, "getWords");
+}`,
+		"getWords",
+	);
 	assert.deepEqual([f.cognitive, f.cyclomatic], [1, 4]);
 });
 
 test("else and else if cost 1 without nesting; each run of like logical operators 1", () =>
 {
-	const f = only(`
+	const f = only(
+		`
 function pick(a: boolean, b: boolean, c: boolean, d: boolean): number
 {
 	if (a && b || c)
@@ -62,7 +69,9 @@ function pick(a: boolean, b: boolean, c: boolean, d: boolean): number
 		return 2;
 	else
 		return 3;
-}`, "pick");
+}`,
+		"pick",
+	);
 	// if 1, the runs "&&" and "||" 2, else if 1, else 1; paths: if, &&, ||, else if
 	assert.deepEqual([f.cognitive, f.cyclomatic, f.depth], [5, 5, 1]);
 	const runs = only("function g(a: boolean, b: boolean, c: boolean): boolean { return a && b && (c && a); }", "g");
@@ -76,7 +85,8 @@ function pick(a: boolean, b: boolean, c: boolean, d: boolean): number
 
 test("nesting raises the cost: an if in a loop in an if, a ternary inside", () =>
 {
-	const f = only(`
+	const f = only(
+		`
 function deep(xs: number[], on: boolean): number
 {
 	let n = 0;
@@ -85,14 +95,18 @@ function deep(xs: number[], on: boolean): number
 			if (x > 0)
 				n += x > 10 ? 2 : 1;
 	return n;
-}`, "deep");
+}`,
+		"deep",
+	);
 	// if 1, for 2, if 3, ternary 4
 	assert.deepEqual([f.cognitive, f.cyclomatic, f.depth], [10, 5, 4]);
 });
 
 test("a callback is measured on its own, under its function's name", () =>
 {
-	const { functions, classes } = measureSource("m.ts", `
+	const { functions, classes } = measureSource(
+		"m.ts",
+		`
 export class Plan
 {
 	units: number[] = [];
@@ -108,37 +122,51 @@ export class Plan
 			return false;
 		});
 	}
-}`);
-	assert.deepEqual(functions.map((f) => f.name), ["Plan.constructor", "Plan.size", "Plan.choose", "Plan.choose > arrow@10"]);
-	const choose = functions.find((f) => f.name === "Plan.choose");
-	const arrow = functions.find((f) => f.name.startsWith("Plan.choose > arrow"));
+}`,
+	);
+	assert.deepEqual(functions.map(f => f.name), [
+		"Plan.constructor",
+		"Plan.size",
+		"Plan.choose",
+		"Plan.choose > arrow@10",
+	]);
+	const choose = functions.find(f => f.name === "Plan.choose");
+	const arrow = functions.find(f => f.name.startsWith("Plan.choose > arrow"));
 	assert.deepEqual([choose?.cognitive, choose?.cyclomatic], [0, 1], "the arrow's if is the arrow's");
 	assert.deepEqual([arrow?.cognitive, arrow?.cyclomatic, arrow?.params], [1, 2, 1]);
-	assert.deepEqual(classes.map((c) => [c.name, c.methods, c.fields, c.lines]), [["Plan", 3, 2, 16]]);
+	assert.deepEqual(classes.map(c => [c.name, c.methods, c.fields, c.lines]), [["Plan", 3, 2, 16]]);
 });
 
 test("functions take the names they are known by", () =>
 {
-	const names = measureSource("m.ts", `
+	const names = measureSource(
+		"m.ts",
+		`
 const helper = (x: number): number => x;
 export function named(): void {}
 const table = { "entry": function(): void {}, other: (): void => undefined };
-[1].map((x) => x);`).functions.map((f) => f.name);
+[1].map((x) => x);`,
+	).functions.map(f => f.name);
 	assert.deepEqual(names, ["helper", "named", "entry", "other", "(module) > arrow@5"]);
 });
 
 test("overload signatures are no functions", () =>
 {
-	const names = measureSource("m.ts", `
+	const names = measureSource(
+		"m.ts",
+		`
 function pick(a: number): number;
 function pick(a: string): string;
-function pick(a: number | string): number | string { return a; }`).functions.map((f) => f.name);
+function pick(a: number | string): number | string { return a; }`,
+	).functions.map(f => f.name);
 	assert.deepEqual(names, ["pick"]);
 });
 
 test("code lines leave out comments and blank lines", () =>
 {
-	const { module } = measureSource("m.ts", `
+	const { module } = measureSource(
+		"m.ts",
+		`
 /**
  * A comment of three lines.
  */
@@ -147,7 +175,8 @@ export const a = 1;   // trailing
 
 export const b = \`two
 lines\`;
-`);
+`,
+	);
 	assert.equal(module.codeLines, 3);
 });
 
@@ -166,12 +195,20 @@ const BODY = `
 test("a function copied into another module is one clone with two copies; imports are no clone", () =>
 {
 	const imports = Array.from({ length: 12 }, (_, i) => `import { thing${i} } from "./module${i}.ts";`).join("\n");
-	const clones = findClones([
-		{ "file": "a.ts", "text": `${imports}\nexport function first(values: number[], limit: number): number\n{${BODY}}\n` },
-		{ "file": "b.ts", "text": `${imports}\nexport const x = 1;\nexport function first(values: number[], limit: number): number\n{${BODY}}\n` }
-	], 40, 5);
+	const clones = findClones(
+		[{
+			"file": "a.ts",
+			"text": `${imports}\nexport function first(values: number[], limit: number): number\n{${BODY}}\n`,
+		}, {
+			"file": "b.ts",
+			"text":
+				`${imports}\nexport const x = 1;\nexport function first(values: number[], limit: number): number\n{${BODY}}\n`,
+		}],
+		40,
+		5,
+	);
 	assert.equal(clones.length, 1);
-	assert.deepEqual(clones[0].copies.map((c) => [c.file, c.startLine, c.endLine]), [["a.ts", 13, 24], ["b.ts", 14, 25]]);
+	assert.deepEqual(clones[0].copies.map(c => [c.file, c.startLine, c.endLine]), [["a.ts", 13, 24], ["b.ts", 14, 25]]);
 	assert.deepEqual([...duplicatedLinesByFile(clones)], [["a.ts", 12], ["b.ts", 12]]);
 });
 
@@ -180,7 +217,7 @@ test("renamed copies are found only when asked; short or overlapping runs are no
 	const renamedBody = BODY.replaceAll("total", "sum").replaceAll("value", "item");
 	const sources = [
 		{ "file": "a.ts", "text": `function first(values: number[], limit: number): number\n{${BODY}}\n` },
-		{ "file": "b.ts", "text": `function second(values: number[], limit: number): number\n{${renamedBody}}\n` }
+		{ "file": "b.ts", "text": `function second(values: number[], limit: number): number\n{${renamedBody}}\n` },
 	];
 	assert.equal(findClones(sources, 40, 5).length, 0);
 	const renamed = findClones(sources, 40, 5, true);
@@ -193,7 +230,9 @@ test("renamed copies are found only when asked; short or overlapping runs are no
 
 test("three copies are one clone", () =>
 {
-	const text = ["one", "two", "three"].map((name) => `function ${name}(values: number[], limit: number): number\n{${BODY}}\n`).join("\n");
+	const text = ["one", "two", "three"].map(name =>
+		`function ${name}(values: number[], limit: number): number\n{${BODY}}\n`
+	).join("\n");
 	const clones = findClones([{ "file": "a.ts", text }], 40, 5);
 	assert.equal(clones.length, 1);
 	assert.equal(clones[0].copies.length, 3);

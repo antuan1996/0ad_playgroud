@@ -10,14 +10,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { fake, override } from "./harness/fakes.ts";
-import { ENEMY, makeHqEntity, PLAYER } from "./harness/hqWorld.ts";
-import { board, disembark, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
+import { ENEMY, PLAYER, makeHqEntity } from "./harness/hqWorld.ts";
+import { ISLAND, SEA, WEST, board, disembark, navalWorld, ship, soldier } from "./harness/navalWorld.ts";
 
 import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
+import { NavalManager } from "../decision/navalManager.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
 import { ROUTE_RESEND_MIN, SHIP_STUCK, TransportPlan } from "../execution/transportPlan.ts";
-import { NavalManager } from "../decision/navalManager.ts";
 
 const PlayerID = PLAYER;
 
@@ -35,7 +35,13 @@ function initNaval(s: ReturnType<typeof seat>): void
 }
 
 /** a plan, initialised and handed to the naval manager, as requireTransport makes one */
-function plan(s: ReturnType<typeof seat>, units: CommonEntity[], end = worldPos(280, 160), start: AccessIndex = WEST, endIndex: AccessIndex = ISLAND): TransportPlan
+function plan(
+	s: ReturnType<typeof seat>,
+	units: CommonEntity[],
+	end = worldPos(280, 160),
+	start: AccessIndex = WEST,
+	endIndex: AccessIndex = ISLAND,
+): TransportPlan
 {
 	const p = TransportPlan.create(s.world.gameState, units, { "startIndex": start, endIndex, "endPos": end });
 	assert.ok(p, "a sea to cross");
@@ -68,7 +74,11 @@ describe("a transport plan made: the sea between the two lands", () =>
 		initNaval(s);
 
 		const ids = s.world.gameState.ai.uniqueIDs.transports;
-		const p = TransportPlan.create(s.world.gameState, [a.ent], { "startIndex": WEST, "endIndex": landRegion(7), "endPos": worldPos(280, 160) });
+		const p = TransportPlan.create(s.world.gameState, [a.ent], {
+			"startIndex": WEST,
+			"endIndex": landRegion(7),
+			"endPos": worldPos(280, 160),
+		});
 
 		assert.equal(p, undefined, "no sea between the lands: no plan");
 		assert.equal(s.world.gameState.ai.uniqueIDs.transports, ids + 1, "its ID is used up all the same, as before");
@@ -83,7 +93,11 @@ describe("a transport plan made: the sea between the two lands", () =>
 		board(a, carrier);
 		initNaval(s);
 
-		const p = TransportPlan.create(s.world.gameState, [a.ent], { "startIndex": landRegion(1), "endIndex": ISLAND, "endPos": worldPos(280, 160) }, carrier.ent);
+		const p = TransportPlan.create(s.world.gameState, [a.ent], {
+			"startIndex": landRegion(1),
+			"endIndex": ISLAND,
+			"endPos": worldPos(280, 160),
+		}, carrier.ent);
 
 		assert.ok(p);
 		assert.equal(p.sea, SEA, "the ship's sea, set when the fleet was counted");
@@ -169,7 +183,7 @@ describe("a transport plan finding its ship: assignShip", () =>
 	it("after its ship sank, chooses the next ship near the units still waiting, not those aboard another", () =>
 	{
 		const s = seat();
-		const a = soldier(s.world, 100, [140, 40], { "onBoard": 207 });	// heading for the plan's other ship
+		const a = soldier(s.world, 100, [140, 40], { "onBoard": 207 }); // heading for the plan's other ship
 		const b = soldier(s.world, 101, [140, 280]);
 		const south = ship(s.world, 205, [180, 40]);
 		const north = ship(s.world, 206, [180, 280]);
@@ -241,7 +255,7 @@ function shipped(s: ReturnType<typeof seat>, units: Array<ReturnType<typeof sold
 {
 	const carrier = ship(s.world, 202, [200, 160], { capacity });
 	initNaval(s);
-	const p = plan(s, units.map((u) => u.ent));
+	const p = plan(s, units.map(u => u.ent));
 	p.assignShip(s.world.gameState);
 	return { carrier, p };
 }
@@ -253,8 +267,8 @@ describe("a transport plan counting room aboard", () =>
 		const s = seat();
 		const a = soldier(s.world, 100, [140, 160]);
 		const { carrier, p } = shipped(s, [a], 3);
-		carrier.state.garrisoned.push(999);	// someone already aboard
-		p.update(s.world.gameState);	// a is sent to it
+		carrier.state.garrisoned.push(999); // someone already aboard
+		p.update(s.world.gameState); // a is sent to it
 
 		assert.equal(p.countFreeSlotsOnShip(carrier.ent), 1);
 		assert.equal(p.countFreeSlots(), 1);
@@ -281,7 +295,7 @@ describe("a transport plan counting room aboard", () =>
 
 		const plans = s.hq.navalManager.transportPlans;
 		assert.equal(plans.length, 2);
-		const [first, second] = [a, b].map((u) => u.ent.getMetadata(PlayerID, "transport"));
+		const [first, second] = [a, b].map(u => u.ent.getMetadata(PlayerID, "transport"));
 		assert.equal(first, p.ID);
 		assert.equal(second, plans[1].ID, "the unit with no room goes to the new plan");
 		assert.equal(plans[1].endIndex, ISLAND);
@@ -384,10 +398,12 @@ describe("a transport plan letting units and ships go", () =>
 	{
 		const s = seat();
 		const left: string[] = [];
-		override(s.hq.attackManager, { "getPlan": (id: number) =>
-			id === 4 ? { "removeUnit": () => left.push("attack") } : undefined });
-		override(s.hq.defenseManager, { "getArmy": (id: number) =>
-			id === 6 ? { "removeOwn": () => left.push("army") } : undefined });
+		override(s.hq.attackManager, {
+			"getPlan": (id: number) => id === 4 ? { "removeUnit": () => left.push("attack") } : undefined,
+		});
+		override(s.hq.defenseManager, {
+			"getArmy": (id: number) => id === 6 ? { "removeOwn": () => left.push("army") } : undefined,
+		});
 		const a = soldier(s.world, 100, [140, 160], { "plan": 4, "PartOfArmy": 6 });
 		initNaval(s);
 		const p = plan(s, [a.ent]);
@@ -461,7 +477,7 @@ describe("a transport plan when boarding goes wrong", () =>
 
 		for (let step = 1; step <= 3; ++step)
 		{
-			carrier.state.pos = [200 - 10 * step, 160];	// coming in
+			carrier.state.pos = [200 - 10 * step, 160]; // coming in
 			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 			p.update(s.world.gameState);
 		}
@@ -482,7 +498,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		carrier.state.aiState = "INDIVIDUAL.WALKING";
 		for (let step = 1; step <= 3; ++step)
 		{
-			heading = step;	// turning in place, the same position
+			heading = step; // turning in place, the same position
 			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 			p.update(s.world.gameState);
 		}
@@ -509,7 +525,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const a = soldier(s.world, 100, [150, 160]);
 		const { carrier, p } = shipped(s, [a]);
 		p.update(s.world.gameState);
-		carrier.state.pos = p.shipPoints()[202];	// the ship is at the shore
+		carrier.state.pos = p.shipPoints()[202]; // the ship is at the shore
 
 		for (let turn = 1; turn <= 6; ++turn)
 		{
@@ -537,7 +553,11 @@ describe("a transport plan when boarding goes wrong", () =>
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
 
-		assert.deepEqual(a.ent.getMetadata(PlayerID, "posGarrison"), [150, 160], "its place recorded for the next check");
+		assert.deepEqual(
+			a.ent.getMetadata(PlayerID, "posGarrison"),
+			[150, 160],
+			"its place recorded for the next check",
+		);
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), 202, "still bound for its ship");
 	});
 
@@ -549,7 +569,7 @@ describe("a transport plan when boarding goes wrong", () =>
 		const { carrier, p } = shipped(s, [a]);
 		p.update(s.world.gameState);
 		carrier.state.pos = p.shipPoints()[202];
-		a.state.pos = undefined;	// inside, the plan not yet told
+		a.state.pos = undefined; // inside, the plan not yet told
 
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 3);
 		p.update(s.world.gameState);
@@ -671,7 +691,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const s = seat();
 		const { a, carrier, p } = arrived(s);
 		p.update(s.world.gameState);
-		disembark(a, carrier, [150, 160]);	// our own coast
+		disembark(a, carrier, [150, 160]); // our own coast
 		const target = p.shipPoints()[202];
 
 		p.update(s.world.gameState);
@@ -709,7 +729,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 		const stops = a.state.stops;
 
-		p.update(s.world.gameState);	// still ashore on our own land
+		p.update(s.world.gameState); // still ashore on our own land
 
 		assert.equal(a.state.destroyed, false);
 		assert.equal(a.state.stops, stops + 1, "the garrison order to the ship is cancelled");
@@ -725,7 +745,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 		disembark(a, carrier, [150, 160]);
 		p.update(s.world.gameState);
-		s.hq.landRegions = { [ISLAND]: true };	// our land is no longer one the office counts on
+		s.hq.landRegions = { [ISLAND]: true }; // our land is no longer one the office counts on
 
 		p.update(s.world.gameState);
 
@@ -788,7 +808,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const s = seat();
 		const { carrier, p } = arrived(s);
 		carrier.state.aiState = "INDIVIDUAL.WALKING";
-		carrier.state.idle = false;	// as the engine has a walking ship
+		carrier.state.idle = false; // as the engine has a walking ship
 
 		p.update(s.world.gameState);
 
@@ -811,7 +831,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 	{
 		const s = seat();
 		const { a, carrier, p } = arrived(s);
-		p.update(s.world.gameState);	// unload ordered, but it never left the ship
+		p.update(s.world.gameState); // unload ordered, but it never left the ship
 
 		p.update(s.world.gameState);
 
@@ -824,7 +844,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		const s = seat();
 		const { a, carrier, p } = arrived(s);
 		p.update(s.world.gameState);
-		carrier.state.garrisoned = [];	// gone from the ship, yet nowhere on the map
+		carrier.state.garrisoned = []; // gone from the ship, yet nowhere on the map
 
 		p.update(s.world.gameState);
 
@@ -840,7 +860,7 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		board(a, carrier);
 		p.update(s.world.gameState);
 		const target = p.shipPoints()[202];
-		carrier.state.pos = [200, 160];	// still mid-sea
+		carrier.state.pos = [200, 160]; // still mid-sea
 
 		for (let turn = 0; turn < 3; ++turn)
 			p.update(s.world.gameState);
@@ -858,8 +878,8 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		p.update(s.world.gameState);
 		board(a, carrier);
 		p.update(s.world.gameState);
-		carrier.state.pos = [200, 160];	// mid-sea
-		carrier.state.aiState = "INDIVIDUAL.COMBAT.APPROACHING";	// not WALKING, yet under way
+		carrier.state.pos = [200, 160]; // mid-sea
+		carrier.state.aiState = "INDIVIDUAL.COMBAT.APPROACHING"; // not WALKING, yet under way
 		carrier.state.idle = false;
 		const moves = carrier.state.moves.length;
 
@@ -910,8 +930,12 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		assert.equal(carrier.state.moves.length, moves, "no new orders");
 
 		// archers come to the shore beside the way ahead
-		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] }, {
+				"attackTypes": () => ["Ranged"],
+				"attackRange": () => ({ "max": 20, "min": 0 }),
+			}),
+		);
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + ROUTE_RESEND_MIN);
 		p.checkRoutes(s.world.gameState);
 
@@ -932,8 +956,12 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		const start = s.world.ai.elapsedTime;
 		p.sailTo(s.world.gameState, carrier.ent, worldPos(230, 60), []);
 		const moves = carrier.state.moves.length;
-		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] }, {
+				"attackTypes": () => ["Ranged"],
+				"attackRange": () => ({ "max": 20, "min": 0 }),
+			}),
+		);
 		s.world.ai.elapsedTime = seconds(start + ROUTE_RESEND_MIN - 1);
 		p.checkRoutes(s.world.gameState);
 		assert.equal(carrier.state.moves.length, moves, "too soon after its last route");
@@ -945,12 +973,20 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		const begin = other.world.ai.elapsedTime;
 		sailing.p.sailTo(other.world.gameState, sailing.carrier.ent, worldPos(230, 60), []);
 		const before = sailing.carrier.state.moves.length;
-		other.world.addEntity(makeHqEntity({ "id": 3101, "owner": ENEMY, "position": [230, 62], "classes": ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		other.world.addEntity(
+			makeHqEntity({ "id": 3101, "owner": ENEMY, "position": [230, 62], "classes": ["Unit", "Ranged"] }, {
+				"attackTypes": () => ["Ranged"],
+				"attackRange": () => ({ "max": 20, "min": 0 }),
+			}),
+		);
 		other.world.ai.elapsedTime = seconds(begin + ROUTE_RESEND_MIN + 1);
 		sailing.p.checkRoutes(other.world.gameState);
 		assert.equal(sailing.carrier.state.moves.length, before, "no safer route: it sails on");
-		assert.equal(sailing.p.routes[sailing.carrier.ent.id()]?.threats, 1, "the threat counted, not sent again for it");
+		assert.equal(
+			sailing.p.routes[sailing.carrier.ent.id()]?.threats,
+			1,
+			"the threat counted, not sent again for it",
+		);
 	});
 
 	it("checks the routes once in three seconds, and forgets a released ship's", () =>
@@ -962,8 +998,12 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 5);
 		p.checkRoutes(s.world.gameState);
 		const moves = carrier.state.moves.length;
-		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 20, "min": 0 }) }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [205, 110], "classes": ["Unit", "Ranged"] }, {
+				"attackTypes": () => ["Ranged"],
+				"attackRange": () => ({ "max": 20, "min": 0 }),
+			}),
+		);
 
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 1);
 		p.checkRoutes(s.world.gameState);
@@ -979,7 +1019,7 @@ describe("a transport sailing round the enemy's shooters: sailTo", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		const { carrier, p } = shipped(s, [a]);
 		const moves = carrier.state.moves.length;
-		p.sea = seaRegion(99);	// a sea the ship is not on
+		p.sea = seaRegion(99); // a sea the ship is not on
 
 		p.sailTo(s.world.gameState, carrier.ent, worldPos(280, 160), []);
 
@@ -997,8 +1037,14 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": landRegion(9), "sea": SEA }, worldPos(10, 10)), [10, 10]);
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": seaRegion(9) }, worldPos(10, 10)), [10, 10]);
+		assert.deepEqual(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": landRegion(9), "sea": SEA }, worldPos(10, 10)),
+			[10, 10],
+		);
+		assert.deepEqual(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": seaRegion(9) }, worldPos(10, 10)),
+			[10, 10],
+		);
 	});
 
 	it("lands units outside enemy territory when it can", () =>
@@ -1013,7 +1059,9 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent], worldPos(280, 100));
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
+		const bp = requireValue(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true),
+		);
 
 		assert.ok(bp[1] >= 200, `north of the enemy's ground, got ${bp}`);
 	});
@@ -1026,14 +1074,27 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const a = soldier(s.world, 100, [140, 100]);
 		initNaval(s);
 		const p = plan(s, [a.ent], worldPos(280, 100));
-		const near = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
+		const near = requireValue(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true),
+		);
 
 		// a band of swordsmen and an archer where the ship would put in
-		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [near[0] + 4, near[1]], "classes": ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 40, "min": 0 }) }));
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
+		s.world.addEntity(
+			makeHqEntity({
+				"id": 3100,
+				"owner": ENEMY,
+				"position": [near[0] + 4, near[1]],
+				"classes": ["Unit", "Ranged"],
+			}, { "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 40, "min": 0 }) }),
+		);
+		const bp = requireValue(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true),
+		);
 
-		assert.ok(Math.hypot(bp[0] - near[0] - 4, bp[1] - near[1]) > 40, `out of the archer's reach: ${near} then ${bp}`);
+		assert.ok(
+			Math.hypot(bp[0] - near[0] - 4, bp[1] - near[1]) > 40,
+			`out of the archer's reach: ${near} then ${bp}`,
+		);
 	});
 
 	it("keeps clear of a dock of ours", () =>
@@ -1041,13 +1102,17 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const s = seat();
 		const carrier = ship(s.world, 202, [200, 160]);
 		const a = soldier(s.world, 100, [140, 160]);
-		s.world.addEntity(makeHqEntity({
-			"id": 300, "owner": PLAYER, "position": [244, 160], "classes": ["Structure", "Dock"]
-		}, {}, { "sea": SEA }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 300, "owner": PLAYER, "position": [244, 160], "classes": ["Structure", "Dock"] }, {}, {
+				"sea": SEA,
+			}),
+		);
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)));
+		const bp = requireValue(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)),
+		);
 
 		assert.ok(Math.hypot(bp[0] - 244, bp[1] - 160) > 40, `away from the dock, got ${bp}`);
 	});
@@ -1057,13 +1122,17 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const s = seat();
 		const carrier = ship(s.world, 202, [200, 160]);
 		const a = soldier(s.world, 100, [140, 160]);
-		s.world.addEntity(makeHqEntity({
-			"id": 300, "owner": PLAYER, "position": [244, 160], "classes": ["Structure", "Dock"]
-		}, { "foundationProgress": () => 0.4 }, { "sea": SEA }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 300, "owner": PLAYER, "position": [244, 160], "classes": ["Structure", "Dock"] }, {
+				"foundationProgress": () => 0.4,
+			}, { "sea": SEA }),
+		);
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)));
+		const bp = requireValue(
+			p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)),
+		);
 		const d = Math.hypot(bp[0] - 244, bp[1] - 160);
 
 		assert.ok(d > 20 && d < 40, `30 m from a foundation rather than 70, got ${d}`);

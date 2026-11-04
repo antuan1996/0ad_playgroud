@@ -56,7 +56,10 @@ export function shootersOf(gameState: CommonGameState): Shooter[]
 		const attacks = ent.attackTypes();
 		if (!attacks?.length)
 			continue;
-		shooters.push({ pos, "range": attacks.includes("Ranged") ? ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE : 0 });
+		shooters.push({
+			pos,
+			"range": attacks.includes("Ranged") ? ent.attackRange("Ranged")?.max ?? DEFAULT_RANGE : 0,
+		});
 	}
 	return shooters;
 }
@@ -87,7 +90,11 @@ function segmentDistance(p: CommonPosition, a: CommonPosition, b: CommonPosition
 }
 
 /** How many shooters reach the way from `from` through the waypoints, its end included. */
-export function threatsAlong(from: CommonPosition, waypoints: readonly CommonPosition[], shooters: readonly Shooter[]): number
+export function threatsAlong(
+	from: CommonPosition,
+	waypoints: readonly CommonPosition[],
+	shooters: readonly Shooter[],
+): number
 {
 	let threats = 0;
 	for (const shooter of shooters)
@@ -178,8 +185,13 @@ function onSea(grid: SeaGrid, cell: number): boolean
  * shooters where it can; the last is `to` itself. Undefined when either end is
  * not on that sea or no way joins them: the caller sends the ship straight.
  */
-export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: CommonPosition, to: CommonPosition,
-	shooters: readonly Shooter[]): CommonPosition[] | undefined
+export function seaRoute(
+	access: Readonly<Accessibility>,
+	sea: SeaIndex,
+	from: CommonPosition,
+	to: CommonPosition,
+	shooters: readonly Shooter[],
+): CommonPosition[] | undefined
 {
 	const width = access.width;
 	const cellOf = (pos: CommonPosition): number =>
@@ -189,7 +201,13 @@ export function seaRoute(access: Readonly<Accessibility>, sea: SeaIndex, from: C
 	};
 	const start = cellOf(from);
 	const goal = cellOf(to);
-	const grid: SeaGrid = { access, sea, width, "height": access.height, "danger": new Uint8Array(width * access.height) };
+	const grid: SeaGrid = {
+		access,
+		sea,
+		width,
+		"height": access.height,
+		"danger": new Uint8Array(width * access.height),
+	};
 	if (!onSea(grid, start) || !onSea(grid, goal))
 		return undefined;
 	markDanger(grid, shooters);
@@ -254,8 +272,13 @@ function searchPath(grid: SeaGrid, start: number, goal: number): number[] | unde
 }
 
 /** Lowers the cost of each sea neighbour of `cell` reached cheaper through it, and queues it. */
-function relaxNeighbours(grid: SeaGrid, cell: number, cost: Float64Array, cameFrom: Int32Array,
-	queue: (next: number, reached: number) => void): void
+function relaxNeighbours(
+	grid: SeaGrid,
+	cell: number,
+	cost: Float64Array,
+	cameFrom: Int32Array,
+	queue: (next: number, reached: number) => void,
+): void
 {
 	const { width, height, danger } = grid;
 	const x = cell % width;
@@ -339,4 +362,3 @@ function worldPosOf(x: number, y: number, cellSize: number): CommonPosition
 {
 	return worldPos((x + 0.5) * cellSize, (y + 0.5) * cellSize);
 }
-

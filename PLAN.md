@@ -406,6 +406,12 @@ imports, a loop the original also left doing nothing, unused test names).
 
 ### 5.2 Every change
 
+- **Format first.** After editing Petra TypeScript sources, tests, declarations
+  or tools, run `npm run format:petra` before every typecheck or test run and
+  before committing. `npm run format:petra:check` is the non-mutating check;
+  the Petra test/coverage npm scripts and pre-commit run it automatically.
+  Formatting is limited to `petra_ts/**/*.ts` and `build/petra_ts/**/*.ts` by
+  `dprint.json`, never generated bots or match/batch output.
 - `npm run build:petra`, `npm run typecheck:petra:tests`, `npm run test:petra`
   and `npm run test:petra:out`.
 - `npm run test:petra:match`: the fixed match and its anomaly checks; the

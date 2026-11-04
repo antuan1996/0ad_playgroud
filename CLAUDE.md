@@ -32,12 +32,21 @@ binaries/system/test                      # cxxtest runner (also runs the JS com
 binaries/system/test --suite <Suite> [--test <name>]   # one suite / one test; --list to enumerate
 ```
 
-### Linting
+### Linting and formatting
 - `npm run lint` / `npm run lint:fix` — ESLint for the game's **JS** (tabs, see `.editorconfig`). It does not lint `.ts` files.
-- `pre-commit run --all-files` — the CI hooks (ruff, shellcheck/shfmt, markdownlint, yamllint, eslint, the non-breaking space in "0 A.D." under `binaries/`).
+- `npm run format:petra` / `npm run format:petra:check` — dprint for the Petra port, tests, declarations and TypeScript tools. The config is `dprint.json`; generated bots and match/batch outputs are excluded.
+- `pre-commit run --all-files` — the CI hooks (ruff, shellcheck/shfmt, markdownlint, yamllint, eslint, dprint, the non-breaking space in "0 A.D." under `binaries/`).
 
 ### Petra TS port
+**Mandatory for coding agents:** after editing Petra TypeScript sources, tests,
+declarations or tools, run `npm run format:petra` before every typecheck or test
+run and before committing. Format again after any later edits. The Petra test
+and coverage npm scripts verify this before running, and pre-commit enforces it
+for commits. See `AGENTS.md`.
+
 ```sh
+npm run format:petra                 # apply the required formatting first
+npm run format:petra:check           # verify without modifying files
 npm run build:petra                 # strict typecheck of the port (noEmit); clean
 npm run typecheck:petra:tests       # typecheck tests + harness (also re-checks the port); clean
 npm run build:petra:out             # build the "Petra TS" in-game bot into simulation/ai/petra_out/ (gitignored)

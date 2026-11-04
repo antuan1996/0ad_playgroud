@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fieldsBeatBerries, MIN_BERRY_GATHERERS } from "../decision/foodSource.ts";
+import { MIN_BERRY_GATHERERS, fieldsBeatBerries } from "../decision/foodSource.ts";
 
 describe("where food comes from: berries or fields", () =>
 {
@@ -17,7 +17,10 @@ describe("where food comes from: berries or fields", () =>
 
 	it("does not act on too few berry gatherers to measure", () =>
 	{
-		assert.equal(fieldsBeatBerries({ "fruit": 0.1, "grain": 0.55, "fruitGatherers": MIN_BERRY_GATHERERS - 1 }), false);
+		assert.equal(
+			fieldsBeatBerries({ "fruit": 0.1, "grain": 0.55, "fruitGatherers": MIN_BERRY_GATHERERS - 1 }),
+			false,
+		);
 		assert.equal(fieldsBeatBerries({ "fruit": 0.1, "grain": 0.55, "fruitGatherers": MIN_BERRY_GATHERERS }), true);
 	});
 

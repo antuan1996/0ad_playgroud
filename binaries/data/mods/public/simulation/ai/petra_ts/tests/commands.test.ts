@@ -23,7 +23,10 @@ describe("the bot's own commands", () =>
 	{
 		resetRecorder();
 		debugShade([entityId(1010), entityId(1011)], [2, 0, 0]);
-		assert.equal(JSON.stringify(commands), JSON.stringify([{ "type": "set-shading-color", "entities": [1010, 1011], "rgb": [2, 0, 0] }]),
-			"the same keys in the same order, as the command log records them");
+		assert.equal(
+			JSON.stringify(commands),
+			JSON.stringify([{ "type": "set-shading-color", "entities": [1010, 1011], "rgb": [2, 0, 0] }]),
+			"the same keys in the same order, as the command log records them",
+		);
 	});
 });

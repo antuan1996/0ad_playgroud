@@ -5,11 +5,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, makeEntity } from "./harness/fakes.ts";
 import { seaRegion, worldPos } from "../adapter/brands.ts";
+import { fake, makeEntity } from "./harness/fakes.ts";
 
 import type { Accessibility } from "simulation/ai/common-api/terrain-analysis.js";
-import { DANGER_MARGIN, MAX_WAYPOINTS, type Shooter, seaRoute, shootersOf, threatsAlong, threatsAt } from "../world/seaRoute.ts";
+import {
+	DANGER_MARGIN,
+	MAX_WAYPOINTS,
+	seaRoute,
+	shootersOf,
+	threatsAlong,
+	threatsAt,
+	type Shooter,
+} from "../world/seaRoute.ts";
 
 const SEA = seaRegion(3);
 const CELL = 4;
@@ -23,8 +31,11 @@ function sea(land: (x: number, y: number) => boolean = () => false): Accessibili
 		for (let x = 0; x < width; ++x)
 			navalPassMap[x + y * width] = land(x, y) ? 1 : SEA;
 	return fake<Accessibility>({
-		"width": width, "height": width, "cellSize": CELL, navalPassMap,
-		"gamePosToMapPos": (pos: [number, number]) => [Math.floor(pos[0] / CELL), Math.floor(pos[1] / CELL)]
+		"width": width,
+		"height": width,
+		"cellSize": CELL,
+		navalPassMap,
+		"gamePosToMapPos": (pos: [number, number]) => [Math.floor(pos[0] / CELL), Math.floor(pos[1] / CELL)],
 	});
 }
 
@@ -52,7 +63,10 @@ describe("seaRoute", () =>
 		assert.ok(route);
 		for (const point of route.slice(0, -1))
 			assert.ok(dist(point, tower.pos) > tower.range + DANGER_MARGIN - CELL, `waypoint ${point} keeps clear`);
-		assert.ok(route.some(point => Math.abs(point[1] - 110) > tower.range + DANGER_MARGIN), "it swings wide of the tower, on one side or the other");
+		assert.ok(
+			route.some(point => Math.abs(point[1] - 110) > tower.range + DANGER_MARGIN),
+			"it swings wide of the tower, on one side or the other",
+		);
 	});
 
 	it("keeps its margin from a swordsman waiting on the shore", () =>
@@ -88,7 +102,10 @@ describe("seaRoute", () =>
 		const from = worldPos(40, 120);
 		const to = worldPos(200, 120);
 		// two towers on the island's west shore and south: the straight way passes within their reach
-		const towers: Shooter[] = [{ "pos": worldPos(100, 80), "range": 40 }, { "pos": worldPos(100, 160), "range": 40 }];
+		const towers: Shooter[] = [{ "pos": worldPos(100, 80), "range": 40 }, {
+			"pos": worldPos(100, 160),
+			"range": 40,
+		}];
 		const route = seaRoute(access, SEA, from, worldPos(200, 230), towers);
 		assert.ok(route);
 		assert.ok(route.length <= MAX_WAYPOINTS);
@@ -100,7 +117,11 @@ describe("seaRoute", () =>
 			{
 				const x = previous[0] + (point[0] - previous[0]) * k / 50;
 				const y = previous[1] + (point[1] - previous[1]) * k / 50;
-				assert.equal(access.navalPassMap[Math.floor(x / CELL) + Math.floor(y / CELL) * 60], SEA, `(${x}, ${y}) at sea`);
+				assert.equal(
+					access.navalPassMap[Math.floor(x / CELL) + Math.floor(y / CELL) * 60],
+					SEA,
+					`(${x}, ${y}) at sea`,
+				);
 			}
 			previous = point;
 		}
@@ -109,10 +130,14 @@ describe("seaRoute", () =>
 
 	it("finds no route from or to a point off its sea, or across land", () =>
 	{
-		const island = sea((x) => x === 30);	// a wall of land down the middle
+		const island = sea(x => x === 30); // a wall of land down the middle
 		assert.equal(seaRoute(island, SEA, worldPos(10, 120), worldPos(230, 120), []), undefined, "no way across");
 		assert.equal(seaRoute(island, SEA, worldPos(122, 120), worldPos(230, 120), []), undefined, "starting on land");
-		assert.equal(seaRoute(sea(), seaRegion(9), worldPos(10, 120), worldPos(230, 120), []), undefined, "another sea");
+		assert.equal(
+			seaRoute(sea(), seaRegion(9), worldPos(10, 120), worldPos(230, 120), []),
+			undefined,
+			"another sea",
+		);
 	});
 });
 
@@ -120,28 +145,46 @@ describe("shootersOf", () =>
 {
 	it("counts the enemy buildings with defensive fire, the archers by their range and the swordsmen at 0, not houses, traders or gaia", () =>
 	{
-		const tower = makeEntity({ id: 1, owner: 2, position: [10, 10], classes: ["Structure", "Tower"] },
-			{ "hasDefensiveFire": () => true, "attackRange": () => ({ "max": 72, "min": 0 }) });
-		const house = makeEntity({ id: 2, owner: 2, position: [20, 20], classes: ["Structure", "House"] },
-			{ "hasDefensiveFire": () => false });
-		const archer = makeEntity({ id: 3, owner: 2, position: [30, 30], classes: ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 60, "min": 0 }) });
-		const swordsman = makeEntity({ id: 4, owner: 2, position: [40, 40], classes: ["Unit", "Melee"] },
-			{ "attackTypes": () => ["Melee"] });
+		const tower = makeEntity({ id: 1, owner: 2, position: [10, 10], classes: ["Structure", "Tower"] }, {
+			"hasDefensiveFire": () => true,
+			"attackRange": () => ({ "max": 72, "min": 0 }),
+		});
+		const house = makeEntity({ id: 2, owner: 2, position: [20, 20], classes: ["Structure", "House"] }, {
+			"hasDefensiveFire": () => false,
+		});
+		const archer = makeEntity({ id: 3, owner: 2, position: [30, 30], classes: ["Unit", "Ranged"] }, {
+			"attackTypes": () => ["Ranged"],
+			"attackRange": () => ({ "max": 60, "min": 0 }),
+		});
+		const swordsman = makeEntity({ id: 4, owner: 2, position: [40, 40], classes: ["Unit", "Melee"] }, {
+			"attackTypes": () => ["Melee"],
+		});
 		const wolf = makeEntity({ id: 5, owner: 0, position: [50, 50], classes: ["Unit", "Animal"] });
-		const trader = makeEntity({ id: 8, owner: 2, position: [80, 80], classes: ["Unit", "Trader"] },
-			{ "attackTypes": () => undefined });
+		const trader = makeEntity({ id: 8, owner: 2, position: [80, 80], classes: ["Unit", "Trader"] }, {
+			"attackTypes": () => undefined,
+		});
 		// a slinger and a sentry post whose templates name no range: a tower's reach
-		const slinger = makeEntity({ id: 7, owner: 2, position: [70, 70], classes: ["Unit", "Ranged"] },
-			{ "attackTypes": () => ["Ranged"], "attackRange": () => undefined });
-		const sentry = makeEntity({ id: 6, owner: 2, position: [60, 60], classes: ["Structure", "Tower"] },
-			{ "hasDefensiveFire": () => true, "attackRange": () => undefined });
+		const slinger = makeEntity({ id: 7, owner: 2, position: [70, 70], classes: ["Unit", "Ranged"] }, {
+			"attackTypes": () => ["Ranged"],
+			"attackRange": () => undefined,
+		});
+		const sentry = makeEntity({ id: 6, owner: 2, position: [60, 60], classes: ["Structure", "Tower"] }, {
+			"hasDefensiveFire": () => true,
+			"attackRange": () => undefined,
+		});
 		const gameState = fake<CommonGameState>({
-			"getEnemyEntities": () => ({ "values": () => [tower, house, archer, swordsman, wolf, sentry, slinger, trader].values() })
+			"getEnemyEntities": () => ({
+				"values": () => [tower, house, archer, swordsman, wolf, sentry, slinger, trader].values(),
+			}),
 		});
 
-		assert.deepEqual(shootersOf(gameState), [{ "pos": [10, 10], "range": 72 }, { "pos": [30, 30], "range": 60 },
-			{ "pos": [40, 40], "range": 0 }, { "pos": [60, 60], "range": 60 }, { "pos": [70, 70], "range": 60 }]);
+		assert.deepEqual(shootersOf(gameState), [
+			{ "pos": [10, 10], "range": 72 },
+			{ "pos": [30, 30], "range": 60 },
+			{ "pos": [40, 40], "range": 0 },
+			{ "pos": [60, 60], "range": 60 },
+			{ "pos": [70, 70], "range": 60 },
+		]);
 	});
 });
 
@@ -152,7 +195,11 @@ describe("threats in reach", () =>
 
 	it("of a point: within a shooter's range and the margin", () =>
 	{
-		assert.equal(threatsAt(worldPos(100, 100 + 40 + DANGER_MARGIN), [archer, swordsman]), 1, "at the edge of the archer's reach");
+		assert.equal(
+			threatsAt(worldPos(100, 100 + 40 + DANGER_MARGIN), [archer, swordsman]),
+			1,
+			"at the edge of the archer's reach",
+		);
 		assert.equal(threatsAt(worldPos(100, 100 + 40 + DANGER_MARGIN + 1), [archer, swordsman]), 0);
 		assert.equal(threatsAt(worldPos(205, 100), [archer, swordsman]), 1, "beside the swordsman");
 	});
@@ -163,6 +210,10 @@ describe("threats in reach", () =>
 		assert.equal(threatsAlong(worldPos(0, 160), [worldPos(300, 160)], [archer, swordsman]), 0);
 		// by (150, 110) then east: past the archer within reach, the swordsman within the margin
 		assert.equal(threatsAlong(worldPos(0, 160), [worldPos(150, 110), worldPos(300, 100)], [archer, swordsman]), 2);
-		assert.equal(threatsAlong(worldPos(100, 100), [worldPos(100, 100)], [archer]), 1, "a way of no length, on the archer");
+		assert.equal(
+			threatsAlong(worldPos(100, 100), [worldPos(100, 100)], [archer]),
+			1,
+			"a way of no length, on the archer",
+		);
 	});
 });

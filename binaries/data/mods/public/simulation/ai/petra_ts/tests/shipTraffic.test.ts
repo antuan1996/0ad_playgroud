@@ -5,16 +5,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { fake, makeEntity } from "./harness/fakes.ts";
 import { worldPos } from "../adapter/brands.ts";
 import { ShipTraffic, TRAFFIC_CELL, TRAFFIC_HALF_LIFE } from "../world/shipTraffic.ts";
+import { fake, makeEntity } from "./harness/fakes.ts";
 
 /** A game state at `time` whose enemy units are `units`. */
 function stateAt(time: number, units: CommonEntity[]): CommonGameState
 {
 	return fake<CommonGameState>({
 		"ai": { "elapsedTime": time },
-		"getEnemyUnits": () => ({ "values": () => units.values() })
+		"getEnemyUnits": () => ({ "values": () => units.values() }),
 	});
 }
 
@@ -26,13 +26,18 @@ describe("ShipTraffic", () =>
 	it("adds each enemy ship's seconds in its cell, fishing boats and merchants less, gaia's and land units not", () =>
 	{
 		const traffic = new ShipTraffic(320, 320);
-		const units = [ship(1, [40, 40]), ship(2, [40, 40], ["Unit", "Ship", "FishingBoat"]),
-			ship(3, [200, 40], ["Unit", "Ship", "Trader"]), ship(4, [100, 100], ["Unit", "Ship"], 0),
-			makeEntity({ id: 5, owner: 2, position: [100, 100], classes: ["Unit", "Infantry"] })];
-		traffic.sample(stateAt(100, units));	// the first sample only starts the clock
+		const units = [
+			ship(1, [40, 40]),
+			ship(2, [40, 40], ["Unit", "Ship", "FishingBoat"]),
+			ship(3, [200, 40], ["Unit", "Ship", "Trader"]),
+			ship(4, [100, 100], ["Unit", "Ship"], 0),
+			makeEntity({ id: 5, owner: 2, position: [100, 100], classes: ["Unit", "Infantry"] }),
+		];
+		traffic.sample(stateAt(100, units)); // the first sample only starts the clock
 		traffic.sample(stateAt(110, units));
 
-		const cell = (x: number, z: number) => traffic.cells[Math.floor(x / TRAFFIC_CELL) + Math.floor(z / TRAFFIC_CELL) * traffic.width];
+		const cell = (x: number, z: number) =>
+			traffic.cells[Math.floor(x / TRAFFIC_CELL) + Math.floor(z / TRAFFIC_CELL) * traffic.width];
 		assert.ok(Math.abs(cell(40, 40) - 12.5) < 1e-4, "a warship's 10 s and a fishing boat's quarter");
 		assert.ok(Math.abs(cell(200, 40) - 5) < 1e-4, "a merchant's half");
 		assert.equal(cell(100, 100), 0, "gaia's ship and a soldier count nothing");

@@ -19,8 +19,8 @@ import { commands, resetRecorder } from "./harness/engine.ts";
 
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
-import { type PlanMetadata, QueuePlan, type SerializedQueuePlan } from "../execution/queueplan.ts";
 import { baseId } from "../adapter/brands.ts";
+import { QueuePlan, type PlanMetadata, type SerializedQueuePlan } from "../execution/queueplan.ts";
 
 /** The base plan on its own; it saves only the fields every plan saves. */
 class BarePlan extends QueuePlan<CommonTemplate>
@@ -34,8 +34,14 @@ class BarePlan extends QueuePlan<CommonTemplate>
 
 	Serialize(): SerializedQueuePlan<CommonTemplate>
 	{
-		return { "category": this.category, "type": this.type, "ID": this.ID, "metadata": this.metadata,
-			"cost": this.cost.Serialize(), "number": this.number };
+		return {
+			"category": this.category,
+			"type": this.type,
+			"ID": this.ID,
+			"metadata": this.metadata,
+			"cost": this.cost.Serialize(),
+			"number": this.number,
+		};
 	}
 }
 
@@ -46,17 +52,13 @@ const SOLDITE_COST = { food: 150, wood: 20 };
 /** A world that knows one template, and nothing else. */
 function world(): CommonGameState
 {
-	return makeFakeGameState({
-		templates: { [SOLDITE]: { cost: SOLDITE_COST } }
-	}).gameState;
+	return makeFakeGameState({ templates: { [SOLDITE]: { cost: SOLDITE_COST } } }).gameState;
 }
 
 /** The resources a manager holds, leaving out the ones it does not need. */
 function costOf(manager: ResourcesManager): Record<string, number>
 {
-	return Object.fromEntries(
-		Object.entries(manager.Serialize().amounts).filter(([, amount]) => amount !== 0)
-	);
+	return Object.fromEntries(Object.entries(manager.Serialize().amounts).filter(([, amount]) => amount !== 0));
 }
 
 describe("QueuePlan", () =>
@@ -92,9 +94,11 @@ describe("QueuePlan", () =>
 		// The game says the template is not there.
 		gameState.getTemplate = () => null;
 		// The plan names the template it could not find.
-		assert.throws(() => new BarePlan(gameState, "units/athenians_ghost"),
-		/Tried to add the inexisting template units\/athenians_ghost to Petra\./,
-		"the error names the template");
+		assert.throws(
+			() => new BarePlan(gameState, "units/athenians_ghost"),
+			/Tried to add the inexisting template units\/athenians_ghost to Petra\./,
+			"the error names the template",
+		);
 	});
 
 	it("numbers plans from Petra's own counter", () =>
@@ -146,8 +150,7 @@ describe("QueuePlan", () =>
 		const plan = new BarePlan(world(), SOLDITE);
 		assert.deepEqual(costOf(plan.getCost()), SOLDITE_COST, "one unit costs the template cost");
 		plan.number = 3;
-		assert.deepEqual(costOf(plan.getCost()), { food: 450, wood: 60 },
-		"three units cost three times as much");
+		assert.deepEqual(costOf(plan.getCost()), { food: 450, wood: 60 }, "three units cost three times as much");
 	});
 
 	it("hands the queue manager a cost of its own", () =>

@@ -25,7 +25,10 @@ registerHooks({
 	resolve(specifier, context, nextResolve)
 	{
 		if (specifier.startsWith("simulation/"))
-			return { "url": pathToFileURL(existing(path.join(modsPublic, specifier), specifier)).href, "shortCircuit": true };
+			return {
+				"url": pathToFileURL(existing(path.join(modsPublic, specifier), specifier)).href,
+				"shortCircuit": true,
+			};
 
 		const resolved = nextResolve(specifier, context);
 		if (!toBuild || !resolved.url.startsWith("file:"))
@@ -35,7 +38,7 @@ registerHooks({
 			return resolved;
 		const built = path.join(outRoot, path.relative(portRoot, file)).replace(/\.ts$/, ".js");
 		return { "url": pathToFileURL(existing(built, specifier)).href, "shortCircuit": true };
-	}
+	},
 });
 
 function existing(file: string, specifier: string): string

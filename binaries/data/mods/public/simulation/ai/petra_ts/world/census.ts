@@ -26,6 +26,6 @@ export function censusOf(gameState: CommonGameState): Census
 		"population": gameState.getPopulation(),
 		"limit": gameState.getPopulationLimit(),
 		"max": gameState.getPopulationMax(),
-		coming
+		coming,
 	};
 }

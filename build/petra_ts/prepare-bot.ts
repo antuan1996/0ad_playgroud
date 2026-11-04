@@ -22,7 +22,7 @@
  * - data.json: the engine reads the bot's name, constructor and entry file from
  *   it, and only lists folders of simulation/ai/ that have one.
  */
-import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,21 +31,21 @@ const BOTS: Record<string, { name: string; description: string }> = {
 	"petra_out": {
 		"name": "Petra TS",
 		"description": "TypeScript port of Petra, the default 0 A.D. AI bot, built from simulation/ai/petra_ts. " +
-			"It is meant to play as the original does; pit it against Petra to compare them.\n\n" + LEVELS
+			"It is meant to play as the original does; pit it against Petra to compare them.\n\n" + LEVELS,
 	},
 	"petra_parity": {
 		"name": "Petra TS parity",
 		"description": "The TypeScript port of Petra as it was frozen at the tag petra-ts-parity, " +
-			"one file per original file: the baseline Petra TS is measured against.\n\n" + LEVELS
+			"one file per original file: the baseline Petra TS is measured against.\n\n" + LEVELS,
 	},
 	"petra_prev": {
 		"name": "Petra TS previous",
 		"description": "Petra TS as it was at the tag petra-ts-prev: the version a change to Petra TS " +
-			"must not lose to.\n\n" + LEVELS
-	}
+			"must not lose to.\n\n" + LEVELS,
+	},
 };
 
-const botArgument = process.argv.find((arg) => arg.startsWith("--bot="));
+const botArgument = process.argv.find(arg => arg.startsWith("--bot="));
 const BOT_ID = botArgument?.slice("--bot=".length) ?? "petra_out";
 const bot = BOTS[BOT_ID];
 if (!bot)
@@ -57,12 +57,7 @@ const CONSTRUCTOR = "PetraBot";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const outDir = join(repoRoot, "binaries/data/mods/public", VFS_DIR);
 
-const metadata = {
-	...bot,
-	"constructor": CONSTRUCTOR,
-	"filename": ENTRY,
-	"useShared": true
-};
+const metadata = { ...bot, "constructor": CONSTRUCTOR, "filename": ENTRY, "useShared": true };
 
 /** static `from "./x"`, side-effect `import "./x"` and dynamic `import("./x")` */
 const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\.?\/[^"']+)\2/g;
@@ -88,11 +83,10 @@ if (process.argv[2] === "state")
 	if (!existsSync(join(outDir, "data.json")))
 		fail(`${VFS_DIR} is not built: run npm run build:petra:out first`);
 	copyFileSync(join(repoRoot, "build/petra_ts/bot-state.js"), join(outDir, "_botstate.js"));
-	writeFileSync(join(outDir, "data.json"), JSON.stringify({
-		...metadata,
-		"constructor": "PetraBotState",
-		"filename": "_botstate.js"
-	}, null, "\t") + "\n");
+	writeFileSync(
+		join(outDir, "data.json"),
+		JSON.stringify({ ...metadata, "constructor": "PetraBotState", "filename": "_botstate.js" }, null, "\t") + "\n",
+	);
 	console.log(`prepare-bot: "${metadata.name}" in ${VFS_DIR} dumps its state (PetraBotState)`);
 	process.exit(0);
 }
@@ -101,8 +95,9 @@ if (!existsSync(join(outDir, ENTRY)))
 	fail(`${VFS_DIR}/${ENTRY} is missing: run tsc -p build/petra_ts/tsconfig.build.json first`);
 
 let rewritten = 0;
-const files = (readdirSync(outDir, { "recursive": true }) as string[]).filter((name) => name.endsWith(".js"))
-	.map((name) => name.split("\\").join("/"));
+const files = (readdirSync(outDir, { "recursive": true }) as string[]).filter(name => name.endsWith(".js")).map(name =>
+	name.split("\\").join("/")
+);
 for (const file of files)
 {
 	const path = join(outDir, file);

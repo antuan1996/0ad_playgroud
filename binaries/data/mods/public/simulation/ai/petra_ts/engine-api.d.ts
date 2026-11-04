@@ -253,10 +253,7 @@ interface EnginePlayerState
 	/** Whether this player has barter-capable markets. */
 	canBarter: boolean;
 	/** Barter rates (Barter.GetPrices) keyed by generic resource code. */
-	barterPrices: {
-		buy: ResourceAmounts;
-		sell: ResourceAmounts;
-	};
+	barterPrices: { buy: ResourceAmounts; sell: ResourceAmounts };
 	/** Only present when the player entity has a StatisticsTracker. */
 	statistics?: EnginePlayerStatistics;
 }
@@ -424,8 +421,7 @@ interface EngineAIEvent
 }
 
 /** A foundation finished building; see components/interfaces/Foundation.js. */
-interface EngineAIConstructionFinishedEvent
-	extends EngineAIEvent
+interface EngineAIConstructionFinishedEvent extends EngineAIEvent
 {
 	/** The (renamed-away) foundation entity. */
 	entity: EntityId;
@@ -437,8 +433,7 @@ interface EngineAIConstructionFinishedEvent
  * One or more units finished training; posted by Trainer.js. `metadata` is
  * whatever Petra attached to the originating train command.
  */
-interface EngineAITrainingFinishedEvent
-	extends EngineAIEvent
+interface EngineAITrainingFinishedEvent extends EngineAIEvent
 {
 	entities: EntityId[];
 	owner: PlayerId;
@@ -452,8 +447,7 @@ interface EngineAITrainingFinishedEvent
  * Commands.js TryConstructBuilding), which AIProxy forwards as this event;
  * Petra's common-api/shared.js turns it into entity metadata.
  */
-interface EngineAIMetadataEvent
-	extends EngineAIEvent
+interface EngineAIMetadataEvent extends EngineAIEvent
 {
 	id: EntityId;
 	owner: PlayerId;
@@ -511,9 +505,8 @@ interface EngineAITerritoryDecayChangedEvent extends EngineAIEvent
  * Destroy event before Petra logic sees it (`SuccessfulFoundation` for
  * foundations completed in the same turn, `metadata` with the per-player
  * PetraEntityMetadata of the entity); the engine itself pushes only `entity`.
-	 */
-interface EngineAIDestroyEvent
-	extends EngineAIEvent
+ */
+interface EngineAIDestroyEvent extends EngineAIEvent
 {
 	entity: EntityId;
 	/** Added by Petra's shared.js when the destroyed entity was a foundation
@@ -554,11 +547,7 @@ interface EngineAIEvents
 	 * Technology value changes per entity, sent by ModifiersManager
 	 * (SendPlayerModifierMessages) — no `player` field is ever added.
 	 */
-	ValueModification: Array<{
-		component: string;
-		valueNames: string[];
-		entities: EntityId[];
-	}>;
+	ValueModification: Array<{ component: string; valueNames: string[]; entities: EntityId[] }>;
 	OwnershipChanged: Array<{ entity: EntityId; from: PlayerId; to: PlayerId }>;
 	/** A unit entered a garrison holder (AIProxy.OnGarrisonedUnitsChanged). */
 	Garrison: Array<{ entity: EntityId; holder: EntityId }>;
@@ -748,14 +737,7 @@ interface EngineRallyPointData
  */
 interface EngineWallSet
 {
-	templates: {
-		tower: string;
-		long: string;
-		medium: string;
-		short: string;
-		gate: string;
-		[key: string]: string;
-	};
+	templates: { tower: string; long: string; medium: string; short: string; gate: string; [key: string]: string };
 	minTowerOverlap: number;
 	maxTowerOverlap: number;
 }
@@ -794,7 +776,14 @@ interface EngineCommandQueuedFormation extends EngineCommandEntityList
 type EngineCommandCheat =
 	| { type: "cheat"; player: PlayerId; action: "addresource"; text: string; parameter: number }
 	| { type: "cheat"; player: PlayerId; action: "convertunit"; selected: EntityId[]; parameter: PlayerId }
-	| { type: "cheat"; player: PlayerId; action: "createunits"; selected: EntityId[]; parameter: number; templates: string[] }
+	| {
+		type: "cheat";
+		player: PlayerId;
+		action: "createunits";
+		selected: EntityId[];
+		parameter: number;
+		templates: string[];
+	}
 	| { type: "cheat"; player: PlayerId; action: "killunits"; selected: EntityId[] }
 	| { type: "cheat"; player: PlayerId; action: "defeatplayer"; parameter: PlayerId }
 	| { type: "cheat"; player: PlayerId; action: "researchTechnology"; parameter: string; selected?: EntityId[] }
@@ -824,34 +813,118 @@ type EngineCommand =
 	| (EngineCommandQueued & { type: "walk"; x: number; z: number; formation?: string })
 	| (EngineCommandWithFormation & { type: "walk-custom"; targetPositions: Record<string, { x: number; y: number }> })
 	| (EngineCommandQueued & { type: "walk-to-range"; x: number; z: number; min: number; max: number })
-	| (EngineCommandWithFormation & { type: "attack-walk"; x: number; z: number; targetClasses?: string[]; allowCapture?: boolean })
-	| (EngineCommandWithFormation & { type: "attack-walk-custom"; targetPositions: Record<string, { x: number; y: number }>; targetClasses?: string[]; allowCapture?: boolean })
+	| (EngineCommandWithFormation & {
+		type: "attack-walk";
+		x: number;
+		z: number;
+		targetClasses?: string[];
+		allowCapture?: boolean;
+	})
+	| (EngineCommandWithFormation & {
+		type: "attack-walk-custom";
+		targetPositions: Record<string, { x: number; y: number }>;
+		targetClasses?: string[];
+		allowCapture?: boolean;
+	})
 	| (EngineCommandQueued & { type: "attack"; target: EntityId; allowCapture?: boolean; formation?: string })
 	| (EngineCommandQueued & { type: "attack-group"; targets: EntityId[]; allowCapture?: boolean })
-	| (EngineCommandQueuedFormation & { type: "patrol"; x: number; z: number; targetClasses?: string[]; allowCapture?: boolean })
+	| (EngineCommandQueuedFormation & {
+		type: "patrol";
+		x: number;
+		z: number;
+		targetClasses?: string[];
+		allowCapture?: boolean;
+	})
 	| (EngineCommandQueued & { type: "heal"; target: EntityId; formation?: string })
 	| (EngineCommandWithFormation & { type: "repair"; target: EntityId; autocontinue?: boolean })
 	| (EngineCommandWithFormation & { type: "gather"; target: EntityId })
-	| (EngineCommandQueued & { type: "gather-near-position"; x: number; z: number; resourceType: string; resourceTemplate: string; formation?: string })
+	| (EngineCommandQueued & {
+		type: "gather-near-position";
+		x: number;
+		z: number;
+		resourceType: string;
+		resourceTemplate: string;
+		formation?: string;
+	})
 	| (EngineCommandWithFormation & { type: "returnresource"; target: EntityId })
 	| (EngineCommandEntityList & { type: "collect-treasure"; target: EntityId; queued?: boolean; formation?: string })
 	| (EngineCommandEntityList & { type: "collect-treasure-near-position"; x: number; z: number; queued?: boolean })
-	| (EngineCommandEntityList & { type: "back-to-work" | "remove-guard" | "leave-turret" | "unload-turrets" | "alert-raise" | "alert-end" | "cancel-upgrade" | "autoqueue-on" | "autoqueue-off" })
+	| (EngineCommandEntityList & {
+		type:
+			| "back-to-work"
+			| "remove-guard"
+			| "leave-turret"
+			| "unload-turrets"
+			| "alert-raise"
+			| "alert-end"
+			| "cancel-upgrade"
+			| "autoqueue-on"
+			| "autoqueue-off";
+	})
 	| (EngineCommandEntityList & { type: "stop"; queued?: boolean })
-	| (EngineCommandQueued & { type: "call-to-arms"; position: { x: number; z: number }; targetClasses?: string[]; allowCapture?: boolean; formation?: string })
+	| (EngineCommandQueued & {
+		type: "call-to-arms";
+		position: { x: number; z: number };
+		targetClasses?: string[];
+		allowCapture?: boolean;
+		formation?: string;
+	})
 	| (EngineCommandQueued & { type: "focus-fire"; target: EntityId; formation?: string })
 	| (EngineCommandEntityList & { type: "occupy-turret"; target: EntityId; queued?: boolean })
 	| (EngineCommandQueued & { type: "garrison" | "guard"; target: EntityId; formation?: string })
-	| { type: "train"; entities: EntityId[]; template: string; count: number; metadata?: Record<string, unknown>; pushFront?: boolean }
+	| {
+		type: "train";
+		entities: EntityId[];
+		template: string;
+		count: number;
+		metadata?: Record<string, unknown>;
+		pushFront?: boolean;
+	}
 	| { type: "research"; entity: EntityId; template: string; metadata?: Record<string, unknown>; pushFront?: boolean }
 	| { type: "stop-production"; entity: EntityId; id: number }
-	| (EngineCommandQueued & { type: "construct"; template: string; x: number; z: number; angle: number; metadata?: Record<string, unknown>; actorSeed?: number; autorepair?: boolean; autocontinue?: boolean; formation?: string; obstructionControlGroup?: number; obstructionControlGroup2?: number })
-	| (EngineCommandEntityList & { type: "construct-wall"; pieces: Array<{ template: string; x: number; z: number; angle: number }>; wallSet: EngineWallSet; startSnappedEntity?: EntityId; endSnappedEntity?: EntityId; autorepair?: boolean; autocontinue?: boolean; queued?: boolean })
+	| (EngineCommandQueued & {
+		type: "construct";
+		template: string;
+		x: number;
+		z: number;
+		angle: number;
+		metadata?: Record<string, unknown>;
+		actorSeed?: number;
+		autorepair?: boolean;
+		autocontinue?: boolean;
+		formation?: string;
+		obstructionControlGroup?: number;
+		obstructionControlGroup2?: number;
+	})
+	| (EngineCommandEntityList & {
+		type: "construct-wall";
+		pieces: Array<{ template: string; x: number; z: number; angle: number }>;
+		wallSet: EngineWallSet;
+		startSnappedEntity?: EntityId;
+		endSnappedEntity?: EntityId;
+		autorepair?: boolean;
+		autocontinue?: boolean;
+		queued?: boolean;
+	})
 	| { type: "delete-entities"; entities: EntityId[] }
-	| { type: "set-rallypoint"; structures?: EntityId[]; x: number; z: number; data?: EngineRallyPointData; queued?: boolean }
+	| {
+		type: "set-rallypoint";
+		structures?: EntityId[];
+		x: number;
+		z: number;
+		data?: EngineRallyPointData;
+		queued?: boolean;
+	}
 	| { type: "unset-rallypoint"; structures?: EntityId[] }
 	| { type: "resign" }
-	| (EngineCommandEntityList & { type: "setup-trade-route"; target: EntityId; source: EntityId; route?: Array<{ x: number; z: number }>; queued?: boolean; formation?: string })
+	| (EngineCommandEntityList & {
+		type: "setup-trade-route";
+		target: EntityId;
+		source: EntityId;
+		route?: Array<{ x: number; z: number }>;
+		queued?: boolean;
+		formation?: string;
+	})
 	| { type: "cancel-setup-trade-route"; entities: EntityId[]; target: EntityId }
 	| { type: "barter"; sell: string; buy: string; amount: number }
 	| { type: "unload"; garrisonHolder: EntityId; entities: EntityId[] }
@@ -917,8 +990,11 @@ declare const Engine: {
 	 * (LongPathfinder.cpp), so `path[0]` neighbours the target while the
 	 * final entry neighbours the start Petra began from.
 	 */
-	ComputePath(start: { x: number; y: number }, end: { x: number; y: number },
-		passabilityMask: number): EnginePathPoint[];
+	ComputePath(
+		start: { x: number; y: number },
+		end: { x: number; y: number },
+		passabilityMask: number,
+	): EnginePathPoint[];
 	/**
 	 * Debug-visualizes `data` (row-major, length width*height) as a PNG
 	 * saved under `screenshots/aidump/name.png`; warns and skips when the

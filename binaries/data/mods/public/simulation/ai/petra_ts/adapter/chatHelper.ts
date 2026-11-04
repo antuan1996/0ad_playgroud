@@ -3,57 +3,63 @@ import { postCommand } from "./commands.ts";
 const launchAttackMessages = {
 	"hugeAttack": [
 		markForTranslation("I am starting a massive military campaign against %(_player_)s, come and join me."),
-		markForTranslation("I have set up a huge army to crush %(_player_)s. Join me and you will have your share of the loot."),
-		markForTranslation("I am launching an unprecedented attack against %(_player_)s. Bring your armies and we may soon win this war.")
+		markForTranslation(
+			"I have set up a huge army to crush %(_player_)s. Join me and you will have your share of the loot.",
+		),
+		markForTranslation(
+			"I am launching an unprecedented attack against %(_player_)s. Bring your armies and we may soon win this war.",
+		),
 	],
 	"other": [
 		markForTranslation("I am launching an attack against %(_player_)s."),
 		markForTranslation("I have just sent an army against %(_player_)s."),
-		markForTranslation("I am sending an army against %(_player_)s.")
-	]
+		markForTranslation("I am sending an army against %(_player_)s."),
+	],
 };
 
 const answerRequestAttackMessages = {
 	"join": [
 		markForTranslation("Let me regroup my army and I will then join you against %(_player_)s."),
-		markForTranslation("I am finishing preparations to attack %(_player_)s.")
+		markForTranslation("I am finishing preparations to attack %(_player_)s."),
 	],
 	"decline": [
-		markForTranslation("Sorry, I do not have enough soldiers currently; but my next attack will target %(_player_)s."),
-		markForTranslation("Sorry, I still need to strengthen my army. However, I will attack %(_player_)s next.")
+		markForTranslation(
+			"Sorry, I do not have enough soldiers currently; but my next attack will target %(_player_)s.",
+		),
+		markForTranslation("Sorry, I still need to strengthen my army. However, I will attack %(_player_)s next."),
 	],
 	"other": [
-		markForTranslation("I cannot help you against %(_player_)s for the time being, I am planning to attack %(_player_2)s first.")
-	]
+		markForTranslation(
+			"I cannot help you against %(_player_)s for the time being, I am planning to attack %(_player_2)s first.",
+		),
+	],
 };
 
 const sentTributeMessages = [
 	markForTranslation("Here is a gift for you, %(_player_)s. Make good use of it."),
 	markForTranslation("I see you are in a bad situation, %(_player_)s. I hope this helps."),
-	markForTranslation("I can help you this time, %(_player_)s, but you should manage your resources more carefully in the future.")
+	markForTranslation(
+		"I can help you this time, %(_player_)s, but you should manage your resources more carefully in the future.",
+	),
 ];
 
 const requestTributeMessages = [
 	markForTranslation("I am in need of %(resource)s, can you help? I will make it up to you."),
-	markForTranslation("I would participate more efficiently in our common war effort if you could provide me some %(resource)s."),
-	markForTranslation("If you can spare me some %(resource)s, I will be able to strengthen my army.")
+	markForTranslation(
+		"I would participate more efficiently in our common war effort if you could provide me some %(resource)s.",
+	),
+	markForTranslation("If you can spare me some %(resource)s, I will be able to strengthen my army."),
 ];
 
 const newTradeRouteMessages = [
 	markForTranslation("I have set up a new route with %(_player_)s. Trading will be profitable for all of us."),
-	markForTranslation("A new trade route is set up with %(_player_)s. Take your share of the profits.")
+	markForTranslation("A new trade route is set up with %(_player_)s. Take your share of the profits."),
 ];
 
 const newDiplomacyMessages = {
-	"ally": [
-		markForTranslation("%(_player_)s and I are now allies.")
-	],
-	"neutral": [
-		markForTranslation("%(_player_)s and I are now neutral.")
-	],
-	"enemy": [
-		markForTranslation("%(_player_)s and I are now enemies.")
-	]
+	"ally": [markForTranslation("%(_player_)s and I are now allies.")],
+	"neutral": [markForTranslation("%(_player_)s and I are now neutral.")],
+	"enemy": [markForTranslation("%(_player_)s and I are now enemies.")],
 };
 
 const answerDiplomacyRequestMessages: Record<string, Record<string, string[]>> = {
@@ -61,93 +67,133 @@ const answerDiplomacyRequestMessages: Record<string, Record<string, string[]>> =
 		"decline": [
 			markForTranslation("I cannot accept your offer to become allies, %(_player_)s."),
 			markForTranslation("I must decline your offer of alliance, %(_player_)s."),
-			markForTranslation("An alliance with you is not in my best interest, %(_player_)s.")
+			markForTranslation("An alliance with you is not in my best interest, %(_player_)s."),
 		],
 		"declineSuggestNeutral": [
 			markForTranslation("I will not be your ally, %(_player_)s. However, I will consider a neutrality pact."),
 			markForTranslation("I reject your request for alliance, %(_player_)s, but we could become neutral."),
-			markForTranslation("%(_player_)s, only a neutrality agreement is conceivable to me.")
+			markForTranslation("%(_player_)s, only a neutrality agreement is conceivable to me."),
 		],
 		"declineRepeatedOffer": [
 			markForTranslation("Our previous alliance did not work out, %(_player_)s. I must decline your offer."),
 			markForTranslation("I won’t ally you again, %(_player_)s!"),
 			markForTranslation("No more alliances between us, %(_player_)s!"),
 			markForTranslation("Your request for peace means nothing to me anymore, %(_player_)s!"),
-			markForTranslation("My answer to your repeated peace proposal will remain war, %(_player_)s!")
+			markForTranslation("My answer to your repeated peace proposal will remain war, %(_player_)s!"),
 		],
 		"accept": [
-			markForTranslation("I will accept your offer to become allies, %(_player_)s. We will both benefit from this partnership."),
+			markForTranslation(
+				"I will accept your offer to become allies, %(_player_)s. We will both benefit from this partnership.",
+			),
 			markForTranslation("An alliance between us is a good idea, %(_player_)s."),
 			markForTranslation("Let both of our people prosper from a peaceful association, %(_player_)s."),
 			markForTranslation("We have found common ground, %(_player_)s. I accept the alliance."),
-			markForTranslation("%(_player_)s, consider us allies from now on.")
+			markForTranslation("%(_player_)s, consider us allies from now on."),
 		],
 		"acceptWithTribute": [
-			markForTranslation("I will ally with you, %(_player_)s, but only if you send me a tribute of %(_amount_)s %(_resource_)s."),
-			markForTranslation("%(_player_)s, you must send me a tribute of %(_amount_)s %(_resource_)s before I accept an alliance with you."),
-			markForTranslation("Unless you send me %(_amount_)s %(_resource_)s, an alliance won’t be formed, %(_player_)s.")
+			markForTranslation(
+				"I will ally with you, %(_player_)s, but only if you send me a tribute of %(_amount_)s %(_resource_)s.",
+			),
+			markForTranslation(
+				"%(_player_)s, you must send me a tribute of %(_amount_)s %(_resource_)s before I accept an alliance with you.",
+			),
+			markForTranslation(
+				"Unless you send me %(_amount_)s %(_resource_)s, an alliance won’t be formed, %(_player_)s.",
+			),
 		],
 		"waitingForTribute": [
-			markForTranslation("%(_player_)s, my offer still stands. I will ally with you only if you send me a tribute of %(_amount_)s %(_resource_)s."),
-			markForTranslation("I’m still waiting for %(_amount_)s %(_resource_)s before accepting your alliance, %(_player_)s."),
-			markForTranslation("%(_player_)s, if you do not send me part of the %(_amount_)s %(_resource_)s tribute soon, I will break off our negotiations.")
-		]
+			markForTranslation(
+				"%(_player_)s, my offer still stands. I will ally with you only if you send me a tribute of %(_amount_)s %(_resource_)s.",
+			),
+			markForTranslation(
+				"I’m still waiting for %(_amount_)s %(_resource_)s before accepting your alliance, %(_player_)s.",
+			),
+			markForTranslation(
+				"%(_player_)s, if you do not send me part of the %(_amount_)s %(_resource_)s tribute soon, I will break off our negotiations.",
+			),
+		],
 	},
 	"neutral": {
 		"decline": [
 			markForTranslation("I will not become neutral with you, %(_player_)s."),
-			markForTranslation("%(_player_)s, I must decline your request for a neutrality pact.")
+			markForTranslation("%(_player_)s, I must decline your request for a neutrality pact."),
 		],
 		"declineRepeatedOffer": [
-			markForTranslation("Our previous neutrality agreement ended in failure, %(_player_)s; I will not consider another one.")
+			markForTranslation(
+				"Our previous neutrality agreement ended in failure, %(_player_)s; I will not consider another one.",
+			),
 		],
 		"accept": [
-			markForTranslation("I welcome your request for peace between our civilizations, %(_player_)s. I will accept."),
-			markForTranslation("%(_player_)s, I will accept your neutrality request. May both our civilizations benefit.")
+			markForTranslation(
+				"I welcome your request for peace between our civilizations, %(_player_)s. I will accept.",
+			),
+			markForTranslation(
+				"%(_player_)s, I will accept your neutrality request. May both our civilizations benefit.",
+			),
 		],
 		"acceptWithTribute": [
-			markForTranslation("If you send me a tribute of %(_amount_)s %(_resource_)s, I will accept your neutrality request, %(_player_)s."),
-			markForTranslation("%(_player_)s, if you send me %(_amount_)s %(_resource_)s, I will accept a neutrality pact.")
+			markForTranslation(
+				"If you send me a tribute of %(_amount_)s %(_resource_)s, I will accept your neutrality request, %(_player_)s.",
+			),
+			markForTranslation(
+				"%(_player_)s, if you send me %(_amount_)s %(_resource_)s, I will accept a neutrality pact.",
+			),
 		],
 		"waitingForTribute": [
-			markForTranslation("%(_player_)s, I will not accept your neutrality request unless you tribute me %(_amount_)s %(_resource_)s soon."),
-			markForTranslation("%(_player_)s, if you do not send me part of the %(_amount_)s %(_resource_)s tribute soon, I will break off our negotiations.")
-		]
-	}
+			markForTranslation(
+				"%(_player_)s, I will not accept your neutrality request unless you tribute me %(_amount_)s %(_resource_)s soon.",
+			),
+			markForTranslation(
+				"%(_player_)s, if you do not send me part of the %(_amount_)s %(_resource_)s tribute soon, I will break off our negotiations.",
+			),
+		],
+	},
 };
 
 const sendDiplomacyRequestMessages = {
 	"ally": {
 		"sendRequest": [
-			markForTranslation("%(_player_)s, it would help both of our civilizations if we formed an alliance. If you become allies with me, I will respond in kind.")
+			markForTranslation(
+				"%(_player_)s, it would help both of our civilizations if we formed an alliance. If you become allies with me, I will respond in kind.",
+			),
 		],
 		"requestExpired": [
 			markForTranslation("%(_player_)s, my offer for an alliance has expired."),
 			markForTranslation("%(_player_)s, I have rescinded my previous offer for an alliance between us."),
-		]
+		],
 	},
 	"neutral": {
 		"sendRequest": [
-			markForTranslation("%(_player_)s, I would like to request a neutrality pact between our civilizations. If you become neutral with me, I will respond in kind."),
-			markForTranslation("%(_player_)s, it would be both to our benefit if we negotiated a neutrality pact. I will become neutral with you if you do the same.")
+			markForTranslation(
+				"%(_player_)s, I would like to request a neutrality pact between our civilizations. If you become neutral with me, I will respond in kind.",
+			),
+			markForTranslation(
+				"%(_player_)s, it would be both to our benefit if we negotiated a neutrality pact. I will become neutral with you if you do the same.",
+			),
 		],
 		"requestExpired": [
 			markForTranslation("%(_player_)s, I have decided to revoke my offer for a neutrality pact."),
-			markForTranslation("%(_player_)s, as you have failed to respond to my request for peace between us, I have abrogated my offer."),
-		]
-	}
+			markForTranslation(
+				"%(_player_)s, as you have failed to respond to my request for peace between us, I have abrogated my offer.",
+			),
+		],
+	},
 };
 
 const emergencyMessages = {
 	"enter": [
 		markForTranslation("My armies failed while defending my empire. Please honor our alliance and send help!"),
-		markForTranslation("My humble armies feel weak and tired. My civilization depends on our alliance, please send help!"),
-		markForTranslation("I need your help. Please do not let my armies fall!")
+		markForTranslation(
+			"My humble armies feel weak and tired. My civilization depends on our alliance, please send help!",
+		),
+		markForTranslation("I need your help. Please do not let my armies fall!"),
 	],
 	"exit": [
 		markForTranslation("My empire regained its old strength, now it is time to seek revenge together!"),
-		markForTranslation("My civilization raised from the ashes. Now my armies feel stronger and eager to fight for our alliance.")
-	]
+		markForTranslation(
+			"My civilization raised from the ashes. Now my armies feel stronger and eager to fight for our alliance.",
+		),
+	],
 };
 
 export function launchAttack(gameState: CommonGameState, player: PlayerId, huge: boolean): void
@@ -157,12 +203,16 @@ export function launchAttack(gameState: CommonGameState, player: PlayerId, huge:
 		"message": "/allies " + pickRandom(launchAttackMessages[huge ? "hugeAttack" : "other"]),
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
-		"parameters": { "_player_": player }
+		"parameters": { "_player_": player },
 	});
 }
 
-export function answerRequestAttack(gameState: CommonGameState, player: PlayerId,
-	answer: "join" | "decline" | "other", other?: PlayerId): void
+export function answerRequestAttack(
+	gameState: CommonGameState,
+	player: PlayerId,
+	answer: "join" | "decline" | "other",
+	other?: PlayerId,
+): void
 {
 	// The "other" response also names a second player (_player_2) when one is supplied.
 	const translateParameters = answer !== "other" ? ["_player_"] : ["_player_", "_player_2"];
@@ -175,7 +225,7 @@ export function answerRequestAttack(gameState: CommonGameState, player: PlayerId
 		"message": "/allies " + pickRandom(answerRequestAttackMessages[answer]),
 		"translateMessage": true,
 		"translateParameters": translateParameters,
-		"parameters": parameters
+		"parameters": parameters,
 	});
 }
 
@@ -186,7 +236,7 @@ export function sentTribute(gameState: CommonGameState, player: PlayerId): void
 		"message": "/allies " + pickRandom(sentTributeMessages),
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
-		"parameters": { "_player_": player }
+		"parameters": { "_player_": player },
 	});
 }
 
@@ -197,7 +247,7 @@ export function requestTribute(gameState: CommonGameState, resource: string): vo
 		"message": "/allies " + pickRandom(requestTributeMessages),
 		"translateMessage": true,
 		"translateParameters": { "resource": "withinSentence" },
-		"parameters": { "resource": Resources.GetNames()[resource] }
+		"parameters": { "resource": Resources.GetNames()[resource] },
 	});
 }
 
@@ -208,12 +258,15 @@ export function newTradeRoute(gameState: CommonGameState, player: PlayerId): voi
 		"message": "/allies " + pickRandom(newTradeRouteMessages),
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
-		"parameters": { "_player_": player }
+		"parameters": { "_player_": player },
 	});
 }
 
-export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
-	newDiplomaticStance: keyof typeof newDiplomacyMessages): void
+export function newDiplomacy(
+	gameState: CommonGameState,
+	player: PlayerId,
+	newDiplomaticStance: keyof typeof newDiplomacyMessages,
+): void
 {
 	const message = pickRandom(newDiplomacyMessages[newDiplomaticStance]);
 	if (message === undefined)
@@ -223,29 +276,42 @@ export function newDiplomacy(gameState: CommonGameState, player: PlayerId,
 		"message": message,
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
-		"parameters": { "_player_": player }
+		"parameters": { "_player_": player },
 	});
 }
 
-export function answerRequestDiplomacy(gameState: CommonGameState, player: PlayerId,
-	requestType: string, response: string,
-	requiredTribute?: { wanted: number; type: string }): void
+export function answerRequestDiplomacy(
+	gameState: CommonGameState,
+	player: PlayerId,
+	requestType: string,
+	response: string,
+	requiredTribute?: { wanted: number; type: string },
+): void
 {
 	postCommand({
 		"type": "aichat",
 		"message": "/msg " + gameState.sharedScript.playersData[player].name + " " +
 			pickRandom(answerDiplomacyRequestMessages[requestType][response]),
 		"translateMessage": true,
-		"translateParameters": requiredTribute ? { "_amount_": null, "_resource_": "withinSentence", "_player_": null } : ["_player_"],
+		"translateParameters": requiredTribute ?
+			{ "_amount_": null, "_resource_": "withinSentence", "_player_": null } :
+			["_player_"],
 		"parameters": requiredTribute ?
-			{ "_amount_": requiredTribute.wanted, "_resource_": Resources.GetNames()[requiredTribute.type], "_player_": player } :
-			{ "_player_": player }
+			{
+				"_amount_": requiredTribute.wanted,
+				"_resource_": Resources.GetNames()[requiredTribute.type],
+				"_player_": player,
+			} :
+			{ "_player_": player },
 	});
 }
 
-export function newRequestDiplomacy(gameState: CommonGameState, player: PlayerId,
+export function newRequestDiplomacy(
+	gameState: CommonGameState,
+	player: PlayerId,
 	requestType: keyof typeof sendDiplomacyRequestMessages,
-	status: keyof typeof sendDiplomacyRequestMessages["ally"]): void
+	status: keyof typeof sendDiplomacyRequestMessages["ally"],
+): void
 {
 	postCommand({
 		"type": "aichat",
@@ -253,7 +319,7 @@ export function newRequestDiplomacy(gameState: CommonGameState, player: PlayerId
 			pickRandom(sendDiplomacyRequestMessages[requestType][status]),
 		"translateMessage": true,
 		"translateParameters": ["_player_"],
-		"parameters": { "_player_": player }
+		"parameters": { "_player_": player },
 	});
 }
 
@@ -262,6 +328,6 @@ export function emergency(gameState: CommonGameState, enable: boolean): void
 	postCommand({
 		"type": "aichat",
 		"message": "/allies " + pickRandom(emergencyMessages[enable ? "enter" : "exit"]),
-		"translateMessage": true
+		"translateMessage": true,
 	});
 }

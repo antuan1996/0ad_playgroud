@@ -17,8 +17,8 @@
  * split that read the per-resource rates was dropped, FINDINGS §19).
  */
 import { gatherRate, ordersOf } from "../adapter/orders.ts";
-import { isInState } from "../adapter/unitState.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { isInState } from "../adapter/unitState.ts";
 
 /** Seconds over which the rate per gatherer is smoothed (an exponential moving average's time constant). */
 export const SMOOTHING = 60;
@@ -39,7 +39,12 @@ type FoodSource = typeof FOOD_SOURCES[number];
  * source, the walk included (FINDINGS §20: a field 0.54 a second at minutes
  * 4-8, berries 0.6-0.75 by the civic centre).
  */
-export const FOOD_PRIOR_RATE: Readonly<Record<FoodSource, number>> = { "fruit": 0.6, "grain": 0.55, "meat": 1, "fish": 0.5 };
+export const FOOD_PRIOR_RATE: Readonly<Record<FoodSource, number>> = {
+	"fruit": 0.6,
+	"grain": 0.55,
+	"meat": 1,
+	"fish": 0.5,
+};
 
 type SerializedGatherEconomy = {
 	perGatherer: Record<string, number>;
@@ -98,7 +103,7 @@ export class GatherEconomy
 			if (specific === "fruit" || specific === "grain" || specific === "meat" || specific === "fish")
 				return specific;
 			if (target && !target.resourceSupplyType())
-				continue;	// a dropsite: the supply is the next order's
+				continue; // a dropsite: the supply is the next order's
 			break;
 		}
 		return subrole === "hunter" ? "meat" : subrole === "fisher" ? "fish" : "fruit";
@@ -130,9 +135,11 @@ export class GatherEconomy
 	private countGatherers(gameState: CommonGameState): GathererCensus
 	{
 		const census: GathererCensus = {
-			"gatherers": {}, "income": {}, "idle": {},
+			"gatherers": {},
+			"income": {},
+			"idle": {},
 			"foodGatherers": { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 },
-			"foodIncome": { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 }
+			"foodIncome": { "fruit": 0, "grain": 0, "meat": 0, "fish": 0 },
 		};
 		for (const res of Resources.GetCodes())
 		{
@@ -183,7 +190,11 @@ export class GatherEconomy
 
 	Serialize(): SerializedGatherEconomy
 	{
-		return { "perGatherer": this.perGatherer, "perFoodGatherer": this.perFoodGatherer, "lastUpdate": this.lastUpdate };
+		return {
+			"perGatherer": this.perGatherer,
+			"perFoodGatherer": this.perFoodGatherer,
+			"lastUpdate": this.lastUpdate,
+		};
 	}
 
 	/** A saved economy: its measured rates */

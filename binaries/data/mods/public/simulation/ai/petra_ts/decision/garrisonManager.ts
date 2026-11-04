@@ -1,22 +1,14 @@
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { dumpEntity, isSiegeUnit } from "../adapter/entityExtend.ts";
-import { Worker } from "../execution/worker.ts";
-import type { Config } from "../world/config.ts";
-import { hasActivity } from "../adapter/unitState.ts";
-import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { hasActivity } from "../adapter/unitState.ts";
+import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
+import { Worker } from "../execution/worker.ts";
+import type { Config } from "../world/config.ts";
 
-export type GarrisonHolderData = {
-	list: EntityId[];
-	allowMelee: boolean;
-};
-type GarrisonThreats = {
-	defenseStructure: boolean;
-	meleeSiege: boolean;
-	rangeSiege: boolean;
-	unit: boolean;
-};
+export type GarrisonHolderData = { list: EntityId[]; allowMelee: boolean };
+type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSiege: boolean; unit: boolean };
 
 /** The fields a save keeps. */
 export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decayingStructures">;
@@ -77,7 +69,7 @@ export class GarrisonManager
 			// Update the list of garrisoned units
 			this.updateGarrisonList(gameState, holder, id, list, events);
 
-			if (!isPlaced(holder))     // could happen with siege unit inside a ship
+			if (!isPlaced(holder)) // could happen with siege unit inside a ship
 				continue;
 
 			if (gameState.ai.elapsedTime - (holder.getMetadata(PlayerID, "holderTimeUpdate") ?? NaN) > 3)
@@ -93,7 +85,10 @@ export class GarrisonManager
 			if (!ent || !isPlaced(ent) || ent.owner() !== PlayerID)
 				this.decayingStructures.delete(id);
 			else if (this.numberOfGarrisonedSlots(ent) < gmin)
-				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, { "min": gmin, "type": GarrisonManager.TYPE_DECAY });
+				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, {
+					"min": gmin,
+					"type": GarrisonManager.TYPE_DECAY,
+				});
 		}
 	}
 
@@ -179,7 +174,13 @@ export class GarrisonManager
 	}
 
 	/** Follow the units sent to garrison in a holder: renamed, killed, garrisoned or their order failed */
-	updateGarrisonList(gameState: CommonGameState, holder: CommonEntity, id: EntityId, list: EntityId[], events: EngineAIEvents): void
+	updateGarrisonList(
+		gameState: CommonGameState,
+		holder: CommonEntity,
+		id: EntityId,
+		list: EntityId[],
+		events: EngineAIEvents,
+	): void
 	{
 		for (let j = 0; j < list.length; ++j)
 		{
@@ -188,16 +189,18 @@ export class GarrisonManager
 					list[j] = evt.newentity;
 
 			const ent = gameState.getEntityById(list[j]);
-			if (!ent)	// unit must have been killed while garrisoning
+			if (!ent) // unit must have been killed while garrisoning
 				list.splice(j--, 1);
-			else if (holder.garrisoned().indexOf(list[j]) !== -1)   // unit is garrisoned
-			{
+			else if (holder.garrisoned().indexOf(list[j]) !== -1)
+			{ // unit is garrisoned
 				this.leaveGarrison(ent);
 				list.splice(j--, 1);
 			}
 			else
 			{
-				if (ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id))
+				if (
+					ordersOf(ent).some((order: Record<string, unknown>): unknown => order.target && order.target === id)
+				)
 					continue;
 				if (ent.getMetadata(PlayerID, "garrisonHolder") === id)
 				{
@@ -209,16 +212,17 @@ export class GarrisonManager
 				{
 					if (gameState.ai.Config.debug > 0)
 					{
-						aiWarn("Petra garrison error: unit " + ent.id() + " (" +
-							ent.genericName() + ") is expected to garrison in " + id + " (" +
-							holder.genericName() + "), but has no such garrison order " +
-							uneval(ordersOf(ent)));
+						aiWarn(
+							"Petra garrison error: unit " + ent.id() + " (" +
+								ent.genericName() + ") is expected to garrison in " + id + " (" +
+								holder.genericName() + "), but has no such garrison order " +
+								uneval(ordersOf(ent)),
+						);
 						dumpEntity(ent);
 					}
 					list.splice(j--, 1);
 				}
 			}
-
 		}
 	}
 
@@ -227,13 +231,18 @@ export class GarrisonManager
 	{
 		const holderAttackRange = holder.attackRange("Ranged");
 		const range = holderAttackRange ? holderAttackRange.max : 80;
-		const around: GarrisonThreats = { "defenseStructure": false, "meleeSiege": false, "rangeSiege": false, "unit": false };
+		const around: GarrisonThreats = {
+			"defenseStructure": false,
+			"meleeSiege": false,
+			"rangeSiege": false,
+			"unit": false,
+		};
 		for (const ent of gameState.getEnemyEntities().values())
 		{
 			if (!mayThreaten(ent) || !isPlaced(ent))
 				continue;
 			const dist = SquareVectorDistance(ent.position(), holder.position());
-			if (dist > range*range)
+			if (dist > range * range)
 				continue;
 			if (ent.hasClass("Structure"))
 				around.defenseStructure = true;
@@ -286,8 +295,12 @@ export class GarrisonManager
 		if (gameState.ai.Config.debug > 2)
 		{
 			warn("garrison unit " + ent.genericName() + " in " + holder.genericName() + " with type " + type);
-			warn(" we try to garrison a unit with plan " + ent.getMetadata(PlayerID, "plan") + " and role " + ent.getMetadata(PlayerID, "role") +
-			     " and subrole " + ent.getMetadata(PlayerID, "subrole") + " and transport " + ent.getMetadata(PlayerID, "transport"));
+			warn(
+				" we try to garrison a unit with plan " + ent.getMetadata(PlayerID, "plan") + " and role " +
+					ent.getMetadata(PlayerID, "role") +
+					" and subrole " + ent.getMetadata(PlayerID, "subrole") + " and transport " +
+					ent.getMetadata(PlayerID, "transport"),
+			);
 		}
 
 		ent.setMetadata(PlayerID, "plan", lentPlan(ent.getMetadata(PlayerID, "plan")));
@@ -331,24 +344,26 @@ export class GarrisonManager
 	{
 		switch (ent.getMetadata(PlayerID, "garrisonType"))
 		{
-		case GarrisonManager.TYPE_FORCE:           // force the ungarrisoning
-			return false;
-		case GarrisonManager.TYPE_TRADE:		// trader garrisoned in ship
-			return true;
-		case GarrisonManager.TYPE_PROTECTION:	// hurt unit for healing or infantry for defense
-			return this.keepProtected(ent, holder, around);
-		case GarrisonManager.TYPE_DECAY:
-			return !!ent.captureStrength() && this.decayingStructures.has(holder.id());
-		case GarrisonManager.TYPE_EMERGENCY: // f.e. hero in regicide mode
-			return this.keepInEmergency(ent, holder, around);
-		default:
-			if (ent.getMetadata(PlayerID, "onBoard") === "onBoard")  // transport is not (yet ?) managed by garrisonManager
+			case GarrisonManager.TYPE_FORCE: // force the ungarrisoning
+				return false;
+			case GarrisonManager.TYPE_TRADE: // trader garrisoned in ship
 				return true;
-			aiWarn("unknown type in garrisonManager " + ent.getMetadata(PlayerID, "garrisonType") +
-				" for " + ent.genericName() + " id " + ent.id() + " inside " + holder.genericName() +
-				" id " + holder.id());
-			ent.setMetadata(PlayerID, "garrisonType", GarrisonManager.TYPE_PROTECTION);
-			return true;
+			case GarrisonManager.TYPE_PROTECTION: // hurt unit for healing or infantry for defense
+				return this.keepProtected(ent, holder, around);
+			case GarrisonManager.TYPE_DECAY:
+				return !!ent.captureStrength() && this.decayingStructures.has(holder.id());
+			case GarrisonManager.TYPE_EMERGENCY: // f.e. hero in regicide mode
+				return this.keepInEmergency(ent, holder, around);
+			default:
+				if (ent.getMetadata(PlayerID, "onBoard") === "onBoard") // transport is not (yet ?) managed by garrisonManager
+					return true;
+				aiWarn(
+					"unknown type in garrisonManager " + ent.getMetadata(PlayerID, "garrisonType") +
+						" for " + ent.genericName() + " id " + ent.id() + " inside " + holder.genericName() +
+						" id " + holder.id(),
+				);
+				ent.setMetadata(PlayerID, "garrisonType", GarrisonManager.TYPE_PROTECTION);
+				return true;
 		}
 	}
 
@@ -358,7 +373,8 @@ export class GarrisonManager
 		if (around.unit || around.defenseStructure)
 			return true;
 		if (around.meleeSiege || around.rangeSiege)
-			return ent.attackTypes()?.indexOf("Melee") === -1 || ent.healthLevel() < this.Config.garrisonHealthLevel.low;
+			return ent.attackTypes()?.indexOf("Melee") === -1 ||
+				ent.healthLevel() < this.Config.garrisonHealthLevel.low;
 		return false;
 	}
 
@@ -367,8 +383,10 @@ export class GarrisonManager
 	{
 		if (holder.buffHeal() && ent.isHealable() && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
 			return true;
-		if (around.unit || around.defenseStructure || around.meleeSiege ||
-			around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high)
+		if (
+			around.unit || around.defenseStructure || around.meleeSiege ||
+			around.rangeSiege && ent.healthLevel() < this.Config.garrisonHealthLevel.high
+		)
 			return true;
 		return !!holder.buffHeal() && ent.needsHeal();
 	}
@@ -387,7 +405,7 @@ export class GarrisonManager
 		if (entAttackTypes && entAttackTypes.indexOf("Melee") !== -1)
 			return false;
 		if (around.unit)
-			return ent.hasClass("Support") || isSiegeUnit(ent);	// only ranged siege here and below as melee siege already released above
+			return ent.hasClass("Support") || isSiegeUnit(ent); // only ranged siege here and below as melee siege already released above
 		if (isSiegeUnit(ent))
 			return around.meleeSiege;
 		return !!holder.buffHeal() && ent.needsHeal();
@@ -396,7 +414,7 @@ export class GarrisonManager
 	/** Add this holder in the list managed by the garrisonManager, and return its (existing or new) data */
 	registerHolder(gameState: CommonGameState, holder: CommonEntity): GarrisonHolderData
 	{
-		let holderData = this.holders.get(holder.id());    // already registered
+		let holderData = this.holders.get(holder.id()); // already registered
 		if (!holderData)
 		{
 			holderData = { "list": [], "allowMelee": true };

@@ -10,12 +10,19 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
-import { type PlayerSpec, setPlayers } from "./harness/diplomacy.ts";
+import { setPlayers, type PlayerSpec } from "./harness/diplomacy.ts";
 import { commands, resetRecorder, sent } from "./harness/engine.ts";
 import { emptyEvents, eventsWith, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import {
-	doorCalls, doorManagers, doorStub, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld,
-	PLAYER, seatHQ
+	PLAYER,
+	doorCalls,
+	doorManagers,
+	doorStub,
+	makeHqEntity,
+	makeHqWorld,
+	seatHQ,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
 import { entityId, playerId, seconds } from "../adapter/brands.ts";
@@ -28,17 +35,23 @@ const ANSWERS: Record<string, Record<string, string>> = {
 		"decline": "I cannot accept your offer to become allies, %(_player_)s.",
 		"declineSuggestNeutral": "I will not be your ally, %(_player_)s. However, I will consider a neutrality pact.",
 		"declineRepeatedOffer": "Our previous alliance did not work out, %(_player_)s. I must decline your offer.",
-		"accept": "I will accept your offer to become allies, %(_player_)s. We will both benefit from this partnership.",
-		"acceptWithTribute": "I will ally with you, %(_player_)s, but only if you send me a tribute of %(_amount_)s %(_resource_)s.",
-		"waitingForTribute": "%(_player_)s, my offer still stands. I will ally with you only if you send me a tribute of %(_amount_)s %(_resource_)s."
+		"accept":
+			"I will accept your offer to become allies, %(_player_)s. We will both benefit from this partnership.",
+		"acceptWithTribute":
+			"I will ally with you, %(_player_)s, but only if you send me a tribute of %(_amount_)s %(_resource_)s.",
+		"waitingForTribute":
+			"%(_player_)s, my offer still stands. I will ally with you only if you send me a tribute of %(_amount_)s %(_resource_)s.",
 	},
 	"neutral": {
 		"decline": "I will not become neutral with you, %(_player_)s.",
-		"declineRepeatedOffer": "Our previous neutrality agreement ended in failure, %(_player_)s; I will not consider another one.",
+		"declineRepeatedOffer":
+			"Our previous neutrality agreement ended in failure, %(_player_)s; I will not consider another one.",
 		"accept": "I welcome your request for peace between our civilizations, %(_player_)s. I will accept.",
-		"acceptWithTribute": "If you send me a tribute of %(_amount_)s %(_resource_)s, I will accept your neutrality request, %(_player_)s.",
-		"waitingForTribute": "%(_player_)s, I will not accept your neutrality request unless you tribute me %(_amount_)s %(_resource_)s soon."
-	}
+		"acceptWithTribute":
+			"If you send me a tribute of %(_amount_)s %(_resource_)s, I will accept your neutrality request, %(_player_)s.",
+		"waitingForTribute":
+			"%(_player_)s, I will not accept your neutrality request unless you tribute me %(_amount_)s %(_resource_)s soon.",
+	},
 };
 
 /**
@@ -55,7 +68,8 @@ function seat(players: PlayerSpec[], options: Partial<HqWorldOptions> = {}, chan
 	const attack = doorStub({ "defeated": {}, "currentEnemyPlayer": undefined });
 	hq.attackManager = attack;
 	// what the town needs most, as the office ranks it
-	hq.pickMostNeededResources = () => [{ "type": "wood", "wanted": 50, "current": 10 }, { "type": "food", "wanted": 30, "current": 20 }];
+	hq.pickMostNeededResources =
+		() => [{ "type": "wood", "wanted": 50, "current": 10 }, { "type": "food", "wanted": 30, "current": 20 }];
 	setPlayers(world, players);
 	resetRecorder();
 	const manager = new DiplomacyManager(hq.Config, false);
@@ -63,16 +77,18 @@ function seat(players: PlayerSpec[], options: Partial<HqWorldOptions> = {}, chan
 }
 
 /** the answers we sent a player, as their message text */
-const answersTo = (player: number): string[] => sent("aichat")
-	.map((c) => c.message)
-	.filter((m) => m.startsWith("/msg Player " + player + " "))
-	.map((m) => m.slice(("/msg Player " + player + " ").length));
+const answersTo = (player: number): string[] =>
+	sent("aichat").map(c => c.message).filter(m => m.startsWith("/msg Player " + player + " ")).map(m =>
+		m.slice(("/msg Player " + player + " ").length)
+	);
 
 /** units of a player, to weigh how strong it is */
 function army(world: HqWorld, owner: number, count: number, first = 100 * owner): void
 {
 	for (let i = 0; i < count; ++i)
-		world.addEntity(makeHqEntity({ "id": first + i, owner, "position": [40, 40], "classes": ["Unit", "Infantry"] }));
+		world.addEntity(
+			makeHqEntity({ "id": first + i, owner, "position": [40, 40], "classes": ["Unit", "Infantry"] }),
+		);
 }
 
 /** the events of a turn, every list empty unless given */
@@ -85,15 +101,32 @@ describe("diplomacy at the start: init", () =>
 {
 	it("an ally both ways is an accepted alliance; one-sided offers are answered as requests", () =>
 	{
-		const { world, manager } = seat([GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" } },
-			{ "towards": { 1: "ally" } }, { "towards": { 1: "neutral" } }, {}]);
+		const { world, manager } = seat([
+			GAIA,
+			US({ 2: "ally" }),
+			{ "towards": { 1: "ally" } },
+			{ "towards": { 1: "ally" } },
+			{ "towards": { 1: "neutral" } },
+			{},
+		]);
 
 		manager.answerStartingStances(world.gameState);
 
-		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), { "requestType": "ally", "status": "accepted" });
-		assert.equal(manager.receivedDiplomacyRequests.get(playerId(3))?.status, "waitingForTribute", "3 is allied to us, not we to 3");
+		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), {
+			"requestType": "ally",
+			"status": "accepted",
+		});
+		assert.equal(
+			manager.receivedDiplomacyRequests.get(playerId(3))?.status,
+			"waitingForTribute",
+			"3 is allied to us, not we to 3",
+		);
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(3))?.requestType, "ally");
-		assert.equal(manager.receivedDiplomacyRequests.get(playerId(4))?.requestType, "neutral", "4 is neutral to us while we are its enemy");
+		assert.equal(
+			manager.receivedDiplomacyRequests.get(playerId(4))?.requestType,
+			"neutral",
+			"4 is neutral to us while we are its enemy",
+		);
 		assert.equal(manager.receivedDiplomacyRequests.has(playerId(5)), false);
 		assert.deepEqual(answersTo(3), [ANSWERS.ally.acceptWithTribute]);
 		assert.deepEqual(answersTo(4), [ANSWERS.neutral.acceptWithTribute]);
@@ -123,7 +156,10 @@ describe("answering a diplomacy request: handleDiplomacyRequest", () =>
 
 		manager.handleDiplomacyRequest(world.gameState, playerId(2), "ally");
 
-		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), { "requestType": "ally", "status": "declinedRequest" });
+		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), {
+			"requestType": "ally",
+			"status": "declinedRequest",
+		});
 		assert.deepEqual(answersTo(2), [ANSWERS.ally.decline]);
 	});
 
@@ -141,11 +177,20 @@ describe("answering a diplomacy request: handleDiplomacyRequest", () =>
 
 	it("a repeated neutrality request is answered from the earlier one", () =>
 	{
-		for (const [status, answer] of [["declinedRequest", "decline"], ["allianceBroken", "declineRepeatedOffer"],
-			["waitingForTribute", "waitingForTribute"]] as const)
+		for (
+			const [status, answer] of [["declinedRequest", "decline"], ["allianceBroken", "declineRepeatedOffer"], [
+				"waitingForTribute",
+				"waitingForTribute",
+			]] as const
+		)
 		{
 			const { world, manager } = seat(table());
-			manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "neutral", status, "wanted": 1000, "type": "wood" });
+			manager.receivedDiplomacyRequests.set(playerId(2), {
+				"requestType": "neutral",
+				status,
+				"wanted": 1000,
+				"type": "wood",
+			});
 			manager.handleDiplomacyRequest(world.gameState, playerId(2), "neutral");
 			assert.deepEqual(answersTo(2), [ANSWERS.neutral[answer]], status);
 		}
@@ -161,7 +206,10 @@ describe("answering a diplomacy request: handleDiplomacyRequest", () =>
 
 		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 2, "to": "ally" }]);
 		assert.ok(attackCalls.some(([m]) => m === "cancelAttacksAgainstPlayer"));
-		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), { "requestType": "ally", "status": "accepted" });
+		assert.deepEqual(manager.receivedDiplomacyRequests.get(playerId(2)), {
+			"requestType": "ally",
+			"status": "accepted",
+		});
 		assert.equal(answersTo(2).at(-1), ANSWERS.ally.accept);
 	});
 
@@ -201,7 +249,9 @@ describe("answering a diplomacy request: handleDiplomacyRequest", () =>
 
 describe("tributes to and from our allies: tributes", () =>
 {
-	const allied = (ally: PlayerSpec = {}): PlayerSpec[] => [GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" }, ...ally }, {}];
+	const allied = (
+		ally: PlayerSpec = {},
+	): PlayerSpec[] => [GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" }, ...ally }, {}];
 
 	it("a stronger town sends a poor ally part of what it has to spare", () =>
 	{
@@ -217,12 +267,14 @@ describe("tributes to and from our allies: tributes", () =>
 
 	it("a small ally gets a hundred of what we hold plenty of", () =>
 	{
-		const { world, hq, manager } = seat(allied({ "resourceCounts": { "stone": 50 }, "popCount": 5 }),
-			{ "stock": { "stone": 600 }, "population": 40 });
+		const { world, hq, manager } = seat(allied({ "resourceCounts": { "stone": 50 }, "popCount": 5 }), {
+			"stock": { "stone": 600 },
+			"population": 40,
+		});
 		army(world, 1, 3);
 		// most of it is promised to the queues already
-		(world.ai.queueManager as unknown as { getAvailableResources: () => Record<string, number> }).getAvailableResources =
-			() => ({ "food": 0, "wood": 0, "stone": 150, "metal": 0 });
+		(world.ai.queueManager as unknown as { getAvailableResources: () => Record<string, number> })
+			.getAvailableResources = () => ({ "food": 0, "wood": 0, "stone": 150, "metal": 0 });
 		void hq;
 
 		manager.tributes(world.gameState);
@@ -279,20 +331,35 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	it("the tribute asked for an alliance seals it once paid in full; part of it gives more time", () =>
 	{
 		const { world, manager } = seat(table());
-		manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "ally", "status": "waitingForTribute", "wanted": 1000,
-			"type": "wood", "warnTime": seconds(10), "sentWarning": true });
+		manager.receivedDiplomacyRequests.set(playerId(2), {
+			"requestType": "ally",
+			"status": "waitingForTribute",
+			"wanted": 1000,
+			"type": "wood",
+			"warnTime": seconds(10),
+			"sentWarning": true,
+		});
 		world.ai.elapsedTime = seconds(200);
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 400 } }] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 400 } }] }),
+		);
 		const request = manager.receivedDiplomacyRequests.get(playerId(2));
 		assert.equal(request?.wanted, 600);
 		assert.equal(request?.warnTime, 260);
 		assert.equal(request?.sentWarning, false);
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 900 } }] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 900 } }] }),
+		);
 		assert.equal(request?.wanted, 600, "food is not what was asked");
 
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 600 } }] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({ "TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "wood": 600 } }] }),
+		);
 		assert.equal(request?.status, "accepted");
 		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 2, "to": "ally" }]);
 	});
@@ -301,21 +368,35 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	{
 		const { world, hq, manager } = seat([GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" } }, {}]);
 		const before = hq.Config.personality.cooperative;
-		manager.checkEvents(world.gameState, eventsWith({ "TributeExchanged": [
-			{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 100, "wood": 100 } },
-			{ "to": playerId(3), "from": playerId(2), "amounts": { "food": 5000 } }
-		] }));
-		assert.ok(Math.abs(hq.Config.personality.cooperative - (before + 0.0001 * 300)) < 1e-9, "food counts once, the rest twice");
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"TributeExchanged": [{ "to": PLAYER, "from": playerId(2), "amounts": { "food": 100, "wood": 100 } }, {
+					"to": playerId(3),
+					"from": playerId(2),
+					"amounts": { "food": 5000 },
+				}],
+			}),
+		);
+		assert.ok(
+			Math.abs(hq.Config.personality.cooperative - (before + 0.0001 * 300)) < 1e-9,
+			"food counts once, the rest twice",
+		);
 
 		world.addEntity(makeHqEntity({ "id": 300, "owner": 3, "position": [40, 40], "classes": ["Unit"] }));
 		world.addEntity(makeHqEntity({ "id": 301, "owner": 2, "position": [44, 40], "classes": ["Unit"] }));
 		world.addEntity(makeHqEntity({ "id": 302, "owner": 3, "position": [48, 40], "classes": ["Unit"] }));
 		const mid = hq.Config.personality.cooperative;
-		manager.checkEvents(world.gameState, eventsWith({ "Attacked": [
-			{ "target": entityId(300), "attacker": entityId(301) },
-			{ "target": entityId(300), "attacker": entityId(302) },	// an enemy hitting an enemy
-			{ "target": entityId(999), "attacker": entityId(301) }
-		] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"Attacked": [
+					{ "target": entityId(300), "attacker": entityId(301) },
+					{ "target": entityId(300), "attacker": entityId(302) }, // an enemy hitting an enemy
+					{ "target": entityId(999), "attacker": entityId(301) },
+				],
+			}),
+		);
 		assert.ok(Math.abs(hq.Config.personality.cooperative - (mid + 0.003)) < 1e-9);
 	});
 
@@ -327,9 +408,15 @@ describe("the turn's diplomatic events: checkEvents", () =>
 		manager.sentDiplomacyRequests.set(playerId(2), { "requestType": "ally", "timeSent": seconds(0) });
 		manager.sentDiplomacyRequests.set(playerId(3), { "requestType": "neutral", "timeSent": seconds(0) });
 
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [
-			{ "player": playerId(2), "otherPlayer": PLAYER }, { "player": playerId(3), "otherPlayer": PLAYER }, { "player": playerId(4), "otherPlayer": playerId(2) }
-		] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyChanged": [{ "player": playerId(2), "otherPlayer": PLAYER }, {
+					"player": playerId(3),
+					"otherPlayer": PLAYER,
+				}, { "player": playerId(4), "otherPlayer": playerId(2) }],
+			}),
+		);
 
 		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 2, "to": "ally" }]);
 		assert.equal(manager.sentDiplomacyRequests.size, 0);
@@ -339,10 +426,20 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	{
 		const { world, manager } = seat(table());
 		manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "ally", "status": "accepted" });
-		manager.receivedDiplomacyRequests.set(playerId(3), { "requestType": "ally", "status": "waitingForTribute", "wanted": 1, "type": "wood" });
+		manager.receivedDiplomacyRequests.set(playerId(3), {
+			"requestType": "ally",
+			"status": "waitingForTribute",
+			"wanted": 1,
+			"type": "wood",
+		});
 		manager.receivedDiplomacyRequests.set(playerId(4), { "requestType": "neutral", "status": "allianceBroken" });
 
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [2, 3, 4].map((player) => ({ "player": playerId(player), "otherPlayer": PLAYER })) }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyChanged": [2, 3, 4].map(player => ({ "player": playerId(player), "otherPlayer": PLAYER })),
+			}),
+		);
 
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(2))?.status, "allianceBroken");
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(3))?.status, "declinedRequest");
@@ -357,7 +454,12 @@ describe("the turn's diplomatic events: checkEvents", () =>
 		const { world, manager } = seat(players);
 		manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "neutral", "status": "declinedRequest" });
 
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [2, 3].map((player) => ({ "player": playerId(player), "otherPlayer": PLAYER })) }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyChanged": [2, 3].map(player => ({ "player": playerId(player), "otherPlayer": PLAYER })),
+			}),
+		);
 
 		assert.deepEqual(answersTo(2), [ANSWERS.ally.decline]);
 		assert.deepEqual(answersTo(3), [ANSWERS.ally.declineSuggestNeutral]);
@@ -365,10 +467,22 @@ describe("the turn's diplomatic events: checkEvents", () =>
 
 	it("a player who allies with us while we are neutral, or turns neutral while we are enemies, makes a request", () =>
 	{
-		const players: PlayerSpec[] = [GAIA, US({ 2: "neutral" }), { "towards": { 1: "ally" } }, { "towards": { 1: "neutral" } }, {}, {}];
+		const players: PlayerSpec[] = [
+			GAIA,
+			US({ 2: "neutral" }),
+			{ "towards": { 1: "ally" } },
+			{ "towards": { 1: "neutral" } },
+			{},
+			{},
+		];
 		const { world, manager } = seat(players);
 
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [2, 3].map((player) => ({ "player": playerId(player), "otherPlayer": PLAYER })) }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyChanged": [2, 3].map(player => ({ "player": playerId(player), "otherPlayer": PLAYER })),
+			}),
+		);
 
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(2))?.requestType, "ally");
 		assert.equal(manager.receivedDiplomacyRequests.get(playerId(3))?.requestType, "neutral");
@@ -389,22 +503,41 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	it("an AI's request is answered, and a tribute asked of it through the game", () =>
 	{
 		const { world, manager } = seat(table());
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyRequest": [
-			{ "type": "diplomacy-request", "player": PLAYER, "source": playerId(2), "to": "ally" },
-			{ "type": "diplomacy-request", "player": playerId(3), "source": playerId(4), "to": "ally" }
-		] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyRequest": [{
+					"type": "diplomacy-request",
+					"player": PLAYER,
+					"source": playerId(2),
+					"to": "ally",
+				}, { "type": "diplomacy-request", "player": playerId(3), "source": playerId(4), "to": "ally" }],
+			}),
+		);
 
-		assert.deepEqual(sent("tribute-request"), [
-			{ "type": "tribute-request", "source": PLAYER, "player": 2, "resourceWanted": 1000, "resourceType": "wood" }
-		]);
+		assert.deepEqual(sent("tribute-request"), [{
+			"type": "tribute-request",
+			"source": PLAYER,
+			"player": 2,
+			"resourceWanted": 1000,
+			"resourceType": "wood",
+		}]);
 	});
 
 	it("an AI's request for a stance we do not know is ignored", () =>
 	{
 		const { world, manager } = seat(table());
-		manager.checkEvents(world.gameState, eventsWith({ "DiplomacyRequest": [
-			{ "type": "diplomacy-request", "player": PLAYER, "source": playerId(2), "to": "enemy" }
-		] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"DiplomacyRequest": [{
+					"type": "diplomacy-request",
+					"player": PLAYER,
+					"source": playerId(2),
+					"to": "enemy",
+				}],
+			}),
+		);
 
 		assert.equal(manager.receivedDiplomacyRequests.size, 0);
 		assert.deepEqual(commands, []);
@@ -414,11 +547,30 @@ describe("the turn's diplomatic events: checkEvents", () =>
 	{
 		const { world, manager } = seat(table(), { "stock": { "food": 500 } });
 		world.ai.elapsedTime = seconds(100);
-		manager.checkEvents(world.gameState, eventsWith({ "TributeRequest": [
-			{ "type": "tribute-request", "player": PLAYER, "source": playerId(2), "resourceWanted": 300, "resourceType": "food" },
-			{ "type": "tribute-request", "player": PLAYER, "source": playerId(3), "resourceWanted": 800, "resourceType": "food" },
-			{ "type": "tribute-request", "player": playerId(4), "source": playerId(2), "resourceWanted": 1, "resourceType": "food" }
-		] }));
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({
+				"TributeRequest": [{
+					"type": "tribute-request",
+					"player": PLAYER,
+					"source": playerId(2),
+					"resourceWanted": 300,
+					"resourceType": "food",
+				}, {
+					"type": "tribute-request",
+					"player": PLAYER,
+					"source": playerId(3),
+					"resourceWanted": 800,
+					"resourceType": "food",
+				}, {
+					"type": "tribute-request",
+					"player": playerId(4),
+					"source": playerId(2),
+					"resourceWanted": 1,
+					"resourceType": "food",
+				}],
+			}),
+		);
 
 		assert.deepEqual(sent("tribute"), [{ "type": "tribute", "player": 2, "amounts": { "food": 300 } }]);
 		assert.equal(manager.nextTributeUpdate, 115);
@@ -429,7 +581,11 @@ describe("the last man standing: lastManStandingCheck", () =>
 {
 	// gaia, us, an ally and a neutral player, no enemy left
 	const endgame = (extra: Partial<HqWorldOptions> = {}, players?: PlayerSpec[]) =>
-		seat(players ?? [GAIA, US({ 2: "ally", 3: "neutral" }), { "towards": { 1: "ally" } }, { "towards": { 1: "neutral" } }], extra);
+		seat(
+			players ??
+				[GAIA, US({ 2: "ally", 3: "neutral" }), { "towards": { 1: "ally" } }, { "towards": { 1: "neutral" } }],
+			extra,
+		);
 
 	it("waits a while once only friends are left, and longer while still weak", () =>
 	{
@@ -454,7 +610,11 @@ describe("the last man standing: lastManStandingCheck", () =>
 		manager.waitingToBetray = true;
 
 		manager.lastManStandingCheck(world.gameState);
-		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 2, "to": "enemy" }], "200 units beat 10 + 150");
+		assert.deepEqual(
+			sent("diplomacy"),
+			[{ "type": "diplomacy", "player": 2, "to": "enemy" }],
+			"200 units beat 10 + 150",
+		);
 
 		const close = endgame();
 		army(close.world, 1, 50);
@@ -475,7 +635,9 @@ describe("the last man standing: lastManStandingCheck", () =>
 		const { world, manager } = endgame({ "victoryConditions": ["wonder"] });
 		army(world, 1, 50);
 		army(world, 2, 100);
-		world.addEntity(makeHqEntity({ "id": 900, "owner": 3, "position": [200, 200], "classes": ["Structure", "Wonder"] }));
+		world.addEntity(
+			makeHqEntity({ "id": 900, "owner": 3, "position": [200, 200], "classes": ["Structure", "Wonder"] }),
+		);
 		manager.waitingToBetray = true;
 
 		manager.lastManStandingCheck(world.gameState);
@@ -487,17 +649,27 @@ describe("the last man standing: lastManStandingCheck", () =>
 	// so this check throws a ReferenceError in a relic game
 	it("in a relic game, counts each relic a player holds", () =>
 	{
-		const { world, manager } = endgame({ "victoryConditions": ["capture_the_relic"] },
-			[GAIA, US({ 2: "ally", 3: "ally" }), { "towards": { 1: "ally" } }, { "towards": { 1: "ally" } }]);
+		const { world, manager } = endgame({ "victoryConditions": ["capture_the_relic"] }, [
+			GAIA,
+			US({ 2: "ally", 3: "ally" }),
+			{ "towards": { 1: "ally" } },
+			{ "towards": { 1: "ally" } },
+		]);
 		army(world, 1, 50);
 		army(world, 2, 100);
 		for (const id of [910, 911])
-			world.addEntity(makeHqEntity({ "id": id, "owner": 3, "position": [200, 200], "classes": ["Unit", "Relic"] }));
+			world.addEntity(
+				makeHqEntity({ "id": id, "owner": 3, "position": [200, 200], "classes": ["Unit", "Relic"] }),
+			);
 		manager.waitingToBetray = true;
 
 		manager.lastManStandingCheck(world.gameState);
 
-		assert.deepEqual(sent("diplomacy"), [{ "type": "diplomacy", "player": 3, "to": "enemy" }], "two relics weigh 300");
+		assert.deepEqual(
+			sent("diplomacy"),
+			[{ "type": "diplomacy", "player": 3, "to": "enemy" }],
+			"two relics weigh 300",
+		);
 	});
 
 	it("the player turned against loses its pending deals", () =>
@@ -505,7 +677,12 @@ describe("the last man standing: lastManStandingCheck", () =>
 		const { world, manager } = endgame();
 		army(world, 1, 50);
 		army(world, 2, 200);
-		manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "ally", "status": "waitingForTribute", "wanted": 1, "type": "wood" });
+		manager.receivedDiplomacyRequests.set(playerId(2), {
+			"requestType": "ally",
+			"status": "waitingForTribute",
+			"wanted": 1,
+			"type": "wood",
+		});
 		manager.sentDiplomacyRequests.set(playerId(2), { "requestType": "ally", "timeSent": seconds(0) });
 		manager.waitingToBetray = true;
 
@@ -518,7 +695,9 @@ describe("the last man standing: lastManStandingCheck", () =>
 
 	it("does nothing in a team-locked game, a ceasefire, an allied victory with allies, alone, or with enemies left", () =>
 	{
-		const locked = endgame({}, [GAIA, { "towards": { 2: "ally" }, "teamLocked": true }, { "towards": { 1: "ally" } }]);
+		const locked = endgame({}, [GAIA, { "towards": { 2: "ally" }, "teamLocked": true }, {
+			"towards": { 1: "ally" },
+		}]);
 		locked.manager.lastManStandingCheck(locked.world.gameState);
 		assert.equal(locked.manager.waitingToBetray, false, "team locked");
 
@@ -548,8 +727,14 @@ describe("tributes we asked for and requests we sent", () =>
 	it("a player slow to pay is reminded once, then turned down", () =>
 	{
 		const { world, manager } = seat(table());
-		manager.receivedDiplomacyRequests.set(playerId(2), { "requestType": "ally", "status": "waitingForTribute", "wanted": 1000,
-			"type": "wood", "warnTime": seconds(100), "sentWarning": false });
+		manager.receivedDiplomacyRequests.set(playerId(2), {
+			"requestType": "ally",
+			"status": "waitingForTribute",
+			"wanted": 1000,
+			"type": "wood",
+			"warnTime": seconds(100),
+			"sentWarning": false,
+		});
 		world.ai.elapsedTime = seconds(90);
 		manager.checkRequestedTributes(world.gameState);
 		assert.deepEqual(answersTo(2), [], "not yet");
@@ -568,8 +753,14 @@ describe("tributes we asked for and requests we sent", () =>
 	it("a request goes to the player sharing most of our enemies, as an alliance since we are neutral with it", () =>
 	{
 		// 3 and 4 are at war with 5 as we are; 2 is at war with nobody
-		const players: PlayerSpec[] = [GAIA, US({ 3: "neutral" }), { "towards": { 1: "ally", 3: "ally", 4: "ally", 5: "ally" } },
-			{ "towards": { 1: "neutral" } }, {}, {}];
+		const players: PlayerSpec[] = [
+			GAIA,
+			US({ 3: "neutral" }),
+			{ "towards": { 1: "ally", 3: "ally", 4: "ally", 5: "ally" } },
+			{ "towards": { 1: "neutral" } },
+			{},
+			{},
+		];
 		const { world, manager } = seat(players);
 		world.ai.elapsedTime = seconds(50);
 
@@ -577,7 +768,12 @@ describe("tributes we asked for and requests we sent", () =>
 
 		// 3 shares four of our enemies (gaia counted), 4 and 5 three each
 		assert.deepEqual([...manager.sentDiplomacyRequests], [[3, { "requestType": "ally", "timeSent": 50 }]]);
-		assert.deepEqual(sent("diplomacy-request"), [{ "type": "diplomacy-request", "source": PLAYER, "player": 3, "to": "ally" }]);
+		assert.deepEqual(sent("diplomacy-request"), [{
+			"type": "diplomacy-request",
+			"source": PLAYER,
+			"player": 3,
+			"to": "ally",
+		}]);
 	});
 
 	it("no request goes to an ally, a defeated player, the player we attack, one already asked or one we turned down", () =>
@@ -614,8 +810,11 @@ describe("diplomacy through the turn: update", () =>
 	it("sends tributes when due, checks the betrayal, and now and then sends a request", () =>
 	{
 		// three enemies besides gaia, no ally: chance may send a request
-		const { world, manager } = seat([GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" }, "resourceCounts": { "wood": 100 } },
-			{}, {}, {}], { "stock": { "wood": 1000 } }, true);
+		const { world, manager } = seat(
+			[GAIA, US({ 2: "ally" }), { "towards": { 1: "ally" }, "resourceCounts": { "wood": 100 } }, {}, {}, {}],
+			{ "stock": { "wood": 1000 } },
+			true,
+		);
 		army(world, 1, 3);
 		world.ai.elapsedTime = seconds(400);
 

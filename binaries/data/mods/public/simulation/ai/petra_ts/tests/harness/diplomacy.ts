@@ -54,17 +54,21 @@ export function setPlayers(world: World, players: PlayerSpec[], us = 1): PlayerR
 		"teamLocked": spec.teamLocked ?? false,
 		"resourceCounts": { "food": 0, "wood": 0, "stone": 0, "metal": 0, ...spec.resourceCounts },
 		"popCount": spec.popCount ?? 0,
-		"isAlly": [...Array(n).keys()].map((j) => stance(i, j) === "ally"),
-		"isMutualAlly": [...Array(n).keys()].map((j) => stance(i, j) === "ally" && stance(j, i) === "ally"),
-		"isNeutral": [...Array(n).keys()].map((j) => stance(i, j) === "neutral"),
-		"isEnemy": [...Array(n).keys()].map((j) => stance(i, j) === "enemy")
+		"isAlly": [...Array(n).keys()].map(j => stance(i, j) === "ally"),
+		"isMutualAlly": [...Array(n).keys()].map(j => stance(i, j) === "ally" && stance(j, i) === "ally"),
+		"isNeutral": [...Array(n).keys()].map(j => stance(i, j) === "neutral"),
+		"isEnemy": [...Array(n).keys()].map(j => stance(i, j) === "enemy"),
 	}));
 
 	const gs = world.gameState;
 	Object.assign(gs.sharedScript, { "playersData": rows });
 	Object.assign(gs.playerData, {
-		"civ": rows[us].civ, "isAlly": rows[us].isAlly, "isMutualAlly": rows[us].isMutualAlly,
-		"isNeutral": rows[us].isNeutral, "isEnemy": rows[us].isEnemy, "teamLocked": rows[us].teamLocked
+		"civ": rows[us].civ,
+		"isAlly": rows[us].isAlly,
+		"isMutualAlly": rows[us].isMutualAlly,
+		"isNeutral": rows[us].isNeutral,
+		"isEnemy": rows[us].isEnemy,
+		"teamLocked": rows[us].teamLocked,
 	});
 	const own = () => rows[us];
 	const defeated = (i: number | string) => rows[+i].state === "defeated";
@@ -79,7 +83,7 @@ export function setPlayers(world: World, players: PlayerSpec[], us = 1): PlayerR
 		"getEnemies": () => own().isEnemy.flatMap((e, i) => e ? [i] : []),
 		"getMutualAllies": () => own().isMutualAlly.flatMap((a, i) => a && rows[i].isMutualAlly[us] ? [i] : []),
 		"getNumPlayerEnemies": () => own().isEnemy.filter((e, i) => e && i > 0 && !defeated(i)).length,
-		"getPlayerCiv": (player?: number) => player === undefined ? own().civ : rows[player].civ
+		"getPlayerCiv": (player?: number) => player === undefined ? own().civ : rows[player].civ,
 	});
 	return rows;
 }

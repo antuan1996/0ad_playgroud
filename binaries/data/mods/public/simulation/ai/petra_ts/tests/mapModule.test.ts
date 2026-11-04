@@ -14,8 +14,19 @@ import { describe, it } from "node:test";
 
 import { override } from "./harness/fakes.ts";
 import {
-	ENEMY, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, MAP_CELLS, PASS_RATIO,
-	passLand, passShore, passWater, PLAYER, structureTemplate, territoryCell
+	ENEMY,
+	MAP_CELLS,
+	PASS_RATIO,
+	PLAYER,
+	makeHqEntity,
+	makeHqWorld,
+	passLand,
+	passShore,
+	passWater,
+	structureTemplate,
+	territoryCell,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
 import { landRegion, worldPos } from "../adapter/brands.ts";
@@ -37,7 +48,7 @@ function board(options: HqWorldOptions = {}): HqWorld
 	const blinkingCells: string[] = [];
 	for (let ix = 10; ix < 30; ++ix)
 		blinkingCells.push(`${ix},30`);
-	const world = makeHqWorld({ "territoryOwner": (ix) => bandOwner(ix), blinkingCells, ...options });
+	const world = makeHqWorld({ "territoryOwner": ix => bandOwner(ix), blinkingCells, ...options });
 	world.gameState.playerData.isMutualAlly[ALLY] = true;
 	return world;
 }
@@ -53,7 +64,12 @@ function free(map: { map: ArrayLike<number> }, ix: number, iy: number): boolean
 /** free or not, for a territory cell of each band (row iy) */
 function bands(map: { map: ArrayLike<number> }, iy: number): Record<string, boolean>
 {
-	return { "neutral": free(map, 5, iy), "own": free(map, 15, iy), "ally": free(map, 25, iy), "enemy": free(map, 35, iy) };
+	return {
+		"neutral": free(map, 5, iy),
+		"own": free(map, 15, iy),
+		"ally": free(map, 25, iy),
+		"enemy": free(map, 35, iy),
+	};
 }
 
 describe("obstruction map: the territories a structure may be built in", () =>
@@ -61,7 +77,11 @@ describe("obstruction map: the territories a structure may be built in", () =>
 	it("a house (own territory only) stands only on our connected land", () =>
 	{
 		const world = board();
-		const map = createObstructionMap(world.gameState, landRegion(2), structureTemplate("structures/athen/house", { "territories": ["own"] }));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/athen/house", { "territories": ["own"] }),
+		);
 		assert.deepEqual(bands(map, 20), { "neutral": false, "own": true, "ally": false, "enemy": false });
 		// our land cut from its civil centre decays: no new house there
 		assert.equal(free(map, 15, 30), false);
@@ -70,8 +90,11 @@ describe("obstruction map: the territories a structure may be built in", () =>
 	it("a civil centre (own, neutral) may also go on neutral land and on our decaying land", () =>
 	{
 		const world = board();
-		const map = createObstructionMap(world.gameState, landRegion(2),
-			structureTemplate("structures/athen/civil_centre", { "territories": ["own", "neutral"] }));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/athen/civil_centre", { "territories": ["own", "neutral"] }),
+		);
 		assert.deepEqual(bands(map, 20), { "neutral": true, "own": true, "ally": false, "enemy": false });
 		assert.equal(free(map, 15, 30), true);
 	});
@@ -79,8 +102,11 @@ describe("obstruction map: the territories a structure may be built in", () =>
 	it("a shrine (own, neutral, ally) may go on an ally's land, decaying or not", () =>
 	{
 		const world = board();
-		const map = createObstructionMap(world.gameState, landRegion(2),
-			structureTemplate("structures/maur/temple", { "territories": ["own", "neutral", "ally"] }));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/maur/temple", { "territories": ["own", "neutral", "ally"] }),
+		);
 		assert.deepEqual(bands(map, 20), { "neutral": true, "own": true, "ally": true, "enemy": false });
 		assert.equal(free(map, 25, 30), true);
 	});
@@ -88,8 +114,11 @@ describe("obstruction map: the territories a structure may be built in", () =>
 	it("a pillar (own, ally) may go on an ally's connected land but not on its decaying land", () =>
 	{
 		const world = board();
-		const map = createObstructionMap(world.gameState, landRegion(2),
-			structureTemplate("structures/maur/pillar_ashoka", { "territories": ["own", "ally"] }));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/maur/pillar_ashoka", { "territories": ["own", "ally"] }),
+		);
 		assert.deepEqual(bands(map, 20), { "neutral": false, "own": true, "ally": true, "enemy": false });
 		assert.equal(free(map, 25, 30), false);
 	});
@@ -97,8 +126,11 @@ describe("obstruction map: the territories a structure may be built in", () =>
 	it("an army camp (neutral, enemy) goes on enemy and neutral land, never on ours", () =>
 	{
 		const world = board();
-		const map = createObstructionMap(world.gameState, landRegion(2),
-			structureTemplate("structures/rome/army_camp", { "territories": ["neutral", "enemy"] }));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/rome/army_camp", { "territories": ["neutral", "enemy"] }),
+		);
 		assert.deepEqual(bands(map, 20), { "neutral": true, "own": false, "ally": false, "enemy": true });
 	});
 
@@ -125,9 +157,13 @@ describe("obstruction map: the ground a structure may stand on", () =>
 		const world = board({
 			// in our band: columns ix 12 water, 13 shore strip, the rest open land;
 			// the rows iy >= 25 are another land region (an island)
-			"passabilityData": (px) => Math.floor(px / PASS_RATIO) === 12 ? passWater :
-				Math.floor(px / PASS_RATIO) === 13 ? passShore : passLand,
-			"landPassMap": (px, pz) => Math.floor(px / PASS_RATIO) === 12 ? 1 : pz >= 25 * PASS_RATIO ? 4 : 2
+			"passabilityData": px =>
+				Math.floor(px / PASS_RATIO) === 12 ?
+					passWater :
+					Math.floor(px / PASS_RATIO) === 13 ?
+					passShore :
+					passLand,
+			"landPassMap": (px, pz) => Math.floor(px / PASS_RATIO) === 12 ? 1 : pz >= 25 * PASS_RATIO ? 4 : 2,
 		});
 		const house = structureTemplate("structures/athen/house", { "territories": ["own"] });
 
@@ -145,11 +181,17 @@ describe("obstruction map: the ground a structure may stand on", () =>
 	it("a dock stands on the shore strip, whatever the land region asked for", () =>
 	{
 		const world = board({
-			"passabilityData": (px) => Math.floor(px / PASS_RATIO) === 12 ? passWater :
-				Math.floor(px / PASS_RATIO) === 13 ? passShore : passLand
+			"passabilityData": px =>
+				Math.floor(px / PASS_RATIO) === 12 ?
+					passWater :
+					Math.floor(px / PASS_RATIO) === 13 ?
+					passShore :
+					passLand,
 		});
-		const dock = structureTemplate("structures/athen/dock",
-			{ "territories": ["own", "ally", "neutral"], "placement": "shore" });
+		const dock = structureTemplate("structures/athen/dock", {
+			"territories": ["own", "ally", "neutral"],
+			"placement": "shore",
+		});
 
 		const map = createObstructionMap(world.gameState, landRegion(4), dock);
 		assert.equal(free(map, 13, 20), true);
@@ -164,13 +206,20 @@ describe("obstruction map: distance rules between structures", () =>
 	/** a tower of the given owner on the given spot */
 	function tower(world: HqWorld, id: number, owner: number, position: [number, number]): void
 	{
-		world.addEntity(makeHqEntity({ id, owner, position, "classes": ["Structure", "Tower", "Defensive"],
-			"templateName": "structures/athen/sentry_tower" }));
+		world.addEntity(
+			makeHqEntity({
+				id,
+				owner,
+				position,
+				"classes": ["Structure", "Tower", "Defensive"],
+				"templateName": "structures/athen/sentry_tower",
+			}),
+		);
 	}
 	const towerTemplate = structureTemplate("structures/athen/defense_tower", {
 		"territories": ["own", "neutral"],
 		"buildDistance": { "FromClass": "Tower", "MinDistance": 60 },
-		"obstruction": { "min": 5, "max": 7 }
+		"obstruction": { "min": 5, "max": 7 },
 	});
 
 	it("a new tower keeps 60 map units (less its own half-size) from our towers", () =>
@@ -193,8 +242,15 @@ describe("obstruction map: distance rules between structures", () =>
 	{
 		const world = board({ "territoryOwner": () => PLAYER });
 		tower(world, 501, ENEMY, [160, 160]);
-		world.addEntity(makeHqEntity({ "id": 502, "owner": PLAYER, "position": [100, 100],
-			"classes": ["Structure", "House"], "templateName": "structures/athen/house" }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 502,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": ["Structure", "House"],
+				"templateName": "structures/athen/house",
+			}),
+		);
 
 		const map = createObstructionMap(world.gameState, landRegion(2), towerTemplate);
 
@@ -206,9 +262,13 @@ describe("obstruction map: distance rules between structures", () =>
 	{
 		const world = board({ "territoryOwner": () => PLAYER });
 		tower(world, 503, PLAYER, [160, 160]);
-		const map = createObstructionMap(world.gameState, landRegion(2), structureTemplate("structures/athen/defense_tower", {
-			"buildDistance": { "FromClass": "Tower", "MinDistance": 0 }
-		}));
+		const map = createObstructionMap(
+			world.gameState,
+			landRegion(2),
+			structureTemplate("structures/athen/defense_tower", {
+				"buildDistance": { "FromClass": "Tower", "MinDistance": 0 },
+			}),
+		);
 		assert.equal(map.map[80 + 80 * PASS_WIDTH], 255);
 	});
 });
@@ -238,7 +298,7 @@ describe("border map: the edge of a round map", () =>
 		const world = makeHqWorld({
 			"circularMap": true,
 			"passabilityData": (px, pz) =>
-				(px - centre) ** 2 + (pz - centre) ** 2 > (PASS_WIDTH / 2) ** 2 ? passWater | 0x8 : passLand
+				(px - centre) ** 2 + (pz - centre) ** 2 > (PASS_WIDTH / 2) ** 2 ? passWater | 0x8 : passLand,
 		});
 
 		const map = createBorderMap(world.gameState);

@@ -50,9 +50,13 @@ export const SWITCH_GAP = 2;
  * queues (FINDINGS §19: weighted by its rate, metal's reserve cost wood).
  * With nothing wanted, the gatherers stay where they are.
  */
-export function targetGatherers(total: number, costs: Readonly<Record<string, number>>,
-	floors: Readonly<Record<string, number>>, rate: Readonly<Record<string, number>>,
-	gatherers: Readonly<Record<string, number>>): Record<string, number>
+export function targetGatherers(
+	total: number,
+	costs: Readonly<Record<string, number>>,
+	floors: Readonly<Record<string, number>>,
+	rate: Readonly<Record<string, number>>,
+	gatherers: Readonly<Record<string, number>>,
+): Record<string, number>
 {
 	const weights: Record<string, number> = {};
 	let sum = 0;
@@ -76,8 +80,11 @@ export function targetGatherers(total: number, costs: Readonly<Record<string, nu
  * a lower rate asks for more gatherers (FINDINGS §19: 82 women on 14 fields,
  * ten of them idle for minutes).
  */
-export function capAtSaturation(target: Readonly<Record<string, number>>, gatherers: Readonly<Record<string, number>>,
-	idle: Readonly<Record<string, number>>): Record<string, number>
+export function capAtSaturation(
+	target: Readonly<Record<string, number>>,
+	gatherers: Readonly<Record<string, number>>,
+	idle: Readonly<Record<string, number>>,
+): Record<string, number>
 {
 	const capped: Record<string, number> = {};
 	let freed = 0;
@@ -98,9 +105,11 @@ export function capAtSaturation(target: Readonly<Record<string, number>>, gather
 		}
 	}
 	if (freed > 0 && open > 0)
+	{
 		for (const res in target)
 			if (!idle[res])
 				capped[res] += freed * target[res] / open;
+	}
 	return capped;
 }
 

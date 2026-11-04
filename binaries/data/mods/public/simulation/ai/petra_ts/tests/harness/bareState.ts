@@ -46,7 +46,7 @@ function fakeEntityList(items: readonly unknown[] = []): object
 		// A real collection re-subscribes to entity events. There are no live
 		// entities to subscribe to here, so this has nothing to do.
 		registerUpdates: () => undefined,
-		length: items.length
+		length: items.length,
 	};
 }
 
@@ -103,14 +103,15 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 
 	const ai: Record<string, unknown> = {
 		queueManager: {
-			changePriority: (queue: string, priority: number) => {
+			changePriority: (queue: string, priority: number) =>
+			{
 				priorityChanges.push([queue, priority]);
-			}
+			},
 		},
 		Config: { priorities: options.priorities ?? {} },
 		// Petra's own id counters, not engine state: a base or a plan takes its
 		// number from here, so anything constructing one needs them.
-		uniqueIDs: { plans: 1, bases: 1 }
+		uniqueIDs: { plans: 1, bases: 1 },
 	};
 
 	const state: Record<string, unknown> = { ai };
@@ -120,19 +121,26 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		const templates = options.templates;
 		// Civ bonuses are a template-id suffix; tests use plain ids.
 		state["applyCiv"] = (template: string) => template;
-		state["getTemplate"] = (template: string) => {
+		state["getTemplate"] = (template: string) =>
+		{
 			const found = templates[template];
 			if (found === undefined)
 				throw new Error(`no fake template "${template}" — add it to the test's templates`);
 			// plans read the population cost straight off the template JSON
 			const population = found.population ?? 0;
 			const made = makeTemplate(template, {
-				"cost": found.cost, "popCost": population, "getPaths": { "Cost": { "Population": population } },
-				"researchTime": found.researchTime
+				"cost": found.cost,
+				"popCost": population,
+				"getPaths": { "Cost": { "Population": population } },
+				"researchTime": found.researchTime,
 			});
 			// a structure has an obstruction and a footprint (template_structure.xml)
 			return template.startsWith("structures/") ?
-				fake<CommonTemplate>({ ...made, "obstructionRadius": () => ({ "min": 1, "max": 2 }), "footprintRadius": () => 2 }) :
+				fake<CommonTemplate>({
+					...made,
+					"obstructionRadius": () => ({ "min": 1, "max": 2 }),
+					"footprintRadius": () => 2,
+				}) :
 				made;
 		};
 		// Plans look for trainers/researchers in their constructor. Answering
@@ -174,8 +182,13 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		// what an unanalysed map looks like to the code that iterates it.
 		// Every cell of a declared map is impassable to land units and ships alike.
 		const cells = options.map ? (options.map.width ?? 8) * (options.map.height ?? 8) : 0;
-		ai["accessibility"] = { regionSize: [], regionType: [], numRegions: 0,
-			landPassMap: new Uint8Array(cells), navalPassMap: new Uint8Array(cells) };
+		ai["accessibility"] = {
+			regionSize: [],
+			regionType: [],
+			numRegions: 0,
+			landPassMap: new Uint8Array(cells),
+			navalPassMap: new Uint8Array(cells),
+		};
 	}
 
 	return { "gameState": fake<CommonGameState>(state), priorityChanges };

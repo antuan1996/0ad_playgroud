@@ -1,0 +1,42 @@
+{
+	"lineWidth": 120,
+	"indentWidth": 4,
+	"newLineKind": "lf",
+	"includes": [
+		"binaries/data/mods/public/simulation/ai/petra_ts/**/*.ts",
+		"build/petra_ts/**/*.ts"
+	],
+	"excludes": [
+		"build/petra_ts/batches/**",
+		"build/petra_ts/matches/**",
+		"build/petra_ts/workers/**"
+	],
+	"typescript": {
+		"locked": true,
+		"useTabs": true,
+		"semiColons": "prefer",
+		"quoteStyle": "alwaysDouble",
+		"quoteProps": "preserve",
+		"useBraces": "maintain",
+		"bracePosition": "nextLine",
+		"singleBodyPosition": "nextLine",
+		"nextControlFlowPosition": "nextLine",
+		"trailingCommas": "onlyMultiLine",
+		"operatorPosition": "sameLine",
+		"conditionalExpression.linePerExpression": true,
+		"preferHanging": false,
+		"preferSingleLine": true,
+		"arrowFunction.useParentheses": "preferNone",
+		"spaceSurroundingProperties": true,
+		"commentLine.forceSpaceAfterSlashes": true,
+		"module.sortImportDeclarations": "caseSensitive",
+		"module.sortExportDeclarations": "caseSensitive",
+		"importDeclaration.sortNamedImports": "caseSensitive",
+		"exportDeclaration.sortNamedExports": "caseSensitive",
+		"importDeclaration.sortTypeOnlyImports": "last",
+		"exportDeclaration.sortTypeOnlyExports": "last"
+	},
+	"plugins": [
+		"npm:@dprint/typescript@0.96.1"
+	]
+}

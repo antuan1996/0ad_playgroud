@@ -23,8 +23,18 @@
  */
 import type { Methods } from "./fakes.ts";
 import {
-	type HqWorld, type HqWorldOptions, layNavalPassMap, makeHqEntity, makeHqWorld, MAP_CELLS,
-	PASS_RATIO, passLand, passShore, passWater, PLAYER, seatHQ
+	MAP_CELLS,
+	PASS_RATIO,
+	PLAYER,
+	layNavalPassMap,
+	makeHqEntity,
+	makeHqWorld,
+	passLand,
+	passShore,
+	passWater,
+	seatHQ,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./hqWorld.ts";
 
 import { landRegion, seaRegion, worldPos } from "../../adapter/brands.ts";
@@ -34,11 +44,11 @@ export const WEST = landRegion(2);
 export const ISLAND = landRegion(3);
 export const SEA = seaRegion(5);
 
-const WIDTH = MAP_CELLS * PASS_RATIO;	// passability cells across, 2 map units each
-const SHORE_WEST = 76;	// first shallow cell of our coast
+const WIDTH = MAP_CELLS * PASS_RATIO; // passability cells across, 2 map units each
+const SHORE_WEST = 76; // first shallow cell of our coast
 const SEA_START = 80;
 const ISLAND_START = 120;
-const SHORE_ISLAND = 124;	// first island cell past the shallows
+const SHORE_ISLAND = 124; // first island cell past the shallows
 
 /** the land region of a passability column (1: no land there) */
 function landOf(px: number, island: boolean): number
@@ -67,11 +77,9 @@ export interface NavalWorld
  * init is left to the suite, as the game leaves it to the opening strategy,
  * so the ships and docks of the opening can be placed first.
  */
-export function navalWorld(options: {
-	island?: boolean;
-	worldOptions?: Partial<HqWorldOptions>;
-	stubs?: string[];
-} = {}): NavalWorld
+export function navalWorld(
+	options: { island?: boolean; worldOptions?: Partial<HqWorldOptions>; stubs?: string[] } = {},
+): NavalWorld
 {
 	const island = options.island ?? true;
 	const stubs = options.stubs ??
@@ -80,11 +88,12 @@ export function navalWorld(options: {
 	const sea = (px: number) => seaOf(px, island);
 	const world = makeHqWorld({
 		"landPassMap": land,
-		"passabilityData": (px: number) => sea(px) > 1 && land(px) > 1 ? passShore : land(px) > 1 ? passLand : passWater,
+		"passabilityData": (px: number) =>
+			sea(px) > 1 && land(px) > 1 ? passShore : land(px) > 1 ? passLand : passWater,
 		"regionTypes": { [WEST]: "land", [ISLAND]: "land", [SEA]: "water" },
 		"regionLinks": { [WEST]: [SEA], [ISLAND]: [SEA], [SEA]: [WEST, ISLAND] },
 		"trajectories": { "2,3": [WEST, SEA, ISLAND], "3,2": [ISLAND, SEA, WEST] },
-		...options.worldOptions
+		...options.worldOptions,
 	});
 
 	const naval = new Uint8Array(WIDTH * WIDTH);
@@ -105,7 +114,7 @@ export function navalWorld(options: {
 			if (px < 0 || px >= WIDTH || pz < 0 || pz >= WIDTH)
 				return 0;
 			return onWater ? naval[px + pz * WIDTH] : world.map.landPassMap[px + pz * WIDTH];
-		}
+		},
 	});
 	world.ai.uniqueIDs.transports = 1;
 
@@ -123,11 +132,15 @@ export function navalWorld(options: {
 	{
 		addEntity(ent);
 		const setMetadata = ent.setMetadata.bind(ent);
-		ent.setMetadata = <K extends keyof PetraEntityMetadata>(player: PlayerId, key: K, value: PetraEntityMetadata[K] | undefined) =>
+		ent.setMetadata = <K extends keyof PetraEntityMetadata>(
+			player: PlayerId,
+			key: K,
+			value: PetraEntityMetadata[K] | undefined,
+		) =>
 		{
 			setMetadata(player, key, value);
 			for (const collection of registered)
-				if (collection.dynamicProperties().some((p) => p === "metadata" || p === "metadata." + key))
+				if (collection.dynamicProperties().some(p => p === "metadata" || p === "metadata." + key))
 					collection.updateEnt(ent);
 		};
 		for (const collection of registered)
@@ -139,7 +152,7 @@ export function navalWorld(options: {
 		stubs,
 		"landRegions": { [WEST]: true, [ISLAND]: true },
 		"navalMap": true,
-		"navalRegions": { [SEA]: true }
+		"navalRegions": { [SEA]: true },
 	});
 	hq.updateTerritories(world.gameState);
 	return { world, hq };
@@ -159,33 +172,57 @@ export interface ShipState
 }
 
 /** a ship of ours at sea; a transport (a warship with room aboard) unless told otherwise */
-export function ship(world: HqWorld, id: number, position: [number, number] | undefined,
-	options: { capacity?: number; classes?: string[]; methods?: Methods; metadata?: Record<string, unknown>; owner?: number } = {})
+export function ship(
+	world: HqWorld,
+	id: number,
+	position: [number, number] | undefined,
+	options: {
+		capacity?: number;
+		classes?: string[];
+		methods?: Methods;
+		metadata?: Record<string, unknown>;
+		owner?: number;
+	} = {},
+)
 {
 	const state: ShipState = {
-		"pos": position, "garrisoned": [], "moves": [], "moveApart": [], "unloaded": [],
-		"stance": "aggressive", "aiState": "INDIVIDUAL.IDLE", "idle": true
+		"pos": position,
+		"garrisoned": [],
+		"moves": [],
+		"moveApart": [],
+		"unloaded": [],
+		"stance": "aggressive",
+		"aiState": "INDIVIDUAL.IDLE",
+		"idle": true,
 	};
-	const ent = world.addEntity(makeHqEntity({
-		id, "owner": options.owner ?? PLAYER, position,
-		"classes": options.classes ?? ["Unit", "Ship", "Warship"], "templateName": "units/athen/ship_bireme"
-	}, {
-		"position": () => state.pos ? [...state.pos] : undefined,
-		"garrisonMax": () => options.capacity ?? 20,
-		"garrisoned": () => state.garrisoned,
-		"isGarrisonHolder": () => true,
-		"canGarrison": () => false,
-		"move": (x: number, z: number) => state.moves.push([x, z]),
-		"moveApart": (pos: [number, number]) => state.moveApart.push(pos),
-		"setStance": (stance: string) => { state.stance = stance; },
-		"getStance": () => state.stance,
-		// as the template's UnitAI/DefaultStance
-		"get": (path: string) => path === "UnitAI/DefaultStance" ? "aggressive" : undefined,
-		"unload": (entId: number) => state.unloaded.push(entId),
-		"unitAIState": () => state.aiState,
-		"isIdle": () => state.idle,
-		...options.methods
-	}, options.metadata ?? {}));
+	const ent = world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": options.owner ?? PLAYER,
+			position,
+			"classes": options.classes ?? ["Unit", "Ship", "Warship"],
+			"templateName": "units/athen/ship_bireme",
+		}, {
+			"position": () => state.pos ? [...state.pos] : undefined,
+			"garrisonMax": () => options.capacity ?? 20,
+			"garrisoned": () => state.garrisoned,
+			"isGarrisonHolder": () => true,
+			"canGarrison": () => false,
+			"move": (x: number, z: number) => state.moves.push([x, z]),
+			"moveApart": (pos: [number, number]) => state.moveApart.push(pos),
+			"setStance": (stance: string) =>
+			{
+				state.stance = stance;
+			},
+			"getStance": () => state.stance,
+			// as the template's UnitAI/DefaultStance
+			"get": (path: string) => path === "UnitAI/DefaultStance" ? "aggressive" : undefined,
+			"unload": (entId: number) => state.unloaded.push(entId),
+			"unitAIState": () => state.aiState,
+			"isIdle": () => state.idle,
+			...options.methods,
+		}, options.metadata ?? {}),
+	);
 	return { ent, state };
 }
 
@@ -200,22 +237,38 @@ export interface UnitState
 }
 
 /** a soldier of ours on land */
-export function soldier(world: HqWorld, id: number, position: [number, number] | undefined,
-	metadata: Record<string, unknown> = {}, methods: Methods = {})
+export function soldier(
+	world: HqWorld,
+	id: number,
+	position: [number, number] | undefined,
+	metadata: Record<string, unknown> = {},
+	methods: Methods = {},
+)
 {
 	const state: UnitState = { "pos": position, "garrisons": [], "ranges": [], "stops": 0, "destroyed": false };
-	const ent = world.addEntity(makeHqEntity({
-		id, "owner": PLAYER, position, "classes": ["Unit", "Infantry", "Soldier", "Melee"],
-		"templateName": "units/athen/infantry_spearman_b"
-	}, {
-		"position": () => state.pos ? [...state.pos] : undefined,
-		"canGarrison": () => true,
-		"garrison": (target: CommonEntity, queued?: boolean) => state.garrisons.push([target.id(), queued]),
-		"moveToRange": (x: number, z: number, min: number, max: number) => state.ranges.push([x, z, min, max]),
-		"stopMoving": () => { ++state.stops; },
-		"destroy": () => { state.destroyed = true; },
-		...methods
-	}, metadata));
+	const ent = world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": PLAYER,
+			position,
+			"classes": ["Unit", "Infantry", "Soldier", "Melee"],
+			"templateName": "units/athen/infantry_spearman_b",
+		}, {
+			"position": () => state.pos ? [...state.pos] : undefined,
+			"canGarrison": () => true,
+			"garrison": (target: CommonEntity, queued?: boolean) => state.garrisons.push([target.id(), queued]),
+			"moveToRange": (x: number, z: number, min: number, max: number) => state.ranges.push([x, z, min, max]),
+			"stopMoving": () =>
+			{
+				++state.stops;
+			},
+			"destroy": () =>
+			{
+				state.destroyed = true;
+			},
+			...methods,
+		}, metadata),
+	);
 	return { ent, state };
 }
 
@@ -227,10 +280,14 @@ export function board(unit: { ent: CommonEntity; state: UnitState }, carrier: { 
 }
 
 /** the engine unloads the soldier from the ship onto the given spot */
-export function disembark(unit: { ent: CommonEntity; state: UnitState }, carrier: { state: ShipState }, at: [number, number]): void
+export function disembark(
+	unit: { ent: CommonEntity; state: UnitState },
+	carrier: { state: ShipState },
+	at: [number, number],
+): void
 {
 	unit.state.pos = at;
-	carrier.state.garrisoned = carrier.state.garrisoned.filter((id) => id !== unit.ent.id());
+	carrier.state.garrisoned = carrier.state.garrisoned.filter(id => id !== unit.ent.id());
 }
 
-export type { HqWorld, Headquarters };
+export type { Headquarters, HqWorld };

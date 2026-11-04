@@ -4,13 +4,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { type FieldCensus, nextField } from "../decision/fields.ts";
+import { nextField, type FieldCensus } from "../decision/fields.ts";
 
 /** a base with two fields, none being built, Petra's provision of two, no limit */
 function base(overrides: Partial<FieldCensus> = {}): FieldCensus
 {
-	return { "berries": 0, "fieldsFirst": false, "fields": 2, "foundations": 0, "queued": 0,
-		"maxFields": false, "provision": 2, "saving": false, ...overrides };
+	return {
+		"berries": 0,
+		"fieldsFirst": false,
+		"fields": 2,
+		"foundations": 0,
+		"queued": 0,
+		"maxFields": false,
+		"provision": 2,
+		"saving": false,
+		...overrides,
+	};
 }
 
 describe("fields", () =>
@@ -19,9 +28,16 @@ describe("fields", () =>
 	{
 		assert.equal(nextField(base({ "fields": 0, "berries": 1200 })), "enough", "plenty of berries");
 		assert.equal(nextField(base({ "fields": 0, "berries": 500 })), "first");
-		assert.equal(nextField(base({ "fields": 0, "berries": 1200, "fieldsFirst": true })), "first", "they bring in less");
-		assert.equal(nextField(base({ "fields": 0, "queued": 1, "berries": 100 })), "more",
-			"one queued is the first; with the berries low, a second, as Petra keeps two in construction");
+		assert.equal(
+			nextField(base({ "fields": 0, "berries": 1200, "fieldsFirst": true })),
+			"first",
+			"they bring in less",
+		);
+		assert.equal(
+			nextField(base({ "fields": 0, "queued": 1, "berries": 100 })),
+			"more",
+			"one queued is the first; with the berries low, a second, as Petra keeps two in construction",
+		);
 	});
 
 	it("keeps two fields in construction, one with berries left, saving or past five fields", () =>

@@ -21,7 +21,7 @@ function unit(state: string | undefined, queue: CommonUnitOrder[]): CommonEntity
 	return fake<CommonEntity>({
 		"unitAIState": () => state,
 		"unitAIOrderData": () => queue,
-		"resourceGatherRates": () => CITIZEN_RATES
+		"resourceGatherRates": () => CITIZEN_RATES,
 	});
 }
 
@@ -29,7 +29,8 @@ function unit(state: string | undefined, queue: CommonUnitOrder[]): CommonEntity
 function world(supplies: Record<number, { generic: string; specific: string } | undefined>): CommonGameState
 {
 	return fake<CommonGameState>({
-		"getEntityById": (id: number) => id in supplies ? fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined
+		"getEntityById": (id: number) =>
+			id in supplies ? fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined,
 	});
 }
 
@@ -41,21 +42,25 @@ describe("what a unit has been ordered to do", () =>
 		// commit 4b516b336e; the reader unwraps the data. If the engine goes
 		// back to GetOrderData, the reader must change with it.
 		const source = readFileSync(path.join(modsPublic, "simulation/ai/common-api/entity.js"), "utf8");
-		assert.match(source, /unitAIOrderData\(\) \{ return SimEngine\.QueryInterface\(this\.id\(\), Sim\.IID_UnitAI\)\.GetOrders\(\); \}/);
+		assert.match(
+			source,
+			/unitAIOrderData\(\) \{ return SimEngine\.QueryInterface\(this\.id\(\), Sim\.IID_UnitAI\)\.GetOrders\(\); \}/,
+		);
 		const unitAI = readFileSync(path.join(modsPublic, "simulation/components/UnitAI.js"), "utf8");
 		assert.match(unitAI, /UnitAI\.prototype\.GetOrders = function\(\)\n\{\n\treturn this\.orderQueue\.slice\(\);/);
 	});
 
 	it("reads each order's data, in queue order, leaving out the orders that carry none", () =>
 	{
-		const queue = [
-			{ "type": "ReturnResource", "data": { "target": entityId(50) } },
-			{ "type": "Stop" },
-			{ "type": "Gather", "data": { "target": entityId(60), "force": false } }
-		];
+		const queue = [{ "type": "ReturnResource", "data": { "target": entityId(50) } }, { "type": "Stop" }, {
+			"type": "Gather",
+			"data": { "target": entityId(60), "force": false },
+		}];
 
-		assert.deepEqual(ordersOf(unit("INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", queue)),
-			[{ "target": 50 }, { "target": 60, "force": false }]);
+		assert.deepEqual(ordersOf(unit("INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", queue)), [{ "target": 50 }, {
+			"target": 60,
+			"force": false,
+		}]);
 		assert.deepEqual(ordersOf(unit("INDIVIDUAL.IDLE", [])), []);
 	});
 });
@@ -66,14 +71,20 @@ describe("the rate a unit gathers at", () =>
 	{
 		const gameState = world({ 70: { "generic": "wood", "specific": "tree" } });
 
-		assert.equal(gatherRate(gameState, unit("INDIVIDUAL.GATHER.GATHERING", orders({ "target": entityId(70) }))), 0.7);
+		assert.equal(
+			gatherRate(gameState, unit("INDIVIDUAL.GATHER.GATHERING", orders({ "target": entityId(70) }))),
+			0.7,
+		);
 	});
 
 	it("an order to gather from a field gives the grain rate, not the fruit one", () =>
 	{
 		const gameState = world({ 71: { "generic": "food", "specific": "grain" } });
 
-		assert.equal(gatherRate(gameState, unit("INDIVIDUAL.GATHER.APPROACHING", orders({ "target": entityId(71) }))), 0.5);
+		assert.equal(
+			gatherRate(gameState, unit("INDIVIDUAL.GATHER.APPROACHING", orders({ "target": entityId(71) }))),
+			0.5,
+		);
 	});
 
 	it("reads the next order when the first has no target", () =>
@@ -105,7 +116,10 @@ describe("the rate a unit gathers at", () =>
 	{
 		const gameState = world({ 70: { "generic": "wood", "specific": "tree" } });
 
-		assert.equal(gatherRate(gameState, unit("INDIVIDUAL.COMBAT.ATTACKING", orders({ "target": entityId(70) }))), undefined);
+		assert.equal(
+			gatherRate(gameState, unit("INDIVIDUAL.COMBAT.ATTACKING", orders({ "target": entityId(70) }))),
+			undefined,
+		);
 		const soldierOnly = fake<CommonEntity>({ "resourceGatherRates": () => undefined });
 		assert.equal(gatherRate(gameState, soldierOnly), undefined);
 	});

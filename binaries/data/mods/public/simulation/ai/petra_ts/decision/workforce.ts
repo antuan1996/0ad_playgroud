@@ -68,16 +68,22 @@ export function supportAlpha(rushToCome: boolean, ceasefireLeft: number | undefi
  * `max · (1 − e^(−alpha · total / max))` between; the share's cap falls to
  * 0.1 where no field can be built (support units gather food at the fields).
  */
-export function supportShare(total: number, supportRatio: number, target: number, alpha: number, fields: boolean): number
+export function supportShare(
+	total: number,
+	supportRatio: number,
+	target: number,
+	alpha: number,
+	fields: boolean,
+): number
 {
 	const supportMax = (fields ? supportRatio : Math.min(supportRatio, 0.1)) * target;
-	return supportMax * (1 - Math.exp(-alpha*total/supportMax));
+	return supportMax * (1 - Math.exp(-alpha * total / supportMax));
 }
 
 /** A citizen soldier's weights: quick and cheap below 45 workers, then the strongest. */
 export function soldierRequirements(total: number): TrainableRequirement[]
 {
 	if (total < 45)
-		return [ ["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"] ];
-	return [ ["strength", 1] ];
+		return [["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"]];
+	return [["strength", 1]];
 }

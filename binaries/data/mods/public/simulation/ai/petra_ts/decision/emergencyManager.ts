@@ -2,7 +2,10 @@ import { emergency as chatEmergency } from "../adapter/chatHelper.ts";
 import type { Config } from "../world/config.ts";
 
 /** The fields a save keeps. */
-export type SerializedEmergencyManager = Pick<EmergencyManager, "referencePopulation" | "referenceStructureCount" | "numRoots" | "hasEmergency">;
+export type SerializedEmergencyManager = Pick<
+	EmergencyManager,
+	"referencePopulation" | "referenceStructureCount" | "numRoots" | "hasEmergency"
+>;
 
 /**
  * Checks for emergencies and acts accordingly
@@ -42,8 +45,10 @@ export class EmergencyManager
 		const nStructures = gameState.getOwnStructures().length;
 		const nRoots = this.rootCount(gameState);
 		const factors = this.Config.emergencyValues;
-		if (((pop / this.referencePopulation) < factors.population || pop === 0) &&
-			((nStructures / this.referenceStructureCount) < factors.structures || nStructures === 0))
+		if (
+			((pop / this.referencePopulation) < factors.population || pop === 0) &&
+			((nStructures / this.referenceStructureCount) < factors.structures || nStructures === 0)
+		)
 			this.setEmergency(gameState, true);
 		else if ((nRoots / this.numRoots) <= factors.roots || (nRoots === 0 && this.numRoots !== 0))
 			this.setEmergency(gameState, true);
@@ -62,9 +67,10 @@ export class EmergencyManager
 		const nStructures = gameState.getOwnStructures().length;
 		const nRoots = this.rootCount(gameState);
 
-		if ((pop > this.referencePopulation * 1.2 &&
-			nStructures > this.referenceStructureCount * 1.2) ||
-			nRoots > this.numRoots)
+		if (
+			(pop > this.referencePopulation * 1.2 && nStructures > this.referenceStructureCount * 1.2) ||
+			nRoots > this.numRoots
+		)
 		{
 			this.setEmergency(gameState, false);
 			this.referencePopulation = pop;
@@ -76,11 +82,10 @@ export class EmergencyManager
 	rootCount(gameState: CommonGameState): number
 	{
 		let roots = 0;
-		gameState.getOwnStructures().toEntityArray().forEach((ent) =>
+		gameState.getOwnStructures().toEntityArray().forEach(ent =>
 		{
 			const influence = ent?.get("TerritoryInfluence");
-			if (typeof influence === "object" && influence !== null &&
-				"Root" in influence && influence.Root === "true")
+			if (typeof influence === "object" && influence !== null && "Root" in influence && influence.Root === "true")
 				roots++;
 		});
 		return roots;
@@ -98,7 +103,7 @@ export class EmergencyManager
 			"referencePopulation": this.referencePopulation,
 			"referenceStructureCount": this.referenceStructureCount,
 			"numRoots": this.numRoots,
-			"hasEmergency": this.hasEmergency
+			"hasEmergency": this.hasEmergency,
 		};
 	}
 

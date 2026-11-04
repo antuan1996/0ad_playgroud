@@ -14,7 +14,15 @@ import { fake, orders } from "./harness/fakes.ts";
 import "simulation/ai/common-api/resources.js";
 
 import { entityId } from "../adapter/brands.ts";
-import { byDeficit, capAtSaturation, deficit, type GatherNeed, SWITCH_GAP, targetGatherers, worthSwitching } from "../decision/gatherSplit.ts";
+import {
+	SWITCH_GAP,
+	byDeficit,
+	capAtSaturation,
+	deficit,
+	targetGatherers,
+	worthSwitching,
+	type GatherNeed,
+} from "../decision/gatherSplit.ts";
 import { FOOD_PRIOR_RATE, GatherEconomy, PRIOR_RATE, SMOOTHING } from "../world/gatherEconomy.ts";
 
 const RESOURCES = ["food", "wood", "stone", "metal"];
@@ -103,7 +111,7 @@ describe("the split: each resource's share of the gatherers", () =>
 		for (const c of cases(500, 2))
 		{
 			const target = targetGatherers(c.total, c.wanted, NO_FLOORS, c.rate, c.gatherers);
-			const wanted = RESOURCES.filter((res) => c.wanted[res] > 0);
+			const wanted = RESOURCES.filter(res => c.wanted[res] > 0);
 			if (wanted.length < 2)
 				continue;
 			const scale = target[wanted[0]] * c.rate[wanted[0]] / c.wanted[wanted[0]];
@@ -119,7 +127,8 @@ describe("the split: each resource's share of the gatherers", () =>
 			if (c.wanted.food === 0)
 				continue;
 			const before = targetGatherers(c.total, c.wanted, c.floors, c.rate, c.gatherers).food;
-			const after = targetGatherers(c.total, c.wanted, c.floors, { ...c.rate, "food": c.rate.food / 2 }, c.gatherers).food;
+			const after =
+				targetGatherers(c.total, c.wanted, c.floors, { ...c.rate, "food": c.rate.food / 2 }, c.gatherers).food;
 			assert.ok(after >= before - 1e-9, "slower food never loses gatherers");
 		}
 	});
@@ -160,8 +169,11 @@ describe("the split: a resource that cannot take more", () =>
 	{
 		// 14 fields hold 70 women; the share asks 90 of the 82 on food, and
 		// the 20 food cannot use go to wood and stone, 3 : 1
-		const capped = capAtSaturation({ "food": 90, "wood": 30, "stone": 10 }, { "food": 82, "wood": 26, "stone": 5 },
-			{ "food": 12, "wood": 0, "stone": 0 });
+		const capped = capAtSaturation(
+			{ "food": 90, "wood": 30, "stone": 10 },
+			{ "food": 82, "wood": 26, "stone": 5 },
+			{ "food": 12, "wood": 0, "stone": 0 },
+		);
 
 		assert.deepEqual(capped, { "food": 70, "wood": 45, "stone": 15 });
 	});
@@ -186,7 +198,7 @@ describe("the split: a resource that cannot take more", () =>
 				else
 					assert.ok(capped[res] >= target[res] - 1e-9);
 			}
-			if (RESOURCES.some((res) => !idle[res as keyof typeof idle] && target[res] > 0))
+			if (RESOURCES.some(res => !idle[res as keyof typeof idle] && target[res] > 0))
 				assert.ok(Math.abs(sum(capped) - sum(target)) < 1e-9, "the share food cannot use goes elsewhere");
 		}
 	});
@@ -194,14 +206,24 @@ describe("the split: a resource that cannot take more", () =>
 
 describe("the split: the order and the switches", () =>
 {
-	const need = (type: string, gatherers: number, target: number, wanted = 1): GatherNeed =>
-		({ type, wanted, "current": 0, gatherers, target });
+	const need = (type: string, gatherers: number, target: number, wanted = 1): GatherNeed => ({
+		type,
+		wanted,
+		"current": 0,
+		gatherers,
+		target,
+	});
 
 	it("orders the resources most short of gatherers first, the more wanted first among equals", () =>
 	{
-		const order = byDeficit([need("stone", 3, 3, 2), need("food", 10, 14), need("wood", 8, 6), need("metal", 1, 1, 5)]);
+		const order = byDeficit([
+			need("stone", 3, 3, 2),
+			need("food", 10, 14),
+			need("wood", 8, 6),
+			need("metal", 1, 1, 5),
+		]);
 
-		assert.deepEqual(order.map((n) => n.type), ["food", "metal", "stone", "wood"]);
+		assert.deepEqual(order.map(n => n.type), ["food", "metal", "stone", "wood"]);
 		assert.deepEqual(order.map(deficit), [4, 0, 0, -2]);
 	});
 
@@ -209,7 +231,7 @@ describe("the split: the order and the switches", () =>
 	{
 		const order = byDeficit([need("metal", 0, 0), need("wood", 9, 8), need("food", 12, 11)]);
 
-		assert.deepEqual(order.map((n) => n.type), ["wood", "food", "metal"]);
+		assert.deepEqual(order.map(n => n.type), ["wood", "food", "metal"]);
 	});
 
 	it("moves a gatherer only when the deficits differ by the gap", () =>
@@ -224,7 +246,7 @@ describe("the split: the order and the switches", () =>
 		for (const c of cases(300, 4))
 		{
 			const target = targetGatherers(c.total, c.wanted, c.floors, c.rate, c.gatherers);
-			const needs = RESOURCES.map((res) => need(res, c.gatherers[res], target[res]));
+			const needs = RESOURCES.map(res => need(res, c.gatherers[res], target[res]));
 			for (const a of needs)
 				for (const b of needs)
 					assert.ok(!(worthSwitching(a, b) && worthSwitching(b, a)));
@@ -236,15 +258,20 @@ describe("the split: the order and the switches", () =>
 		for (const c of cases(300, 5))
 		{
 			const target = targetGatherers(c.total, c.wanted, c.floors, c.rate, c.gatherers);
-			const needs = RESOURCES.map((res) => need(res, c.gatherers[res], target[res]));
+			const needs = RESOURCES.map(res => need(res, c.gatherers[res], target[res]));
 			const miss = (list: GatherNeed[]): number => list.reduce((s, n) => s + Math.abs(deficit(n)), 0);
 			for (const from of needs)
 				for (const to of needs)
 				{
 					if (from === to || !worthSwitching(from, to) || from.gatherers === 0)
 						continue;
-					const after = needs.map((n) => n === from ? { ...n, "gatherers": n.gatherers - 1 } :
-						n === to ? { ...n, "gatherers": n.gatherers + 1 } : n);
+					const after = needs.map(n =>
+						n === from ?
+							{ ...n, "gatherers": n.gatherers - 1 } :
+							n === to ?
+							{ ...n, "gatherers": n.gatherers + 1 } :
+							n
+					);
 					assert.ok(miss(after) < miss(needs) + 1e-9);
 				}
 		}
@@ -254,7 +281,13 @@ describe("the split: the order and the switches", () =>
 describe("the measured rates: what a gatherer brings in, the walk included", () =>
 {
 	/** a worker of ours with its roles, state and order */
-	function worker(id: number, subrole: string, gatherType: string | undefined, state: string, supply?: number): CommonEntity
+	function worker(
+		id: number,
+		subrole: string,
+		gatherType: string | undefined,
+		state: string,
+		supply?: number,
+	): CommonEntity
 	{
 		// the engine reports a unit idle in UnitAI's IDLE state
 		const metadata: Record<string, unknown> = { "subrole": subrole, "gather-type": gatherType };
@@ -264,7 +297,7 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 			"unitAIState": () => state,
 			"isIdle": () => state === "INDIVIDUAL.IDLE",
 			"unitAIOrderData": () => supply === undefined ? [] : orders({ "target": entityId(supply) }),
-			"resourceGatherRates": () => ({ "food.fruit": 1, "food.meat": 1, "wood.tree": 0.7 })
+			"resourceGatherRates": () => ({ "food.fruit": 1, "food.meat": 1, "wood.tree": 0.7 }),
 		});
 	}
 
@@ -272,25 +305,27 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 	{
 		const supplies: Record<number, { generic: string; specific: string }> = {
 			900: { "generic": "food", "specific": "fruit" },
-			901: { "generic": "wood", "specific": "tree" }
+			901: { "generic": "wood", "specific": "tree" },
 		};
 		return fake<CommonGameState>({
 			"ai": { "elapsedTime": time },
 			"getOwnEntitiesByRole": () => ({ "values": () => workers.values() }),
-			"getEntityById": (id: number) => id in supplies ? fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined
+			"getEntityById": (id: number) =>
+				id in supplies ? fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined,
 		});
 	}
 
 	// four on the berries, one of them at the bush; two woodcutters, both at the tree
-	const town = (): CommonEntity[] => [
-		worker(1, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 900),
-		worker(2, "gatherer", "food", "INDIVIDUAL.GATHER.APPROACHING", 900),
-		worker(3, "gatherer", "food", "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", 900),
-		worker(4, "hunter", undefined, "INDIVIDUAL.COMBAT.APPROACHING", 900),
-		worker(5, "gatherer", "wood", "INDIVIDUAL.GATHER.GATHERING", 901),
-		worker(6, "gatherer", "wood", "INDIVIDUAL.GATHER.GATHERING", 901),
-		worker(7, "builder", undefined, "INDIVIDUAL.REPAIR.REPAIRING")
-	];
+	const town =
+		(): CommonEntity[] => [
+			worker(1, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 900),
+			worker(2, "gatherer", "food", "INDIVIDUAL.GATHER.APPROACHING", 900),
+			worker(3, "gatherer", "food", "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", 900),
+			worker(4, "hunter", undefined, "INDIVIDUAL.COMBAT.APPROACHING", 900),
+			worker(5, "gatherer", "wood", "INDIVIDUAL.GATHER.GATHERING", 901),
+			worker(6, "gatherer", "wood", "INDIVIDUAL.GATHER.GATHERING", 901),
+			worker(7, "builder", undefined, "INDIVIDUAL.REPAIR.REPAIRING"),
+		];
 
 	it("counts the gatherers and what those gathering bring in now", () =>
 	{
@@ -305,8 +340,13 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 	it("counts the gatherers left idle with nothing to gather: the fields are full", () =>
 	{
 		const economy = new GatherEconomy();
-		economy.update(world([...town(), worker(8, "gatherer", "food", "INDIVIDUAL.IDLE"),
-			worker(9, "gatherer", "food", "INDIVIDUAL.IDLE")], 0));
+		economy.update(
+			world([
+				...town(),
+				worker(8, "gatherer", "food", "INDIVIDUAL.IDLE"),
+				worker(9, "gatherer", "food", "INDIVIDUAL.IDLE"),
+			], 0),
+		);
 
 		assert.equal(economy.gatherers.food, 6);
 		assert.equal(economy.idle.food, 2);
@@ -323,7 +363,9 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 		// a minute later: 1 - 1/e of the way from 0.4 to 1/4
 		const expected = PRIOR_RATE.food + (0.25 - PRIOR_RATE.food) * (1 - Math.exp(-1));
 		assert.ok(Math.abs(economy.rateOf("food") - expected) < 1e-9);
-		assert.ok(Math.abs(economy.rateOf("wood") - (PRIOR_RATE.wood + (0.7 - PRIOR_RATE.wood) * (1 - Math.exp(-1)))) < 1e-9);
+		assert.ok(
+			Math.abs(economy.rateOf("wood") - (PRIOR_RATE.wood + (0.7 - PRIOR_RATE.wood) * (1 - Math.exp(-1)))) < 1e-9,
+		);
 		assert.equal(economy.rateOf("stone"), PRIOR_RATE.stone, "nobody on stone: still the prior");
 	});
 
@@ -332,28 +374,32 @@ describe("the measured rates: what a gatherer brings in, the walk included", () 
 		const supplies: Record<number, { generic: string; specific: string } | undefined> = {
 			900: { "generic": "food", "specific": "fruit" },
 			902: { "generic": "food", "specific": "grain" },
-			950: undefined	// our farmstead: no supply
+			950: undefined, // our farmstead: no supply
 		};
 		const gameState = fake<CommonGameState>({
 			"ai": { "elapsedTime": 0 },
-			"getOwnEntitiesByRole": () => ({ "values": () => [
-				worker(1, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 900),
-				worker(2, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 902),
-				// carrying to the farmstead, then back to the field
-				fake<CommonEntity>({
-					"getMetadata": (_p: number, key: string) => ({ "subrole": "gatherer", "gather-type": "food" })[key],
-					"position": () => [10, 10],
-					"unitAIState": () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
-					"isIdle": () => false,
-					"unitAIOrderData": () => orders({ "target": entityId(950) }, { "target": entityId(902) }),
-					"resourceGatherRates": () => ({ "food.grain": 0.5 })
-				}),
-				// carrying back from a bush picked clean: its order names nothing left
-				worker(4, "gatherer", "food", "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", 999),
-				worker(5, "hunter", undefined, "INDIVIDUAL.COMBAT.APPROACHING")
-			].values() }),
-			"getEntityById": (id: number) => id in supplies ?
-				fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined
+			"getOwnEntitiesByRole": () => ({
+				"values": () =>
+					[
+						worker(1, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 900),
+						worker(2, "gatherer", "food", "INDIVIDUAL.GATHER.GATHERING", 902),
+						// carrying to the farmstead, then back to the field
+						fake<CommonEntity>({
+							"getMetadata": (_p: number, key: string) =>
+								({ "subrole": "gatherer", "gather-type": "food" })[key],
+							"position": () => [10, 10],
+							"unitAIState": () => "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
+							"isIdle": () => false,
+							"unitAIOrderData": () => orders({ "target": entityId(950) }, { "target": entityId(902) }),
+							"resourceGatherRates": () => ({ "food.grain": 0.5 }),
+						}),
+						// carrying back from a bush picked clean: its order names nothing left
+						worker(4, "gatherer", "food", "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", 999),
+						worker(5, "hunter", undefined, "INDIVIDUAL.COMBAT.APPROACHING"),
+					].values(),
+			}),
+			"getEntityById": (id: number) =>
+				id in supplies ? fake<CommonEntity>({ "resourceSupplyType": () => supplies[id] }) : undefined,
 		});
 		const economy = new GatherEconomy();
 		economy.update(gameState);

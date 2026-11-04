@@ -6,14 +6,29 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-	type WorkforceCensus, batchSize, soldierRequirements, supportAlpha, supportShare, trainingStopped
+	batchSize,
+	soldierRequirements,
+	supportAlpha,
+	supportShare,
+	trainingStopped,
+	type WorkforceCensus,
 } from "../decision/workforce.ts";
 
 /** a town of 40 workers, little queued, the town phase researched, Petra's targets of difficulty 5 */
 function town(overrides: Partial<WorkforceCensus> = {}): WorkforceCensus
 {
-	return { "workers": 40, "queuedSupports": 2, "queuedSoldiers": 2, "inTraining": 4, "target": 150,
-		"popPhase2": 150, "waitingForTown": false, "saving": false, "stalled": false, ...overrides };
+	return {
+		"workers": 40,
+		"queuedSupports": 2,
+		"queuedSoldiers": 2,
+		"inTraining": 4,
+		"target": 150,
+		"popPhase2": 150,
+		"waitingForTown": false,
+		"saving": false,
+		"stalled": false,
+		...overrides,
+	};
 }
 
 describe("workforce", () =>
@@ -30,8 +45,16 @@ describe("workforce", () =>
 	{
 		assert.equal(trainingStopped(town()), false);
 		assert.equal(trainingStopped(town({ "workers": 147 })), true, "147 + 4 queued past 150");
-		assert.equal(trainingStopped(town({ "workers": 144, "waitingForTown": true })), false, "144 + 4 queued: 148, under 150");
-		assert.equal(trainingStopped(town({ "workers": 146, "waitingForTown": true })), true, "150: the town phase awaited");
+		assert.equal(
+			trainingStopped(town({ "workers": 144, "waitingForTown": true })),
+			false,
+			"144 + 4 queued: 148, under 150",
+		);
+		assert.equal(
+			trainingStopped(town({ "workers": 146, "waitingForTown": true })),
+			true,
+			"150: the town phase awaited",
+		);
 		assert.equal(trainingStopped(town({ "workers": 146 })), false, "the same town with the phase researched");
 	});
 
@@ -65,12 +88,19 @@ describe("workforce", () =>
 		// 0.5 · 60 = 30 at most; at 30 workers in peace 30 · (1 − e^−0.85) = 17.2
 		assert.ok(Math.abs(supportShare(30, 0.5, 60, 0.85, true) - 30 * (1 - Math.exp(-0.85))) < 1e-12);
 		assert.ok(supportShare(1000, 0.5, 60, 0.85, true) < 30 && supportShare(1000, 0.5, 60, 0.85, true) > 29.99);
-		assert.ok(Math.abs(supportShare(30, 0.5, 60, 0.85, false) - 6 * (1 - Math.exp(-0.85 * 5))) < 1e-12, "no fields: 6 at most");
+		assert.ok(
+			Math.abs(supportShare(30, 0.5, 60, 0.85, false) - 6 * (1 - Math.exp(-0.85 * 5))) < 1e-12,
+			"no fields: 6 at most",
+		);
 	});
 
 	it("chooses soldiers quick and cheap below 45 workers, then the strongest", () =>
 	{
-		assert.deepEqual(soldierRequirements(44), [["speed", 0.5], ["costsResource", 0.5, "stone"], ["costsResource", 0.5, "metal"]]);
+		assert.deepEqual(soldierRequirements(44), [["speed", 0.5], ["costsResource", 0.5, "stone"], [
+			"costsResource",
+			0.5,
+			"metal",
+		]]);
 		assert.deepEqual(soldierRequirements(45), [["strength", 1]]);
 	});
 });

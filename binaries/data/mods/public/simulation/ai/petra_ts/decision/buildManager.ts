@@ -71,8 +71,8 @@ export class BuildManager
 		for (const evt of events.Destroy)
 			removeBuilder(this.builders, evt.entity);
 
-		for (const evt of events.OwnershipChanged)   // capture events
-		{
+		for (const evt of events.OwnershipChanged)
+		{ // capture events
 			if (evt.from === PlayerID)
 			{
 				removeBuilder(this.builders, evt.entity);
@@ -88,8 +88,10 @@ export class BuildManager
 
 		for (const evt of events.ValueModification)
 		{
-			if (evt.component !== "Builder" ||
-				  !evt.valueNames.some((val: string): boolean => val.startsWith("Builder/Entities/")))
+			if (
+				evt.component !== "Builder" ||
+				!evt.valueNames.some((val: string): boolean => val.startsWith("Builder/Entities/"))
+			)
 				continue;
 
 			// Unfortunately there really is not an easy way to determine the changes
@@ -100,7 +102,6 @@ export class BuildManager
 				addBuilder(this.builders, civ, ent);
 		}
 	}
-
 
 	/**
 	 * Get the buildable structures passing a filter.
@@ -154,8 +155,7 @@ export class BuildManager
 		const unbuildable = this.unbuildables.get(template);
 		if (unbuildable === undefined)
 		{
-			this.unbuildables.set(template,
-				{ "reason": reason, "time": gameState.ai.elapsedTime + time });
+			this.unbuildables.set(template, { "reason": reason, "time": gameState.ai.elapsedTime + time });
 		}
 		else
 		{
@@ -187,10 +187,7 @@ export class BuildManager
 
 	Serialize(): SerializedBuildManager
 	{
-		return {
-			"builders": this.builders,
-			"unbuildables": this.unbuildables
-		};
+		return { "builders": this.builders, "unbuildables": this.unbuildables };
 	}
 
 	/** A saved build manager: its builders and what it cannot build yet */

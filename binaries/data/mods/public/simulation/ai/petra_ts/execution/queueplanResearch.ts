@@ -1,6 +1,6 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { type PlanMetadata, type PlanStart, QueuePlan } from "./queueplan.ts";
 import { hqOf } from "./hq.ts";
+import { QueuePlan, type PlanMetadata, type PlanStart } from "./queueplan.ts";
 
 export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 {
@@ -58,7 +58,9 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 	/** Researches the technology at the building with the shortest queue among those canStart found. */
 	private start(gameState: CommonGameState, researchers: CommonEntity[]): void
 	{
-		researchers.sort((a: CommonEntity, b: CommonEntity): number => (a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN));
+		researchers.sort((a: CommonEntity, b: CommonEntity): number =>
+			(a.trainingQueueTime() ?? NaN) - (b.trainingQueueTime() ?? NaN)
+		);
 		// Drop anything in the queue if we rush it.
 		if (this.rush)
 			researchers[0]?.stopAllProduction(0.45);
@@ -69,7 +71,10 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 	onStart(gameState: CommonGameState): void
 	{
 		if (this.queueToReset)
-			gameState.ai.queueManager.changePriority(this.queueToReset, gameState.ai.Config.priorities[this.queueToReset]);
+			gameState.ai.queueManager.changePriority(
+				this.queueToReset,
+				gameState.ai.Config.priorities[this.queueToReset],
+			);
 
 		for (let i = gameState.getNumberOfPhases(); i > 0; --i)
 		{
@@ -99,7 +104,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 			"cost": this.cost.Serialize(),
 			"number": this.number,
 			"rush": this.rush,
-			"queueToReset": this.queueToReset || undefined
+			"queueToReset": this.queueToReset || undefined,
 		};
 	}
 

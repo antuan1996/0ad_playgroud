@@ -15,11 +15,11 @@
  * tests/FINDINGS.md §11: both sides reach town and city phase, the winner the
  * population cap, decided at 46:20 after a long fight.
  */
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import assert from "node:assert/strict";
 import { checkMatch } from "./match-checks.ts";
 
 const repo = join(import.meta.dirname, "..", "..");
@@ -27,25 +27,39 @@ const game = join(repo, "binaries", "system", "pyrogenesis");
 const record = join(repo, "build", "petra_ts", "matches", "test");
 
 const match = [
-	"-m", "random/mainland",
-	"-s", "287591089",
-	"-a", "941505347",
-	"-d", "5",
-	"-c", "athen",
-	"-w", "conquest",
-	"-o", "petra_out",
+	"-m",
+	"random/mainland",
+	"-s",
+	"287591089",
+	"-a",
+	"941505347",
+	"-d",
+	"5",
+	"-c",
+	"athen",
+	"-w",
+	"conquest",
+	"-o",
+	"petra_out",
 	// headless, timeline, command log and notices, end at 90 game minutes if
 	// undecided; not -b: the checks do not read the bot's internal state
-	"-n", "-t", "-l", "-T",
-	"-r", record
+	"-n",
+	"-t",
+	"-l",
+	"-T",
+	"-r",
+	record,
 ];
 
 test("a mirror match of Petra TS in the game shows no anomaly", {
 	"skip": existsSync(game) ? false : `${game} is missing: build the engine first (see CLAUDE.md)`,
-	"timeout": 10 * 60 * 1000
+	"timeout": 10 * 60 * 1000,
 }, async t =>
 {
-	const run = spawnSync(join(repo, "build", "petra_ts", "match.sh"), match, { "encoding": "utf8", "maxBuffer": 1 << 30 });
+	const run = spawnSync(join(repo, "build", "petra_ts", "match.sh"), match, {
+		"encoding": "utf8",
+		"maxBuffer": 1 << 30,
+	});
 	assert.equal(run.status, 0, `match.sh failed:\n${run.stderr.slice(-2000)}`);
 	const report = readFileSync(join(record, "match.txt"), "utf8");
 	t.diagnostic(`record: ${record}`);

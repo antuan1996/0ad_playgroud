@@ -9,7 +9,7 @@ trim_trailing_whitespace = true
 indent_size = 4
 indent_style = space
 
-[*.{js,mjs}]
+[*.{js,mjs,ts}]
 indent_style = tab
 
 [*.py]

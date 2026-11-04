@@ -15,7 +15,7 @@
  * Anything not stubbed raises an error naming itself rather than returning
  * undefined, so a test cannot pass by accident on a missing global.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach } from "node:test";
 
@@ -69,8 +69,10 @@ afterEach(() =>
 	const allowed = misplacedMovesAllowed;
 	misplacedMovesAllowed = false;
 	if (found.length && !allowed)
-		throw new Error("a plan moved from a state its caller did not expect " +
-			"(set the state the game has there, or call allowMisplacedMoves()):\n  " + found.join("\n  "));
+		throw new Error(
+			"a plan moved from a state its caller did not expect " +
+				"(set the state the game has there, or call allowMisplacedMoves()):\n  " + found.join("\n  "),
+		);
 });
 
 /** Thrown by Engine.Exit so a test can tell "the AI gave up" from a crash. */
@@ -87,7 +89,8 @@ export class EngineExit extends Error
 function makeEngine(): object
 {
 	const real: Record<string, unknown> = {
-		PostCommand: (player: number, command: EngineCommand) => {
+		PostCommand: (player: number, command: EngineCommand) =>
+		{
 			void player;
 			commands.push(command);
 		},
@@ -96,17 +99,20 @@ function makeEngine(): object
 		ComputePath: () => null,
 		DumpImage: () => undefined,
 		GetTemplate: () => null,
-		Exit: (code: number) => {
+		Exit: (code: number) =>
+		{
 			throw new EngineExit(code);
 		},
 		// VFS reads answered from the real mod files on disk.
-		ReadJSONFile: (vfsPath: string) => {
+		ReadJSONFile: (vfsPath: string) =>
+		{
 			const file = path.join(modsPublic, vfsPath);
 			if (!existsSync(file))
 				return null;
 			return JSON.parse(readFileSync(file, "utf8"));
 		},
-		ListDirectoryFiles: (vfsDir: string, extension = "*", recurse = false) => {
+		ListDirectoryFiles: (vfsDir: string, extension = "*", recurse = false) =>
+		{
 			const dir = path.join(modsPublic, vfsDir);
 			if (!existsSync(dir))
 				return [];
@@ -120,7 +126,7 @@ function makeEngine(): object
 				out.push(path.posix.join(vfsDir.replace(/\/+$/, ""), name.split(path.sep).join("/")));
 			}
 			return out.sort();
-		}
+		},
 	};
 
 	return new Proxy(real, {
@@ -131,7 +137,7 @@ function makeEngine(): object
 			if (property in target)
 				return target[property];
 			throw new Error(`Engine.${property} is not stubbed — add it to tests/harness/engine.ts`);
-		}
+		},
 	});
 }
 
@@ -153,13 +159,14 @@ function uneval(value: unknown, depth = 0): string
 	if (value instanceof Set)
 		return `new Set([${[...value].map(item => uneval(item, depth + 1)).join(", ")}])`;
 	if (value instanceof Map)
-		return `new Map([${[...value].map(([k, v]) => `[${uneval(k, depth + 1)}, ${uneval(v, depth + 1)}]`).join(", ")}])`;
+		return `new Map([${
+			[...value].map(([k, v]) => `[${uneval(k, depth + 1)}, ${uneval(v, depth + 1)}]`).join(", ")
+		}])`;
 	if (Array.isArray(value))
 		return `[${value.map(item => uneval(item, depth + 1)).join(", ")}]`;
 	if (typeof value === "object")
 	{
-		const entries = Object.entries(value)
-			.map(([key, item]) => `${key}: ${uneval(item, depth + 1)}`);
+		const entries = Object.entries(value).map(([key, item]) => `${key}: ${uneval(item, depth + 1)}`);
 		return `{ ${entries.join(", ")} }`;
 	}
 	return String(value);
@@ -205,8 +212,14 @@ export function installEngineGlobals(): void
 		if (MISPLACED_MOVE.test(text))
 			misplacedMoves.push(text);
 	};
-	g["error"] = (message: unknown) => { logs.push(String(message)); };
-	g["dump"] = (message: unknown) => { logs.push(String(message)); };
+	g["error"] = (message: unknown) =>
+	{
+		logs.push(String(message));
+	};
+	g["dump"] = (message: unknown) =>
+	{
+		logs.push(String(message));
+	};
 	g["deepfreeze"] = function deepfreeze(value: unknown): unknown
 	{
 		if (value && typeof value === "object")
@@ -233,8 +246,11 @@ export function installEngineGlobals(): void
 		}
 		catch (err)
 		{
-			throw new Error(`${path.basename(path.dirname(dir))}/globalscripts/${file} failed to load into the test global scope: ` +
-				`${(err as Error).message}`);
+			throw new Error(
+				`${
+					path.basename(path.dirname(dir))
+				}/globalscripts/${file} failed to load into the test global scope: ` + `${(err as Error).message}`,
+			);
 		}
 	}
 

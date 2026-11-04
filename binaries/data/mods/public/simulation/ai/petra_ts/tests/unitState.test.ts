@@ -21,17 +21,32 @@ function gameUnitAIStates(): string[]
 {
 	// JavaScript's own globals pass through; the game's (Engine, IID_*, ...) are stubs
 	const builtins = new Set<string | symbol>(Object.getOwnPropertyNames(vm.runInNewContext("globalThis")));
-	const stub: unknown = new Proxy(function () {}, { "get": () => stub, "apply": () => stub, "construct": () => stub as object });
+	const stub: unknown = new Proxy(function()
+	{}, { "get": () => stub, "apply": () => stub, "construct": () => stub as object });
 	const sandbox = new Proxy<Record<string | symbol, unknown>>({}, {
 		"has": () => true,
-		"get": (target, key) => key in target ? target[key] :
-			builtins.has(key) ? (globalThis as Record<string | symbol, unknown>)[key] : stub,
-		"set": (target, key, value) => { target[key] = value; return true; }
+		"get": (target, key) =>
+			key in target ?
+				target[key] :
+				builtins.has(key) ?
+				(globalThis as Record<string | symbol, unknown>)[key] :
+				stub,
+		"set": (target, key, value) =>
+		{
+			target[key] = value;
+			return true;
+		},
 	});
 	const context = vm.createContext(sandbox);
 	vm.runInContext(readFileSync(path.join(modsPublic, "globalscripts/FSM.js"), "utf8"), context);
-	vm.runInContext("function UnitAI() {}\n" +
-		readFileSync(path.join(modsPublic, "simulation/components/UnitAI.js"), "utf8").replace(/^function UnitAI\(\) \{\}$/m, ""), context);
+	vm.runInContext(
+		"function UnitAI() {}\n" +
+			readFileSync(path.join(modsPublic, "simulation/components/UnitAI.js"), "utf8").replace(
+				/^function UnitAI\(\) \{\}$/m,
+				"",
+			),
+		context,
+	);
 	const FSM = vm.runInContext("FSM", context);
 	return Object.keys(new FSM(vm.runInContext("UnitAI.prototype.UnitFsmSpec", context)).states).filter(Boolean).sort();
 }
@@ -40,16 +55,27 @@ describe("what a unit is doing: parsing its state", () =>
 {
 	it("knows every state UnitAI's state machine has, and no other", () =>
 	{
-		assert.deepEqual([...states.UNIT_AI_STATES].sort(), gameUnitAIStates(),
-			"UNIT_AI_STATES no longer matches simulation/components/UnitAI.js: refresh it");
+		assert.deepEqual(
+			[...states.UNIT_AI_STATES].sort(),
+			gameUnitAIStates(),
+			"UNIT_AI_STATES no longer matches simulation/components/UnitAI.js: refresh it",
+		);
 	});
 
 	it("reads a state into who the unit acts as and what it does", () =>
 	{
-		assert.deepEqual(states.parseUnitState("INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"),
-			{ "kind": "known", "name": "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING", "role": "INDIVIDUAL", "activity": "GATHER" });
-		assert.deepEqual(states.parseUnitState("FORMATIONMEMBER.WALKING"),
-			{ "kind": "known", "name": "FORMATIONMEMBER.WALKING", "role": "FORMATIONMEMBER", "activity": "WALKING" });
+		assert.deepEqual(states.parseUnitState("INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING"), {
+			"kind": "known",
+			"name": "INDIVIDUAL.GATHER.RETURNINGRESOURCE.APPROACHING",
+			"role": "INDIVIDUAL",
+			"activity": "GATHER",
+		});
+		assert.deepEqual(states.parseUnitState("FORMATIONMEMBER.WALKING"), {
+			"kind": "known",
+			"name": "FORMATIONMEMBER.WALKING",
+			"role": "FORMATIONMEMBER",
+			"activity": "WALKING",
+		});
 	});
 
 	it("gives a role alone no activity, as the name's second part is none", () =>
@@ -86,7 +112,7 @@ describe("what a unit is doing: parsing its state", () =>
 		logs.length = 0;
 		assert.throws(() => states.requiredActivityIs(unit(undefined), "FLEEING"));
 		assert.throws(() => states.requiredStateWithin(unit(undefined), "INDIVIDUAL.COLLECTTREASURE"));
-		assert.ok(logs.some((entry) => entry.includes("required value")), "it said what was missing");
+		assert.ok(logs.some(entry => entry.includes("required value")), "it said what was missing");
 		assert.equal(states.requiredActivityIs(unit("INDIVIDUAL.FLEEING"), "FLEEING"), true);
 	});
 });

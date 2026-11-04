@@ -3,8 +3,8 @@
  *
  *   node --test build/petra_ts/batch-stats.test.ts
  */
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { sprt, summarise, wilson, type BatchRow } from "./batch-stats.ts";
 
 const close = (actual: number, expected: number, digits = 3): void =>
@@ -34,22 +34,44 @@ test("the SPRT bounds are Wald's and the LLR moves with wins and losses", () =>
 	assert.equal(sprt(50, 45).verdict, "undecided");
 });
 
-function game(index: number, outcome: BatchRow["outcome"], swapped: boolean, seed: number, fingerprint = `f${index}`): BatchRow
+function game(
+	index: number,
+	outcome: BatchRow["outcome"],
+	swapped: boolean,
+	seed: number,
+	fingerprint = `f${index}`,
+): BatchRow
 {
 	return {
-		"game": index, "map": "random/mainland", "mapSeed": seed, "aiSeed": seed, "blue": "petra_parity", "red": "petra_fixed",
-		swapped, outcome, "reason": outcome == "draw" ? "time limit" : "last player alive", "decided": 30 * 60000,
-		fingerprint, "errors": 0, "warnings": 0, "wall": 60, "worker": 0
+		"game": index,
+		"map": "random/mainland",
+		"mapSeed": seed,
+		"aiSeed": seed,
+		"blue": "petra_parity",
+		"red": "petra_fixed",
+		swapped,
+		outcome,
+		"reason": outcome == "draw" ? "time limit" : "last player alive",
+		"decided": 30 * 60000,
+		fingerprint,
+		"errors": 0,
+		"warnings": 0,
+		"wall": 60,
+		"worker": 0,
 	};
 }
 
 test("the summary counts outcomes, slots, sweeps and repeated games", () =>
 {
 	const rows = [
-		game(1, "blue", false, 1), game(2, "blue", true, 1),
-		game(3, "blue", false, 2), game(4, "red", true, 2),
-		game(5, "draw", false, 3), game(6, "red", true, 3),
-		game(7, "blue", false, 1, "f1"), game(8, "blue", false, 2, "other")
+		game(1, "blue", false, 1),
+		game(2, "blue", true, 1),
+		game(3, "blue", false, 2),
+		game(4, "red", true, 2),
+		game(5, "draw", false, 3),
+		game(6, "red", true, 3),
+		game(7, "blue", false, 1, "f1"),
+		game(8, "blue", false, 2, "other"),
 	];
 	const summary = summarise(rows);
 	assert.match(summary, /petra_parity won 5, petra_fixed won 2, 1 draws \(time limit\)/);

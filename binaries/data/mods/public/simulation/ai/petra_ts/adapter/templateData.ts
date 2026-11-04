@@ -48,10 +48,12 @@ export function footprintHalves(template: CommonTemplate): FootprintHalves
  * half width) or a circle (unit); undefined without an obstruction or with
  * none of these shapes.
  */
-type ObstructionShape =
-	| { kind: "static"; width: number; depth: number }
-	| { kind: "gate"; width: number; depth: number; doorHalfWidth: number }
-	| { kind: "unit"; radius: number };
+type ObstructionShape = { kind: "static"; width: number; depth: number } | {
+	kind: "gate";
+	width: number;
+	depth: number;
+	doorHalfWidth: number;
+} | { kind: "unit"; radius: number };
 
 export function obstructionShape(template: CommonTemplate): ObstructionShape | undefined
 {
@@ -62,7 +64,7 @@ export function obstructionShape(template: CommonTemplate): ObstructionShape | u
 		return {
 			"kind": "static",
 			"width": numberAt(template, "Obstruction/Static/@width"),
-			"depth": numberAt(template, "Obstruction/Static/@depth")
+			"depth": numberAt(template, "Obstruction/Static/@depth"),
 		};
 	}
 	if (template.get("Obstruction/Obstructions"))
@@ -72,10 +74,12 @@ export function obstructionShape(template: CommonTemplate): ObstructionShape | u
 			"kind": "gate",
 			"width": doorWidth + numberAt(template, "Obstruction/Obstructions/Left/@width") +
 				numberAt(template, "Obstruction/Obstructions/Right/@width"),
-			"depth": Math.max(numberAt(template, "Obstruction/Obstructions/Door/@depth"),
+			"depth": Math.max(
+				numberAt(template, "Obstruction/Obstructions/Door/@depth"),
 				numberAt(template, "Obstruction/Obstructions/Left/@depth"),
-				numberAt(template, "Obstruction/Obstructions/Right/@depth")),
-			"doorHalfWidth": doorWidth / 2
+				numberAt(template, "Obstruction/Obstructions/Right/@depth"),
+			),
+			"doorHalfWidth": doorWidth / 2,
 		};
 	}
 	if (template.get("Obstruction/Unit"))
@@ -84,11 +88,7 @@ export function obstructionShape(template: CommonTemplate): ObstructionShape | u
 }
 
 /** One bonus of an attack: against units of `Classes` (a class list) of civ `Civ`, if given. */
-type AttackBonus = {
-	Civ?: string;
-	Classes?: string;
-	Multiplier: number;
-};
+type AttackBonus = { Civ?: string; Classes?: string; Multiplier: number };
 
 /** The bonuses of an attack type ("Melee", "Ranged", ...), keyed by their names in the template. */
 export function attackBonuses(template: CommonTemplate, type: string): AttackBonus[]
@@ -107,7 +107,7 @@ export function attackBonuses(template: CommonTemplate, type: string): AttackBon
 		list.push({
 			"Civ": "Civ" in bonus && typeof bonus.Civ === "string" ? bonus.Civ : undefined,
 			"Classes": "Classes" in bonus && typeof bonus.Classes === "string" ? bonus.Classes : undefined,
-			"Multiplier": "Multiplier" in bonus ? Number(bonus.Multiplier) : NaN
+			"Multiplier": "Multiplier" in bonus ? Number(bonus.Multiplier) : NaN,
 		});
 	}
 	return list;

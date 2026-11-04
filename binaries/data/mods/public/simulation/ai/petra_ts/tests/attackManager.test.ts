@@ -13,15 +13,15 @@ import { describe, it } from "node:test";
 
 import { logs, resetRecorder, sent } from "./harness/engine.ts";
 import { emptyEvents, fake, makeEntity, orders, restoreEngine, stubGlobal } from "./harness/fakes.ts";
-import { ENEMY, GAIA, makeWorld, PLAYER, type World, type WorldOptions } from "./harness/world.ts";
+import { ENEMY, GAIA, PLAYER, makeWorld, type World, type WorldOptions } from "./harness/world.ts";
 
 import { armyId, attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
 import { AttackManager } from "../decision/attackManager.ts";
-import { Config } from "../world/config.ts";
-import { MEDIUM, SANDBOX } from "../world/difficultyLevel.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { QueueManager } from "../execution/queueManager.ts";
+import { Config } from "../world/config.ts";
+import { MEDIUM, SANDBOX } from "../world/difficultyLevel.ts";
 
 const KEEP = AttackPlan.PREPARATION_KEEP_GOING;
 const FAILED = AttackPlan.PREPARATION_FAILED;
@@ -35,7 +35,7 @@ function configFor(aggressive: number, overrides: Partial<Config> = {}): Config
 	return Object.assign(new Config(MEDIUM), {
 		priorities: {},
 		personality: { aggressive, defensive: 0, cooperative: 0.5 },
-		...overrides
+		...overrides,
 	});
 }
 
@@ -69,19 +69,21 @@ interface PlanCalls
  * by the test: how it rolls preparation, whether it starts, how many units it
  * owns, and what its abort/force-start calls did.
  */
-function planStub(overrides: {
-	name?: number;
-	type?: string;
-	state?: string;
-	targetPlayer?: number | undefined;
-	units?: number;
-	paused?: boolean;
-	preparation?: number;
-	startable?: boolean;
-	remaining?: number | false;
-	alreadyStarted?: boolean;
-	position?: [number, number] | undefined;
-} = {}): AttackPlan & PlanCalls
+function planStub(
+	overrides: {
+		name?: number;
+		type?: string;
+		state?: string;
+		targetPlayer?: number | undefined;
+		units?: number;
+		paused?: boolean;
+		preparation?: number;
+		startable?: boolean;
+		remaining?: number | false;
+		alreadyStarted?: boolean;
+		position?: [number, number] | undefined;
+	} = {},
+): AttackPlan & PlanCalls
 {
 	const stub = {
 		name: overrides.name ?? 1,
@@ -98,9 +100,18 @@ function planStub(overrides: {
 		answerAttacksCalls: 0,
 		updatePreparationCalls: 0,
 		pauses: [] as boolean[],
-		forceStart: () => { ++stub.forceStartCalls; },
-		checkEvents: () => { ++stub.checkEventsCalls; },
-		answerAttacks: () => { ++stub.answerAttacksCalls; },
+		forceStart: () =>
+		{
+			++stub.forceStartCalls;
+		},
+		checkEvents: () =>
+		{
+			++stub.checkEventsCalls;
+		},
+		answerAttacks: () =>
+		{
+			++stub.answerAttacksCalls;
+		},
 		isStarted: () => overrides.alreadyStarted ?? false,
 		isPaused: () => stub.paused,
 		updatePreparation: () =>
@@ -110,10 +121,17 @@ function planStub(overrides: {
 		},
 		StartAttack: () => overrides.startable ?? true,
 		update: () => overrides.remaining ?? 1,
-		Abort: () => { ++stub.abortCalls; },
+		Abort: () =>
+		{
+			++stub.abortCalls;
+		},
 		getName: () => stub.name,
 		getType: () => stub.type,
-		setPaused: (value: boolean) => { stub.paused = value; stub.pauses.push(value); }
+		setPaused: (value: boolean) =>
+		{
+			stub.paused = value;
+			stub.pauses.push(value);
+		},
 	};
 	return fake<AttackPlan & PlanCalls>(stub);
 }
@@ -138,7 +156,7 @@ function armyStub(id: number, foes: number[], owns: number[]): DefenseArmy
 			const index = army.ownEntities.indexOf(own);
 			if (index !== -1)
 				army.ownEntities.splice(index, 1);
-		}
+		},
 	};
 	return fake<DefenseArmy>(army);
 }
@@ -213,7 +231,10 @@ describe("attack manager", () =>
 			const world = makeWorld();
 			const manager = makeManager(world, worldConfig(world));
 			const events = emptyEvents();
-			events.AttackRequest.push({ "source": PLAYER, "player": playerId(3) }, { "source": playerId(3), "player": playerId(2) }, { "source": playerId(3), "player": playerId(1) });
+			events.AttackRequest.push({ "source": PLAYER, "player": playerId(3) }, {
+				"source": playerId(3),
+				"player": playerId(2),
+			}, { "source": playerId(3), "player": playerId(1) });
 			const roster = manager.upcomingAttacks["Rush"];
 			const attack = planStub({ name: 4, units: 9 });
 			roster.push(attack, planStub({ name: 5, units: 9 }));
@@ -238,7 +259,10 @@ describe("attack manager", () =>
 			assert.equal(rush.forceStartCalls, 0, "the attack is not forced");
 			const [message] = sent("aichat");
 			assert.equal(message.parameters?._player_, 2, "the prey was named");
-			assert.ok(/enough soldiers|strengthen my army/.test(message.message), `the decline was told: ${message.message}`);
+			assert.ok(
+				/enough soldiers|strengthen my army/.test(message.message),
+				`the decline was told: ${message.message}`,
+			);
 		});
 
 		it("points the ally at the enemy we are already fighting, when we cannot help", () =>
@@ -254,8 +278,11 @@ describe("attack manager", () =>
 
 			manager.checkEvents(world.gameState, events);
 			const [message] = sent("aichat");
-			assert.deepEqual(message.parameters, { "_player_": 2, "_player_2": 4 },
-				"the ally learned where our forces are");
+			assert.deepEqual(
+				message.parameters,
+				{ "_player_": 2, "_player_2": 4 },
+				"the ally learned where our forces are",
+			);
 		});
 
 		it("aims its idle armies at the asked player, and forces them once twelve stand ready", () =>
@@ -294,7 +321,10 @@ describe("attack manager", () =>
 			world.gameState.playerData.isAlly[3] = true;
 			const manager = makeManager(world, worldConfig(world));
 			const events = emptyEvents();
-			events.AttackRequest.push({ "source": playerId(3), "player": playerId(2) }, { "source": playerId(3), "player": playerId(4) });
+			events.AttackRequest.push({ "source": playerId(3), "player": playerId(2) }, {
+				"source": playerId(3),
+				"player": playerId(4),
+			});
 			manager.upcomingAttacks["Rush"].push(planStub({ name: 4, units: 9 }));
 
 			manager.checkEvents(world.gameState, events);
@@ -326,7 +356,11 @@ describe("attack manager", () =>
 			events.EntityRenamed.push({ "entity": entityId(6001), "newentity": entityId(7001) });
 
 			manager.checkEvents(fake<CommonGameState>({}), events);
-			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [6002, 7001], "the rebuilt bomber was re-listed");
+			assert.deepEqual(
+				[...manager.bombingAttacks.get(entityId(5000))!],
+				[6002, 7001],
+				"the rebuilt bomber was re-listed",
+			);
 		});
 	});
 
@@ -335,8 +369,9 @@ describe("attack manager", () =>
 		/** a target structure somewhere away from the bomber */
 		function makeEnemyWall(world: World, id = 5000, position: [number, number] = [40, 40]): CommonEntity
 		{
-			return world.addEntity(makeEntity({ id, "owner": ENEMY, position, "classes": ["Structure"] },
-				{ "footprintRadius": () => 2 }));
+			return world.addEntity(
+				makeEntity({ id, "owner": ENEMY, position, "classes": ["Structure"] }, { "footprintRadius": () => 2 }),
+			);
 		}
 
 		it("prunes aims whose target is gone or no longer hostile", () =>
@@ -345,8 +380,12 @@ describe("attack manager", () =>
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world); // survives, its force still under orders
 			world.addEntity(makeEntity({ id: 5002, owner: PLAYER, position: [32, 30], classes: ["Structure"] }));
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => false, "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => false,
+					"unitAIOrderData": () => orders({ "target": entityId(5000) }),
+				}),
+			);
 			manager.bombingAttacks.set(entityId(5002), new Set([entityId(1100)]));
 			manager.bombingAttacks.set(entityId(5003), new Set([entityId(1100)]));
 			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100)]));
@@ -360,14 +399,28 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
-			world.addEntity(makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }), "unitAIOrderData": () => orders({ "target": entityId(6000) }) }));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"unitAIOrderData": () => orders({ "target": entityId(5000) }),
+				}),
+			);
+			world.addEntity(
+				makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"unitAIOrderData": () => orders({ "target": entityId(6000) }),
+				}),
+			);
 			manager.bombingAttacks.set(entityId(5000), new Set([entityId(1100), entityId(1101)]));
 
 			manager.assignBombers(world.gameState);
-			assert.deepEqual([...manager.bombingAttacks.get(entityId(5000))!], [1100], "the moved-on bomber was dropped");
+			assert.deepEqual(
+				[...manager.bombingAttacks.get(entityId(5000))!],
+				[1100],
+				"the moved-on bomber was dropped",
+			);
 		});
 
 		it("skips blind, busy or reserved bombers", () =>
@@ -375,16 +428,36 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => undefined }));
-			world.addEntity(makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => false, "attackRange": () => ({ "max": 40 }) }));
-			world.addEntity(makeEntity({ id: 1102, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }) }, { "plan": -2 }));
-			world.addEntity(makeEntity({ id: 1103, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }) }, { "plan": -3 }));
-			world.addEntity(makeEntity({ id: 1104, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] },
-				{ "isIdle": () => true, "attackRange": () => ({ "max": 40 }) }, { "plan": 1, "subrole": "walking" }));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => undefined,
+				}),
+			);
+			world.addEntity(
+				makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => false,
+					"attackRange": () => ({ "max": 40 }),
+				}),
+			);
+			world.addEntity(
+				makeEntity({ id: 1102, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+				}, { "plan": -2 }),
+			);
+			world.addEntity(
+				makeEntity({ id: 1103, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+				}, { "plan": -3 }),
+			);
+			world.addEntity(
+				makeEntity({ id: 1104, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+				}, { "plan": 1, "subrole": "walking" }),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.equal(manager.bombingAttacks.size, 0, "nobody was enrolled");
@@ -396,12 +469,15 @@ describe("attack manager", () =>
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
 			const strikes: unknown[][] = [];
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 60 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": (aimed: unknown, capture: unknown, queued: unknown) => strikes.push([aimed, capture, queued])
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 60 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": (aimed: unknown, capture: unknown, queued: unknown) =>
+						strikes.push([aimed, capture, queued]),
+				}),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [[5000, false, false]], "the wall took the shot without marching");
@@ -415,19 +491,24 @@ describe("attack manager", () =>
 			makeEnemyWall(world);
 			const strikes: unknown[][] = [];
 			const moves: Array<[number, number]> = [];
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 40 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": (aimed: unknown, capture: unknown, queued: unknown) => strikes.push([aimed, capture, queued]),
-				"move": (x: number, y: number) => moves.push([x, y])
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": (aimed: unknown, capture: unknown, queued: unknown) =>
+						strikes.push([aimed, capture, queued]),
+					"move": (x: number, y: number) => moves.push([x, y]),
+				}),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [[5000, false, true]], "the shot was queued while moving");
 			assert.equal(moves.length, 1, "the bomber marched once");
-			assert.ok(Math.abs(moves[0][0] - 11.72) < 0.01 && Math.abs(moves[0][1] - 11.72) < 0.01,
-				`the stand-off spot just inside gun range: ${moves[0]}`);
+			assert.ok(
+				Math.abs(moves[0][0] - 11.72) < 0.01 && Math.abs(moves[0][1] - 11.72) < 0.01,
+				`the stand-off spot just inside gun range: ${moves[0]}`,
+			);
 		});
 
 		/** one bomber, one wall, and the territory/access answers to probe */
@@ -435,18 +516,22 @@ describe("attack manager", () =>
 		{
 			const world = makeWorld({ enemyPlayer: ENEMY, territory: new Map(territory) });
 			if (access)
+			{
 				for (const [key, value] of access)
 					world.accessAt.set(key, value);
+			}
 			const manager = makeManager(world, worldConfig(world));
 			makeEnemyWall(world);
 			const strikes: unknown[] = [];
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 40 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": (aimed: unknown) => strikes.push(aimed),
-				"move": () => undefined
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": (aimed: unknown) => strikes.push(aimed),
+					"move": () => undefined,
+				}),
+			);
 			manager.assignBombers(world.gameState);
 			return strikes.length;
 		}
@@ -464,21 +549,35 @@ describe("attack manager", () =>
 			world.territory.set("40,41", ENEMY);
 			const manager = makeManager(world, worldConfig(world));
 			const strikes: unknown[] = [];
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 60 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": (aimed: unknown) => strikes.push(aimed)
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 60 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": (aimed: unknown) => strikes.push(aimed),
+				}),
+			);
 			// a field nobody works, however hostile its ground
-			world.addEntity(makeEntity({ id: 5002, owner: ENEMY, position: [12, 12], classes: ["Structure", "Field"] },
-				{ "resourceSupplyNumGatherers": () => 0, "footprintRadius": () => 1 }));
+			world.addEntity(
+				makeEntity({ id: 5002, owner: ENEMY, position: [12, 12], classes: ["Structure", "Field"] }, {
+					"resourceSupplyNumGatherers": () => 0,
+					"footprintRadius": () => 1,
+				}),
+			);
 			// a worked field on our own ground
-			world.addEntity(makeEntity({ id: 5003, owner: ENEMY, position: [20, 20], classes: ["Structure", "Field"] },
-				{ "resourceSupplyNumGatherers": () => 2, "footprintRadius": () => 1 }));
+			world.addEntity(
+				makeEntity({ id: 5003, owner: ENEMY, position: [20, 20], classes: ["Structure", "Field"] }, {
+					"resourceSupplyNumGatherers": () => 2,
+					"footprintRadius": () => 1,
+				}),
+			);
 			// a worked field deep in enemy land
-			world.addEntity(makeEntity({ id: 5001, owner: ENEMY, position: [40, 41], classes: ["Structure", "Field"] },
-				{ "resourceSupplyNumGatherers": () => 2, "footprintRadius": () => 1 }));
+			world.addEntity(
+				makeEntity({ id: 5001, owner: ENEMY, position: [40, 41], classes: ["Structure", "Field"] }, {
+					"resourceSupplyNumGatherers": () => 2,
+					"footprintRadius": () => 1,
+				}),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [5001], "only the worked enemy field drew the bombers");
@@ -492,19 +591,24 @@ describe("attack manager", () =>
 			const crowd = new Set<EntityId>();
 			for (let i = 0; i < 5; ++i)
 			{
-				world.addEntity(makeEntity({ id: 7001 + i, owner: PLAYER },
-					{ "unitAIOrderData": () => orders({ "target": entityId(5000) }) }));
+				world.addEntity(
+					makeEntity({ id: 7001 + i, owner: PLAYER }, {
+						"unitAIOrderData": () => orders({ "target": entityId(5000) }),
+					}),
+				);
 				crowd.add(entityId(7001 + i));
 			}
 			manager.bombingAttacks.set(entityId(5000), crowd);
 			const strikes: unknown[] = [];
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 40 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": (aimed: unknown) => strikes.push(aimed),
-				"move": () => undefined
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": (aimed: unknown) => strikes.push(aimed),
+					"move": () => undefined,
+				}),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [], "the crowded wall was left alone");
@@ -518,20 +622,24 @@ describe("attack manager", () =>
 			makeEnemyWall(world);
 			const strikes: unknown[] = [];
 			const shoot = (id: number) => (aimed: unknown) => strikes.push([id, aimed]);
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 40 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": shoot(1100),
-				"move": () => undefined
-			}));
-			world.addEntity(makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 40 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
-				"attack": shoot(1101),
-				"move": () => undefined
-			}));
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": shoot(1100),
+					"move": () => undefined,
+				}),
+			);
+			world.addEntity(
+				makeEntity({ id: 1101, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 40 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+					"attack": shoot(1101),
+					"move": () => undefined,
+				}),
+			);
 
 			manager.assignBombers(world.gameState);
 			assert.equal(strikes.length, 2, "both bombers opened fire");
@@ -543,10 +651,12 @@ describe("attack manager", () =>
 		it("keeps the units a previous attack dropped for the next muster", () =>
 		{
 			const world = makeWorld();
-			world.addEntity(makeEntity({ id: 1200, owner: PLAYER, position: [11, 12], classes: ["Unit"] },
-				{}, { "plan": -1 }));
-			world.addEntity(makeEntity({ id: 1201, owner: PLAYER, position: [11, 12], classes: ["Unit"] },
-				{}, { "plan": 8 }));
+			world.addEntity(
+				makeEntity({ id: 1200, owner: PLAYER, position: [11, 12], classes: ["Unit"] }, {}, { "plan": -1 }),
+			);
+			world.addEntity(
+				makeEntity({ id: 1201, owner: PLAYER, position: [11, 12], classes: ["Unit"] }, {}, { "plan": 8 }),
+			);
 			const manager = makeManager(world, worldConfig(world));
 
 			assert.equal(manager.outOfPlan.hasEntId(entityId(1200)), true, "the dropped unit was kept");
@@ -572,12 +682,19 @@ describe("attack manager", () =>
 			manager.startedAttacks["Rush"].push(planStub({ name: 7, units: 6, state: "walking" }));
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((line) => line.includes(" upcoming attacks =================")), "the dump opened");
-			assert.ok(logs.some((line) => line.includes(" plan 5 type Attack state completing units 4")),
-				`the waiting plan was listed: ${logs.join(" | ")}`);
-			assert.ok(logs.some((line) => line.includes(" started attacks ==================")), "the second dump opened");
-			assert.ok(logs.some((line) => line.includes(" plan 7 type Rush state walking units 6")),
-				"the walking plan was listed");
+			assert.ok(logs.some(line => line.includes(" upcoming attacks =================")), "the dump opened");
+			assert.ok(
+				logs.some(line => line.includes(" plan 5 type Attack state completing units 4")),
+				`the waiting plan was listed: ${logs.join(" | ")}`,
+			);
+			assert.ok(
+				logs.some(line => line.includes(" started attacks ==================")),
+				"the second dump opened",
+			);
+			assert.ok(
+				logs.some(line => line.includes(" plan 7 type Rush state walking units 6")),
+				"the walking plan was listed",
+			);
 			assert.equal(manager.debugTime, 100, "the next dump waits another minute");
 		});
 
@@ -598,8 +715,10 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Attack"].push(planStub({ name: 5, alreadyStarted: true }));
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((line) => /Petra problem in attackManager/.test(line)),
-				`the grumble was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(line => /Petra problem in attackManager/.test(line)),
+				`the grumble was logged: ${logs.join(" | ")}`,
+			);
 		});
 
 		it("keeps a preparing attack warm for the next turn", () =>
@@ -622,7 +741,9 @@ describe("attack manager", () =>
 			manager.maxRushes = 2;
 			manager.rushSize = [20, 20];
 			manager.upcomingAttacks["Rush"].push(planStub({ name: 3 }));
-			world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
 			assert.equal(manager.upcomingAttacks["Rush"].length, 1, "no second rush");
@@ -637,8 +758,10 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Attack"].push(attack);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((line) => line.includes("Attack Manager: Attack plan 3 aborted.")),
-				`the abort was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(line => line.includes("Attack Manager: Attack plan 3 aborted.")),
+				`the abort was logged: ${logs.join(" | ")}`,
+			);
 			assert.equal(attack.abortCalls, 1, "the plan was told");
 			assert.equal(manager.upcomingAttacks["Attack"].length, 0, "the roster forgot it");
 		});
@@ -651,17 +774,18 @@ describe("attack manager", () =>
 			manager.upcomingAttacks["Attack"].push(attack);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((line) => line.includes("Attack Manager: Starting Attack plan 3")),
-				`the start was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(line => line.includes("Attack Manager: Starting Attack plan 3")),
+				`the start was logged: ${logs.join(" | ")}`,
+			);
 			const [message] = sent("aichat");
 			assert.equal(message.parameters?._player_, ENEMY, "the prey was announced");
-			assert.ok(/launching|sent|sending/.test(message.message),
-				`the campaign was told: ${message.message}`);
+			assert.ok(/launching|sent|sending/.test(message.message), `the campaign was told: ${message.message}`);
 			assert.equal(manager.startedAttacks["Attack"].length, 1, "the plan now marches");
 			assert.equal(manager.upcomingAttacks["Attack"].length, 0, "and left the preparation roster");
 		});
 
-	it("skips the announcement when chatter is off", () =>
+		it("skips the announcement when chatter is off", () =>
 		{
 			resetRecorder();
 			const world = makeWorld({ debug: 1 });
@@ -705,8 +829,10 @@ describe("attack manager", () =>
 			manager.startedAttacks["Attack"].push(spent, dissolved);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((entry) => entry.includes("Attack plan 3 is finished with remaining 0")),
-				`the retirement was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(entry => entry.includes("Attack plan 3 is finished with remaining 0")),
+				`the retirement was logged: ${logs.join(" | ")}`,
+			);
 			assert.equal(spent.abortCalls, 1, "the spent plan was aborted");
 			assert.equal(dissolved.abortCalls, 1, "the dissolved plan was aborted too");
 			assert.equal(manager.startedAttacks["Attack"].length, 0, "the roster forgot both");
@@ -741,11 +867,15 @@ describe("attack manager", () =>
 			const manager = makeManager(world, worldConfig(world));
 			manager.maxRushes = 1;
 			manager.rushSize = [20];
-			world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((entry) => entry.includes("Rushing plan 0 with maxRushes 1")),
-				`the rush was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(entry => entry.includes("Rushing plan 0 with maxRushes 1")),
+				`the rush was logged: ${logs.join(" | ")}`,
+			);
 			assert.equal(manager.upcomingAttacks["Rush"].length, 1, "one fresh rush waits");
 			const plan = manager.upcomingAttacks["Rush"][0];
 			assert.equal(plan.name, 0, "named by the running counter");
@@ -777,11 +907,15 @@ describe("attack manager", () =>
 			resetRecorder();
 			const world = makeWorld({ phase: 2, debug: 2 });
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((entry) => entry.includes("Creating the plan Attack  0")),
-				`the creation was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(entry => entry.includes("Creating the plan Attack  0")),
+				`the creation was logged: ${logs.join(" | ")}`,
+			);
 			assert.equal(manager.upcomingAttacks["Attack"].length, 1, "a default attack waits in preparation");
 			const plan = manager.upcomingAttacks["Attack"][0];
 			assert.equal(plan.type, "Attack", "the first two attacks are default ones");
@@ -791,7 +925,9 @@ describe("attack manager", () =>
 		it("swells into a HugeAttack once two default attacks have been spent", () =>
 		{
 			const { world, manager } = creationWorld({ phase: 2 });
-			world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 			manager.attackNumber = 2;
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
@@ -818,14 +954,22 @@ describe("attack manager", () =>
 		it("waits for the phase-two tech to be underway before attacking", () =>
 		{
 			const idle = creationWorld({ phaseName: "phase.town" });
-			idle.world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			idle.world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 			idle.manager.update(idle.world.gameState, idle.world.ai.queues, emptyEvents());
 			assert.equal(idle.manager.upcomingAttacks["Attack"].length, 0, "no tech, no attack");
 
 			const researching = creationWorld({ phaseName: "phase.town", researching: ["phase.town"] });
-			researching.world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			researching.world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 			researching.manager.update(researching.world.gameState, researching.world.ai.queues, emptyEvents());
-			assert.equal(researching.manager.upcomingAttacks["Attack"].length, 1, "the tech underway, the attack comes");
+			assert.equal(
+				researching.manager.upcomingAttacks["Attack"].length,
+				1,
+				"the tech underway, the attack comes",
+			);
 		});
 
 		it("attacks whatever happens when no base could ever rise again", () =>
@@ -843,14 +987,18 @@ describe("attack manager", () =>
 		it("caps the running attacks by the town's population allowance", () =>
 		{
 			const capped = creationWorld({ phase: 2, populationMax: 40 });
-			capped.world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			capped.world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 			capped.manager.startedAttacks["Attack"].push(planStub({ name: 2 }));
 
 			capped.manager.update(capped.world.gameState, capped.world.ai.queues, emptyEvents());
 			assert.equal(capped.manager.upcomingAttacks["Attack"].length, 0, "one running attack fills a small town");
 
 			const roomy = creationWorld({ phase: 2 });
-			roomy.world.addEntity(makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }));
+			roomy.world.addEntity(
+				makeEntity({ id: 900, owner: PLAYER, position: [14, 14], classes: ["Structure", "Barracks"] }),
+			);
 			roomy.manager.startedAttacks["Attack"].push(planStub({ name: 2 }));
 
 			roomy.manager.update(roomy.world.gameState, roomy.world.ai.queues, emptyEvents());
@@ -860,7 +1008,9 @@ describe("attack manager", () =>
 		it("makes a raid on the threat the defense manager spotted", () =>
 		{
 			const { world, manager } = creationWorld({ enemyPlayer: ENEMY });
-			const threat = world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }));
+			const threat = world.addEntity(
+				makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }),
+			);
 			world.ai.HQ.defenseManager.targetList.push(entityId(5000));
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
@@ -889,13 +1039,16 @@ describe("attack manager", () =>
 			// naval map, but no sea lane connects our land to theirs
 			resetRecorder();
 			const { world, manager } = creationWorld({ enemyPlayer: ENEMY, navalMap: true });
-			world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] },
-				{}, { "access": 3 }));
+			world.addEntity(
+				makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }, {}, { "access": 3 }),
+			);
 			world.ai.HQ.defenseManager.targetList.push(entityId(5000));
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.ok(logs.some((entry) => entry.includes("has an inaccessible target")),
-				`the missing sea lane was logged: ${logs.join(" | ")}`);
+			assert.ok(
+				logs.some(entry => entry.includes("has an inaccessible target")),
+				`the missing sea lane was logged: ${logs.join(" | ")}`,
+			);
 			assert.equal(manager.upcomingAttacks["Raid"].length, 0, "no raid was planned");
 			assert.equal(manager.raidNumber, 0, "and no credit spent");
 		});
@@ -905,16 +1058,25 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			world.ai.playedTurn = 5;
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [40, 40], classes: ["Structure"] },
-				{ "footprintRadius": () => 2 }));
-			world.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 60 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY
-			}));
+			world.addEntity(
+				makeEntity({ id: 5000, owner: ENEMY, position: [40, 40], classes: ["Structure"] }, {
+					"footprintRadius": () => 2,
+				}),
+			);
+			world.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 60 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+				}),
+			);
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
-			assert.equal(manager.bombingAttacks.get(entityId(5000))?.has(entityId(1100)), true, "the idle bomber was enrolled");
+			assert.equal(
+				manager.bombingAttacks.get(entityId(5000))?.has(entityId(1100)),
+				true,
+				"the idle bomber was enrolled",
+			);
 		});
 
 		it("leaves the bombers alone on other turns and on easy difficulties", () =>
@@ -923,11 +1085,13 @@ describe("attack manager", () =>
 			otherTurn.ai.playedTurn = 6;
 			const manager = makeManager(otherTurn, worldConfig(otherTurn));
 			otherTurn.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [40, 40], classes: ["Structure"] }));
-			otherTurn.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 60 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY
-			}));
+			otherTurn.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 60 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+				}),
+			);
 
 			manager.update(otherTurn.gameState, otherTurn.ai.queues, emptyEvents());
 			assert.equal(manager.bombingAttacks.size, 0, "no polling off the fifth turn");
@@ -936,11 +1100,13 @@ describe("attack manager", () =>
 			easy.ai.playedTurn = 5;
 			const easyManager = makeManager(easy, worldConfig(easy));
 			easy.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [40, 40], classes: ["Structure"] }));
-			easy.addEntity(makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
-				"isIdle": () => true,
-				"attackRange": () => ({ "max": 60 }),
-				"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY
-			}));
+			easy.addEntity(
+				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
+					"isIdle": () => true,
+					"attackRange": () => ({ "max": 60 }),
+					"canAttackTarget": (aimed: CommonEntity) => aimed.owner() === ENEMY,
+				}),
+			);
 
 			easyManager.update(easy.gameState, easy.ai.queues, emptyEvents());
 			assert.equal(easyManager.bombingAttacks.size, 0, "no polling on the easiest difficulty");
@@ -993,8 +1159,9 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			const manager = makeManager(world, worldConfig(world));
 			for (let i = 0; i < 7; ++i)
-				world.addEntity(makeEntity({ id: 6000 + i, owner: ENEMY, position: [30 + i, 40],
-					classes: ["Structure", "Tower"] }));
+				world.addEntity(
+					makeEntity({ id: 6000 + i, owner: ENEMY, position: [30 + i, 40], classes: ["Structure", "Tower"] }),
+				);
 
 			const rush = planStub({ name: 3, type: "Rush" });
 			assert.equal(manager.getEnemyPlayer(world.gameState, rush), undefined, "too well defended for a rush");
@@ -1010,8 +1177,12 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			addFoe(world, 3);
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] }));
-			world.addEntity(makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] }));
+			world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] }),
+			);
+			world.addEntity(
+				makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] }),
+			);
 
 			const attack = planStub({ name: 3 });
 			assert.equal(manager.getEnemyPlayer(world.gameState, attack), ENEMY, "the nearer centre won");
@@ -1023,10 +1194,15 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY });
 			addFoe(world, 3);
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] }));
+			world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] }),
+			);
 			// the overseas centre: on another land, so out of reach for a ground army
-			world.addEntity(makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] },
-				{}, { "access": 3 }));
+			world.addEntity(
+				makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] }, {}, {
+					"access": 3,
+				}),
+			);
 
 			const attack = planStub({ name: 3 });
 			assert.equal(manager.getEnemyPlayer(world.gameState, attack), ENEMY, "the overseas centre was ignored");
@@ -1038,8 +1214,11 @@ describe("attack manager", () =>
 			addFoe(world, 3);
 			const manager = makeManager(world, worldConfig(world));
 			// the enemy's centre sits on another land: out of the centre chase
-			world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] },
-				{}, { "access": 3 }));
+			world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "CivCentre"] }, {}, {
+					"access": 3,
+				}),
+			);
 			world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [31, 40], classes: ["Unit"] }));
 			world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [32, 40], classes: ["Unit"] }));
 			world.addEntity(makeEntity({ id: 3100, owner: 3, position: [80, 95], classes: ["Unit"] }));
@@ -1047,8 +1226,11 @@ describe("attack manager", () =>
 			world.addEntity(makeEntity({ id: 3102, owner: 3, position: [82, 95], classes: ["Unit"] }));
 
 			const attack = planStub({ name: 3 });
-			assert.equal(manager.getEnemyPlayer(world.gameState, attack), ENEMY,
-				"the civ centre outweighed the extra unit");
+			assert.equal(
+				manager.getEnemyPlayer(world.gameState, attack),
+				ENEMY,
+				"the civ centre outweighed the extra unit",
+			);
 			assert.equal(manager.currentEnemyPlayer, ENEMY, "and was remembered");
 		});
 
@@ -1058,9 +1240,13 @@ describe("attack manager", () =>
 			addFoe(world, 3);
 			const manager = makeManager(world, worldConfig(world));
 			world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }));
-			world.addEntity(makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] }));
+			world.addEntity(
+				makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "CivCentre"] }),
+			);
 			for (let i = 0; i < 10; ++i)
-				world.addEntity(makeEntity({ id: 3100 + i, owner: 3, position: [80 + i * 0.4, 95], classes: ["Unit"] }));
+				world.addEntity(
+					makeEntity({ id: 3100 + i, owner: 3, position: [80 + i * 0.4, 95], classes: ["Unit"] }),
+				);
 			manager.currentEnemyPlayer = ENEMY;
 
 			const plain = planStub({ name: 3 });
@@ -1073,36 +1259,58 @@ describe("attack manager", () =>
 		{
 			const building = foeWorld({ enemyPlayer: ENEMY, victoryConditions: ["wonder"] });
 			addFoe(building.world, 3);
-			building.world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40],
-				classes: ["Structure", "Wonder"] }, { "foundationProgress": () => 40 }));
-			building.world.addEntity(makeEntity({ id: 2001, owner: 3, position: [80, 95],
-				classes: ["Structure", "Wonder"] }, { "foundationProgress": () => 80 }));
+			building.world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "Wonder"] }, {
+					"foundationProgress": () => 40,
+				}),
+			);
+			building.world.addEntity(
+				makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "Wonder"] }, {
+					"foundationProgress": () => 80,
+				}),
+			);
 			const attack = planStub({ name: 3 });
-			assert.equal(building.manager.getEnemyPlayer(building.world.gameState, attack), 3,
-				"the more advanced wonder won");
+			assert.equal(
+				building.manager.getEnemyPlayer(building.world.gameState, attack),
+				3,
+				"the more advanced wonder won",
+			);
 			assert.equal(building.manager.currentEnemyPlayer, 3, "and was remembered");
 
 			const finished = foeWorld({ enemyPlayer: ENEMY, victoryConditions: ["wonder"] });
 			addFoe(finished.world, 3);
-			finished.world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40],
-				classes: ["Structure", "Wonder"] }, { "foundationProgress": () => 40 }));
-			finished.world.addEntity(makeEntity({ id: 2001, owner: 3, position: [80, 95],
-				classes: ["Structure", "Wonder"] })); // completed: no progress at all
-			assert.equal(finished.manager.getEnemyPlayer(finished.world.gameState, planStub({ name: 3 })), 3,
-				"a finished wonder wins outright");
+			finished.world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "Wonder"] }, {
+					"foundationProgress": () => 40,
+				}),
+			);
+			finished.world.addEntity(
+				makeEntity({ id: 2001, owner: 3, position: [80, 95], classes: ["Structure", "Wonder"] }),
+			); // completed: no progress at all
+			assert.equal(
+				finished.manager.getEnemyPlayer(finished.world.gameState, planStub({ name: 3 })),
+				3,
+				"a finished wonder wins outright",
+			);
 		});
 
 		it("leaves a gaia wonder alone and falls back to the usual choice", () =>
 		{
 			const world = makeWorld({ enemyPlayer: ENEMY, victoryConditions: ["wonder"] });
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 2000, owner: GAIA, position: [30, 40],
-				classes: ["Structure", "Wonder"] }, { "foundationProgress": () => 40 }));
+			world.addEntity(
+				makeEntity({ id: 2000, owner: GAIA, position: [30, 40], classes: ["Structure", "Wonder"] }, {
+					"foundationProgress": () => 40,
+				}),
+			);
 			world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [80, 95], classes: ["Structure"] }));
 
 			const attack = planStub({ name: 3 });
-			assert.equal(manager.getEnemyPlayer(world.gameState, attack), ENEMY,
-				"the wonder was ignored, the usual choice stands");
+			assert.equal(
+				manager.getEnemyPlayer(world.gameState, attack),
+				ENEMY,
+				"the wonder was ignored, the usual choice stands",
+			);
 		});
 
 		it("seizes the richest relic hoard", () =>
@@ -1129,7 +1337,9 @@ describe("attack manager", () =>
 			const manager = makeManager(world, worldConfig(world));
 			world.addEntity(makeEntity({ id: 4000, owner: ENEMY, position: [30, 40], classes: ["Unit", "Relic"] }));
 			for (let i = 0; i < 3; ++i)
-				world.addEntity(makeEntity({ id: 4100 + i, owner: GAIA, position: [50 + i, 50], classes: ["Unit", "Relic"] }));
+				world.addEntity(
+					makeEntity({ id: 4100 + i, owner: GAIA, position: [50 + i, 50], classes: ["Unit", "Relic"] }),
+				);
 
 			// the picker itself does name gaia, and resets the gaia-relic plan
 			const attack = planStub({ name: 3, targetPlayer: 3 }); // an aim already chosen
@@ -1139,8 +1349,11 @@ describe("attack manager", () =>
 
 			// but the caller's `relicPick || wonderPick` swallows gaia's 0 on its own return:
 			// gaia steers later plans only through the remembered-target branch
-			assert.equal(manager.getEnemyPlayer(world.gameState, planStub({ name: 4 })), 0,
-				"the remembered gaia pick still steers later plans");
+			assert.equal(
+				manager.getEnemyPlayer(world.gameState, planStub({ name: 4 })),
+				0,
+				"the remembered gaia pick still steers later plans",
+			);
 		});
 
 		it("mixes a wonder and a relic aim by chance", () =>
@@ -1148,7 +1361,9 @@ describe("attack manager", () =>
 			const world = makeWorld({ enemyPlayer: ENEMY, victoryConditions: ["wonder", "capture_the_relic"] });
 			addFoe(world, 3);
 			const manager = makeManager(world, worldConfig(world));
-			world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "Wonder"] }));
+			world.addEntity(
+				makeEntity({ id: 2000, owner: ENEMY, position: [30, 40], classes: ["Structure", "Wonder"] }),
+			);
 			world.addEntity(makeEntity({ id: 4000, owner: 3, position: [80, 95], classes: ["Unit", "Relic"] }));
 
 			const attack = planStub({ name: 3 });
@@ -1164,8 +1379,11 @@ describe("attack manager", () =>
 			stubGlobal("randBool", () => true);
 			try
 			{
-				assert.equal(manager.getEnemyPlayer(world.gameState, planStub({ name: 4 })), 3,
-					"chance switched to the relic hoard");
+				assert.equal(
+					manager.getEnemyPlayer(world.gameState, planStub({ name: 4 })),
+					3,
+					"chance switched to the relic hoard",
+				);
 			}
 			finally
 			{
@@ -1263,7 +1481,8 @@ describe("attack manager", () =>
 			manager.startedAttacks["Attack"].push(
 				planStub({ name: 3, units: 4, position: [20, 20] }),
 				planStub({ name: 4, units: 2, position: [90, 90] }),
-				planStub({ name: 5, units: 9 })); // no position: inside a transport
+				planStub({ name: 5, units: 9 }),
+			); // no position: inside a transport
 
 			assert.equal(manager.numAttackingUnitsAround(worldPos(25, 25), 10), 4, "the nearby army counts");
 			assert.equal(manager.numAttackingUnitsAround(worldPos(25, 25), 200), 6, "the far army counts within reach");
@@ -1273,17 +1492,15 @@ describe("attack manager", () =>
 	describe("switching defense armies over", () =>
 	{
 		/** the default defense setup: one target, one army, a draggable unit list */
-		function defenseWorld(options: WorldOptions = {}): {
-			world: World;
-			manager: AttackManager;
-			target: CommonEntity;
-			army: DefenseArmy;
-		}
+		function defenseWorld(
+			options: WorldOptions = {},
+		): { world: World; manager: AttackManager; target: CommonEntity; army: DefenseArmy }
 		{
 			const world = makeWorld(options);
 			const manager = makeManager(world, worldConfig(world));
-			const target = world.addEntity(makeEntity({ id: 5000, owner: ENEMY, position: [30, 40],
-				classes: ["Structure"] }));
+			const target = world.addEntity(
+				makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }),
+			);
 			const army = armyStub(5, [3100], []);
 			world.ai.HQ.defenseManager.armies.push(army);
 			return { world, manager, target, army };
@@ -1292,9 +1509,7 @@ describe("attack manager", () =>
 		/** a defender standing near the threat */
 		function defender(world: World, id: number): CommonEntity
 		{
-			return world.addEntity(makeEntity({
-				id, "owner": PLAYER, "position": [19, 19], "classes": ["Unit"]
-			}));
+			return world.addEntity(makeEntity({ id, "owner": PLAYER, "position": [19, 19], "classes": ["Unit"] }));
 		}
 
 		it("refuses a call without a target, without a position, or without a plan of action", () =>
@@ -1302,13 +1517,25 @@ describe("attack manager", () =>
 			const { world, manager, target } = defenseWorld();
 			const blur = makeWorld().addEntity(makeEntity({ id: 5001, owner: ENEMY, classes: ["Structure"] }));
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, fake<CommonEntity>(undefined), { "range": 5 }), false,
-				"no target, no attack");
-			assert.equal(manager.switchDefenseToAttack(world.gameState, blur, { "range": 5 }), false,
-				"no position, no attack");
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, {}), false,
-				"neither range nor army id");
-			assert.ok(logs.some((entry) => /inconsistent data/.test(entry)), `the misuse was logged: ${logs.join(" | ")}`);
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, fake<CommonEntity>(undefined), { "range": 5 }),
+				false,
+				"no target, no attack",
+			);
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, blur, { "range": 5 }),
+				false,
+				"no position, no attack",
+			);
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, {}),
+				false,
+				"neither range nor army id",
+			);
+			assert.ok(
+				logs.some(entry => /inconsistent data/.test(entry)),
+				`the misuse was logged: ${logs.join(" | ")}`,
+			);
 		});
 
 		// artificial world: defense plans carry no target, so only the rally-point
@@ -1320,8 +1547,11 @@ describe("attack manager", () =>
 			world.bases[0].anchor = undefined;
 			world.removeEntity(1000);
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }), false,
-				"no base, no rallying");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }),
+				false,
+				"no base, no rallying",
+			);
 			assert.equal(manager.startedAttacks["Attack"].length, 0, "no plan was kept either");
 		});
 
@@ -1331,8 +1561,11 @@ describe("attack manager", () =>
 			const joiner = defender(world, 1200);
 			army.ownEntities = [entityId(1200)];
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }), true,
-				"the army was handed over");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }),
+				true,
+				"the army was handed over",
+			);
 			const plan = manager.startedAttacks["Attack"][0];
 			assert.equal(plan.name, 0, "named by the running counter");
 			assert.equal(plan.targetPlayer, ENEMY, "aimed at the raider");
@@ -1354,8 +1587,11 @@ describe("attack manager", () =>
 			army.ownEntities = [entityId(1200)];
 			defender(world, 1200);
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, { "range": 5 }), false,
-				"out of reach, no handover");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "range": 5 }),
+				false,
+				"out of reach, no handover",
+			);
 			assert.deepEqual(army.foeEntities, [3100], "the foes were untouched");
 			assert.deepEqual(army.ownEntities, [1200], "the defenders were untouched");
 		});
@@ -1369,8 +1605,11 @@ describe("attack manager", () =>
 			world.ai.HQ.defenseManager.armies.push(neighbour);
 			defender(world, 1300);
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target,
-				{ "armyID": armyId(6), "uniqueTarget": true }), true, "the named army was handed over");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "armyID": armyId(6), "uniqueTarget": true }),
+				true,
+				"the named army was handed over",
+			);
 			const plan = manager.startedAttacks["Attack"][0];
 			assert.equal(plan.uniqueTargetId, 5000, "the attack holds only this target");
 			assert.deepEqual(neighbour.foeEntities, [], "the named army was drained");
@@ -1379,25 +1618,33 @@ describe("attack manager", () =>
 			assert.deepEqual(army.ownEntities, [1200], "with its defenders at home");
 		});
 
-	// only the port passes: it skips units that left the world mid-drain
-	// (the original dereferences the missing unit and throws)
-	it("enlists only joinable defenders", () =>
+		// only the port passes: it skips units that left the world mid-drain
+		// (the original dereferences the missing unit and throws)
+		it("enlists only joinable defenders", () =>
 		{
 			const { world, manager, target, army } = defenseWorld();
 			army.ownEntities = [entityId(1200), entityId(1202), entityId(1203), entityId(1204)];
 			defender(world, 1200);
 			// 1202 carries a transport mark: the code drains it but never enlists it
-			world.addEntity(makeEntity({ id: 1202, owner: PLAYER, position: [19, 19], classes: ["Unit"] },
-				{}, { "transport": 4 }));
+			world.addEntity(
+				makeEntity({ id: 1202, owner: PLAYER, position: [19, 19], classes: ["Unit"] }, {}, { "transport": 4 }),
+			);
 			// 1203 rides inside a transport and has no position of its own
 			world.addEntity(makeEntity({ id: 1203, owner: PLAYER, classes: ["Unit"] }));
 			// 1204 has left the world by the time the plan asks for it
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }), true,
-				"the joinable defender made the attack");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }),
+				true,
+				"the joinable defender made the attack",
+			);
 			const plan = manager.startedAttacks["Attack"][0];
 			assert.equal(plan.unitCollection.hasEntId(entityId(1200)), true, "the plain defender joined");
-			assert.equal(plan.unitCollection.hasEntId(entityId(1202)), false, "the transport-marked defender was drained but stayed home");
+			assert.equal(
+				plan.unitCollection.hasEntId(entityId(1202)),
+				false,
+				"the transport-marked defender was drained but stayed home",
+			);
 			assert.equal(plan.unitCollection.hasEntId(entityId(1203)), false, "the positionless defender stayed home");
 			assert.equal(plan.unitCollection.hasEntId(entityId(1204)), false, "the vanished defender was skipped");
 		});
@@ -1406,8 +1653,11 @@ describe("attack manager", () =>
 		{
 			const { world, manager, target, army } = defenseWorld();
 
-			assert.equal(manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }), false,
-				"nobody to hand over");
+			assert.equal(
+				manager.switchDefenseToAttack(world.gameState, target, { "range": 70 }),
+				false,
+				"nobody to hand over",
+			);
 			assert.equal(army.foeEntities.length, 0, "the foes were still handed back");
 			// an artifact worth knowing: the aborted plan stays in the started roster
 			assert.equal(manager.startedAttacks["Attack"].length, 1, "the aborted plan was kept in the roster");
@@ -1438,9 +1688,18 @@ describe("attack manager", () =>
 
 			const fresh = makeWorld();
 			// as the bot loads: the queue manager first, with the plans' queues
-			fresh.ai.queueManager = QueueManager.restore(fresh.ai.Config, fresh.gameState, world.ai.queueManager.Serialize());
+			fresh.ai.queueManager = QueueManager.restore(
+				fresh.ai.Config,
+				fresh.gameState,
+				world.ai.queueManager.Serialize(),
+			);
 			fresh.ai.queues = fresh.ai.queueManager.queues;
-			const restored = AttackManager.restore(worldConfig(fresh), fresh.gameState, saved, fresh.ai.HQ.canBuildUnits);
+			const restored = AttackManager.restore(
+				worldConfig(fresh),
+				fresh.gameState,
+				saved,
+				fresh.ai.HQ.canBuildUnits,
+			);
 			fresh.ai.HQ.attackManager = restored;
 
 			assert.equal(restored.totalNumber, 5, "the counters came back");
@@ -1452,11 +1711,9 @@ describe("attack manager", () =>
 			assert.equal(restored.currentEnemyPlayer, 2, "the remembered foe came back");
 			assert.deepEqual(restored.defeated, { 3: true }, "the losses came back");
 			assert.equal(restored.upcomingAttacks["Rush"].length, 1, "the waiting plan came back");
-			assert.equal(restored.upcomingAttacks["Rush"][0].name, 7,
-				"under its own name");
+			assert.equal(restored.upcomingAttacks["Rush"][0].name, 7, "under its own name");
 			assert.equal(restored.startedAttacks["Attack"].length, 1, "the marching plan came back");
-			assert.equal(restored.startedAttacks["Attack"][0].name, 8,
-				"under its own name");
+			assert.equal(restored.startedAttacks["Attack"][0].name, 8, "under its own name");
 			assert.equal(restored.upcomingAttacks["Attack"].length, 0, "the empty rosters stayed empty");
 			assert.equal(restored.startedAttacks["Rush"].length, 0, "the empty rosters stayed empty");
 		});
@@ -1479,17 +1736,26 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 		const sailing = AttackPlan.create(world.gameState, world.ai.Config, 7, "Attack");
 		assert.ok(sailing);
 		const soldier = (id: number, position: [number, number]) =>
-			world.addEntity(makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "Melee"] }, {}, { "plan": 7 }));
+			world.addEntity(
+				makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "Melee"] }, {}, { "plan": 7 }),
+			);
 		const ashore = Array.from({ length: onOurLand }, (_, i) => soldier(1100 + i, [12 + i, 12]));
 		const away = [soldier(1200, [70, 70]), soldier(1201, [71, 70])];
 		for (const ent of [...ashore, ...away])
 			sailing.unitCollection.updateEnt(ent);
 		// two enemy houses, the farther listed first, and a soldier of theirs on our land
 		if (houses)
-			world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [40, 40], classes: ["Structure", "Village", "House"] }));
+			world.addEntity(
+				makeEntity({ id: 2100, owner: ENEMY, position: [40, 40], classes: ["Structure", "Village", "House"] }),
+			);
 		const house = houses ?
-			world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [20, 20], classes: ["Structure", "Village", "House"] })) : undefined;
-		const raider = world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 14], classes: ["Unit", "Soldier", "Infantry"] }));
+			world.addEntity(
+				makeEntity({ id: 2101, owner: ENEMY, position: [20, 20], classes: ["Structure", "Village", "House"] }),
+			) :
+			undefined;
+		const raider = world.addEntity(
+			makeEntity({ id: 3000, owner: ENEMY, position: [15, 14], classes: ["Unit", "Soldier", "Infantry"] }),
+		);
 		return { world, manager, sailing, ashore, away, house, raider };
 	}
 
@@ -1540,11 +1806,19 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const manager = makeManager(world, worldConfig(world));
-		for (const [id, land, classes] of [[3000, 5, ["Unit", "Support", "FemaleCitizen"]], [3001, 6, ["Unit", "Trader"]],
-			[3002, 7, ["Unit", "Soldier"]], [3003, 8, ["Unit", "Hero"]], [3004, 10, ["Unit", "Siege"]],
-			[3005, 11, ["Structure", "House"]], [3006, 12, ["Unit", "Ship", "Soldier"]],
-			[3007, 1, ["Unit", "Soldier"]]] as const)	// on an impassable cell, a cliff's edge: no land
-		{
+		for (
+			const [id, land, classes] of [
+				[3000, 5, ["Unit", "Support", "FemaleCitizen"]],
+				[3001, 6, ["Unit", "Trader"]],
+				[3002, 7, ["Unit", "Soldier"]],
+				[3003, 8, ["Unit", "Hero"]],
+				[3004, 10, ["Unit", "Siege"]],
+				[3005, 11, ["Structure", "House"]],
+				[3006, 12, ["Unit", "Ship", "Soldier"]],
+				[3007, 1, ["Unit", "Soldier"]],
+			] as const
+		)
+		{ // on an impassable cell, a cliff's edge: no land
 			world.accessAt.set(`${id},0`, land);
 			world.addEntity(makeEntity({ id, owner: ENEMY, position: [id, 0], classes: [...classes] }));
 		}

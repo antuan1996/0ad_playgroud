@@ -1,9 +1,9 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { type PlanMetadata, type PlanStart, QueuePlan } from "./queueplan.ts";
-import { Worker } from "./worker.ts";
-import { hqOf } from "./hq.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { hqOf } from "./hq.ts";
+import { QueuePlan, type PlanMetadata, type PlanStart } from "./queueplan.ts";
+import { Worker } from "./worker.ts";
 
 /** Buildings that may train a plan's units: never empty. */
 type Trainers = [CommonPlacedEntity, ...CommonPlacedEntity[]];
@@ -18,8 +18,13 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 {
 	maxMerge: number;
 
-	constructor(gameState: CommonGameState, type: string, metadata?: PlanMetadata,
-		number: number = 1, maxMerge: number = 5)
+	constructor(
+		gameState: CommonGameState,
+		type: string,
+		metadata?: PlanMetadata,
+		number: number = 1,
+		maxMerge: number = 5,
+	)
 	{
 		const name = gameState.applyCiv(type);
 		super(gameState, name, gameState.getTemplate(name), "unit", metadata);
@@ -173,7 +178,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 			"metadata": this.metadata,
 			"cost": this.cost.Serialize(),
 			"number": this.number,
-			"maxMerge": this.maxMerge
+			"maxMerge": this.maxMerge,
 		};
 	}
 

@@ -46,13 +46,12 @@ if (import.meta.main)
 		[
 			"--experimental-test-coverage",
 			`--test-coverage-include=${target === "out" ? "**/petra_out/**" : "**/petra_ts/**"}`,
-			"--test-coverage-exclude=**/tests/**"
+			"--test-coverage-exclude=**/tests/**",
 		] :
 		[];
-	const rest = args.filter((arg) => arg !== "--coverage");
-	const flags = [...coverage, ...rest.filter((arg) => arg.startsWith("-"))];
-	const files = rest.filter((arg) => !arg.startsWith("-"))
-		.map((file) => existsSync(file) ? file : path.join(here, file));
+	const rest = args.filter(arg => arg !== "--coverage");
+	const flags = [...coverage, ...rest.filter(arg => arg.startsWith("-"))];
+	const files = rest.filter(arg => !arg.startsWith("-")).map(file => existsSync(file) ? file : path.join(here, file));
 
 	const result = spawnSync(process.execPath, testArgs(files, flags), { "stdio": "inherit", "env": process.env });
 	if (result.error)

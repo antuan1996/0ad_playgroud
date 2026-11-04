@@ -11,12 +11,7 @@ import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced, isSupply } from "../adapter/placed.ts";
 
 /** A supply on a base's list: the dropsite it is brought to, its distance there, the entity and its id */
-export type ResourceSupply = {
-	dropsite: EntityId;
-	dist: number;
-	ent?: CommonSupplyEntity;
-	id: EntityId;
-};
+export type ResourceSupply = { dropsite: EntityId; dist: number; ent?: CommonSupplyEntity; id: EntityId };
 
 export class BaseResources
 {
@@ -37,8 +32,12 @@ export class BaseResources
 	 * the supplies must be on (the base's, or the dropsite's own for the
 	 * baseless pool).
 	 */
-	addDropsite(gameState: CommonGameState, dropsite: CommonPlacedEntity, access: AccessIndex | undefined,
-		maxDistResourceSquare: number): boolean
+	addDropsite(
+		gameState: CommonGameState,
+		dropsite: CommonPlacedEntity,
+		access: AccessIndex | undefined,
+		maxDistResourceSquare: number,
+	): boolean
 	{
 		if (this.dropsites[dropsite.id()])
 			return false;
@@ -46,14 +45,21 @@ export class BaseResources
 
 		const dropsiteTypes = dropsite.resourceDropsiteTypes();
 		if (dropsiteTypes)
+		{
 			for (const type of dropsiteTypes)
 				this.listSupplies(gameState, dropsite, type, access, maxDistResourceSquare);
+		}
 		return true;
 	}
 
 	/** Adds the supplies of one resource within reach of a dropsite to its bands, nearest first. */
-	private listSupplies(gameState: CommonGameState, dropsite: CommonPlacedEntity, type: string,
-		access: AccessIndex | undefined, maxDistResourceSquare: number): void
+	private listSupplies(
+		gameState: CommonGameState,
+		dropsite: CommonPlacedEntity,
+		type: string,
+		access: AccessIndex | undefined,
+		maxDistResourceSquare: number,
+	): void
 	{
 		const resources = gameState.getResourceSupplies(type);
 		if (!resources.length)
@@ -79,9 +85,9 @@ export class BaseResources
 			const dist = SquareVectorDistance(supply.position(), dropsitePos);
 			if (dist < maxDistResourceSquare)
 			{
-				if (dist < maxDistResourceSquare/16)        // distmax/4
+				if (dist < maxDistResourceSquare / 16) // distmax/4
 					nearby.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
-				else if (dist < maxDistResourceSquare/4)    // distmax/2
+				else if (dist < maxDistResourceSquare / 4) // distmax/2
 					medium.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
 				else
 					faraway.push({ "dropsite": dropsiteId, "id": supply.id(), "dist": dist });
@@ -125,14 +131,18 @@ export class BaseResources
 		this.dropsites[entityID] = undefined;
 	}
 
-	getResourceLevel(gameState: CommonGameState, type: string, distances: string[] = ["nearby", "medium", "faraway"]): number
+	getResourceLevel(
+		gameState: CommonGameState,
+		type: string,
+		distances: string[] = ["nearby", "medium", "faraway"],
+	): number
 	{
 		let count = 0;
 		const check: Record<number, boolean> = {};
 		for (const proxim of distances)
 			for (const supply of this.dropsiteSupplies[type][proxim])
 			{
-				if (check[supply.id])    // avoid double counting as same resource can appear several time
+				if (check[supply.id]) // avoid double counting as same resource can appear several time
 					continue;
 				check[supply.id] = true;
 				const supplyEntity = gameState.getEntityById(supply.id);

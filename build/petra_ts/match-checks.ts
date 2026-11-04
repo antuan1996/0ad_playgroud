@@ -106,7 +106,7 @@ export const limits = {
 	// 121 in one snapshot; 138-156 for twelve minutes when a finished attack
 	// withdrew into its civic centre's footprint, tests/FINDINGS.md §4)
 	walkingUnits: 50,
-	walkingSnapshots: 3
+	walkingSnapshots: 3,
 };
 
 function readLines(dir: string, file: string): string[]
@@ -147,21 +147,40 @@ export function checkMatch(dir: string): Check[]
 	// The outcome.
 	const errors = /^lines with ERROR in game.log: (\d+)/m.exec(report)?.[1];
 	const warnings = /^lines with WARNING in game.log: (\d+)/m.exec(report)?.[1];
-	check("no script error or warning", errors == "0" && warnings == "0" ? [] :
-		[`${errors ?? "?"} error and ${warnings ?? "?"} warning lines in game.log`], "none in game.log");
+	check(
+		"no script error or warning",
+		errors == "0" && warnings == "0" ?
+			[] :
+			[`${errors ?? "?"} error and ${warnings ?? "?"} warning lines in game.log`],
+		"none in game.log",
+	);
 
 	const result = /^result: (.*)$/m.exec(report)?.[1] ?? "";
-	check("decided by a victory condition", winner === undefined ? ["no player won"] :
-		result.includes("(time limit)") ? [`undecided at the time limit: ${result}`] : [], result);
+	check(
+		"decided by a victory condition",
+		winner === undefined ?
+			["no player won"] :
+			result.includes("(time limit)") ?
+			[`undecided at the time limit: ${result}`] :
+			[],
+		result,
+	);
 
 	// Phases, from the timeline (snapshots every two minutes).
 	const reached = (player: number, phase: string): number | undefined =>
 		snapshots(player).find(t => t.phase.split(",").includes(phase))?.minute;
 	const winnerTown = winner === undefined ? undefined : reached(winner, "phase_town");
-	check("the winner reaches town phase", winner === undefined ? ["no winner"] :
-		winnerTown === undefined || winnerTown > limits.townPhaseMinute ?
-			[`town phase ${winnerTown === undefined ? "never" : `at minute ${winnerTown}`}, limit ${limits.townPhaseMinute}`] : [],
-		`at minute ${winnerTown}`);
+	check(
+		"the winner reaches town phase",
+		winner === undefined ?
+			["no winner"] :
+			winnerTown === undefined || winnerTown > limits.townPhaseMinute ?
+			[`town phase ${
+				winnerTown === undefined ? "never" : `at minute ${winnerTown}`
+			}, limit ${limits.townPhaseMinute}`] :
+			[],
+		`at minute ${winnerTown}`,
+	);
 
 	const statistic = (p: PlayerStatistics, key: string, type: string): number =>
 	{
@@ -170,8 +189,11 @@ export function checkMatch(dir: string): Check[]
 	};
 	const winnerStats = players.find(p => p.playerID == winner);
 	const metal = winnerStats ? statistic(winnerStats, "resourcesGathered", "metal") : 0;
-	check("the winner mines metal", metal >= limits.winnerMetal ? [] : [`${metal} metal gathered, at least ${limits.winnerMetal}`],
-		`${metal} gathered`);
+	check(
+		"the winner mines metal",
+		metal >= limits.winnerMetal ? [] : [`${metal} metal gathered, at least ${limits.winnerMetal}`],
+		`${metal} gathered`,
+	);
 
 	// The economy, snapshot by snapshot.
 	const walking: string[] = [];
@@ -187,13 +209,17 @@ export function checkMatch(dir: string): Check[]
 			const walkers = t.unitAI?.WALKING ?? 0;
 			walkingSince = walkers >= limits.walkingUnits ? walkingSince + 1 : 0;
 			if (walkingSince == limits.walkingSnapshots)
-				walking.push(`player ${player}: ${walkers} units walking at minute ${t.minute}, ` +
-					`at least ${limits.walkingUnits} for ${limits.walkingSnapshots} snapshots`);
+				walking.push(
+					`player ${player}: ${walkers} units walking at minute ${t.minute}, ` +
+						`at least ${limits.walkingUnits} for ${limits.walkingSnapshots} snapshots`,
+				);
 			const women = t.classes.Support ?? 0;
 			const idleWomen = t.idle?.Support ?? 0;
 			const idleNow = idleWomen > Math.max(limits.idleSupport, limits.idleSupportShare * women);
 			if (idleNow && idleBefore)
-				idle.push(`player ${player} at minute ${t.minute}: ${idleWomen} of ${women} women idle, as two minutes before`);
+				idle.push(
+					`player ${player} at minute ${t.minute}: ${idleWomen} of ${women} women idle, as two minutes before`,
+				);
 			idleBefore = idleNow;
 			for (const [type, amount] of Object.entries(t.resources))
 				if (amount > limits.stockpile && t.pop < limits.stockpileBelowPop)
@@ -204,9 +230,21 @@ export function checkMatch(dir: string): Check[]
 		if (start === undefined || later === undefined || later < limits.earlyGrowth * start)
 			growth.push(`player ${player}: population ${start} at minute 1, ${later} at minute 9`);
 	}
-	check("no march goes on for good", walking, `never ${limits.walkingUnits} units walking ${limits.walkingSnapshots} snapshots in a row`);
-	check("workers are not left idle", idle, `at most ${limits.idleSupport} idle women, or ${limits.idleSupportShare * 100}%`);
-	check("no stockpile grows unspent", stock, `no resource above ${limits.stockpile} below population ${limits.stockpileBelowPop}`);
+	check(
+		"no march goes on for good",
+		walking,
+		`never ${limits.walkingUnits} units walking ${limits.walkingSnapshots} snapshots in a row`,
+	);
+	check(
+		"workers are not left idle",
+		idle,
+		`at most ${limits.idleSupport} idle women, or ${limits.idleSupportShare * 100}%`,
+	);
+	check(
+		"no stockpile grows unspent",
+		stock,
+		`no resource above ${limits.stockpile} below population ${limits.stockpileBelowPop}`,
+	);
 	check("both sides grow early", growth, `population at least ${limits.earlyGrowth}x from minute 1 to 9`);
 
 	// The commands.
@@ -257,7 +295,11 @@ export function checkMatch(dir: string): Check[]
 					++first;
 				if (last - first + 1 > limits.repeatedTurns)
 				{
-					repeated.push(`player ${player}: ${json.slice(0, 120)} in ${last - first + 1} turns from minute ${minuteOf(turns[first])}`);
+					repeated.push(
+						`player ${player}: ${json.slice(0, 120)} in ${last - first + 1} turns from minute ${
+							minuteOf(turns[first])
+						}`,
+					);
 					break;
 				}
 			}
@@ -275,7 +317,9 @@ export function checkMatch(dir: string): Check[]
 			const cancels = list.filter(c => c.type == "stop-production").length;
 			const snapshot = snapshots(player).filter(t => t.minute <= minute).at(-1);
 			if (cancels > limits.cancelsPerMinute && snapshot && snapshot.pop < snapshot.popLimit - limits.capMargin)
-				churn.push(`player ${player} in minute ${minute}: ${cancels} productions cancelled at population ${snapshot.pop} of ${snapshot.popLimit}`);
+				churn.push(
+					`player ${player} in minute ${minute}: ${cancels} productions cancelled at population ${snapshot.pop} of ${snapshot.popLimit}`,
+				);
 		}
 
 		// A phase is had soon after it is ordered.
@@ -284,21 +328,36 @@ export function checkMatch(dir: string): Check[]
 			const order = own.find(c => c.type == "research" && c.template?.startsWith(phase));
 			const had = reached(player, phase);
 			if (order && had === undefined && minuteOf(order.time) + limits.phaseResearchMinutes < decidedMinute)
-				phasing.push(`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, never had`);
+				phasing.push(
+					`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, never had`,
+				);
 			else if (order && had !== undefined && had > minuteOf(order.time) + limits.phaseResearchMinutes)
-				phasing.push(`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, had at ${had}`);
+				phasing.push(
+					`player ${player}: ${order.template} ordered at minute ${minuteOf(order.time)}, had at ${had}`,
+				);
 			else if (!order && had !== undefined)
 				phasing.push(`player ${player}: ${phase} had at minute ${had} but never ordered`);
 		}
 		if (player == winner && !own.some(c => c.type == "research" && c.template?.startsWith("phase_town")))
 			phasing.push(`player ${player}, the winner, never ordered town phase`);
 	}
-	check("no side falls silent", silent, `a command every minute while it has buildings and ${limits.silentPopulation} units`);
-	check("no command repeated turn after turn", repeated,
-		`no command in more than ${limits.repeatedTurns} turns within ${limits.repeatWindow / 60000} minutes`);
+	check(
+		"no side falls silent",
+		silent,
+		`a command every minute while it has buildings and ${limits.silentPopulation} units`,
+	);
+	check(
+		"no command repeated turn after turn",
+		repeated,
+		`no command in more than ${limits.repeatedTurns} turns within ${limits.repeatWindow / 60000} minutes`,
+	);
 	check("no command flood", floods, `at most ${limits.commandsPerTurn} commands a turn`);
 	check("no production churn", churn, `at most ${limits.cancelsPerMinute} cancels a minute below the population cap`);
-	check("phases follow their orders", phasing, `each phase within ${limits.phaseResearchMinutes} minutes of its order`);
+	check(
+		"phases follow their orders",
+		phasing,
+		`each phase within ${limits.phaseResearchMinutes} minutes of its order`,
+	);
 
 	// What the game refused. Notices addressed to an entity id rather than a
 	// player come from a swapped call in Commands.js (CanPlayerOrAllyControlUnit

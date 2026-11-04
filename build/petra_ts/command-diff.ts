@@ -12,7 +12,7 @@
  * so its log must be the same, line for line; the first difference says when
  * and for which player the two bots first chose differently.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { BatchRow } from "./batch-stats.ts";
 
@@ -46,14 +46,17 @@ export function diverge(a: string[], b: string[]): Divergence
 	return { line, "time": first?.time, "player": first?.player, lengths };
 }
 
-const readLog = (dir: string): string[] =>
-	readFileSync(join(dir, "commands.txt"), "utf8").split("\n").filter(Boolean);
-const clock = (ms: number): string => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+const readLog = (dir: string): string[] => readFileSync(join(dir, "commands.txt"), "utf8").split("\n").filter(Boolean);
+const clock = (ms: number): string =>
+	`${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 function describe(d: Divergence): string
 {
-	return d.line === undefined ? `same ${d.lengths[0]} commands` :
-		`differ from command ${d.line + 1} at ${clock(d.time ?? 0)}, player ${d.player} (${d.lengths[0]} and ${d.lengths[1]} commands)`;
+	return d.line === undefined ?
+		`same ${d.lengths[0]} commands` :
+		`differ from command ${d.line + 1} at ${clock(d.time ?? 0)}, player ${d.player} (${d.lengths[0]} and ${
+			d.lengths[1]
+		} commands)`;
 }
 
 function showPair(dirA: string, dirB: string, context: number): void
@@ -69,13 +72,17 @@ function showPair(dirA: string, dirB: string, context: number): void
 	{
 		console.log(`--- ${label}`);
 		for (let i = from; i < Math.min(log.length, d.line + context + 1); ++i)
-			console.log(`${i == d.line ? ">" : " "} ${i + 1}: ${log[i].length > 400 ? log[i].slice(0, 400) + "..." : log[i]}`);
+			console.log(
+				`${i == d.line ? ">" : " "} ${i + 1}: ${log[i].length > 400 ? log[i].slice(0, 400) + "..." : log[i]}`,
+			);
 	}
 }
 
 function showBatch(dir: string): void
 {
-	const rows: BatchRow[] = readFileSync(join(dir, "results.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
+	const rows: BatchRow[] = readFileSync(join(dir, "results.jsonl"), "utf8").split("\n").filter(Boolean).map(l =>
+		JSON.parse(l)
+	);
 	const games = new Map(readdirSync(join(dir, "games")).map(name => [Number(name), join(dir, "games", name)]));
 	const pairs = new Map<string, BatchRow[]>();
 	for (const r of rows)

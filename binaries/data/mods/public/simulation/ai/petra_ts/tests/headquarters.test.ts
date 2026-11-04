@@ -14,26 +14,66 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { eventsWith, fake, makeTemplate, orders, override, restoreEngine, stubGlobal, placed, structure } from "./harness/fakes.ts";
 import {
-	centerOfCell, doorCalls, doorManagers, dropsiteCC, ENEMY, GAIA, type HqSeatOptions, type HqWorld,
-	type HqWorldOptions, makeGaiaSupply, makeHQConfig, makeHqEntity, makeHqWorld, PLAYER, seatHQ,
-	structureTemplate
+	eventsWith,
+	fake,
+	makeTemplate,
+	orders,
+	override,
+	placed,
+	restoreEngine,
+	structure,
+	stubGlobal,
+} from "./harness/fakes.ts";
+import {
+	ENEMY,
+	GAIA,
+	PLAYER,
+	centerOfCell,
+	doorCalls,
+	doorManagers,
+	dropsiteCC,
+	makeGaiaSupply,
+	makeHQConfig,
+	makeHqEntity,
+	makeHqWorld,
+	seatHQ,
+	structureTemplate,
+	type HqSeatOptions,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
-import { baseId, cellIndex, entityId, landRegion, playerId, seconds, templateName, worldPos } from "../adapter/brands.ts";
+import {
+	baseId,
+	cellIndex,
+	entityId,
+	landRegion,
+	playerId,
+	seconds,
+	templateName,
+	worldPos,
+} from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
+import { BasesManager } from "../decision/basesManager.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY, DRY_WOOD, type Headquarters, SHORE_TOWER_TRAFFIC, STALLED_IDLE } from "../decision/headquarters.ts";
-import { ShipTraffic } from "../world/shipTraffic.ts";
+import {
+	CC_ENEMY_AVOID,
+	CC_ORDER_WAIT,
+	CC_SPOT_MEMORY,
+	DRY_WOOD,
+	SHORE_TOWER_TRAFFIC,
+	STALLED_IDLE,
+	type Headquarters,
+} from "../decision/headquarters.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
-import { BasesManager } from "../decision/basesManager.ts";
 import { border, largeFrontier, narrowFrontier, outside } from "../world/mapMask.ts";
-import { BuildManager } from "../decision/buildManager.ts";
+import { ShipTraffic } from "../world/shipTraffic.ts";
 
 /** an office seated on the plain, with its doors recorded (unless a suite seats its own) */
 function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<HqSeatOptions> = {})
@@ -43,8 +83,10 @@ function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<H
 	return { world, hq };
 }
 
-describe("headquarters boot: the office opening its doors", () => {
-	it("constructs, inits and reads the map it was handed", async () => {
+describe("headquarters boot: the office opening its doors", () =>
+{
+	it("constructs, inits and reads the map it was handed", async () =>
+	{
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { stubs: doorManagers });
 
@@ -58,7 +100,7 @@ describe("headquarters boot: the office opening its doors", () => {
 		// tile keeps unrestricted-passable mini-cells, so it carries the
 		// `border` bit rather than `outside` (that one survives only on
 		// tile whose whole mini-cell block is unrestricted-impassable)
-				assert.ok(hq.borderMap.map[0] & border);
+		assert.ok(hq.borderMap.map[0] & border);
 		assert.ok(!(hq.borderMap.map[0] & outside));
 		assert.ok(!(hq.borderMap.map[20 + 20 * 40] & (outside | border)));
 
@@ -69,15 +111,18 @@ describe("headquarters boot: the office opening its doors", () => {
 		assert.deepEqual(hq.navalRegions, {});
 	});
 
-	it("reports the phase the world is in", async () => {
+	it("reports the phase the world is in", async () =>
+	{
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { stubs: doorManagers });
 		assert.equal(hq.currentPhase, 1);
 	});
 });
 
-describe("headquarters and the queues: what the workers should gather", () => {
-	it("reads the wanted rates the queue manager books", async () => {
+describe("headquarters and the queues: what the workers should gather", () =>
+{
+	it("reads the wanted rates the queue manager books", async () =>
+	{
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { stubs: doorManagers });
 
@@ -88,8 +133,10 @@ describe("headquarters and the queues: what the workers should gather", () => {
 	});
 });
 
-describe("headquarters and the next worker: the resource that starves first", () => {
-	it("orders the resources by how far the gatherers fall short", async () => {
+describe("headquarters and the next worker: the resource that starves first", () =>
+{
+	it("orders the resources by how far the gatherers fall short", async () =>
+	{
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { stubs: doorManagers });
 
@@ -113,71 +160,111 @@ describe("headquarters and the next worker: the resource that starves first", ()
 	});
 });
 
-describe("checkEvents: diplomacy waves", () => {
-	it("a change we are party to resets the diplomacy-bound collections", () => {
+describe("checkEvents: diplomacy waves", () =>
+{
+	it("a change we are party to resets the diplomacy-bound collections", () =>
+	{
 		const { world, hq } = seat();
-		hq.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [{ "player": playerId(1), "otherPlayer": playerId(2) }] }));
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "DiplomacyChanged": [{ "player": playerId(1), "otherPlayer": playerId(2) }] }),
+		);
 		assert.deepEqual(world.diplomacyResets, [world.ai.playedTurn]);
 	});
 
-	it("a change far away deals with other tables", () => {
+	it("a change far away deals with other tables", () =>
+	{
 		const { world, hq } = seat();
 		hq.checkEvents(world.gameState, eventsWith({ "DiplomacyChanged": [{ "player": GAIA, "otherPlayer": ENEMY }] }));
 		assert.deepEqual(world.diplomacyResets, []);
 	});
 });
 
-describe("checkEvents: a finished market frees the fields", () => {
-	it("a market finishing sets maxFields off", () => {
+describe("checkEvents: a finished market frees the fields", () =>
+{
+	it("a market finishing sets maxFields off", () =>
+	{
 		const { world, hq } = seat();
-		hq.maxFields = 5;	// fields are still being limited (configFirstBase's small map case)
-		world.addEntity(makeHqEntity({
-			id: 31, owner: PLAYER, position: centerOfCell(20, 21),
-			classes: ["Structure", "Market"], templateName: "structures/athen/market"
-		}));
-		hq.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": entityId(999), "newentity": entityId(31) }]
-		}));
+		hq.maxFields = 5; // fields are still being limited (configFirstBase's small map case)
+		world.addEntity(
+			makeHqEntity({
+				id: 31,
+				owner: PLAYER,
+				position: centerOfCell(20, 21),
+				classes: ["Structure", "Market"],
+				templateName: "structures/athen/market",
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "ConstructionFinished": [{ "entity": entityId(999), "newentity": entityId(31) }] }),
+		);
 		assert.equal(hq.maxFields, false);
 	});
 
-	it("a repaired building is not the finished market", () => {
+	it("a repaired building is not the finished market", () =>
+	{
 		const { world, hq } = seat();
 		hq.maxFields = 5;
-		world.addEntity(makeHqEntity({
-			id: 31, owner: PLAYER, position: centerOfCell(20, 21),
-			classes: ["Structure", "Market"], templateName: "structures/athen/market"
-		}));
-		hq.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": entityId(31), "newentity": entityId(31) }]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 31,
+				owner: PLAYER,
+				position: centerOfCell(20, 21),
+				classes: ["Structure", "Market"],
+				templateName: "structures/athen/market",
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "ConstructionFinished": [{ "entity": entityId(31), "newentity": entityId(31) }] }),
+		);
 		assert.equal(hq.maxFields, 5);
 	});
 
-	it("an enemy market finishing is none of our business", () => {
+	it("an enemy market finishing is none of our business", () =>
+	{
 		const { world, hq } = seat();
 		hq.maxFields = 5;
-		world.addEntity(makeHqEntity({
-			id: 31, owner: ENEMY, position: centerOfCell(30, 30),
-			classes: ["Structure", "Market"], templateName: "structures/athen/market"
-		}));
-		hq.checkEvents(world.gameState, eventsWith({
-			"ConstructionFinished": [{ "entity": entityId(999), "newentity": entityId(31) }]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 31,
+				owner: ENEMY,
+				position: centerOfCell(30, 30),
+				classes: ["Structure", "Market"],
+				templateName: "structures/athen/market",
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "ConstructionFinished": [{ "entity": entityId(999), "newentity": entityId(31) }] }),
+		);
 		assert.equal(hq.maxFields, 5);
 	});
 });
 
-describe("checkEvents: what a captured unit carries into town", () => {
-	it("a captured worker becomes an idle worker again", () => {
+describe("checkEvents: what a captured unit carries into town", () =>
+{
+	it("a captured worker becomes an idle worker again", () =>
+	{
 		const { world, hq } = seat();
-		const worker = world.addEntity(makeHqEntity({
-			id: 51, owner: PLAYER, position: centerOfCell(21, 21),
-			classes: ["Unit", "Support", "Worker"], templateName: "units/athen/support_female_citizen"
-		}, {}, { "role": "trader", "subrole": "trading", "plan": 7, "PartOfArmy": true }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(51), "from": ENEMY, "to": PLAYER }]
-		}));
+		const worker = world.addEntity(
+			makeHqEntity(
+				{
+					id: 51,
+					owner: PLAYER,
+					position: centerOfCell(21, 21),
+					classes: ["Unit", "Support", "Worker"],
+					templateName: "units/athen/support_female_citizen",
+				},
+				{},
+				{ "role": "trader", "subrole": "trading", "plan": 7, "PartOfArmy": true },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(51), "from": ENEMY, "to": PLAYER }] }),
+		);
 		// the capture calming: books wiped, the office's own role granted
 		assert.equal(worker.getMetadata(PLAYER, "role"), "worker");
 		assert.equal(worker.getMetadata(PLAYER, "subrole"), "idle");
@@ -185,30 +272,51 @@ describe("checkEvents: what a captured unit carries into town", () => {
 		assert.equal(worker.getMetadata(PLAYER, "PartOfArmy"), undefined);
 	});
 
-	it("a captured mercenary, a worker by its classes, is no worker", () => {
+	it("a captured mercenary, a worker by its classes, is no worker", () =>
+	{
 		const { world, hq } = seat();
-		const mercenary = world.addEntity(makeHqEntity({
-			id: 54, owner: PLAYER, position: centerOfCell(21, 22),
-			classes: ["Unit", "CitizenSoldier", "Worker", "Infantry", "Ranged", "Mercenary"],
-			templateName: "units/athen/infantry_archer_b"
-		}, { "attackTypes": () => ["Ranged"] }, { "plan": 3 }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(54), "from": ENEMY, "to": PLAYER }]
-		}));
+		const mercenary = world.addEntity(
+			makeHqEntity(
+				{
+					id: 54,
+					owner: PLAYER,
+					position: centerOfCell(21, 22),
+					classes: ["Unit", "CitizenSoldier", "Worker", "Infantry", "Ranged", "Mercenary"],
+					templateName: "units/athen/infantry_archer_b",
+				},
+				{ "attackTypes": () => ["Ranged"] },
+				{ "plan": 3 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(54), "from": ENEMY, "to": PLAYER }] }),
+		);
 		assert.equal(mercenary.getMetadata(PLAYER, "role"), undefined);
 		assert.equal(mercenary.getMetadata(PLAYER, "subrole"), undefined);
 		assert.equal(mercenary.getMetadata(PLAYER, "plan"), -1, "free for the next attack");
 	});
 
-	it("a captured attacker keeps no old plans and loses the worker books", () => {
+	it("a captured attacker keeps no old plans and loses the worker books", () =>
+	{
 		const { world, hq } = seat();
-		const soldier = world.addEntity(makeHqEntity({
-			id: 52, owner: PLAYER, position: centerOfCell(22, 21),
-			classes: ["Unit", "CitizenSoldier", "Infantry"], templateName: "units/athen/infantry_spearman_b"
-		}, { "attackTypes": () => ["Melee"] }, { "plan": 3 }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(52), "from": ENEMY, "to": PLAYER }]
-		}));
+		const soldier = world.addEntity(
+			makeHqEntity(
+				{
+					id: 52,
+					owner: PLAYER,
+					position: centerOfCell(22, 21),
+					classes: ["Unit", "CitizenSoldier", "Infantry"],
+					templateName: "units/athen/infantry_spearman_b",
+				},
+				{ "attackTypes": () => ["Melee"] },
+				{ "plan": 3 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(52), "from": ENEMY, "to": PLAYER }] }),
+		);
 		// plan -1: no plan is waiting for it
 		assert.equal(soldier.getMetadata(PLAYER, "plan"), -1);
 		assert.equal(soldier.getMetadata(PLAYER, "role"), undefined);
@@ -216,15 +324,26 @@ describe("checkEvents: what a captured unit carries into town", () => {
 		assert.equal(soldier.getMetadata(PLAYER, "subrole"), undefined);
 	});
 
-	it("a captured ship reads the sea, a captured trader trades again", () => {
+	it("a captured ship reads the sea, a captured trader trades again", () =>
+	{
 		const { world, hq } = seat();
-		const ship = world.addEntity(makeHqEntity({
-			id: 53, owner: PLAYER, position: centerOfCell(12, 30),
-			classes: ["Unit", "Ship", "Trader"], templateName: "units/athen/ship_merchant"
-		}, { "attackTypes": () => ["Melee"] }, { "plan": 4, "route": [1, 2] }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(53), "from": ENEMY, "to": PLAYER }]
-		}));
+		const ship = world.addEntity(
+			makeHqEntity(
+				{
+					id: 53,
+					owner: PLAYER,
+					position: centerOfCell(12, 30),
+					classes: ["Unit", "Ship", "Trader"],
+					templateName: "units/athen/ship_merchant",
+				},
+				{ "attackTypes": () => ["Melee"] },
+				{ "plan": 4, "route": [1, 2] },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(53), "from": ENEMY, "to": PLAYER }] }),
+		);
 		// ship and trader features both apply: sea access read, route wiped, trader role kept
 		assert.equal(ship.getMetadata(PLAYER, "sea"), 2);
 		assert.equal(ship.getMetadata(PLAYER, "route"), undefined);
@@ -234,60 +353,91 @@ describe("checkEvents: what a captured unit carries into town", () => {
 	});
 });
 
-describe("checkEvents: the wall that decays (captured or fading)", () => {
-	it("a captured decaying tower goes to the garrison office's decay watch", () => {
+describe("checkEvents: the wall that decays (captured or fading)", () =>
+{
+	it("a captured decaying tower goes to the garrison office's decay watch", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 61, owner: PLAYER, position: centerOfCell(25, 25),
-			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
-		}, {
-			"decaying": () => true, "isGarrisonHolder": () => true, "hasDefensiveFire": () => true,
-			"territoryDecayRate": () => 6, "garrisonRegenRate": () => 2, "defaultRegenRate": () => 1
-		}));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(61), "from": GAIA, "to": PLAYER }]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 61,
+				owner: PLAYER,
+				position: centerOfCell(25, 25),
+				classes: ["Structure", "Tower"],
+				templateName: "structures/athen/watchtower",
+			}, {
+				"decaying": () => true,
+				"isGarrisonHolder": () => true,
+				"hasDefensiveFire": () => true,
+				"territoryDecayRate": () => 6,
+				"garrisonRegenRate": () => 2,
+				"defaultRegenRate": () => 1,
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(61), "from": GAIA, "to": PLAYER }] }),
+		);
 		// the garrison manager keeps its bet: ceil((6-1)/2) = 3 men minimum
 		assert.deepEqual([...hq.garrisonManager.decayingStructures.keys()], [61]);
 		assert.deepEqual([...hq.garrisonManager.decayingStructures.values()], [3]);
 		assert.ok(!hq.decayingStructures.has(entityId(61)));
 	});
 
-	it("a decaying wall without garrison rights lands on the plain list", () => {
+	it("a decaying wall without garrison rights lands on the plain list", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 62, owner: PLAYER, position: centerOfCell(25, 26),
-			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-		}, { "decaying": () => true }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"OwnershipChanged": [{ "entity": entityId(62), "from": GAIA, "to": PLAYER }]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 62,
+				owner: PLAYER,
+				position: centerOfCell(25, 26),
+				classes: ["Structure", "Wall"],
+				templateName: "structures/athen/wall",
+			}, { "decaying": () => true }),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "OwnershipChanged": [{ "entity": entityId(62), "from": GAIA, "to": PLAYER }] }),
+		);
 		// a bare wall cannot be defended by garrison; the plain book keeps it
 		assert.ok(hq.decayingStructures.has(entityId(62)));
 		assert.deepEqual([...hq.garrisonManager.decayingStructures.keys()], []);
 	});
 });
 
-describe("checkEvents: rally points when training starts", () => {
+describe("checkEvents: rally points when training starts", () =>
+{
 	function trainer(id: number, queue: unknown)
 	{
 		// engine entities answer both the entity API (trainingQueue()) and the
 		// raw sim view (_entity.trainingQueue); the port walks the first, the
 		// original the second
 		return makeHqEntity({
-			id, owner: PLAYER, position: centerOfCell(20, 20),
-			classes: ["Structure", "Trainer"], templateName: "structures/athen/barracks"
+			id,
+			owner: PLAYER,
+			position: centerOfCell(20, 20),
+			classes: ["Structure", "Trainer"],
+			templateName: "structures/athen/barracks",
 		}, {
 			"trainingQueue": () => queue,
 			"_entity": { "trainingQueue": queue === false ? undefined : queue } as unknown as (
-				...args: any[]) => unknown,
-			"setRallyPoint": (...args: unknown[]) => { calls.push(["setRallyPoint", args]); },
-			"unsetRallyPoint": (...args: unknown[]) => { calls.push(["unsetRallyPoint", args]); }
+				...args: any[]
+			) => unknown,
+			"setRallyPoint": (...args: unknown[]) =>
+			{
+				calls.push(["setRallyPoint", args]);
+			},
+			"unsetRallyPoint": (...args: unknown[]) =>
+			{
+				calls.push(["unsetRallyPoint", args]);
+			},
 		});
 	}
 	let calls: Array<[string, unknown[]]> = [];
 
-	it("a queued autogarrison trains its units straight into the wall", () => {
+	it("a queued autogarrison trains its units straight into the wall", () =>
+	{
 		const { world, hq } = seat();
 		calls = [];
 		const barracks = world.addEntity(trainer(71, [{ "metadata": { "garrisonType": "Tower" } }]));
@@ -295,7 +445,8 @@ describe("checkEvents: rally points when training starts", () => {
 		assert.deepEqual(calls, [["setRallyPoint", [barracks, "garrison"]]]);
 	});
 
-	it("nothing to garrison: the usual rally to the training ground", () => {
+	it("nothing to garrison: the usual rally to the training ground", () =>
+	{
 		const { world, hq } = seat();
 		calls = [];
 		world.addEntity(trainer(72, [{ "metadata": {} }]));
@@ -303,159 +454,296 @@ describe("checkEvents: rally points when training starts", () => {
 		assert.deepEqual(calls, [["unsetRallyPoint", []]]);
 	});
 
-	it("no queue, no rally point, and the enemy's barracks is no business", () => {
+	it("no queue, no rally point, and the enemy's barracks is no business", () =>
+	{
 		const { world, hq } = seat();
 		calls = [];
 		world.addEntity(trainer(73, false));
-		world.addEntity(makeHqEntity({
-			id: 74, owner: ENEMY, position: centerOfCell(30, 30),
-			classes: ["Structure", "Trainer"], templateName: "structures/athen/barracks"
-		}, {
-			"trainingQueue": () => [{ "metadata": { "garrisonType": "Tower" } }],
-			"setRallyPoint": (...args: unknown[]) => { calls.push(["setRallyPoint", args]); },
-			"unsetRallyPoint": (...args: unknown[]) => { calls.push(["unsetRallyPoint", args]); }
-		}));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingStarted": [{ "entity": entityId(73) }, { "entity": entityId(74) }] }));
+		world.addEntity(
+			makeHqEntity({
+				id: 74,
+				owner: ENEMY,
+				position: centerOfCell(30, 30),
+				classes: ["Structure", "Trainer"],
+				templateName: "structures/athen/barracks",
+			}, {
+				"trainingQueue": () => [{ "metadata": { "garrisonType": "Tower" } }],
+				"setRallyPoint": (...args: unknown[]) =>
+				{
+					calls.push(["setRallyPoint", args]);
+				},
+				"unsetRallyPoint": (...args: unknown[]) =>
+				{
+					calls.push(["unsetRallyPoint", args]);
+				},
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingStarted": [{ "entity": entityId(73) }, { "entity": entityId(74) }] }),
+		);
 		assert.deepEqual(calls, []);
 	});
 });
 
-describe("checkEvents: training finished — landing and stale plans", () => {
-	it("a unit garrisoned by its training ends up registered in the holder's book", () => {
+describe("checkEvents: training finished — landing and stale plans", () =>
+{
+	it("a unit garrisoned by its training ends up registered in the holder's book", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 81, owner: PLAYER, position: centerOfCell(20, 20),
-			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
-		}));
-		world.addEntity(makeHqEntity({
-			id: 82, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_archer_b"
-		}, { "garrisonHolderID": () => 81 }, { "garrisonType": "protection" }));	// no position: garrisoned inside the holder
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(82)], "owner": PLAYER }] }));
+		world.addEntity(
+			makeHqEntity({
+				id: 81,
+				owner: PLAYER,
+				position: centerOfCell(20, 20),
+				classes: ["Structure", "Tower"],
+				templateName: "structures/athen/watchtower",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({ id: 82, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_archer_b" }, {
+				"garrisonHolderID": () => 81,
+			}, { "garrisonType": "protection" }),
+		); // no position: garrisoned inside the holder
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(82)], "owner": PLAYER }] }),
+		);
 		// registration only: nobody has marched into the holder through this call
 		assert.ok(hq.garrisonManager.holders.has(entityId(81)));
 		assert.deepEqual(hq.garrisonManager.holders.get(entityId(81))?.list, []);
 	});
 
-	it("a unit the rally point garrisoned but not trained to garrison comes out again", () => {
+	it("a unit the rally point garrisoned but not trained to garrison comes out again", () =>
+	{
 		// the rally point is set per building from the batch at the head of its
 		// queue as the bot last saw it, so a batch for an attack trained behind
 		// an emergency one walks in too, and would sit there with its plan
 		const { world, hq } = seat();
 		const unloaded: unknown[] = [];
-		world.addEntity(makeHqEntity({
-			id: 85, owner: PLAYER, position: centerOfCell(20, 20),
-			classes: ["Structure", "Fortress"], templateName: "structures/athen/fortress"
-		}, { "unload": (id: unknown) => unloaded.push(id) }));
-		const unit = world.addEntity(makeHqEntity({
-			id: 86, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_spearman_b"
-		}, { "garrisonHolderID": () => 85 }, { "plan": 4 }));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(86)], "owner": PLAYER }] }));
+		world.addEntity(
+			makeHqEntity({
+				id: 85,
+				owner: PLAYER,
+				position: centerOfCell(20, 20),
+				classes: ["Structure", "Fortress"],
+				templateName: "structures/athen/fortress",
+			}, { "unload": (id: unknown) => unloaded.push(id) }),
+		);
+		const unit = world.addEntity(
+			makeHqEntity(
+				{ id: 86, owner: PLAYER, classes: ["Unit"], templateName: "units/athen/infantry_spearman_b" },
+				{ "garrisonHolderID": () => 85 },
+				{ "plan": 4 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(86)], "owner": PLAYER }] }),
+		);
 		assert.deepEqual(unloaded, [86]);
 		assert.equal(hq.garrisonManager.holders.has(entityId(85)), false, "no holder of ours to keep it in");
 		void unit;
 	});
 
-	it("autogarrison that fails on a full wall forgets its intent", () => {
+	it("autogarrison that fails on a full wall forgets its intent", () =>
+	{
 		const { world, hq } = seat();
-		const unit = world.addEntity(makeHqEntity({
-			id: 83, owner: PLAYER, position: centerOfCell(21, 20),
-			classes: ["Unit"], templateName: "units/athen/infantry_archer_b"
-		}, {}, { "garrisonType": "Tower" }));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(83)], "owner": PLAYER }] }));
+		const unit = world.addEntity(
+			makeHqEntity(
+				{
+					id: 83,
+					owner: PLAYER,
+					position: centerOfCell(21, 20),
+					classes: ["Unit"],
+					templateName: "units/athen/infantry_archer_b",
+				},
+				{},
+				{ "garrisonType": "Tower" },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(83)], "owner": PLAYER }] }),
+		);
 		assert.equal(unit.getMetadata(PLAYER, "garrisonType"), undefined);
 	});
 
-	it("a finished unit of an aborted attack plans no more", async () => {
+	it("a finished unit of an aborted attack plans no more", async () =>
+	{
 		const { world, hq } = seat();
-		const unit = world.addEntity(makeHqEntity({
-			id: 84, owner: PLAYER, position: centerOfCell(21, 20),
-			classes: ["Unit"], templateName: "units/athen/infantry_spearman_b"
-		}, {}, { "plan": 12 }));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(84)], "owner": PLAYER }] }));
+		const unit = world.addEntity(
+			makeHqEntity(
+				{
+					id: 84,
+					owner: PLAYER,
+					position: centerOfCell(21, 20),
+					classes: ["Unit"],
+					templateName: "units/athen/infantry_spearman_b",
+				},
+				{},
+				{ "plan": 12 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(84)], "owner": PLAYER }] }),
+		);
 		assert.equal(unit.getMetadata(PLAYER, "plan"), -1);
 	});
 
-	it("a plan still waiting keeps its recruit", async () => {
-				const { world, hq } = seat();
+	it("a plan still waiting keeps its recruit", async () =>
+	{
+		const { world, hq } = seat();
 		// a raid plan that never started: the recruit recorded under its name
-		hq.attackManager.upcomingAttacks = byAttackType((type) =>
-			type === "Raid" ? [fake<AttackPlan>({ "getName": () => 12, "state": AttackPlan.STATE_UNEXECUTED })] : []);
-		const unit = world.addEntity(makeHqEntity({
-			id: 85, owner: PLAYER, position: centerOfCell(21, 20),
-			classes: ["Unit"], templateName: "units/athen/infantry_spearman_b"
-		}, {}, { "plan": 12 }));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(85)], "owner": PLAYER }] }));
+		hq.attackManager.upcomingAttacks = byAttackType(type =>
+			type === "Raid" ? [fake<AttackPlan>({ "getName": () => 12, "state": AttackPlan.STATE_UNEXECUTED })] : []
+		);
+		const unit = world.addEntity(
+			makeHqEntity(
+				{
+					id: 85,
+					owner: PLAYER,
+					position: centerOfCell(21, 20),
+					classes: ["Unit"],
+					templateName: "units/athen/infantry_spearman_b",
+				},
+				{},
+				{ "plan": 12 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(85)], "owner": PLAYER }] }),
+		);
 		assert.equal(unit.getMetadata(PLAYER, "plan"), 12);
 	});
 
-	it("a foreign unit finishing training is none of ours", () => {
+	it("a foreign unit finishing training is none of ours", () =>
+	{
 		const { world, hq } = seat();
-		const allyUnit = world.addEntity(makeHqEntity({
-			id: 86, owner: ENEMY, position: centerOfCell(30, 30),
-			classes: ["Unit"], templateName: "units/athen/unit"
-		}, {}, { "plan": 12 }));
-		hq.checkEvents(world.gameState, eventsWith({ "TrainingFinished": [{ "entities": [entityId(86)], "owner": PLAYER }] }));
+		const allyUnit = world.addEntity(
+			makeHqEntity(
+				{
+					id: 86,
+					owner: ENEMY,
+					position: centerOfCell(30, 30),
+					classes: ["Unit"],
+					templateName: "units/athen/unit",
+				},
+				{},
+				{ "plan": 12 },
+			),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TrainingFinished": [{ "entities": [entityId(86)], "owner": PLAYER }] }),
+		);
 		assert.equal(allyUnit.getMetadata(ENEMY, "plan"), 12);
 	});
 });
 
-describe("checkEvents: territory decay events", () => {
-	it("a wall in dead territory goes to the plain book, a tower to garrison", () => {
+describe("checkEvents: territory decay events", () =>
+{
+	it("a wall in dead territory goes to the plain book, a tower to garrison", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 91, owner: PLAYER, position: centerOfCell(12, 12),
-			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-		}, { "decaying": () => true }));
-		world.addEntity(makeHqEntity({
-			id: 92, owner: PLAYER, position: centerOfCell(12, 13),
-			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
-		}, {
-			"isGarrisonHolder": () => true, "hasDefensiveFire": () => true,
-			"territoryDecayRate": () => 6, "garrisonRegenRate": () => 2, "defaultRegenRate": () => 1
-		}));
-		hq.checkEvents(world.gameState, eventsWith({
-			"TerritoryDecayChanged": [
-				{ "entity": entityId(91), "to": true, "rate": 1 },
-				{ "entity": entityId(92), "to": true, "rate": 1 }
-			]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 91,
+				owner: PLAYER,
+				position: centerOfCell(12, 12),
+				classes: ["Structure", "Wall"],
+				templateName: "structures/athen/wall",
+			}, { "decaying": () => true }),
+		);
+		world.addEntity(
+			makeHqEntity({
+				id: 92,
+				owner: PLAYER,
+				position: centerOfCell(12, 13),
+				classes: ["Structure", "Tower"],
+				templateName: "structures/athen/watchtower",
+			}, {
+				"isGarrisonHolder": () => true,
+				"hasDefensiveFire": () => true,
+				"territoryDecayRate": () => 6,
+				"garrisonRegenRate": () => 2,
+				"defaultRegenRate": () => 1,
+			}),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({
+				"TerritoryDecayChanged": [{ "entity": entityId(91), "to": true, "rate": 1 }, {
+					"entity": entityId(92),
+					"to": true,
+					"rate": 1,
+				}],
+			}),
+		);
 		assert.ok(hq.decayingStructures.has(entityId(91)));
 		assert.ok(hq.garrisonManager.decayingStructures.has(entityId(92)));
 		assert.ok(!hq.decayingStructures.has(entityId(92)));
 	});
 
-	it("the tower recovered: the garrison bet is withdrawn", () => {
+	it("the tower recovered: the garrison bet is withdrawn", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 92, owner: PLAYER, position: centerOfCell(12, 13),
-			classes: ["Structure", "Tower"], templateName: "structures/athen/watchtower"
-		}, {
-			"isGarrisonHolder": () => true, "hasDefensiveFire": () => true,
-			"territoryDecayRate": () => 6, "garrisonRegenRate": () => 2, "defaultRegenRate": () => 1
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 92,
+				owner: PLAYER,
+				position: centerOfCell(12, 13),
+				classes: ["Structure", "Tower"],
+				templateName: "structures/athen/watchtower",
+			}, {
+				"isGarrisonHolder": () => true,
+				"hasDefensiveFire": () => true,
+				"territoryDecayRate": () => 6,
+				"garrisonRegenRate": () => 2,
+				"defaultRegenRate": () => 1,
+			}),
+		);
 		hq.garrisonManager.decayingStructures.set(entityId(92), 3);
-		hq.checkEvents(world.gameState, eventsWith({
-			"TerritoryDecayChanged": [{ "entity": entityId(92), "to": false, "rate": 1 }]
-		}));
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({ "TerritoryDecayChanged": [{ "entity": entityId(92), "to": false, "rate": 1 }] }),
+		);
 		assert.ok(!hq.garrisonManager.decayingStructures.has(entityId(92)));
 	});
 
-	it("a foundation and a foreign wall are not decayed property yet", () => {
+	it("a foundation and a foreign wall are not decayed property yet", () =>
+	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 93, owner: PLAYER, position: centerOfCell(12, 12),
-			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-		}, { "foundationProgress": () => 0.5, "decaying": () => true }));
-		world.addEntity(makeHqEntity({
-			id: 94, owner: ENEMY, position: centerOfCell(12, 14),
-			classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-		}, { "decaying": () => true }));
-		hq.checkEvents(world.gameState, eventsWith({
-			"TerritoryDecayChanged": [
-				{ "entity": entityId(93), "to": true, "rate": 1 },
-				{ "entity": entityId(94), "to": true, "rate": 1 }
-			]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 93,
+				owner: PLAYER,
+				position: centerOfCell(12, 12),
+				classes: ["Structure", "Wall"],
+				templateName: "structures/athen/wall",
+			}, { "foundationProgress": () => 0.5, "decaying": () => true }),
+		);
+		world.addEntity(
+			makeHqEntity({
+				id: 94,
+				owner: ENEMY,
+				position: centerOfCell(12, 14),
+				classes: ["Structure", "Wall"],
+				templateName: "structures/athen/wall",
+			}, { "decaying": () => true }),
+		);
+		hq.checkEvents(
+			world.gameState,
+			eventsWith({
+				"TerritoryDecayChanged": [{ "entity": entityId(93), "to": true, "rate": 1 }, {
+					"entity": entityId(94),
+					"to": true,
+					"rate": 1,
+				}],
+			}),
+		);
 		assert.ok(!hq.decayingStructures.has(entityId(93)));
 		assert.ok(!hq.decayingStructures.has(entityId(94)));
 	});
@@ -470,13 +758,22 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 		stubGlobal("randFloat", () => 0);
 		try
 		{
-			world.addEntity(makeHqEntity({
-				id: 101, owner: PLAYER, position: centerOfCell(12, 12),
-				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-			}, {
-				"decaying": () => true, "capturePoints": () => [0, 150, 50],
-				"destroy": () => { destroyed.push(101); }
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 101,
+					owner: PLAYER,
+					position: centerOfCell(12, 12),
+					classes: ["Structure", "Wall"],
+					templateName: "structures/athen/wall",
+				}, {
+					"decaying": () => true,
+					"capturePoints": () => [0, 150, 50],
+					"destroy": () =>
+					{
+						destroyed.push(101);
+					},
+				}),
+			);
 			hq.decayingStructures.add(entityId(101));
 			hq.checkEvents(world.gameState, eventsWith({ "Attacked": [] }));
 			// we still hold three quarters: above the 0.7 surrender line
@@ -484,7 +781,10 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 			// the book keeps the entry — the office keeps watching a standing wall
 			assert.ok(hq.decayingStructures.has(entityId(101)));
 		}
-		finally { restoreEngine(); }
+		finally
+		{
+			restoreEngine();
+		}
 	});
 
 	it("one attack at the wall moves the line and the falling wall goes", () =>
@@ -494,19 +794,34 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 		stubGlobal("randFloat", () => 0);
 		try
 		{
-			world.addEntity(makeHqEntity({
-				id: 102, owner: PLAYER, position: centerOfCell(12, 12),
-				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-			}, {
-				"decaying": () => true, "capturePoints": () => [0, 150, 50],
-				"destroy": () => { destroyed.push(102); }
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 102,
+					owner: PLAYER,
+					position: centerOfCell(12, 12),
+					classes: ["Structure", "Wall"],
+					templateName: "structures/athen/wall",
+				}, {
+					"decaying": () => true,
+					"capturePoints": () => [0, 150, 50],
+					"destroy": () =>
+					{
+						destroyed.push(102);
+					},
+				}),
+			);
 			hq.decayingStructures.add(entityId(102));
 			// the same capture ratio (0.75), but with someone shooting at it
-			hq.checkEvents(world.gameState, eventsWith({ "Attacked": [{ "target": entityId(102), "attacker": entityId(900) }] }));
+			hq.checkEvents(
+				world.gameState,
+				eventsWith({ "Attacked": [{ "target": entityId(102), "attacker": entityId(900) }] }),
+			);
 			assert.deepEqual(destroyed, [102]);
 		}
-		finally { restoreEngine(); }
+		finally
+		{
+			restoreEngine();
+		}
 	});
 
 	it("giving-in walls survive when the wild reclaims them or we still hold most", () =>
@@ -517,27 +832,48 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 		try
 		{
 			// no enemy shares a piece: the wall turns back to gaia, harmless
-			world.addEntity(makeHqEntity({
-				id: 103, owner: PLAYER, position: centerOfCell(12, 12),
-				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-			}, {
-				"decaying": () => true, "capturePoints": () => [0, 100],
-				"destroy": () => { destroyed.push(103); }
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 103,
+					owner: PLAYER,
+					position: centerOfCell(12, 12),
+					classes: ["Structure", "Wall"],
+					templateName: "structures/athen/wall",
+				}, {
+					"decaying": () => true,
+					"capturePoints": () => [0, 100],
+					"destroy": () =>
+					{
+						destroyed.push(103);
+					},
+				}),
+			);
 			// an enemy touching it, but 95% of the stones still ours
-			world.addEntity(makeHqEntity({
-				id: 104, owner: PLAYER, position: centerOfCell(12, 13),
-				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-			}, {
-				"decaying": () => true, "capturePoints": () => [0, 190, 10],
-				"destroy": () => { destroyed.push(104); }
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 104,
+					owner: PLAYER,
+					position: centerOfCell(12, 13),
+					classes: ["Structure", "Wall"],
+					templateName: "structures/athen/wall",
+				}, {
+					"decaying": () => true,
+					"capturePoints": () => [0, 190, 10],
+					"destroy": () =>
+					{
+						destroyed.push(104);
+					},
+				}),
+			);
 			hq.decayingStructures.add(entityId(103));
 			hq.decayingStructures.add(entityId(104));
 			hq.checkEvents(world.gameState, eventsWith({ "Attacked": [] }));
 			assert.deepEqual(destroyed, []);
 		}
-		finally { restoreEngine(); }
+		finally
+		{
+			restoreEngine();
+		}
 	});
 
 	it("in easy games the office shrugs at decaying walls", () =>
@@ -547,18 +883,30 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 		stubGlobal("randFloat", () => 0);
 		try
 		{
-			world.addEntity(makeHqEntity({
-				id: 105, owner: PLAYER, position: centerOfCell(12, 12),
-				classes: ["Structure", "Wall"], templateName: "structures/athen/wall"
-			}, {
-				"decaying": () => true, "capturePoints": () => [0, 100, 100],
-				"destroy": () => { destroyed.push(105); }
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 105,
+					owner: PLAYER,
+					position: centerOfCell(12, 12),
+					classes: ["Structure", "Wall"],
+					templateName: "structures/athen/wall",
+				}, {
+					"decaying": () => true,
+					"capturePoints": () => [0, 100, 100],
+					"destroy": () =>
+					{
+						destroyed.push(105);
+					},
+				}),
+			);
 			hq.decayingStructures.add(entityId(105));
 			hq.checkEvents(world.gameState, eventsWith({ "Attacked": [] }));
 			assert.deepEqual(destroyed, []);
 		}
-		finally { restoreEngine(); }
+		finally
+		{
+			restoreEngine();
+		}
 	});
 });
 
@@ -632,16 +980,19 @@ describe("updateTerritories: the town's borders move", () =>
 /** a villager able to raise the listed structures, put on the plain */
 function builder(world: HqWorld, id: number, buildables: string[], position: [number, number] = [14, 14])
 {
-	return world.addEntity(makeHqEntity({
-		id, "owner": PLAYER, position,
-		"classes": ["Unit", "Support", "Worker", "Villager"],
-		"templateName": "units/athen_support_villager",
-	}, {
-		"buildableEntities": () => buildables,
-	}));
+	return world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": PLAYER,
+			position,
+			"classes": ["Unit", "Support", "Worker", "Villager"],
+			"templateName": "units/athen_support_villager",
+		}, { "buildableEntities": () => buildables }),
+	);
 }
 
-describe("headquarters and first arrival: what a new civilization counts on day one", () => {
+describe("headquarters and first arrival: what a new civilization counts on day one", () =>
+{
 	it("a continental start books no scarcity and prepares one rush", () =>
 	{
 		const world = makeHqWorld({ "stock": { "food": 1000, "wood": 9000 } });
@@ -673,15 +1024,13 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 			// the island link to open sea 4, as naval campaign's navy reads it
 			"regionLinks": { 2: [4], 3: [3] },
 		});
-		const hq = seatHQ(world, {
-			stubs: doorManagers,
-			"navalRegions": { 4: true },
-		});
+		const hq = seatHQ(world, { stubs: doorManagers, "navalRegions": { 4: true } });
 		// the map's island is region 2 of 100 territory cells...
 		// (the harness default 100 cells * 2x2 = 400 map units, under every cut)
 		// the same list the manager campaigns register from territories
-		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
-			{ "classes": ["Structure", "Corral"] });
+		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral", {
+			"classes": ["Structure", "Corral"],
+		});
 		builder(world, 17, ["structures/athen/corral"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -707,8 +1056,9 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		const world = makeHqWorld({ "stock": { "food": 500, "wood": 1500 } });
 		Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
 		const hq = seatHQ(world, { stubs: doorManagers });
-		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
-			{ "classes": ["Structure", "Corral"] });
+		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral", {
+			"classes": ["Structure", "Corral"],
+		});
 		builder(world, 17, ["structures/athen/corral"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -727,8 +1077,10 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		{
 			const world = makeHqWorld({ "stock": { "food": 1000, "wood": 16000 }, "ceasefire": 1200 });
 			Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
-			const hq = seatHQ(world, { stubs: doorManagers,
-				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }) });
+			const hq = seatHQ(world, {
+				stubs: doorManagers,
+				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }),
+			});
 			hq.handleNewBase(world.gameState);
 			// allowed = ceil(7500/3000) = 3, but the truce lasts
 			assert.equal(hq.attackManager.maxRushes, 0);
@@ -737,8 +1089,10 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		{
 			const world = makeHqWorld({ "stock": { "food": 1000, "wood": 16000 }, "ceasefire": 700 });
 			Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
-			const hq = seatHQ(world, { stubs: doorManagers,
-				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }) });
+			const hq = seatHQ(world, {
+				stubs: doorManagers,
+				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }),
+			});
 			hq.handleNewBase(world.gameState);
 			assert.equal(hq.attackManager.maxRushes, 1);
 			assert.deepEqual(hq.attackManager.rushSize, [20]);
@@ -747,8 +1101,10 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		{
 			const world = makeHqWorld({ "stock": { "food": 1000, "wood": 16000 } });
 			Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
-			const hq = seatHQ(world, { stubs: doorManagers,
-				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }) });
+			const hq = seatHQ(world, {
+				stubs: doorManagers,
+				config: makeHQConfig({ "personality": { "aggressive": 0.8 } }),
+			});
 			hq.handleNewBase(world.gameState);
 			assert.equal(hq.attackManager.maxRushes, 3);
 			assert.deepEqual(hq.attackManager.rushSize, [16, 20, 24]);
@@ -765,8 +1121,24 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		// the gather-estimation map HQ records for its cells — the value
 		// updateResources books for a wood-that-matters there
 		const seedCC = dropsiteCC(world);
-		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
-		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 2,
+				"position": [140, 100],
+				"generic": "wood",
+				"specific": "tree",
+				"classes": ["Forest"],
+			}),
+		);
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 3,
+				"position": [146, 96],
+				"generic": "wood",
+				"specific": "tree",
+				"classes": ["Forest"],
+			}),
+		);
 		const { width } = world.map.territory;
 		const forestCell = (140 / 8 | 0) + width * (100 / 8 | 0);
 		const woodMap = world.gameState.sharedScript.resourceMaps.wood.map;
@@ -775,8 +1147,10 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		// the depot scanner only looks inside the claimed ground
 		hq.updateTerritories(world.gameState);
 
-		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
-			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"] });
+		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
+			"classes": ["Structure", "DropsiteWood"],
+			"dropsiteTypes": ["wood"],
+		});
 		builder(world, 17, ["structures/athen/storehouse"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -808,14 +1182,33 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
 		const hq = seatHQ(world, { stubs: doorManagers });
 		const seedCC = dropsiteCC(world);
-		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
-		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood", "specific": "tree", "classes": ["Forest"] }));
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 2,
+				"position": [140, 100],
+				"generic": "wood",
+				"specific": "tree",
+				"classes": ["Forest"],
+			}),
+		);
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 3,
+				"position": [146, 96],
+				"generic": "wood",
+				"specific": "tree",
+				"classes": ["Forest"],
+			}),
+		);
 		const { width } = world.map.territory;
 		const woodMap = world.gameState.sharedScript.resourceMaps.wood.map;
 		woodMap[(140 / 8 | 0) + width * (100 / 8 | 0)] = 100;
 		hq.updateTerritories(world.gameState);
-		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
-			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"], "cost": { "wood": 100 } });
+		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
+			"classes": ["Structure", "DropsiteWood"],
+			"dropsiteTypes": ["wood"],
+			"cost": { "wood": 100 },
+		});
 		builder(world, 17, ["structures/athen/storehouse"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, seedCC, false);
@@ -835,8 +1228,10 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		const hq = seatHQ(world, { stubs: doorManagers });
 
 		dropsiteCC(world);
-		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse",
-			{ "classes": ["Structure", "DropsiteWood"], "dropsiteTypes": ["wood"] });
+		world.templates["structures/athen/storehouse"] = structureTemplate("structures/athen/storehouse", {
+			"classes": ["Structure", "DropsiteWood"],
+			"dropsiteTypes": ["wood"],
+		});
 		builder(world, 17, ["structures/athen/storehouse"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -851,11 +1246,15 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 	{
 		const world = makeHqWorld({ "stock": { "food": 300, "wood": 900 } });
 		const hq = seatHQ(world, { stubs: doorManagers });
-		world.addEntity(makeHqEntity({
-			id: 500, "owner": PLAYER, "position": [15, 15],
-			"classes": ["Structure", "Corral"],
-			"templateName": "structures/athen_corral",
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 500,
+				"owner": PLAYER,
+				"position": [15, 15],
+				"classes": ["Structure", "Corral"],
+				"templateName": "structures/athen_corral",
+			}),
+		);
 
 		configFirstBase(hq, world.gameState);
 		assert.equal(hq.needCorral, true);
@@ -894,40 +1293,44 @@ function trainerTown(world: HqWorld): { civicCentre: CommonEntity; barracks: Com
 	// queue still answers []), so the CC is a facility even at rest
 	civicCentre.trainingQueue = () => [];
 	civicCentre.trainableEntities = () => [templateName("units/athen/support_civilian")];
-	world.templates["units/athen/support_civilian"] = makeTemplate("units/athen/support_civilian",
-		{
-			"classes": ["Unit", "Human", "Support", "Builder", "Civilian", "Worker"],
-			"cost": { "food": 50 }, "walkSpeed": 9,
-			"getPaths": { "Cost": { "Population": 1 } }
-		});
-	const barracks = world.addEntity(makeHqEntity({
-		"id": 400, "owner": PLAYER, "position": [104, 140],
-		"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks",
-	}, { "trainingQueue": () => [] }));
-	barracks.trainableEntities = () => [
-		templateName("units/athen/infantry_spearman_b"), templateName("units/athen/infantry_archer_b")
-	];
-	world.templates["structures/athen/barracks"] = structureTemplate("structures/athen/barracks",
-		{ "classes": ["Structure", "Barracks"] });
+	world.templates["units/athen/support_civilian"] = makeTemplate("units/athen/support_civilian", {
+		"classes": ["Unit", "Human", "Support", "Builder", "Civilian", "Worker"],
+		"cost": { "food": 50 },
+		"walkSpeed": 9,
+		"getPaths": { "Cost": { "Population": 1 } },
+	});
+	const barracks = world.addEntity(
+		makeHqEntity({
+			"id": 400,
+			"owner": PLAYER,
+			"position": [104, 140],
+			"classes": ["Structure", "Barracks"],
+			"templateName": "structures/athen/barracks",
+		}, { "trainingQueue": () => [] }),
+	);
+	barracks.trainableEntities =
+		() => [templateName("units/athen/infantry_spearman_b"), templateName("units/athen/infantry_archer_b")];
+	world.templates["structures/athen/barracks"] = structureTemplate("structures/athen/barracks", {
+		"classes": ["Structure", "Barracks"],
+	});
 	// crops under the walls: the full 0.3 support share applies unless a
 	// suite drops the field again (the lost-fields suite)
-	world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
-		{ "classes": ["Structure", "Economic", "Field"] });
-	world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
-		{
-			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee",
-				"Spearman", "Worker", "Citizen"],
-			// the infantry base costs 50 food, the spearman adds 50 wood
-			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
-			"getPaths": { "Cost": { "Population": 1 } }
-		});
-	world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b",
-		{
-			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged",
-				"Archer", "Worker", "Citizen"],
-			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9,
-			"getPaths": { "Cost": { "Population": 1 } }
-		});
+	world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
+		"classes": ["Structure", "Economic", "Field"],
+	});
+	world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+		"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Spearman", "Worker", "Citizen"],
+		// the infantry base costs 50 food, the spearman adds 50 wood
+		"cost": { "food": 50, "wood": 50 },
+		"walkSpeed": 9.5,
+		"getPaths": { "Cost": { "Population": 1 } },
+	});
+	world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b", {
+		"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged", "Archer", "Worker", "Citizen"],
+		"cost": { "food": 50, "wood": 50 },
+		"walkSpeed": 9,
+		"getPaths": { "Cost": { "Population": 1 } },
+	});
 	return { civicCentre, barracks };
 }
 
@@ -935,39 +1338,52 @@ function trainerTown(world: HqWorld): { civicCentre: CommonEntity; barracks: Com
 function hand(world: HqWorld, id: number, soldier: boolean): CommonEntity
 {
 	const spec = soldier ?
-		{ "id": id, "owner": PLAYER, "position": [80 + id, 80 + id] as [number, number],
+		{
+			"id": id,
+			"owner": PLAYER,
+			"position": [80 + id, 80 + id] as [number, number],
 			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Worker"],
-			"templateName": "units/athen/infantry_spearman_b" } :
-		{ "id": id, "owner": PLAYER, "position": [60 + id, 60 + id] as [number, number],
+			"templateName": "units/athen/infantry_spearman_b",
+		} :
+		{
+			"id": id,
+			"owner": PLAYER,
+			"position": [60 + id, 60 + id] as [number, number],
 			"classes": ["Unit", "Human", "Support", "Worker", "Civilian", "Builder"],
-			"templateName": "units/athen/support_civilian" };
+			"templateName": "units/athen/support_civilian",
+		};
 	const ent = world.addEntity(makeHqEntity(spec, {}, { "role": "worker" })) as CommonEntity;
 	return ent;
 }
 
 /** seed a live training order on a queue, as a started TrainingPlan sits */
-function trainingOrder(world: HqWorld, queueName: PetraRuntime.ConfiguredQueueName, template: string,
-	number: number, metadata: Record<string, unknown>, count = 1)
+function trainingOrder(
+	world: HqWorld,
+	queueName: PetraRuntime.ConfiguredQueueName,
+	template: string,
+	number: number,
+	metadata: Record<string, unknown>,
+	count = 1,
+)
 {
 	const queues = world.ai.queues;
 	for (let i = 0; i < count; ++i)
-		queues[queueName].addPlan(new TrainingPlan(world.gameState, template, metadata,
-			number, Math.max(number, 5)));
+		queues[queueName].addPlan(new TrainingPlan(world.gameState, template, metadata, number, Math.max(number, 5)));
 }
 
-describe("headquarters and phase advance: what the city still lacks", () => {
+describe("headquarters and phase advance: what the city still lacks", () =>
+{
 	it("a town requirement orders the market; the phase-up booking goes through", () =>
 	{
 		// the real ladder (phase_city_generic.json) asks three Town-class
 		// structures before the city research completes; a fresh town holds
 		// its civic centre (not a Town-class building — the civil centre
 		// template carries no Town token) so the office must raise one
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] } });
 
-		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
-			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
+			"classes": ["Structure", "Trade", "Town", "Market"],
+		});
 		builder(world, 17, ["structures/athen/market"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -991,19 +1407,23 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 	{
 		// a market stands (it counts Town) so the next code path looks for
 		// the second town anchor of a real city core
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] } });
 
-		world.addEntity(makeHqEntity({
-			"id": 500, "owner": PLAYER, "position": [80, 120],
+		world.addEntity(
+			makeHqEntity({
+				"id": 500,
+				"owner": PLAYER,
+				"position": [80, 120],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
 			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market",
-		}));
-		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
-			{ "classes": ["Structure", "Trade", "Town", "Market"] });
-		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple",
-			{ "classes": ["Structure", "Town", "Temple"] });
+		});
+		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple", {
+			"classes": ["Structure", "Town", "Temple"],
+		});
 		builder(world, 17, ["structures/athen/temple"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -1017,22 +1437,29 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 
 	it("market and temple standing: the forge answers on the military queue", () =>
 	{
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] } });
 
-		world.addEntity(makeHqEntity({
-			"id": 500, "owner": PLAYER, "position": [80, 120],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market",
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 501, "owner": PLAYER, "position": [96, 120],
-			"classes": ["Structure", "Town", "Temple"],
-			"templateName": "structures/athen/temple",
-		}));
-		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
-			{ "classes": ["Structure", "Town", "Forge"] });
+		world.addEntity(
+			makeHqEntity({
+				"id": 500,
+				"owner": PLAYER,
+				"position": [80, 120],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 501,
+				"owner": PLAYER,
+				"position": [96, 120],
+				"classes": ["Structure", "Town", "Temple"],
+				"templateName": "structures/athen/temple",
+			}),
+		);
+		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge", {
+			"classes": ["Structure", "Town", "Forge"],
+		});
 		builder(world, 17, ["structures/athen/forge"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -1051,31 +1478,46 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 	{
 		// market, temple and forge all carry the Town visible class — with
 		// three of them the city-bound count is satisfied
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] } });
 
-		world.addEntity(makeHqEntity({
-			"id": 500, "owner": PLAYER, "position": [80, 120],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market",
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 501, "owner": PLAYER, "position": [96, 120],
-			"classes": ["Structure", "Town", "Temple"],
-			"templateName": "structures/athen/temple",
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 502, "owner": PLAYER, "position": [112, 120],
-			"classes": ["Structure", "Town", "Forge"],
-			"templateName": "structures/athen/forge",
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 500,
+				"owner": PLAYER,
+				"position": [80, 120],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 501,
+				"owner": PLAYER,
+				"position": [96, 120],
+				"classes": ["Structure", "Town", "Temple"],
+				"templateName": "structures/athen/temple",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 502,
+				"owner": PLAYER,
+				"position": [112, 120],
+				"classes": ["Structure", "Town", "Forge"],
+				"templateName": "structures/athen/forge",
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
 		// every queue stays empty and untouched
-		const untouched: PetraRuntime.ConfiguredQueueName[] = ["economicBuilding", "militaryBuilding", "wonder", "majorTech"];
+		const untouched: PetraRuntime.ConfiguredQueueName[] = [
+			"economicBuilding",
+			"militaryBuilding",
+			"wonder",
+			"majorTech",
+		];
 		for (const queue of untouched)
 			assert.equal(world.ai.queues[queue].plans.length, 0, queue);
 		// no priority was lifted
@@ -1087,49 +1529,49 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 	{
 		// the town's line already builds a corral for the herd; the office
 		// will not wedge the market in front of a running project
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Town", "count": 3 }] } });
 
-		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
-			{ "classes": ["Structure", "Trade", "Town", "Market"] });
-		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple",
-			{ "classes": ["Structure", "Town", "Temple"] });
-		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge",
-			{ "classes": ["Structure", "Town", "Forge"] });
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
+			"classes": ["Structure", "Trade", "Town", "Market"],
+		});
+		world.templates["structures/athen/temple"] = structureTemplate("structures/athen/temple", {
+			"classes": ["Structure", "Town", "Temple"],
+		});
+		world.templates["structures/athen/forge"] = structureTemplate("structures/athen/forge", {
+			"classes": ["Structure", "Town", "Forge"],
+		});
 		builder(world, 17, ["structures/athen/market"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral",
-			{ "classes": ["Structure", "Corral"] });
+		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral", {
+			"classes": ["Structure", "Corral"],
+		});
 		const queues = world.ai.queues;
-		queues.economicBuilding.addPlan(new ConstructionPlan(world.gameState,
-			"structures/athen/corral"));
+		queues.economicBuilding.addPlan(new ConstructionPlan(world.gameState, "structures/athen/corral"));
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
 		// the corral remains the only order on the economic line
 		assert.equal(queues.economicBuilding.plans.length, 1);
 		assert.equal(queues.economicBuilding.plans[0].type, "structures/athen/corral");
-		assert.equal((queues.militaryBuilding).plans.length, 0);
+		assert.equal(queues.militaryBuilding.plans.length, 0);
 	});
 
 	it("the village count is the houses' business, not the office's", () =>
 	{
 		// the true phase-town requirement (phase_town_generic.json) reads
 		// five Village-class structures; the office leaves houses half of it
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Village", "count": 5 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Village", "count": 5 }] } });
 
-		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market",
-			{ "classes": ["Structure", "Trade", "Town", "Market"] });
+		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
+			"classes": ["Structure", "Trade", "Town", "Market"],
+		});
 		builder(world, 17, ["structures/athen/market"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
 
-		assert.equal((world.ai.queues.economicBuilding).plans.length, 0);
+		assert.equal(world.ai.queues.economicBuilding.plans.length, 0);
 		const priority = world.ai.queueManager.getPriority("economicBuilding");
 		assert.equal(priority, 700);
 	});
@@ -1138,12 +1580,11 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 	{
 		// wonder victory worlds require their wonder before the last phase:
 		// the office steers the class-less requirement to the wonder queue
-		const { world, hq } = seat({
-			"phaseRequirements": { 2: [{ "class": "Wonder", "count": 1 }] }
-		});
+		const { world, hq } = seat({ "phaseRequirements": { 2: [{ "class": "Wonder", "count": 1 }] } });
 
-		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder",
-			{ "classes": ["Structure", "City", "Wonder"] });
+		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder", {
+			"classes": ["Structure", "City", "Wonder"],
+		});
 		builder(world, 17, ["structures/athen/wonder"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -1159,7 +1600,8 @@ describe("headquarters and phase advance: what the city still lacks", () => {
 	});
 });
 
-describe("headquarters and the workforce: how many hands the village asks for", () => {
+describe("headquarters and the workforce: how many hands the village asks for", () =>
+{
 	it("eight hands out, ten more on the books: the orders trim back to one", async () =>
 	{
 		// eight workers stand in the fields, two queued orders of ten hands
@@ -1171,8 +1613,11 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		assert.ok(civicCentre && barracks);
 		for (let i = 0; i < 8; ++i)
 			hand(world, 500 + i, false);
-		trainingOrder(world, "villager", "units/athen/support_civilian", 10,
-			{ "role": "worker", "base": 0, "support": true }, 2);
+		trainingOrder(world, "villager", "units/athen/support_civilian", 10, {
+			"role": "worker",
+			"base": 0,
+			"support": true,
+		}, 2);
 
 		// the queued supports now stand far past the share the office
 		// wants, so the next order goes to the barracks; the office
@@ -1220,8 +1665,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		assert.equal(queues.villager.plans[0].type, "units/athen/support_civilian");
 		// the batch reads ceil(30/10) = 3
 		assert.equal(queues.villager.plans[0].number, 3);
-		assert.deepEqual(queues.villager.plans[0].metadata,
-			{ "role": "worker", "base": 0, "support": true });
+		assert.deepEqual(queues.villager.plans[0].metadata, { "role": "worker", "base": 0, "support": true });
 		assert.equal(queues.citizenSoldier.plans.length, 0);
 	});
 
@@ -1263,8 +1707,20 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		const { world, hq } = seat();
 		trainerTown(world);
 		world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b", {
-			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Ranged", "Archer", "Worker", "Mercenary"],
-			"cost": { "food": 50, "metal": 50 }, "walkSpeed": 9, "getPaths": { "Cost": { "Population": 1 } }
+			"classes": [
+				"Unit",
+				"Human",
+				"CitizenSoldier",
+				"Soldier",
+				"Infantry",
+				"Ranged",
+				"Archer",
+				"Worker",
+				"Mercenary",
+			],
+			"cost": { "food": 50, "metal": 50 },
+			"walkSpeed": 9,
+			"getPaths": { "Cost": { "Population": 1 } },
 		});
 		for (let i = 0; i < 16; ++i)
 			hand(world, 500 + i, false);
@@ -1278,7 +1734,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hq.trainMoreWorkers(world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
-			assert.deepEqual(queues.citizenSoldier.plans.map((plan) => plan.type), [], "no mercenary in the worker line");
+			assert.deepEqual(queues.citizenSoldier.plans.map(plan => plan.type), [], "no mercenary in the worker line");
 			assert.equal(queues.villager.plans.length, 1);
 		}
 		finally
@@ -1295,9 +1751,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		// 30 · (1 − e^−1) = 19.0 — one hand beyond the standing count,
 		// so the truce town trains a civilian where the open town would
 		// not
-		const { world, hq } = seat({
-			"ceasefire": true
-		});
+		const { world, hq } = seat({ "ceasefire": true });
 		trainerTown(world);
 		for (let i = 0; i < 18; ++i)
 			hand(world, 500 + i, false);
@@ -1352,8 +1806,9 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		// 17.2, so the villager line books the next order
 		const { world, hq } = seat();
 		trainerTown(world);
-		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
-			{ "classes": ["Structure", "Economic", "Field"] });
+		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
+			"classes": ["Structure", "Economic", "Field"],
+		});
 		for (let i = 0; i < 8; ++i)
 			hand(world, 500 + i, false);
 		for (let i = 0; i < 22; ++i)
@@ -1374,8 +1829,11 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		trainerTown(world);
 		for (let i = 0; i < 13; ++i)
 			hand(world, 500 + i, false);
-		trainingOrder(world, "villager", "units/athen/support_civilian", 9,
-			{ "role": "worker", "base": 0, "support": true });
+		trainingOrder(world, "villager", "units/athen/support_civilian", 9, {
+			"role": "worker",
+			"base": 0,
+			"support": true,
+		});
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
 
@@ -1391,8 +1849,11 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		trainerTown(world);
 		for (let i = 0; i < 70; ++i)
 			hand(world, 500 + i, false);
-		trainingOrder(world, "villager", "units/athen/support_civilian", 9,
-			{ "role": "worker", "base": 0, "support": true });
+		trainingOrder(world, "villager", "units/athen/support_civilian", 9, {
+			"role": "worker",
+			"base": 0,
+			"support": true,
+		});
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
 
@@ -1461,12 +1922,13 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		const { world, hq } = seat({
 			"researching": ["phase_city"],
 			// the city tech exists, and sits being researched
-			"phaseName": "phase_city"
+			"phaseName": "phase_city",
 		});
 		trainerTown(world);
 		hq.Config.Economy.popPhase2 = 1;
-		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field",
-			{ "classes": ["Structure", "Economic", "Field"] });
+		world.templates["structures/athen/field"] = structureTemplate("structures/athen/field", {
+			"classes": ["Structure", "Economic", "Field"],
+		});
 		for (let i = 0; i < 5; ++i)
 			hand(world, 500 + i, false);
 		for (let i = 0; i < 7; ++i)
@@ -1490,10 +1952,14 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		assert.ok(civicCentre && barracks);
 		// one live sixteen-hand order, shaped as the engine lists it
 		// (entity.js: unitTemplate, count, metadata)
-		civicCentre.trainingQueue = () => [fake<CommonTrainingQueueItem>(
-			{ "count": 16, "unitTemplate": templateName("units/athen/support_civilian"),
-				"metadata": { "role": "worker", "support": true } })
-		];
+		civicCentre.trainingQueue =
+			() => [
+				fake<CommonTrainingQueueItem>({
+					"count": 16,
+					"unitTemplate": templateName("units/athen/support_civilian"),
+					"metadata": { "role": "worker", "support": true },
+				}),
+			];
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
 
@@ -1510,10 +1976,19 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		const { world, hq } = seat();
 		const { civicCentre, barracks } = trainerTown(world);
 		assert.ok(civicCentre && barracks);
-		trainingOrder(world, "villager", "units/athen/support_civilian", 10,
-			{ "role": "worker", "base": 0, "support": true }, 4);
-		trainingOrder(world, "citizenSoldier", "units/athen/infantry_spearman_b", 10,
-			{ "role": "worker", "base": 0 }, 4);
+		trainingOrder(world, "villager", "units/athen/support_civilian", 10, {
+			"role": "worker",
+			"base": 0,
+			"support": true,
+		}, 4);
+		trainingOrder(
+			world,
+			"citizenSoldier",
+			"units/athen/infantry_spearman_b",
+			10,
+			{ "role": "worker", "base": 0 },
+			4,
+		);
 
 		hq.trainMoreWorkers(world.gameState, world.ai.queues);
 
@@ -1528,10 +2003,15 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		// mid-foundations trains nothing): the office has no villager and
 		// no soldier to order, and both queues stand still
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			"id": 400, "owner": PLAYER, "position": [104, 140],
-			"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks",
-		}, { "trainingQueue": () => [] }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 400,
+				"owner": PLAYER,
+				"position": [104, 140],
+				"classes": ["Structure", "Barracks"],
+				"templateName": "structures/athen/barracks",
+			}, { "trainingQueue": () => [] }),
+		);
 		for (let i = 0; i < 3; ++i)
 			hand(world, 500 + i, false);
 
@@ -1543,7 +2023,8 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 	});
 });
 
-describe("headquarters and the recruit choice: what the weights pick", () => {
+describe("headquarters and the recruit choice: what the weights pick", () =>
+{
 	// the comparator the office runs on its two recruit bills: value =
 	// 0.1 + Σ param·weight, then every resource the card costs multiplies
 	// that value by its costsResource weight, and the order divides by
@@ -1554,8 +2035,7 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 	{
 		const { world, hq } = seat();
 		// no facility anywhere on the plain — the camp answers no card
-		const best = hq.findBestTrainableUnit(world.gameState, ["Support+Worker"],
-			[["costsResource", 1, "food"]]);
+		const best = hq.findBestTrainableUnit(world.gameState, ["Support+Worker"], [["costsResource", 1, "food"]]);
 
 		assert.equal(best, undefined);
 	});
@@ -1570,8 +2050,10 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		const { world, hq } = seat({ "stock": { "food": 1000, "wood": 1000 } });
 		trainerTown(world);
 
-		const best = hq.findBestTrainableUnit(world.gameState,
-			[["CitizenSoldier", "Infantry", "Melee"]], [["speed", 0.5]]);
+		const best = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry", "Melee"]], [[
+			"speed",
+			0.5,
+		]]);
 
 		assert.equal(best, "units/athen/infantry_spearman_b");
 	});
@@ -1594,32 +2076,50 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		const { world, hq } = seat({ "stock": { "food": 1000, "wood": 1000 } });
 		trainerTown(world);
 		// the two recruit cards carry their real attack blocks
-		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
-			{
-				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
-					"Melee", "Spearman", "Worker", "Citizen"],
-				"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
-				"getPaths": { "Cost": { "Population": 1 } },
-				"attackTypes": ["Melee", "Slaughter"],
-				"attackStrengths": { "Melee": { "Hack": 4.5, "Pierce": 4 } },
-				"attackRanges": { "Melee": { "max": 4 } },
-				"attackTimes": { "Melee": { "prepare": 500, "repeat": 1000 } },
-				"resistanceStrengths": { "Hack": 3, "Pierce": 3 },
-				"maxHitpoints": 100
-			});
-		world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b",
-			{
-				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
-					"Ranged", "Archer", "Worker", "Citizen"],
-				"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9,
-				"getPaths": { "Cost": { "Population": 1 } },
-				"attackTypes": ["Ranged", "Slaughter"],
-				"attackStrengths": { "Ranged": { "Pierce": 7.2 } },
-				"attackRanges": { "Ranged": { "max": 60 } },
-				"attackTimes": { "Ranged": { "prepare": 800, "repeat": 1250 } },
-				"resistanceStrengths": { "Hack": 1, "Pierce": 1 },
-				"maxHitpoints": 50
-			});
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+			"classes": [
+				"Unit",
+				"Human",
+				"CitizenSoldier",
+				"Soldier",
+				"Infantry",
+				"Melee",
+				"Spearman",
+				"Worker",
+				"Citizen",
+			],
+			"cost": { "food": 50, "wood": 50 },
+			"walkSpeed": 9.5,
+			"getPaths": { "Cost": { "Population": 1 } },
+			"attackTypes": ["Melee", "Slaughter"],
+			"attackStrengths": { "Melee": { "Hack": 4.5, "Pierce": 4 } },
+			"attackRanges": { "Melee": { "max": 4 } },
+			"attackTimes": { "Melee": { "prepare": 500, "repeat": 1000 } },
+			"resistanceStrengths": { "Hack": 3, "Pierce": 3 },
+			"maxHitpoints": 100,
+		});
+		world.templates["units/athen/infantry_archer_b"] = makeTemplate("units/athen/infantry_archer_b", {
+			"classes": [
+				"Unit",
+				"Human",
+				"CitizenSoldier",
+				"Soldier",
+				"Infantry",
+				"Ranged",
+				"Archer",
+				"Worker",
+				"Citizen",
+			],
+			"cost": { "food": 50, "wood": 50 },
+			"walkSpeed": 9,
+			"getPaths": { "Cost": { "Population": 1 } },
+			"attackTypes": ["Ranged", "Slaughter"],
+			"attackStrengths": { "Ranged": { "Pierce": 7.2 } },
+			"attackRanges": { "Ranged": { "max": 60 } },
+			"attackTimes": { "Ranged": { "prepare": 800, "repeat": 1250 } },
+			"resistanceStrengths": { "Hack": 1, "Pierce": 1 },
+			"maxHitpoints": 50,
+		});
 		// twenty-three supports and twenty-two hoplites on the payroll: the
 		// support share 30·(1 − e^−0.85·45/30) = 21.6 stands below the
 		// standing supports, so the barracks answers, and 45 in total
@@ -1661,13 +2161,13 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		// 0.1·0.2/21 = 0.00095: the untouched card leads
 		const { world, hq } = seat({ "stock": { "food": 1000 } });
 		trainerTown(world);
-		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
-			{
-				"classes": ["Unit", "Infantry"], "cost": { "stone": 20 }, "walkSpeed": 9.5
-			});
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+			"classes": ["Unit", "Infantry"],
+			"cost": { "stone": 20 },
+			"walkSpeed": 9.5,
+		});
 
-		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"],
-			[["costsResource", 1, "food"]]);
+		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"], [["costsResource", 1, "food"]]);
 
 		assert.equal(best, "units/athen/support_civilian");
 	});
@@ -1681,22 +2181,38 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		const { world, hq } = seat({ "stock": { "food": 1000, "stone": 200, "metal": 200 } });
 		const { civicCentre } = trainerTown(world);
 		assert.ok(civicCentre);
-		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
-			{
-				"classes": ["Unit", "Infantry"], "cost": { "stone": 20 }, "walkSpeed": 9.5
-			});
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+			"classes": ["Unit", "Infantry"],
+			"cost": { "stone": 20 },
+			"walkSpeed": 9.5,
+		});
 		dropsiteCC(world);
 		// two stone mines of 300 next to the civic centre; the ledger loop
 		// is the storehouse test's (it walks assignResourceToDropsite)
-		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100],
-			"generic": "stone", "specific": "stone", "classes": ["Stone"], "amount": 300 }));
-		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96],
-			"generic": "stone", "specific": "stone", "classes": ["Stone"], "amount": 300 }));
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 2,
+				"position": [140, 100],
+				"generic": "stone",
+				"specific": "stone",
+				"classes": ["Stone"],
+				"amount": 300,
+			}),
+		);
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 3,
+				"position": [146, 96],
+				"generic": "stone",
+				"specific": "stone",
+				"classes": ["Stone"],
+				"amount": 300,
+			}),
+		);
 		hq.updateTerritories(world.gameState);
 		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, civicCentre, false);
 
-		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"],
-			[["costsResource", 1, "food"]]);
+		const best = hq.findBestTrainableUnit(world.gameState, ["Unit"], [["costsResource", 1, "food"]]);
 
 		assert.equal(best, "units/athen/infantry_spearman_b");
 	});
@@ -1709,20 +2225,20 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
 		const { world, hq } = seat();
 		trainerTown(world);
 		// unequal bills so the compared order stays deterministic
-		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b",
-			{
-				"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry",
-					"Melee", "Worker", "Citizen"],
-				"cost": { "food": 50, "wood": 30 }, "walkSpeed": 9.5,
-				"getPaths": { "Cost": { "Population": 1 } }
-			});
+		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
+			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Worker", "Citizen"],
+			"cost": { "food": 50, "wood": 30 },
+			"walkSpeed": 9.5,
+			"getPaths": { "Cost": { "Population": 1 } },
+		});
 
 		resetRecorder();
-		const best = hq.findBestTrainableUnit(world.gameState,
-			[["CitizenSoldier", "Infantry"]], [["magnetism", 1]]);
+		const best = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry"]], [["magnetism", 1]]);
 
-		assert.ok(logs.some((entry) => /trainMoreUnits avec non prevu/.test(entry)),
-			"the unexpected parameter was logged");
+		assert.ok(
+			logs.some(entry => /trainMoreUnits avec non prevu/.test(entry)),
+			"the unexpected parameter was logged",
+		);
 		// both cards read the same 0.1 base, so the cheaper bill leads
 		assert.equal(best, "units/athen/infantry_spearman_b");
 	});
@@ -1736,37 +2252,43 @@ describe("headquarters and the recruit choice: what the weights pick", () => {
  * stone tower 13x13. Every footprint walk needs the "@"-prefixed attribute
  * leaves the template walk reads, otherwise halfSize turns NaN and silently
  * disables the enemy-fire checks. */
-const ccTemplate = () => structureTemplate("structures/athen/civil_centre", {
-	"classes": ["Structure", "CivCentre"],
-	"territories": ["own", "neutral"],
-	"getPaths": { "Footprint": { "Square": { "@width": 32, "@depth": 32 } } },
-	"obstruction": { "min": 15, "max": 21.2 }
-});
-const marketTemplate = () => structureTemplate("structures/athen/market", {
-	"classes": ["Structure", "Trade", "Town", "Market"],
-	"getPaths": { "Footprint": { "Square": { "@width": 33, "@depth": 29 } } },
-	"obstruction": { "min": 13, "max": 21.96 }
-});
-const fortressTemplate = () => structureTemplate("structures/athen/fortress", {
-	"classes": ["Structure", "Fortress", "Defensive"],
-	"getPaths": { "Footprint": { "Square": { "@width": 30, "@depth": 30 } } },
-	"obstruction": { "min": 15, "max": 21.2 }
-});
-const towerTemplate = () => structureTemplate("structures/athen/defense_tower", {
-	"classes": ["Structure", "Tower", "Defensive"],
-	"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
-	"obstruction": { "min": 6, "max": 9.2 }
-});
+const ccTemplate = () =>
+	structureTemplate("structures/athen/civil_centre", {
+		"classes": ["Structure", "CivCentre"],
+		"territories": ["own", "neutral"],
+		"getPaths": { "Footprint": { "Square": { "@width": 32, "@depth": 32 } } },
+		"obstruction": { "min": 15, "max": 21.2 },
+	});
+const marketTemplate = () =>
+	structureTemplate("structures/athen/market", {
+		"classes": ["Structure", "Trade", "Town", "Market"],
+		"getPaths": { "Footprint": { "Square": { "@width": 33, "@depth": 29 } } },
+		"obstruction": { "min": 13, "max": 21.96 },
+	});
+const fortressTemplate = () =>
+	structureTemplate("structures/athen/fortress", {
+		"classes": ["Structure", "Fortress", "Defensive"],
+		"getPaths": { "Footprint": { "Square": { "@width": 30, "@depth": 30 } } },
+		"obstruction": { "min": 15, "max": 21.2 },
+	});
+const towerTemplate = () =>
+	structureTemplate("structures/athen/defense_tower", {
+		"classes": ["Structure", "Tower", "Defensive"],
+		"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
+		"obstruction": { "min": 6, "max": 9.2 },
+	});
 
 /** the ally trade cards: getTraderTemplatesGains only quotes a gain when the
  * trader templates exist (a real game always has them, so a market suite that
  * wants a counted route must seat the two cards). */
 function seatTraders(world: HqWorld): void
 {
-	world.templates["units/{civ}/support_trader"] = makeTemplate("units/{civ}/support_trader",
-		{ "classes": ["Unit", "Support", "Trader"] });
-	world.templates["units/{civ}/ship_merchant"] = makeTemplate("units/{civ}/ship_merchant",
-		{ "classes": ["Unit", "Ship", "Trader"] });
+	world.templates["units/{civ}/support_trader"] = makeTemplate("units/{civ}/support_trader", {
+		"classes": ["Unit", "Support", "Trader"],
+	});
+	world.templates["units/{civ}/ship_merchant"] = makeTemplate("units/{civ}/ship_merchant", {
+		"classes": ["Unit", "Ship", "Trader"],
+	});
 }
 
 describe("findStrategicCCLocation: the ground the next town claims", () =>
@@ -1780,17 +2302,23 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 		const { world, hq } = seat();
 		// the board is settled: a second allied town takes the far corner and
 		// every territory cell stayed ours, so no gaia ground is left to claim
-		world.addEntity(makeHqEntity({
-			"id": 2100, "owner": PLAYER, "position": [308, 308],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2100,
+				"owner": PLAYER,
+				"position": [308, 308],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
 		const result = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate()));
 		assert.equal(result, undefined, "no position is claimed");
 		// and the transport question was never asked of a positionless base
-		assert.ok(!doorCalls(hq.navalManager).some(([call]: [string, unknown[]]) =>
-			call === "setMinimalTransportShips"),
-			"no ships were budgeted for a positionless base");
+		assert.ok(
+			!doorCalls(hq.navalManager).some(([call]: [string, unknown[]]) => call === "setMinimalTransportShips"),
+			"no ships were budgeted for a positionless base",
+		);
 	});
 
 	it("a border town rises between two allied towns", () =>
@@ -1800,15 +2328,23 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 		// north-west scrap the nearest-to-both legal claim
 		const { world, hq } = seat({
 			"territoryOwner": (ix: number, iy: number) =>
-				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER
+				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 2100, "owner": PLAYER, "position": [308, 308],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2100,
+				"owner": PLAYER,
+				"position": [308, 308],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [57, 257],
-			"the claim sits on the diagonal between the towns");
+		assert.deepEqual(
+			hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())),
+			[57, 257],
+			"the claim sits on the diagonal between the towns",
+		);
 	});
 
 	it("with one allied town the search becomes an economic one", () =>
@@ -1817,15 +2353,21 @@ describe("findStrategicCCLocation: the ground the next town claims", () =>
 		// lose the ally-favouring term, so plain economics would refuse it at
 		// cut 60 - but a strategic expansion settles for cut 30
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => ix === 24 && iy === 20 ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => ix === 24 && iy === 20 ? 0 : PLAYER,
 		});
 
 		// the plain economics call answers the ground not worth a town (cut 60)
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			false, "a town for its own sake is too dear there");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			false,
+			"a town for its own sake is too dear there",
+		);
 		// the strategic call delegates with the cheaper cut and takes the lot
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [193, 161],
-			"expansion settles for the lot plain economics refused");
+		assert.deepEqual(
+			hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())),
+			[193, 161],
+			"expansion settles for the lot plain economics refused",
+		);
 	});
 });
 
@@ -1838,8 +2380,14 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// the village plants beside the party rather than in the far country
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "proximity": worldPos(100, 100), "fromStrategic": false }),
-			[97, 97], "the first act of founding likes company");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+				"proximity": worldPos(100, 100),
+				"fromStrategic": false,
+			}),
+			[97, 97],
+			"the first act of founding likes company",
+		);
 	});
 
 	it("the river bends the choice to the east bank", () =>
@@ -1853,8 +2401,14 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 			for (let px = 44; px <= 59; ++px)
 				world.map.setPassData(px, pz, 0xB);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "proximity": worldPos(72, 72), "fromStrategic": false }),
-			[151, 81], "the settlement stays on the water's edge");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+				"proximity": worldPos(72, 72),
+				"fromStrategic": false,
+			}),
+			[151, 81],
+			"the settlement stays on the water's edge",
+		);
 	});
 
 	it("no town grows in the yard of a storehouse", () =>
@@ -1865,19 +2419,27 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// sheet and beyond 60 units the second lot stands
 		const gaia = new Set([24 + 20 * 40, 29 + 29 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 606, "owner": PLAYER, "position": [196, 148],
-			"classes": ["Structure", "Storehouse"], "templateName": "structures/athen/storehouse"
-		}, {
-			"resourceDropsiteTypes": () => ["wood"],
-			"isResourceDropsite": (resource: string) =>
-				resource === undefined || resource === "" || resource === "wood"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 606,
+				"owner": PLAYER,
+				"position": [196, 148],
+				"classes": ["Structure", "Storehouse"],
+				"templateName": "structures/athen/storehouse",
+			}, {
+				"resourceDropsiteTypes": () => ["wood"],
+				"isResourceDropsite": (resource: string) =>
+					resource === undefined || resource === "" || resource === "wood",
+			}),
+		);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			[233, 233], "the yard is kept for the carts");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			[233, 233],
+			"the yard is kept for the carts",
+		);
 	});
 
 	it("between two free lots the richer wood decides", () =>
@@ -1887,16 +2449,22 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// val formula 2*wood + wood + stone + metal reads the richer valley
 		const gaia = new Set([29 + 15 * 40, 29 + 29 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			[233, 233], "the denser stand pulls the village");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			[233, 233],
+			"the denser stand pulls the village",
+		);
 		// and the sheet moved south, the village follows the wood
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 40;
 		world.map.ccResourceMaps.wood.map[29 + 15 * 40] = 60;
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			[233, 121], "the sheet moved, the village moved");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			[233, 121],
+			"the sheet moved, the village moved",
+		);
 	});
 
 	// only the port passes: a base for room took no free island with little
@@ -1905,34 +2473,67 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 	{
 		const gaia = new Set([29 + 29 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
 		for (const sheet of Object.values(world.map.ccResourceMaps))
 			sheet.map.fill(0);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }), false,
-			"nothing to gather there: below the cut");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }),
-			[233, 233], "for its room, the free lot");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }),
+			false,
+			"nothing to gather there: below the cut",
+		);
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+				"fromStrategic": true,
+				"forRoom": true,
+			}),
+			[233, 233],
+			"for its room, the free lot",
+		);
 	});
 
 	it("for its room, a base takes a contested lot when no other is left; for its resources, it does not", () =>
 	{
 		const gaia = new Set([29 + 29 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		override(hq.attackManager, { "enemiesByLand": () => new Map([[2, [makeHqEntity({
-			"id": 6100, "owner": ENEMY, "position": [240, 240], "classes": ["Unit", "Soldier"] })]]]) });
+		override(hq.attackManager, {
+			"enemiesByLand": () =>
+				new Map([[2, [
+					makeHqEntity({
+						"id": 6100,
+						"owner": ENEMY,
+						"position": [240, 240],
+						"classes": ["Unit", "Soldier"],
+					}),
+				]]]),
+		});
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }), false,
-			"an enemy soldier beside it: contested");
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }),
-			[233, 233], "for its room, the contested lot all the same");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true }),
+			false,
+			"an enemy soldier beside it: contested",
+		);
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+				"fromStrategic": true,
+				"forRoom": true,
+			}),
+			[233, 233],
+			"for its room, the contested lot all the same",
+		);
 		hq.ccSpotsAvoided.push({ "pos": worldPos(233, 233), "until": 1e9 });
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": true, "forRoom": true }), false,
-			"but not one that failed");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+				"fromStrategic": true,
+				"forRoom": true,
+			}),
+			false,
+			"but not one that failed",
+		);
 	});
 
 	it("a raiding army pushes the new town across the map", () =>
@@ -1942,12 +2543,15 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// village plants on the far side
 		const gaia = new Set([15 + 28 * 40, 29 + 28 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
 		hq.defenseManager.armies.push({ "foePosition": [124, 228] } as never);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			[233, 225], "the village plants beyond the raid");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			[233, 225],
+			"the village plants beyond the raid",
+		);
 	});
 
 	it("towns are not built under an enemy tower's fire", () =>
@@ -1957,18 +2561,20 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// and the east lot stands
 		const gaia = new Set([15 + 28 * 40, 29 + 28 * 40]);
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER,
 		});
-		world.addEntity(makeHqEntity({
-			id: 2200, "owner": ENEMY, "position": [124, 228],
-			"classes": ["Structure", "Tower"],
-		}, {
-			"hasDefensiveFire": () => true,
-			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 60 } : undefined
-		}));
+		world.addEntity(
+			makeHqEntity({ id: 2200, "owner": ENEMY, "position": [124, 228], "classes": ["Structure", "Tower"] }, {
+				"hasDefensiveFire": () => true,
+				"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 60 } : undefined,
+			}),
+		);
 
-		assert.deepEqual(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			[233, 225], "the village keeps out of range");
+		assert.deepEqual(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			[233, 225],
+			"the village keeps out of range",
+		);
 	});
 
 	it("ground too far from every town is refused", () =>
@@ -1976,12 +2582,13 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		// only the far-border corner stayed unclaimed: 260+ units from town
 		// (the disfavour band halves the sheet) and inside the map's border
 		// ring (another half) drops the sheet under the 60 cut
-		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => ix >= 35 && iy >= 35 ? 0 : PLAYER
-		});
+		const { world, hq } = seat({ "territoryOwner": (ix: number, iy: number) => ix >= 35 && iy >= 35 ? 0 : PLAYER });
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
-			false, "a town that far out never pays");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			false,
+			"a town that far out never pays",
+		);
 		// (the oversea arm needs distances beyond 500, which a 320-wide board
 		// cannot produce, so its lift is not exercisable on this harness)
 	});
@@ -1993,8 +2600,11 @@ describe("findMarketLocation: where the trade route settles", () =>
 	{
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 
-		assert.deepEqual(hq.findMarketLocation(world.gameState, structure(marketTemplate())),
-			[-1, -1, -1, 0], "no partner, no geometry - the plan places it");
+		assert.deepEqual(
+			hq.findMarketLocation(world.gameState, structure(marketTemplate())),
+			[-1, -1, -1, 0],
+			"no partner, no geometry - the plan places it",
+		);
 	});
 
 	it("the second market opens the route as far from its partner as it can", () =>
@@ -2003,16 +2613,19 @@ describe("findMarketLocation: where the trade route settles", () =>
 		// because a real game always trades and the route values gain*distSq {
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 		seatTraders(world);
-		world.addEntity(makeHqEntity({
-			"id": 3000, "owner": PLAYER, "position": [244, 76],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 3000,
+				"owner": PLAYER,
+				"position": [244, 76],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 		hq.updateTerritories(world.gameState);
 
 		const result = hq.findMarketLocation(world.gameState, structure(marketTemplate()));
-		assert.deepEqual(result, [23, 297, 2, 56310],
-			"the new market clings to the far south-west corner");
+		assert.deepEqual(result, [23, 297, 2, 56310], "the new market clings to the far south-west corner");
 		// the trade record is booked under the town's base; base ids start at
 		// 2 because the anchorless manager consumes id 1 at territory time
 		assert.equal(result[2], 2);
@@ -2024,16 +2637,23 @@ describe("findMarketLocation: where the trade route settles", () =>
 	{
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 		seatTraders(world);
-		world.addEntity(makeHqEntity({
-			"id": 3000, "owner": PLAYER, "position": [244, 76],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 3000,
+				"owner": PLAYER,
+				"position": [244, 76],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 		hq.updateTerritories(world.gameState);
 		hq.tradeManager.minimalGain = 10 ** 9;
 
-		assert.equal(hq.findMarketLocation(world.gameState, structure(marketTemplate())), false,
-			"the route is too poor, and one market already stands");
+		assert.equal(
+			hq.findMarketLocation(world.gameState, structure(marketTemplate())),
+			false,
+			"the route is too poor, and one market already stands",
+		);
 	});
 
 	// a mod scenario: Resources.GetTradableCodes answers [] when the
@@ -2043,19 +2663,26 @@ describe("findMarketLocation: where the trade route settles", () =>
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 		// the partner market belongs to the neighbouring empire, whose market
 		// makes the trade arithmetic certain but never our own
-		world.addEntity(makeHqEntity({
-			"id": 3001, "owner": ENEMY, "position": [100, 200],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 3001,
+				"owner": ENEMY,
+				"position": [100, 200],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 		(world.gameState.playerData as unknown as Record<string, boolean[]>).isMutualAlly[ENEMY] = true;
 		const engine = globalThis as Record<string, unknown>;
 		const realCodes = (engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes;
 		(engine.Resources as { GetTradableCodes: () => string[] }).GetTradableCodes = () => [];
 		try
 		{
-			assert.equal(hq.findMarketLocation(world.gameState, structure(marketTemplate())), false,
-				"no tradable goods, no second route");
+			assert.equal(
+				hq.findMarketLocation(world.gameState, structure(marketTemplate())),
+				false,
+				"no tradable goods, no second route",
+			);
 		}
 		finally
 		{
@@ -2073,16 +2700,21 @@ describe("findDefensiveLocation: where the walls face", () =>
 	{
 		const seatOut = seat({
 			"territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER,
-			...worldOptions
+			...worldOptions,
 		});
 		seatOut.hq.updateTerritories(seatOut.world.gameState);
 		return seatOut;
 	}
 	const enemyTown = (world: HqWorld, pos: [number, number] = [204, 220]) =>
-		world.addEntity(makeHqEntity({
-			"id": 4000, "owner": ENEMY, "position": pos,
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 4000,
+				"owner": ENEMY,
+				"position": pos,
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
 	it("fortress and tower brace the frontier nearest the foe's town", () =>
 	{
@@ -2091,27 +2723,39 @@ describe("findDefensiveLocation: where the walls face", () =>
 
 		// cell (33,21) is the frontier cell nearest the enemy town and 80 units
 		// from it (the not-under-80 rule's exact boundary is allowed)
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			[265, 169, 2], "the fortress presses the frontier");
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(towerTemplate())),
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			[265, 169, 2],
+			"the fortress presses the frontier",
+		);
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(towerTemplate())),
 			[265, 169, 2],
 			// row 21 is narrow, so the tower's large-frontier exclusion never
 			// bites and the stone tower takes the same post
-			"the tower takes the same post");
+			"the tower takes the same post",
+		);
 	});
 
 	it("a fort in the way turns the walls to the far side", () =>
 	{
 		const { world, hq } = seatMarch();
 		enemyTown(world);
-		world.addEntity(makeHqEntity({
-			id: 4050, "owner": PLAYER, "position": [265, 169],
-			"classes": ["Structure", "Fortress", "Defensive"],
-			"templateName": "structures/athen/fortress"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 4050,
+				"owner": PLAYER,
+				"position": [265, 169],
+				"classes": ["Structure", "Fortress", "Defensive"],
+				"templateName": "structures/athen/fortress",
+			}),
+		);
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			[137, 169, 2], "the walls spread out to the mirror post");
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			[137, 169, 2],
+			"the walls spread out to the mirror post",
+		);
 	});
 
 	it("walls stand out of the enemy tower's reach", () =>
@@ -2121,31 +2765,39 @@ describe("findDefensiveLocation: where the walls face", () =>
 		// the enemy tower by its town shoots 120; with the fortress half size
 		// (15) the danger band is 135, so the nearest posts fall inside and
 		// the walls retreat past 135
-		world.addEntity(makeHqEntity({
-			id: 4100, "owner": ENEMY, "position": [268, 172],
-			"classes": ["Structure", "Tower"],
-		}, {
-			"hasDefensiveFire": () => true,
-			"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 120 } : undefined
-		}));
+		world.addEntity(
+			makeHqEntity({ id: 4100, "owner": ENEMY, "position": [268, 172], "classes": ["Structure", "Tower"] }, {
+				"hasDefensiveFire": () => true,
+				"attackRange": (type: string) => type === "Ranged" ? { "min": 0, "max": 120 } : undefined,
+			}),
+		);
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			[129, 177, 2], "the walls stand clear of the fire");
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			[129, 177, 2],
+			"the walls stand clear of the fire",
+		);
 	});
 
 	it("at peace everywhere the walls wait — except facing a neutral", () =>
 	{
 		const { world, hq } = seatMarch();
 		// nobody is an enemy yet: no wall is worth raising
-		assert.equal(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			undefined, "no walls against everyone");
+		assert.equal(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			undefined,
+			"no walls against everyone",
+		);
 		// ... unless a third empire is met but not war-declared — we may be in
 		// cease fire, and Petra still braces toward the neutral town
 		enemyTown(world);
 		world.gameState.playerData.isEnemy[ENEMY] = false;
 		world.gameState.playerData.isNeutral[ENEMY] = true;
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			[265, 169, 2], "the walls face the neutral town all the same");
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			[265, 169, 2],
+			"the walls face the neutral town all the same",
+		);
 	});
 
 	it("a rising wonder draws the fortifications", () =>
@@ -2153,13 +2805,17 @@ describe("findDefensiveLocation: where the walls face", () =>
 		// the wonder victor builds its forts around the wonder, not the frontier
 		const { world, hq } = seatMarch({ "victoryConditions": ["wonder"] });
 		enemyTown(world, [20, 300]);
-		world.addEntity(makeHqEntity({
-			id: 5000, "owner": PLAYER, "position": [160, 160],
-			"classes": ["Structure", "Wonder"],
-		}, { "footprintRadius": () => 22.6 }));
+		world.addEntity(
+			makeHqEntity({ id: 5000, "owner": PLAYER, "position": [160, 160], "classes": ["Structure", "Wonder"] }, {
+				"footprintRadius": () => 22.6,
+			}),
+		);
 
-		assert.deepEqual(hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
-			[89, 129, 2], "the fort guards the wonder first");
+		assert.deepEqual(
+			hq.findDefensiveLocation(world.gameState, structure(fortressTemplate())),
+			[89, 129, 2],
+			"the fort guards the wonder first",
+		);
 		// (the wonder-without-position arm the port guards differently is a
 		// resiliency note, not a counted deviation: the ref would crash on the
 		// missing position, the port skips the cell)
@@ -2175,10 +2831,19 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 	{
 		const seatOut = seat({ "territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER });
 		seatOut.hq.updateTerritories(seatOut.world.gameState);
-		seatOut.world.addEntity(makeHqEntity({
-			"id": 4000, "owner": ENEMY, "position": [204, 220],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}, {}, townLand === undefined ? {} : { "access": townLand }));
+		seatOut.world.addEntity(
+			makeHqEntity(
+				{
+					"id": 4000,
+					"owner": ENEMY,
+					"position": [204, 220],
+					"classes": ["Structure", "CivCentre"],
+					"templateName": "structures/athen/civil_centre",
+				},
+				{},
+				townLand === undefined ? {} : { "access": townLand },
+			),
+		);
 		const map = seatOut.hq.geography.territoryMap;
 		const traffic = new ShipTraffic(map.width * map.cellSize, map.height * map.cellSize);
 		for (const [pos, seconds] of passages)
@@ -2208,9 +2873,14 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 	it("the next tower goes to the passage the first does not watch", () =>
 	{
 		const { world, hq } = seatShores([[[72, 40], 100], [[232, 40], 60]]);
-		world.addEntity(makeHqEntity({
-			"id": 4200, "owner": PLAYER, "position": [72, 80], "classes": ["Structure", "Tower", "Defensive"]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 4200,
+				"owner": PLAYER,
+				"position": [72, 80],
+				"classes": ["Structure", "Tower", "Defensive"],
+			}),
+		);
 		// the busy passage, a third once watched, counts about 33 against the other's 60
 		assert.ok(near(hq.findDefensiveLocation(world.gameState, structure(tower())), [232, 40], 60));
 	});
@@ -2220,10 +2890,17 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 		// the enemy's town stands on another island
 		const { world, hq } = seatShores([[[72, 40], SHORE_TOWER_TRAFFIC - 1]], 9);
 		assert.equal(hq.towersByTrafficOnly(world.gameState), true);
-		assert.equal(hq.findDefensiveLocation(world.gameState, structure(tower())), undefined, "too little traffic: no tower");
+		assert.equal(
+			hq.findDefensiveLocation(world.gameState, structure(tower())),
+			undefined,
+			"too little traffic: no tower",
+		);
 		hq.shipTraffic?.cells.fill(0);
 		requireValue(hq.shipTraffic).cells[requireValue(hq.shipTraffic?.cellAt(worldPos(72, 40)))] = 100;
-		assert.ok(near(hq.findDefensiveLocation(world.gameState, structure(tower())), [72, 40], 60), "over the passage");
+		assert.ok(
+			near(hq.findDefensiveLocation(world.gameState, structure(tower())), [72, 40], 60),
+			"over the passage",
+		);
 	});
 
 	it("a fortress keeps to the frontier", () =>
@@ -2238,8 +2915,15 @@ describe("findDefensiveLocation: towers where the enemy's ships pass", () =>
 describe("civic centres overseas: followed orders and contested spots", () =>
 {
 	const centre = (world: HqWorld, id: number, pos: [number, number], progress: number | undefined, owner = PLAYER) =>
-		world.addEntity(makeHqEntity({ id, owner, "position": pos, "classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre" }, { "foundationProgress": () => progress }));
+		world.addEntity(
+			makeHqEntity({
+				id,
+				owner,
+				"position": pos,
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}, { "foundationProgress": () => progress }),
+		);
 
 	it("a spot whose foundation never appeared is avoided for a while, one that stands is forgotten", () =>
 	{
@@ -2255,7 +2939,11 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT);
 		hq.followCivCentreOrders(world.gameState);
 		assert.deepEqual(hq.ccSpotsAvoided.map(spot => spot.pos), [[200, 200]], "the spot that never took");
-		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(240, 220), landRegion(2)), true, "avoided around it");
+		assert.equal(
+			hq.isContestedCCSpot(world.gameState, worldPos(240, 220), landRegion(2)),
+			true,
+			"avoided around it",
+		);
 		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(300, 300), landRegion(2)), false);
 		assert.equal(hq.ccOrders.length, 1, "the foundation that stands is followed on");
 
@@ -2273,8 +2961,10 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		const lost = centre(world, 5001, [200, 200], 30);
 		centre(world, 5002, [60, 200], 50);
 		hq.followCivCentreOrders(world.gameState);
-		override(lost, { "position": () => undefined });	// destroyed
-		override(requireValue(world.gameState.getEntityById(entityId(5002))), { "foundationProgress": () => undefined });
+		override(lost, { "position": () => undefined }); // destroyed
+		override(requireValue(world.gameState.getEntityById(entityId(5002))), {
+			"foundationProgress": () => undefined,
+		});
 		world.ai.elapsedTime = seconds(1002);
 		hq.followCivCentreOrders(world.gameState);
 		assert.deepEqual(hq.ccSpotsAvoided.map(spot => spot.pos), [[200, 200]]);
@@ -2286,14 +2976,35 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 		const enemyLands = new Map<number, CommonEntity[]>();
 		override(hq.attackManager, { "enemiesByLand": () => enemyLands });
-		const tower = makeHqEntity({ "id": 6001, "owner": ENEMY, "position": [300, 300], "classes": ["Structure", "Tower"] });
-		const soldier = makeHqEntity({ "id": 6002, "owner": ENEMY, "position": [100, 100], "classes": ["Unit", "Soldier"] });
+		const tower = makeHqEntity({
+			"id": 6001,
+			"owner": ENEMY,
+			"position": [300, 300],
+			"classes": ["Structure", "Tower"],
+		});
+		const soldier = makeHqEntity({
+			"id": 6002,
+			"owner": ENEMY,
+			"position": [100, 100],
+			"classes": ["Unit", "Soldier"],
+		});
 		enemyLands.set(7, [tower]);
 		enemyLands.set(2, [soldier]);
 		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(250, 250), landRegion(7)), true, "their island");
-		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID - 1, 100), landRegion(2)), true, "beside their soldier");
-		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID + 1, 100), landRegion(2)), false);
-		assert.equal(hq.isContestedCCSpot(world.gameState, worldPos(250, 250), landRegion(9)), false, "an empty island");
+		assert.equal(
+			hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID - 1, 100), landRegion(2)),
+			true,
+			"beside their soldier",
+		);
+		assert.equal(
+			hq.isContestedCCSpot(world.gameState, worldPos(100 + CC_ENEMY_AVOID + 1, 100), landRegion(2)),
+			false,
+		);
+		assert.equal(
+			hq.isContestedCCSpot(world.gameState, worldPos(250, 250), landRegion(9)),
+			false,
+			"an empty island",
+		);
 	});
 });
 
@@ -2310,7 +3021,7 @@ describe("a dry town on a naval map", () =>
 			hq.geography.navalMap = naval;
 			override(hq, { "getTotalResourceLevel": () => ({ "wood": DRY_WOOD - 1 }) });
 			world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
-				"classes": ["Structure", "Trade", "Town", "Market"]
+				"classes": ["Structure", "Trade", "Town", "Market"],
 			});
 			bookBuilder(world, hq, ["structures/{civ}/market"]);
 			assert.equal(hq.landRunDry(world.gameState), naval);
@@ -2331,8 +3042,13 @@ describe("a town whose land ran dry", () =>
 		hq.geography.navalMap = true;
 		override(hq, { "getTotalResourceLevel": () => ({ "wood": dry ? DRY_WOOD - 1 : DRY_WOOD + 1 }) });
 		for (let i = 0; i < workers; ++i)
-			world.addEntity(makeHqEntity({ "id": 7000 + i, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Support", "Worker"] },
-				{}, { "role": Worker.ROLE_WORKER, "subrole": i < idle ? Worker.SUBROLE_IDLE : Worker.SUBROLE_GATHERER }));
+			world.addEntity(
+				makeHqEntity(
+					{ "id": 7000 + i, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Support", "Worker"] },
+					{},
+					{ "role": Worker.ROLE_WORKER, "subrole": i < idle ? Worker.SUBROLE_IDLE : Worker.SUBROLE_GATHERER },
+				),
+			);
 		return { world, hq };
 	}
 
@@ -2388,7 +3104,11 @@ describe("a town whose land ran dry", () =>
 		assert.equal(world.ai.queueManager.getPriority("civilCentre"), raised, "two buildings without room");
 		missing.n = 1;
 		hq.provideForDryLand(world.gameState, world.ai.queues);
-		assert.equal(world.ai.queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "one: as before");
+		assert.equal(
+			world.ai.queueManager.getPriority("civilCentre"),
+			hq.Config.priorities.civilCentre,
+			"one: as before",
+		);
 	});
 });
 
@@ -2402,25 +3122,26 @@ describe("canBuild: which stones the office will book", () =>
 
 	/** the house the canBuild matrix books: the game's own EntityLimits
 	 * category and the template's inherited own-only territory */
-	const houseTemplate = (overrides: {
-		available?: boolean;
-	} = {}) => structureTemplate("structures/athen/house", {
-		"classes": ["Structure", "House", "Economic", "City"],
-		"buildCategory": "House",
-		...overrides
-	});
+	const houseTemplate = (overrides: { available?: boolean } = {}) =>
+		structureTemplate("structures/athen/house", {
+			"classes": ["Structure", "House", "Economic", "City"],
+			"buildCategory": "House",
+			...overrides,
+		});
 
 	/** a support builder on the payroll: one unit whose Builder/Entities
 	 * template names the structures it can raise, {civ} expanded as the
 	 * common-api does before the office sees the list */
 	function seatBuilder(world: HqWorld, buildables: string[]): void
 	{
-		world.addEntity(makeHqEntity({
-			"id": 2201, "owner": PLAYER, "position": [151, 151],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			buildableEntities: (civ: string) => buildables.map(name => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2201,
+				"owner": PLAYER,
+				"position": [151, 151],
+				"classes": ["Unit", "Support", "Worker"],
+			}, { buildableEntities: (civ: string) => buildables.map(name => name.replace("{civ}", civ)) }),
+		);
 	}
 
 	it("a house rises where a builder stands and the census allows", () =>
@@ -2431,8 +3152,7 @@ describe("canBuild: which stones the office will book", () =>
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true);
-		assert.equal(hq.buildManager.unbuildables.size, 0,
-			"a buildable template parks nothing");
+		assert.equal(hq.buildManager.unbuildables.size, 0, "a buildable template parks nothing");
 	});
 
 	it("the census caps the town at its counted houses and parks the attempt", () =>
@@ -2443,10 +3163,10 @@ describe("canBuild: which stones the office will book", () =>
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
-		assert.deepEqual(
-			[...hq.buildManager.unbuildables.entries()],
-			[["structures/athen/house", { "reason": "limit", "time": 190 }]],
-			"a capped build parks for the default 90 seconds from the turn's time");
+		assert.deepEqual([...hq.buildManager.unbuildables.entries()], [["structures/athen/house", {
+			"reason": "limit",
+			"time": 190,
+		}]], "a capped build parks for the default 90 seconds from the turn's time");
 	});
 
 	it("one room short of the census cap the office still books", () =>
@@ -2466,8 +3186,11 @@ describe("canBuild: which stones the office will book", () =>
 		seatBuilder(world, ["structures/{civ}/house"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true,
-			"no limit row for the category means the count is ignored");
+		assert.equal(
+			hq.canBuild(world.gameState, "structures/{civ}/house"),
+			true,
+			"no limit row for the category means the count is ignored",
+		);
 	});
 
 	it("a template the game disabled per civ parks forever", () =>
@@ -2478,8 +3201,10 @@ describe("canBuild: which stones the office will book", () =>
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/storehouse"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/storehouse"),
-			{ "reason": "disabled", "time": Infinity });
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/storehouse"), {
+			"reason": "disabled",
+			"time": Infinity,
+		});
 	});
 
 	it("a template name disabled without a template still parks as disabled", () =>
@@ -2491,9 +3216,10 @@ describe("canBuild: which stones the office will book", () =>
 		world.templates["structures/athen/house"] = houseTemplate();
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/dock"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/dock"),
-			{ "reason": "disabled", "time": Infinity },
-			"a `notemplate` row would mean the disabled list was consulted second");
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/dock"), {
+			"reason": "disabled",
+			"time": Infinity,
+		}, "a `notemplate` row would mean the disabled list was consulted second");
 	});
 
 	it("a template the engine never shipped parks forever", () =>
@@ -2501,10 +3227,15 @@ describe("canBuild: which stones the office will book", () =>
 		const { world, hq } = seat();
 		world.templates["structures/athen/house"] = houseTemplate();
 
-		assert.equal(hq.canBuild(world.gameState, "structures/athen/missing"), false
-			, "no template in the store, no stone to book under it");
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/missing"),
-			{ "reason": "notemplate", "time": Infinity });
+		assert.equal(
+			hq.canBuild(world.gameState, "structures/athen/missing"),
+			false,
+			"no template in the store, no stone to book under it",
+		);
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/missing"), {
+			"reason": "notemplate",
+			"time": Infinity,
+		});
 	});
 
 	it("a template whose requirements are unmet parks one season", () =>
@@ -2515,8 +3246,10 @@ describe("canBuild: which stones the office will book", () =>
 		hq.buildManager = BuildManager.start(world.gameState);
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
-			{ "reason": "requirements", "time": 130 }, "requirements park for 30 seconds");
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"), {
+			"reason": "requirements",
+			"time": 130,
+		}, "requirements park for 30 seconds");
 	});
 
 	it("nobody on the payroll to raise it parks for two seasons", () =>
@@ -2525,8 +3258,10 @@ describe("canBuild: which stones the office will book", () =>
 		world.templates["structures/athen/house"] = houseTemplate();
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
-			{ "reason": "nobuilder", "time": 220 }, "no builder parks for 120 seconds");
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"), {
+			"reason": "nobuilder",
+			"time": 220,
+		}, "no builder parks for 120 seconds");
 	});
 
 	it("the hold answers on the cache long after the site changed hands", () =>
@@ -2541,13 +3276,19 @@ describe("canBuild: which stones the office will book", () =>
 		seatBuilder(world, ["structures/{civ}/house"]);
 		hq.buildManager.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(2201) }] }));
 		world.ai.elapsedTime = seconds(150);
-		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false,
-			"hold is on for 120 seconds, and the office trusts it");
+		assert.equal(
+			hq.canBuild(world.gameState, "structures/{civ}/house"),
+			false,
+			"hold is on for 120 seconds, and the office trusts it",
+		);
 
 		// past the hold the office asks the site again — and now books
 		world.ai.elapsedTime = seconds(221);
-		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), true,
-			"the reopened ask re-walks the checks from the top");
+		assert.equal(
+			hq.canBuild(world.gameState, "structures/{civ}/house"),
+			true,
+			"the reopened ask re-walks the checks from the top",
+		);
 	});
 
 	it("the refused call answers the first refusal in ask order", () =>
@@ -2558,8 +3299,10 @@ describe("canBuild: which stones the office will book", () =>
 		world.templates["structures/athen/house"] = houseTemplate({ "available": false });
 
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
-			{ "reason": "requirements", "time": 130 }, "requirements before the census");
+		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"), {
+			"reason": "requirements",
+			"time": 130,
+		}, "requirements before the census");
 	});
 
 	it("a townless board cannot book a house in gaia ground", () =>
@@ -2571,14 +3314,16 @@ describe("canBuild: which stones the office will book", () =>
 		// the town's civic centre still standing: a foundation is a potential
 		// base, not a working one (the territory board answers all the same,
 		// so the territorial walk in the office hears identical rows)
-		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
-			() => 0;
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress = () => 0;
 		hq.basesManager.resetBaseCache();
 
 		assert.equal(hq.hasActiveBase(), false);
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
-		assert.deepEqual(hq.buildManager.unbuildables.get("structures/athen/house"),
-			{ "reason": "room", "time": 280 }, "own-only territory parks for 180 seconds");
+		assert.deepEqual(
+			hq.buildManager.unbuildables.get("structures/athen/house"),
+			{ "reason": "room", "time": 280 },
+			"own-only territory parks for 180 seconds",
+		);
 	});
 
 	it("a townless board books beyond own ground where its charter reaches", () =>
@@ -2587,13 +3332,15 @@ describe("canBuild: which stones the office will book", () =>
 		world.templates["structures/athen/civil_centre"] = ccTemplate();
 		seatBuilder(world, ["structures/{civ}/civil_centre"]);
 		hq.buildManager = BuildManager.start(world.gameState);
-		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
-			() => 0;
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress = () => 0;
 		hq.basesManager.resetBaseCache();
 
 		assert.equal(hq.hasActiveBase(), false);
-		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/civil_centre"), true,
-			"the civ centre plants outside mere rows: neutral ground answers its charter");
+		assert.equal(
+			hq.canBuild(world.gameState, "structures/{civ}/civil_centre"),
+			true,
+			"the civ centre plants outside mere rows: neutral ground answers its charter",
+		);
 	});
 });
 
@@ -2602,19 +3349,33 @@ describe("findBestBaseForMilitary: where the army stands", () =>
 	/** one of our towns: an own civ centre carrying the roster id of its base */
 	function ownTown(world: HqWorld, id: number, position: [number, number], baseId: number): void
 	{
-		world.addEntity(makeHqEntity({
-			id, "owner": PLAYER, position,
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}, {}, { "base": baseId }));
+		world.addEntity(
+			makeHqEntity(
+				{
+					id,
+					"owner": PLAYER,
+					position,
+					"classes": ["Structure", "CivCentre"],
+					"templateName": "structures/athen/civil_centre",
+				},
+				{},
+				{ "base": baseId },
+			),
+		);
 	}
 
 	/** a hostile town on the plain */
 	function enemyTownAt(world: HqWorld, id: number, position: [number, number]): void
 	{
-		world.addEntity(makeHqEntity({
-			id, "owner": ENEMY, position,
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/spart/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id,
+				"owner": ENEMY,
+				position,
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/spart/civil_centre",
+			}),
+		);
 	}
 
 	it("the town closest to the hostile one keeps the first call", () =>
@@ -2647,10 +3408,15 @@ describe("findBestBaseForMilitary: where the army stands", () =>
 		// own town beside it counts as its own ally all the same
 		const { world, hq } = seat({}, { "seatBases": false });
 		ownTown(world, 1102, [80, 80], 2);
-		world.addEntity(makeHqEntity({
-			"id": 1104, "owner": GAIA + 1, "position": [90, 80],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/other/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 1104,
+				"owner": GAIA + 1,
+				"position": [90, 80],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/other/civil_centre",
+			}),
+		);
 
 		assert.equal(hq.findBestBaseForMilitary(world.gameState), undefined);
 	});
@@ -2686,36 +3452,38 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 	/** the town's training cards, keyed by the template name the anchor lists */
 	function seatCards(world: HqWorld): void
 	{
-		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
-			{
-				"classes": ["Unit", "Infantry", "Melee", "CitizenSoldier"],
-				"getPaths": { "Cost": { "Population": 1 } },
-				"cost": { "food": 100 }
-			});
-		world.templates["units/athen/infantry_archer"] = makeTemplate("units/athen/infantry_archer",
-			{
-				"classes": ["Unit", "Infantry", "Ranged", "Archer", "CitizenSoldier"],
-				"getPaths": { "Cost": { "Population": 1 } },
-				"cost": { "wood": 100 }
-			});
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman", {
+			"classes": ["Unit", "Infantry", "Melee", "CitizenSoldier"],
+			"getPaths": { "Cost": { "Population": 1 } },
+			"cost": { "food": 100 },
+		});
+		world.templates["units/athen/infantry_archer"] = makeTemplate("units/athen/infantry_archer", {
+			"classes": ["Unit", "Infantry", "Ranged", "Archer", "CitizenSoldier"],
+			"getPaths": { "Cost": { "Population": 1 } },
+			"cost": { "wood": 100 },
+		});
 	}
 
 	/** the base anchor dressed for the alarm: both queue views (the entity
 	 * method the port's first pass reads and the raw sim view the counting
 	 * step reads on both implementations), the card list, and the wall's
 	 * garrison answers */
-	function emergencyAnchor(hq: Headquarters, world: HqWorld, options: {
-		trainables?: string[];
-		queue?: Array<Record<string, unknown>> | undefined;
-		garrisonMax?: number;
-		arrowClasses?: string[];
-		ejectedHealth?: number;
-	} = {})
+	function emergencyAnchor(
+		hq: Headquarters,
+		world: HqWorld,
+		options: {
+			trainables?: string[];
+			queue?: Array<Record<string, unknown>> | undefined;
+			garrisonMax?: number;
+			arrowClasses?: string[];
+			ejectedHealth?: number;
+		} = {},
+	)
 	{
 		const anchor = requireValue(hq.baseManagers()[0].anchor);
 		override(anchor, {
 			"trainableEntities": () => options.trainables ?? [],
-			"trainingQueue": () => options.queue ?? false
+			"trainingQueue": () => options.queue ?? false,
 		});
 		anchor._entity = fake<EngineAIEntityState>({ "trainingQueue": options.queue ?? undefined });
 		if (options.garrisonMax !== undefined)
@@ -2743,7 +3511,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		try
 		{
 			const anchor = emergencyAnchor(hq, world, {
-				"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
+				"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
 			});
 
 			assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]), true);
@@ -2755,8 +3523,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 			assert.equal(plan.number, 1);
 			assert.equal(plan.metadata?.trainer, anchor.id());
 
-			assert.equal(accountOf(world, "emergency"), 100,
-				"the cost was booked against the emergency account from the town's available stock");
+			assert.equal(
+				accountOf(world, "emergency"),
+				100,
+				"the cost was booked against the emergency account from the town's available stock",
+			);
 		}
 		finally
 		{
@@ -2771,8 +3542,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]), true);
 
-		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]), false,
-			"the queue's own batch is the answer while it lasts");
+		assert.equal(
+			hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]),
+			false,
+			"the queue's own batch is the answer while it lasts",
+		);
 		const queue = world.ai.queues.emergency;
 		assert.equal(queue.plans.length, 1, "the second call books nothing");
 	});
@@ -2784,8 +3558,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 
 		// 390 cells out in both axes: ~304,200 square distance over the cut
-		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(400, 400)]), false,
-			"the town's guard cannot reach to respond in time");
+		assert.equal(
+			hq.trainEmergencyUnits(world.gameState, [worldPos(400, 400)]),
+			false,
+			"the town's guard cannot reach to respond in time",
+		);
 	});
 
 	it("no road on the victim's land — the office holds", () =>
@@ -2795,8 +3572,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman"] });
 		world.accessAt.set("60,60", 9);
 
-		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(60, 60)]), false,
-			"the anchor on land 2 cannot reach the calls from land 9");
+		assert.equal(
+			hq.trainEmergencyUnits(world.gameState, [worldPos(60, 60)]),
+			false,
+			"the anchor on land 2 cannot reach the calls from land 9",
+		);
 	});
 
 	it("a training house already brimming skips the call", () =>
@@ -2808,11 +3588,14 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 			// 6 s of queued production, half under way, reads as a house at
 			// work: only batches in progress or bound for the wall count the
 			// wait, so this batch is what the clock looks at
-			"queue": [{ "metadata": {}, "progress": 0.5, "id": 1, "timeRemaining": 6000 }]
+			"queue": [{ "metadata": {}, "progress": 0.5, "id": 1, "timeRemaining": 6000 }],
 		});
 
-		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]), false,
-			"the only anchor is occupied at its queue");
+		assert.equal(
+			hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]),
+			false,
+			"the only anchor is occupied at its queue",
+		);
 	});
 
 	it("the wall's garrison book counts batches, and the lone fill makes the call ranged", () =>
@@ -2821,16 +3604,24 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		seatCards(world);
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
-			"queue": [
-				{ "metadata": { "garrisonType": "Tower" }, "count": 3, "progress": 0.2, "timeRemaining": 2000 },
-				{ "id": 5, "metadata": {}, "progress": 0, "timeRemaining": 1000 }
-			],
+			"queue": [{ "metadata": { "garrisonType": "Tower" }, "count": 3, "progress": 0.2, "timeRemaining": 2000 }, {
+				"id": 5,
+				"metadata": {},
+				"progress": 0,
+				"timeRemaining": 1000,
+			}],
 			"garrisonMax": 10,
 			"arrowClasses": ["Archer"],
-			"ejectedHealth": 0.5
+			"ejectedHealth": 0.5,
 		});
 		const stops: number[] = [];
-		override(anchor, { "stopProduction": (id: number) => { stops.push(id); return true; } });
+		override(anchor, {
+			"stopProduction": (id: number) =>
+			{
+				stops.push(id);
+				return true;
+			},
+		});
 		stubGlobal("randBool", () => true);
 		try
 		{
@@ -2841,8 +3632,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 			assert.deepEqual(stops, [5]);
 			const queue = world.ai.queues.emergency;
 			const plan = queue.plans[0];
-			assert.equal(plan.type, "units/athen/infantry_archer",
-				"room in the wall means the ranged roll goes through");
+			assert.equal(
+				plan.type,
+				"units/athen/infantry_archer",
+				"room in the wall means the ranged roll goes through",
+			);
 			assert.equal(plan.metadata?.garrisonType, GarrisonManager.TYPE_PROTECTION);
 			assert.equal(plan.metadata?.role, Worker.ROLE_WORKER);
 		}
@@ -2860,7 +3654,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		const anchor = emergencyAnchor(hq, world, {
 			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"],
 			"garrisonMax": 10,
-			"ejectedHealth": 0.5
+			"ejectedHealth": 0.5,
 		});
 		anchor.hitpoints = () => 40;
 		stubGlobal("randBool", () => true);
@@ -2871,8 +3665,11 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 			const queue = world.ai.queues.emergency;
 			const plan = queue.plans[0];
 			assert.equal(plan.type, "units/athen/infantry_spearman");
-			assert.equal(plan.metadata?.garrisonType, undefined,
-				"a wall with no room for men takes plain trash troops");
+			assert.equal(
+				plan.metadata?.garrisonType,
+				undefined,
+				"a wall with no room for men takes plain trash troops",
+			);
 		}
 		finally
 		{
@@ -2893,17 +3690,21 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 
 	it("the disabled card is passed over and its teammate wins the call", () =>
 	{
-		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500 }, "disabledTemplates": ["units/athen/infantry_spearman"] });
-		seatCards(world);
-		emergencyAnchor(hq, world, {
-			"trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"]
+		const { world, hq } = seat({
+			"stock": { "food": 500, "wood": 500 },
+			"disabledTemplates": ["units/athen/infantry_spearman"],
 		});
+		seatCards(world);
+		emergencyAnchor(hq, world, { "trainables": ["units/athen/infantry_spearman", "units/athen/infantry_archer"] });
 
 		assert.equal(hq.trainEmergencyUnits(world.gameState, [worldPos(50, 50)]), true);
 		const queue = world.ai.queues.emergency;
 		const plan = queue.plans[0];
-		assert.equal(plan.type, "units/athen/infantry_archer",
-			"the prohibition leaves the ranged answer standing in the melee roll");
+		assert.equal(
+			plan.type,
+			"units/athen/infantry_archer",
+			"the prohibition leaves the ranged answer standing in the melee roll",
+		);
 	});
 
 	it("when the emergency account falls short, the neighbour queue lends", () =>
@@ -2927,22 +3728,32 @@ describe("the headcount and the workforce: the queues' living tally", () =>
 	/** a training house: an own structure whose queue carries a batch */
 	function trainingHouse(world: HqWorld, id: number, items: Array<Record<string, unknown>>): void
 	{
-		world.addEntity(makeHqEntity({
-			id, "owner": PLAYER, "position": centerOfCell(30, 30),
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}, { "trainingQueue": () => items }));
+		world.addEntity(
+			makeHqEntity({
+				id,
+				"owner": PLAYER,
+				"position": centerOfCell(30, 30),
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}, { "trainingQueue": () => items }),
+		);
 	}
 
 	it("the queued batches join their population to the town's headcount", () =>
 	{
 		const { world, hq } = seat({ "population": 10 });
 		// the engine hands template leaves over as strings (parsed XML)
-		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
-			{ "classes": ["Unit", "Infantry"], "getPaths": { "Cost": { "Population": "2" } } });
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman", {
+			"classes": ["Unit", "Infantry"],
+			"getPaths": { "Cost": { "Population": "2" } },
+		});
 		trainingHouse(world, 1120, [{ "unitTemplate": "units/athen/infantry_spearman", "count": 3 }]);
 
-		assert.equal(hq.getAccountedPopulation(world.gameState), 16,
-			"10 townsfolk on the ground, plus a batch of 3 twos in the queue");
+		assert.equal(
+			hq.getAccountedPopulation(world.gameState),
+			16,
+			"10 townsfolk on the ground, plus a batch of 3 twos in the queue",
+		);
 		// the count is sealed per turn: the same question answers the same
 		assert.equal(hq.getAccountedPopulation(world.gameState), 16);
 	});
@@ -2958,8 +3769,9 @@ describe("the headcount and the workforce: the queues' living tally", () =>
 	it("a population card with no template leaf adds nothing", () =>
 	{
 		const { world, hq } = seat({ "population": 10 });
-		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
-			{ "classes": ["Unit", "Infantry"] });
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman", {
+			"classes": ["Unit", "Infantry"],
+		});
 		trainingHouse(world, 1120, [{ "unitTemplate": "units/athen/infantry_spearman", "count": 3 }]);
 
 		// Cost/Population absent: the leaf is undefined in the walk
@@ -2969,21 +3781,28 @@ describe("the headcount and the workforce: the queues' living tally", () =>
 	it("the queued worker batches join the workforce rolls", () =>
 	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			"id": 1121, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Worker"]
-		}, {}, { "role": "worker" }));
-		world.addEntity(makeHqEntity({
-			"id": 1122, "owner": PLAYER, "position": [110, 100], "classes": ["Unit", "Soldier"]
-		}));
-		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman",
-			{ "classes": ["Unit", "Infantry"] });
-		trainingHouse(world, 1120, [
-			{ "unitTemplate": "units/athen/infantry_spearman", "count": 4, "metadata": { "role": "worker" } },
-			{ "unitTemplate": "units/athen/infantry_archer", "count": 2, "metadata": { "role": "soldier" } }
-		]);
+		world.addEntity(
+			makeHqEntity({ "id": 1121, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Worker"] }, {}, {
+				"role": "worker",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({ "id": 1122, "owner": PLAYER, "position": [110, 100], "classes": ["Unit", "Soldier"] }),
+		);
+		world.templates["units/athen/infantry_spearman"] = makeTemplate("units/athen/infantry_spearman", {
+			"classes": ["Unit", "Infantry"],
+		});
+		trainingHouse(world, 1120, [{
+			"unitTemplate": "units/athen/infantry_spearman",
+			"count": 4,
+			"metadata": { "role": "worker" },
+		}, { "unitTemplate": "units/athen/infantry_archer", "count": 2, "metadata": { "role": "soldier" } }]);
 
-		assert.equal(hq.getAccountedWorkers(world.gameState), 5,
-			"one worker on the ground, and only the worker batch of four belongs");
+		assert.equal(
+			hq.getAccountedWorkers(world.gameState),
+			5,
+			"one worker on the ground, and only the worker batch of four belongs",
+		);
 	});
 });
 
@@ -2992,17 +3811,22 @@ describe("the danger lights: what keeps the office from building under fire", ()
 	/** an enemy tower with the ranged book of a watchtower: max range given */
 	function firingTower(world: HqWorld, id: number, position: [number, number], range = 80): CommonEntity
 	{
-		return world.addEntity(makeHqEntity({
-			id, "owner": ENEMY, position,
-			"classes": ["Structure", "Tower"], "templateName": "structures/spart/watchtower"
-		}, {
-			// the common-api's own read of a ranged attack with a default
-			// arrow (entity.js hasDefensiveFire): the tower shoots
-			"get": (path: string) => path === "Attack/Ranged" ? { "MaxRange": range } : undefined,
-			"getDefaultArrow": () => 1,
-			"hasDefensiveFire": () => true,
-			"attackRange": () => ({ "max": range, "min": 0 })
-		}));
+		return world.addEntity(
+			makeHqEntity({
+				id,
+				"owner": ENEMY,
+				position,
+				"classes": ["Structure", "Tower"],
+				"templateName": "structures/spart/watchtower",
+			}, {
+				// the common-api's own read of a ranged attack with a default
+				// arrow (entity.js hasDefensiveFire): the tower shoots
+				"get": (path: string) => path === "Attack/Ranged" ? { "MaxRange": range } : undefined,
+				"getDefaultArrow": () => 1,
+				"hasDefensiveFire": () => true,
+				"attackRange": () => ({ "max": range, "min": 0 }),
+			}),
+		);
 	}
 
 	it("an invading column keeps a field of ground where nothing may rise", () =>
@@ -3012,15 +3836,16 @@ describe("the danger lights: what keeps the office from building under fire", ()
 			// the column at its field camp east of the river
 			{ "foePosition": [100, 100] },
 			// an army of stragglers, no position to its name yet
-			{ "foePosition": undefined }
+			{ "foePosition": undefined },
 		];
 
-		assert.equal(hq.isNearInvadingArmy(worldPos(160, 100)), true,
-			"under 12 000 square units of the column, refuse the spot");
-		assert.equal(hq.isNearInvadingArmy(worldPos(400, 400)), false,
-			"far enough from the camp to build");
-		assert.equal(hq.isNearInvadingArmy(worldPos(100, 100)), true,
-			"the army's own ground is of course invaded");
+		assert.equal(
+			hq.isNearInvadingArmy(worldPos(160, 100)),
+			true,
+			"under 12 000 square units of the column, refuse the spot",
+		);
+		assert.equal(hq.isNearInvadingArmy(worldPos(400, 400)), false, "far enough from the camp to build");
+		assert.equal(hq.isNearInvadingArmy(worldPos(100, 100)), true, "the army's own ground is of course invaded");
 	});
 
 	it("an enemy tower's fire will not reach past its own range", () =>
@@ -3028,10 +3853,16 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		const { world, hq } = seat();
 		firingTower(world, 2201, [100, 100]);
 
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)), true,
-			"50 squares out, inside the 80 of the tower");
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(250, 100)), false,
-			"150 squares out, past the tower's reach");
+		assert.equal(
+			hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
+			true,
+			"50 squares out, inside the 80 of the tower",
+		);
+		assert.equal(
+			hq.isUnderEnemyFire(world.gameState, worldPos(250, 100)),
+			false,
+			"150 squares out, past the tower's reach",
+		);
 	});
 
 	it("the caller's own radius adds to the tower's reach", () =>
@@ -3040,10 +3871,16 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		firingTower(world, 2201, [100, 100]);
 
 		// the radius stands for the ground a to-be structure occupies
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 60), true,
-			"the 140 of range and radius reaches the 130-square mark");
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 40), false,
-			"the 120 of the pair does not reach the 130-square mark");
+		assert.equal(
+			hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 60),
+			true,
+			"the 140 of range and radius reaches the 130-square mark",
+		);
+		assert.equal(
+			hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 40),
+			false,
+			"the 120 of the pair does not reach the 130-square mark",
+		);
 	});
 
 	it("a dangerous ground either sees a column or stands inside a tower's fire", () =>
@@ -3051,15 +3888,24 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		const { world, hq } = seat();
 		firingTower(world, 2201, [100, 100]);
 
-		assert.equal(hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0), false,
-			"no column, no fire: the meadow is free");
-		assert.equal(hq.isDangerousLocation(world.gameState, worldPos(150, 100), 0), true,
-			"no column, but the tower's fire reaches it");
-		(hq.defenseManager as unknown as { armies: Array<Record<string, unknown>> }).armies = [
-			{ "foePosition": [340, 150] }
-		];
-		assert.equal(hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0), true,
-			"the column stands within reach of the field's edge");
+		assert.equal(
+			hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
+			false,
+			"no column, no fire: the meadow is free",
+		);
+		assert.equal(
+			hq.isDangerousLocation(world.gameState, worldPos(150, 100), 0),
+			true,
+			"no column, but the tower's fire reaches it",
+		);
+		(hq.defenseManager as unknown as { armies: Array<Record<string, unknown>> }).armies = [{
+			"foePosition": [340, 150],
+		}];
+		assert.equal(
+			hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
+			true,
+			"the column stands within reach of the field's edge",
+		);
 	});
 
 	it("the tower's book stays sealed for the whole turn", () =>
@@ -3071,8 +3917,11 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		// the tower demolished after the question: the turn's sealed book
 		// still answers with what the map held when it was written
 		world.ents.delete(2201);
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)), true,
-			"the same turn answers the same firing book");
+		assert.equal(
+			hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
+			true,
+			"the same turn answers the same firing book",
+		);
 	});
 });
 
@@ -3085,32 +3934,40 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 	// undefined-strength guards here never flip an answer, so no test pins
 	// them — the same convention every batch follows
 	/** a capturable town building: the enemy civil centre over the hill */
-	function captureTarget(world: HqWorld, opts: {
-		id?: number;
-		owner?: number;
-		points?: number[];
-		garrisoned?: CommonEntity[];
-		decaying?: boolean;
-		invulnerable?: boolean;
-		defenseFire?: boolean;
-	} = {}): CommonEntity
+	function captureTarget(
+		world: HqWorld,
+		opts: {
+			id?: number;
+			owner?: number;
+			points?: number[];
+			garrisoned?: CommonEntity[];
+			decaying?: boolean;
+			invulnerable?: boolean;
+			defenseFire?: boolean;
+		} = {},
+	): CommonEntity
 	{
-		const target = world.addEntity(makeHqEntity({
-			id: opts.id ?? 2601, "owner": opts.owner ?? ENEMY, "position": centerOfCell(50, 50),
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/spart/civil_centre"
-		}, {
-			"isCapturable": () => true,
-			"capturePoints": () => opts.points ?? [1000],
-			"healthLevel": () => 1,
-			"defaultRegenRate": () => 0,
-			"decaying": () => opts.decaying ?? false,
-			"isInvulnerable": () => opts.invulnerable ?? false,
-			"isGarrisonHolder": () => !!opts.garrisoned,
-			// garrisoned() lists entity ids, as the engine's queue does
-			"garrisoned": () => (opts.garrisoned ?? []).map((e) => e.id()),
-			"garrisonRegenRate": () => opts.garrisoned ? 1 : 0,
-			"hasDefensiveFire": () => opts.defenseFire ?? false
-		}, { "base": 2 }));
+		const target = world.addEntity(
+			makeHqEntity({
+				id: opts.id ?? 2601,
+				"owner": opts.owner ?? ENEMY,
+				"position": centerOfCell(50, 50),
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/spart/civil_centre",
+			}, {
+				"isCapturable": () => true,
+				"capturePoints": () => opts.points ?? [1000],
+				"healthLevel": () => 1,
+				"defaultRegenRate": () => 0,
+				"decaying": () => opts.decaying ?? false,
+				"isInvulnerable": () => opts.invulnerable ?? false,
+				"isGarrisonHolder": () => !!opts.garrisoned,
+				// garrisoned() lists entity ids, as the engine's queue does
+				"garrisoned": () => (opts.garrisoned ?? []).map(e => e.id()),
+				"garrisonRegenRate": () => opts.garrisoned ? 1 : 0,
+				"hasDefensiveFire": () => opts.defenseFire ?? false,
+			}, { "base": 2 }),
+		);
 		return target;
 	}
 
@@ -3123,29 +3980,36 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		orderData?: CommonUnitOrderData[];
 	} = {}): CommonEntity
 	{
-		return world.addEntity(makeHqEntity({
-			id, "owner": PLAYER, "position": [150, 150],
-			"classes": ["Unit", "Infantry", "CitizenSoldier"],
-			"templateName": "units/athen/infantry_spearman_b"
-		}, {
-			// the Attack/Capture leaf, with optional keyed Bonuses: the
-			// bonus read walks the leaf again one step deeper
-			"get": (path: string) =>
-				path === "Attack/Capture" ? { "Capture": opts.strength, "Bonuses": opts.bonus } :
-				path === "Attack/Capture/Bonuses" ? opts.bonus : undefined,
-			// canCapture() without a target asks only for the Capture attack,
-			// which the template leaf answers; the target passed later stands
-			// for the restricted-classes read, unmodeled here
-			"canCapture": () => true,
-			"captureStrength": () => opts.strength,
-			"unitAIState": () => opts.state === null ? undefined : opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
-			"unitAIOrderData": () => orders(...opts.orderData ?? [{ "target": entityId(2601), "attackType": "Capture" }])
-		}));
+		return world.addEntity(
+			makeHqEntity({
+				id,
+				"owner": PLAYER,
+				"position": [150, 150],
+				"classes": ["Unit", "Infantry", "CitizenSoldier"],
+				"templateName": "units/athen/infantry_spearman_b",
+			}, {
+				// the Attack/Capture leaf, with optional keyed Bonuses: the
+				// bonus read walks the leaf again one step deeper
+				"get": (path: string) =>
+					path === "Attack/Capture" ?
+						{ "Capture": opts.strength, "Bonuses": opts.bonus } :
+						path === "Attack/Capture/Bonuses" ?
+						opts.bonus :
+						undefined,
+				// canCapture() without a target asks only for the Capture attack,
+				// which the template leaf answers; the target passed later stands
+				// for the restricted-classes read, unmodeled here
+				"canCapture": () => true,
+				"captureStrength": () => opts.strength,
+				"unitAIState": () => opts.state === null ? undefined : opts.state ?? "INDIVIDUAL.COMBAT.ATTACKING",
+				"unitAIOrderData": () =>
+					orders(...opts.orderData ?? [{ "target": entityId(2601), "attackType": "Capture" }]),
+			}),
+		);
 	}
 
 	/** the ledger's entry for a target, peeked two ways */
-	function ledger(hq: Headquarters, targetId: number):
-		{ strength: number; ents: Set<number> } | undefined
+	function ledger(hq: Headquarters, targetId: number): { strength: number; ents: Set<number> } | undefined
 	{
 		return (hq as unknown as { capturableTargets: Map<number, { strength: number; ents: Set<number> }> })
 			.capturableTargets.get(targetId);
@@ -3157,17 +4021,20 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world);
 		const unit = capturer(world, 2611, { "strength": 20 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
 		// 20 capture strength against a thousand capture points: quietly out
 		// of the running, so the order that stands needs no correction
 		assert.deepEqual(ledger(hq, 2601), { "strength": 20, "ents": new Set([2611]) });
-		assert.equal(hq.capturableTargetsTime, 100,
-			"the ledger stamps the turn it was last raised");
-		assert.deepEqual(commands, [],
-			"the order already rides capture; nothing to correct");
+		assert.equal(hq.capturableTargetsTime, 100, "the ledger stamps the turn it was last raised");
+		assert.deepEqual(commands, [], "the order already rides capture; nothing to correct");
 	});
 
 	it("a batch too thin outright becomes a plain assault", () =>
@@ -3176,7 +4043,12 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world);
 		const unit = capturer(world, 2611, { "strength": 10 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3192,8 +4064,18 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		const first = capturer(world, 2611, { "strength": 8 });
 		const second = capturer(world, 2612, { "strength": 9 });
 		const commands: Array<[number, boolean]> = [];
-		override(first, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
-		override(second, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(first, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
+		override(second, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3221,10 +4103,15 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world);
 		const unit = capturer(world, 2611, {
 			"strength": 5,
-			"bonus": { "siege": { "Classes": "Structure", "Multiplier": "2" } }
+			"bonus": { "siege": { "Classes": "Structure", "Multiplier": "2" } },
 		});
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3248,24 +4135,32 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 
 		hq.updateCaptureStrength(world.gameState);
 
-		assert.equal(ledger(hq, 2601), undefined,
-			"no unit among them faces the target in combat");
-		assert.equal(hq.capturableTargetsTime, 100,
-			"the walk still stamps its time even with an empty book");
+		assert.equal(ledger(hq, 2601), undefined, "no unit among them faces the target in combat");
+		assert.equal(hq.capturableTargetsTime, 100, "the walk still stamps its time even with an empty book");
 	});
 
 	it("a garrisoned wall buys time for its capture points", () =>
 	{
 		const { world, hq } = seat();
 		// the wall's regen of 1 times the crew's 6 capture strength holds it
-		const crew = world.addEntity(makeHqEntity({
-			"id": 2701, "owner": ENEMY, "position": centerOfCell(50, 50),
-			"classes": ["Unit", "Soldier"], "templateName": "units/spart/infantry_spearman_e"
-		}, { "captureStrength": () => 6 }));
+		const crew = world.addEntity(
+			makeHqEntity({
+				"id": 2701,
+				"owner": ENEMY,
+				"position": centerOfCell(50, 50),
+				"classes": ["Unit", "Soldier"],
+				"templateName": "units/spart/infantry_spearman_e",
+			}, { "captureStrength": () => 6 }),
+		);
 		captureTarget(world, { "garrisoned": [crew] });
 		const unit = capturer(world, 2611, { "strength": 17 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3276,14 +4171,24 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 	it("a wall firing arrows demands a heavier batch still", () =>
 	{
 		const { world, hq } = seat();
-		const crew = world.addEntity(makeHqEntity({
-			"id": 2701, "owner": ENEMY, "position": centerOfCell(50, 50),
-			"classes": ["Unit", "Soldier"], "templateName": "units/spart/infantry_spearman_e"
-		}, { "captureStrength": () => 6 }));
+		const crew = world.addEntity(
+			makeHqEntity({
+				"id": 2701,
+				"owner": ENEMY,
+				"position": centerOfCell(50, 50),
+				"classes": ["Unit", "Soldier"],
+				"templateName": "units/spart/infantry_spearman_e",
+			}, { "captureStrength": () => 6 }),
+		);
 		captureTarget(world, { "garrisoned": [crew], "defenseFire": true });
 		const unit = capturer(world, 2611, { "strength": 25 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3300,7 +4205,12 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world, { "owner": 2 });
 		const unit = capturer(world, 2611, { "strength": 1 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3316,7 +4226,12 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world, { "owner": 2, "decaying": true });
 		const unit = capturer(world, 2611, { "strength": 1 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3330,7 +4245,12 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		captureTarget(world, { "invulnerable": true });
 		const unit = capturer(world, 2611, { "strength": 1 });
 		const commands: Array<[number, boolean]> = [];
-		override(unit, { "attack": (target: number, capture: boolean) => { commands.push([target, capture]); } });
+		override(unit, {
+			"attack": (target: number, capture: boolean) =>
+			{
+				commands.push([target, capture]);
+			},
+		});
 
 		hq.updateCaptureStrength(world.gameState);
 
@@ -3347,7 +4267,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		return structureTemplate("structures/athen/military_colony", {
 			"classes": ["Structure", "Military"],
 			"territories": ["own", "neutral"],
-			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } }
+			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } },
 		});
 	}
 
@@ -3356,14 +4276,19 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 	{
 		world.templates["structures/athen/military_colony"] = colonyTemplate();
 		world.templates["structures/athen/civil_centre"] = ccTemplate();
-		world.addEntity(makeHqEntity({
-			"id": 2202, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) =>
-				["structures/{civ}/military_colony", "structures/{civ}/civil_centre"]
-					.map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2202,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/military_colony", "structures/{civ}/civil_centre"].map(name =>
+						name.replace("{civ}", civ)
+					),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
@@ -3372,10 +4297,15 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
 		// our town hall: a built CC carrying the civ's own applied template,
 		// the walk `hasOwnCC` reads
-		world.addEntity(makeHqEntity({
-			"id": 1102, "owner": PLAYER, "position": [80, 80],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 1102,
+				"owner": PLAYER,
+				"position": [80, 80],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 		seatCards(world, hq);
 
 		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
@@ -3392,7 +4322,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		const { world, hq } = seat({
 			"phase": 2,
 			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 },
-			"disabledTemplates": ["structures/athen/military_colony"]
+			"disabledTemplates": ["structures/athen/military_colony"],
 		});
 		seatCards(world, hq);
 
@@ -3406,9 +4336,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 	{
 		// phase 1 on the seat: the town hall waits for the phase's word and
 		// the office plants nothing new meanwhile
-		const { world, hq } = seat({
-			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
-		});
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
 		seatCards(world, hq);
 
 		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), false);
@@ -3421,7 +4349,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 			"phase": 1,
 			"phaseName": "phaseTown",
 			"researching": ["phaseTown"],
-			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
+			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 },
 		});
 		seatCards(world, hq);
 
@@ -3435,14 +4363,21 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
 		seatCards(world, hq);
 		// the block next door is ours: a civil centre rising from the ground
-		world.addEntity(makeHqEntity({
-			id: 1220, "owner": PLAYER, "position": [220, 120],
-			"classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre"
-		}, { "foundationProgress": () => 0.5 }));
+		world.addEntity(
+			makeHqEntity({
+				id: 1220,
+				"owner": PLAYER,
+				"position": [220, 120],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}, { "foundationProgress": () => 0.5 }),
+		);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), false,
-			"one town already rises; the office waits for it");
+		assert.equal(
+			hq.buildNewBase(world.gameState, world.ai.queues),
+			false,
+			"one town already rises; the office waits for it",
+		);
 	});
 
 	it("a civil-centre plan already queued holds the laying too", () =>
@@ -3451,8 +4386,11 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		seatCards(world, hq);
 		// the office already books one; a second call holds on its side
 		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), false,
-			"one plan at a time holds the civil-centre queue");
+		assert.equal(
+			hq.buildNewBase(world.gameState, world.ai.queues),
+			false,
+			"one plan at a time holds the civil-centre queue",
+		);
 		const queue = world.ai.queues.civilCentre;
 		assert.equal(queue.plans.length, 1);
 	});
@@ -3463,23 +4401,31 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 	/** the colony card registered and booked, as the office keeps its cards */
 	function seatCards(world: HqWorld, hq: Headquarters): void
 	{
-		world.templates["structures/athen/military_colony"] = structureTemplate(
-			"structures/athen/military_colony", {
+		world.templates["structures/athen/military_colony"] = structureTemplate("structures/athen/military_colony", {
 			"classes": ["Structure", "Military"],
 			"territories": ["own", "neutral"],
-			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } }
+			"getPaths": { "Footprint": { "Square": { "@width": 28, "@depth": 28 } } },
 		});
-		world.addEntity(makeHqEntity({
-			"id": 1102, "owner": PLAYER, "position": [80, 80],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 2202, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) =>
-				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 1102,
+				"owner": PLAYER,
+				"position": [80, 80],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 2202,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/military_colony"].map(name => name.replace("{civ}", civ)),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
@@ -3487,10 +4433,15 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 	function seatPopulation(world: HqWorld, count: number): void
 	{
 		for (let i = 0; i < count; ++i)
-			world.addEntity(makeHqEntity({
-				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
-				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 4100 + i,
+					"owner": PLAYER,
+					position: [100 + i, 100],
+					"classes": ["Unit", "Worker"],
+					"templateName": "units/athen/support_female_citizen",
+				}),
+			);
 	}
 
 	it("the civil-centre queue's own batch holds every expansion hint", () =>
@@ -3532,8 +4483,11 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 
 		hq.checkBaseExpansion(world.gameState, world.ai.queues);
 
-		assert.equal(world.ai.queues.civilCentre.plans.length, 0,
-			"while the town's phase is up in the air, no second ground is opened");
+		assert.equal(
+			world.ai.queues.civilCentre.plans.length,
+			0,
+			"while the town's phase is up in the air, no second ground is opened",
+		);
 	});
 
 	it("the swelling town asks past the aggressive threshold, not before it", () =>
@@ -3546,13 +4500,17 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		hq.checkBaseExpansion(world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 0, "exactly the threshold holds");
 
-		world.addEntity(makeHqEntity({
-			id: 4170, "owner": PLAYER, position: [250, 100],
-			"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 4170,
+				"owner": PLAYER,
+				position: [250, 100],
+				"classes": ["Unit", "Worker"],
+				"templateName": "units/athen/support_female_citizen",
+			}),
+		);
 		hq.checkBaseExpansion(world.gameState, world.ai.queues);
-		assert.equal(world.ai.queues.civilCentre.plans.length, 1,
-			"the caller over the floor breaks the wait");
+		assert.equal(world.ai.queues.civilCentre.plans.length, 1, "the caller over the floor breaks the wait");
 	});
 
 	it("the retiring manager asks from fewer callers when the funds stretch", () =>
@@ -3581,10 +4539,16 @@ describe("the office's turn on the clock: update's schedule", () =>
 
 		// the wipe may already have been recomputed by one of the update's
 		// own walks: the point is the stale 999 never rides again
-		assert.notEqual(hq.turnCache.accountedPopulation, 999,
-			"the headcount of yesterday is not the headcount of today");
-		assert.equal(hq.getAccountedPopulation(world.gameState), 0,
-			"the recount answers from today's town, not yesterday's book");
+		assert.notEqual(
+			hq.turnCache.accountedPopulation,
+			999,
+			"the headcount of yesterday is not the headcount of today",
+		);
+		assert.equal(
+			hq.getAccountedPopulation(world.gameState),
+			0,
+			"the recount answers from today's town, not yesterday's book",
+		);
 	});
 
 	it("the town hall advancing marks the office's phase and clears the flag", () =>
@@ -3615,10 +4579,15 @@ describe("the office's turn on the clock: update's schedule", () =>
 	it("a market built turns the office's barter lantern on", () =>
 	{
 		const { world, hq } = seat();
-		world.addEntity(makeHqEntity({
-			id: 2501, "owner": PLAYER, "position": centerOfCell(30, 30),
-			"classes": ["Structure", "Market"], "templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 2501,
+				"owner": PLAYER,
+				"position": centerOfCell(30, 30),
+				"classes": ["Structure", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 
 		hq.update(world.gameState, world.ai.queues, eventsWith({}));
 
@@ -3632,8 +4601,7 @@ describe("the office's turn on the clock: update's schedule", () =>
 
 		hq.update(world.gameState, world.ai.queues, eventsWith({}));
 
-		assert.equal(hq.capturableTargetsTime, 100,
-			"the walk stamped itself again at the town's own clock");
+		assert.equal(hq.capturableTargetsTime, 100, "the walk stamped itself again at the town's own clock");
 	});
 
 	it("but a ledger still fresh with the town's clock waits its turn", () =>
@@ -3643,79 +4611,106 @@ describe("the office's turn on the clock: update's schedule", () =>
 
 		hq.update(world.gameState, world.ai.queues, eventsWith({}));
 
-		assert.equal(hq.capturableTargetsTime, 98,
-			"under three seconds of silence, the book stays as it was");
+		assert.equal(hq.capturableTargetsTime, 98, "under three seconds of silence, the book stays as it was");
 	});
 
 	it("the expansion hint rides the seventh turn of ten through the update", () =>
 	{
-		const { world, hq } = seat({
-			"phase": 2,
-			"stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 }
-		});
-		world.templates["structures/athen/military_colony"] = structureTemplate(
-			"structures/athen/military_colony", {
+		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
+		world.templates["structures/athen/military_colony"] = structureTemplate("structures/athen/military_colony", {
 			"classes": ["Structure", "Military"],
-			"territories": ["own", "neutral"]
+			"territories": ["own", "neutral"],
 		});
-		world.addEntity(makeHqEntity({
-			id: 1102, "owner": PLAYER, position: [80, 80],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 2202, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) =>
-				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 1102,
+				"owner": PLAYER,
+				position: [80, 80],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 2202,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/military_colony"].map(name => name.replace("{civ}", civ)),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 		for (let i = 0; i < 71; ++i)
-			world.addEntity(makeHqEntity({
-				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
-				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 4100 + i,
+					"owner": PLAYER,
+					position: [100 + i, 100],
+					"classes": ["Unit", "Worker"],
+					"templateName": "units/athen/support_female_citizen",
+				}),
+			);
 		world.ai.playedTurn = 7;
 
 		hq.update(world.gameState, world.ai.queues, eventsWith({}));
 
-		assert.equal(world.ai.queues.civilCentre.plans.length, 1,
-			"the seventh turn carries the expansion hint to the colony book");
-		assert.equal(world.ai.queues.civilCentre.plans[0]?.type,
-			"structures/athen/military_colony");
+		assert.equal(
+			world.ai.queues.civilCentre.plans.length,
+			1,
+			"the seventh turn carries the expansion hint to the colony book",
+		);
+		assert.equal(world.ai.queues.civilCentre.plans[0]?.type, "structures/athen/military_colony");
 	});
 
 	it("but a turn off the seventh rides without the hint", () =>
 	{
 		const { world, hq } = seat({ "phase": 2, "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } });
-		world.templates["structures/athen/military_colony"] = structureTemplate(
-			"structures/athen/military_colony", {
+		world.templates["structures/athen/military_colony"] = structureTemplate("structures/athen/military_colony", {
 			"classes": ["Structure", "Military"],
-			"territories": ["own", "neutral"]
+			"territories": ["own", "neutral"],
 		});
-		world.addEntity(makeHqEntity({
-			id: 1102, "owner": PLAYER, position: [80, 80],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 2202, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) =>
-				["structures/{civ}/military_colony"].map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id: 1102,
+				"owner": PLAYER,
+				position: [80, 80],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 2202,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/military_colony"].map(name => name.replace("{civ}", civ)),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 		for (let i = 0; i < 71; ++i)
-			world.addEntity(makeHqEntity({
-				id: 4100 + i, "owner": PLAYER, position: [100 + i, 100],
-				"classes": ["Unit", "Worker"], "templateName": "units/athen/support_female_citizen"
-			}));
+			world.addEntity(
+				makeHqEntity({
+					id: 4100 + i,
+					"owner": PLAYER,
+					position: [100 + i, 100],
+					"classes": ["Unit", "Worker"],
+					"templateName": "units/athen/support_female_citizen",
+				}),
+			);
 		world.ai.playedTurn = 8;
 
 		hq.update(world.gameState, world.ai.queues, eventsWith({}));
 
-		assert.equal(world.ai.queues.civilCentre.plans.length, 0,
-			"the eighth turn carries no expansion hint, the card unbooked");
+		assert.equal(
+			world.ai.queues.civilCentre.plans.length,
+			0,
+			"the eighth turn carries no expansion hint, the card unbooked",
+		);
 	});
 });
 
@@ -3730,8 +4725,7 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 		hq.handleNewBase(world.gameState);
 
 		assert.equal(hq.firstBaseConfig, true, "the landing is configured once");
-		assert.equal(hq.saveSpace, true,
-			"the small starting ground of a fresh town keeps the buildings packed");
+		assert.equal(hq.saveSpace, true, "the small starting ground of a fresh town keeps the buildings packed");
 		assert.equal(hq.maxFields, 1, "and its fields stay few");
 	});
 
@@ -3746,8 +4740,11 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 
 		hq.handleNewBase(world.gameState);
 
-		assert.equal(hq.saveResources, undefined,
-			"the funds are spent freely again: the new ground may fix the shortage");
+		assert.equal(
+			hq.saveResources,
+			undefined,
+			"the funds are spent freely again: the new ground may fix the shortage",
+		);
 		assert.equal(hq.saveSpace, undefined, "the buildings spread again");
 		assert.equal(hq.maxFields, false, "the fields are not numbered anymore");
 	});
@@ -3759,7 +4756,7 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 	{
 		const { world, hq } = seat({
 			"trajectories": { "2,3": [2, 8, 3] },
-			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+			"regionTypes": { 2: "land", 3: "land", 8: "water" },
 		});
 
 		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), 8);
@@ -3767,10 +4764,7 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 
 	it("a land bridge between the shores names no sea", () =>
 	{
-		const { world, hq } = seat({
-			"trajectories": { "2,3": [2, 3] },
-			"regionTypes": { 2: "land", 3: "land" }
-		});
+		const { world, hq } = seat({ "trajectories": { "2,3": [2, 3] }, "regionTypes": { 2: "land", 3: "land" } });
 
 		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
 	});
@@ -3779,7 +4773,7 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 	{
 		const { world, hq } = seat({
 			"trajectories": { "2,3": [2, 8, 3] },
-			"regionTypes": { 2: "land", 3: "land", 8: "land" }
+			"regionTypes": { 2: "land", 3: "land", 8: "land" },
 		});
 
 		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
@@ -3787,12 +4781,13 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 
 	it("no known route between the two regions names no sea", () =>
 	{
-		const { world, hq } = seat({
-			"regionTypes": { 2: "land", 3: "land", 8: "water" }
-		});
+		const { world, hq } = seat({ "regionTypes": { 2: "land", 3: "land", 8: "water" } });
 
-		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined,
-			"the engine answers no trajectory at all, so nothing to cross");
+		assert.equal(
+			hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)),
+			undefined,
+			"the engine answers no trajectory at all, so nothing to cross",
+		);
 	});
 });
 
@@ -3803,19 +4798,24 @@ describe("the stock of gatherable resources: getTotalResourceLevel", () =>
 		const { world, hq } = seat();
 		// two forest trees: one near the dropsite, one in the medium band.
 		// The near tree also appears in the medium band, and must not count twice.
-		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood",
-			"classes": ["Forest"], "amount": 300 }));
-		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood",
-			"classes": ["Forest"], "amount": 200 }));
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 2,
+				"position": [140, 100],
+				"generic": "wood",
+				"classes": ["Forest"],
+				"amount": 300,
+			}),
+		);
+		world.addEntity(
+			makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood", "classes": ["Forest"], "amount": 200 }),
+		);
 		// the scanner's book for the base, set directly; the scanner itself is
 		// pinned by the storehouse test above
-		const base = hq.basesManager.baseManagers[0] as unknown as
-			{ dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>> };
-		base.dropsiteSupplies.wood = {
-			"nearby": [{ "id": 2 }],
-			"medium": [{ "id": 2 }, { "id": 3 }],
-			"faraway": []
+		const base = hq.basesManager.baseManagers[0] as unknown as {
+			dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>>;
 		};
+		base.dropsiteSupplies.wood = { "nearby": [{ "id": 2 }], "medium": [{ "id": 2 }, { "id": 3 }], "faraway": [] };
 
 		const total = hq.getTotalResourceLevel(world.gameState);
 
@@ -3826,17 +4826,22 @@ describe("the stock of gatherable resources: getTotalResourceLevel", () =>
 	it("the proximity the caller asks for narrows the sum", () =>
 	{
 		const { world, hq } = seat();
-		world.addEntity(makeGaiaSupply({ "id": 2, "position": [140, 100], "generic": "wood",
-			"classes": ["Forest"], "amount": 300 }));
-		world.addEntity(makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood",
-			"classes": ["Forest"], "amount": 200 }));
-		const base = hq.basesManager.baseManagers[0] as unknown as
-			{ dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>> };
-		base.dropsiteSupplies.wood = {
-			"nearby": [{ "id": 2 }],
-			"medium": [{ "id": 2 }, { "id": 3 }],
-			"faraway": []
+		world.addEntity(
+			makeGaiaSupply({
+				"id": 2,
+				"position": [140, 100],
+				"generic": "wood",
+				"classes": ["Forest"],
+				"amount": 300,
+			}),
+		);
+		world.addEntity(
+			makeGaiaSupply({ "id": 3, "position": [146, 96], "generic": "wood", "classes": ["Forest"], "amount": 200 }),
+		);
+		const base = hq.basesManager.baseManagers[0] as unknown as {
+			dropsiteSupplies: Record<string, Record<string, Array<{ id: number }>>>;
 		};
+		base.dropsiteSupplies.wood = { "nearby": [{ "id": 2 }], "medium": [{ "id": 2 }, { "id": 3 }], "faraway": [] };
 
 		const total = hq.getTotalResourceLevel(world.gameState, ["wood"], ["nearby"]);
 
@@ -3855,12 +4860,17 @@ describe("a pen for the herd: manageCorral", () =>
 	/** our builder, booking the pen card */
 	function seatPenBuilder(world: HqWorld, hq: Headquarters): void
 	{
-		world.addEntity(makeHqEntity({
-			"id": 2203, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) => ["structures/{civ}/corral"].map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2203,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/corral"].map(name => name.replace("{civ}", civ)),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
@@ -3868,7 +4878,8 @@ describe("a pen for the herd: manageCorral", () =>
 	{
 		const { world, hq } = seat();
 		world.templates["structures/athen/corral"] = structureTemplate("structures/athen/corral", {
-			"classes": ["Structure", "Corral"], "territories": ["own", "neutral"]
+			"classes": ["Structure", "Corral"],
+			"territories": ["own", "neutral"],
 		});
 		seatPenBuilder(world, hq);
 
@@ -3884,10 +4895,15 @@ describe("a pen for the herd: manageCorral", () =>
 		const { world, hq } = seat();
 		world.templates["gaia/fauna_deer"] = huntable("gaia/fauna_deer");
 		// a pen carries a production queue: its training list reads empty, not absent
-		world.addEntity(makeHqEntity({
-			"id": 2301, "owner": PLAYER, "position": [120, 120],
-			"classes": ["Structure", "Corral"], "templateName": "structures/athen/corral"
-		}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2301,
+				"owner": PLAYER,
+				"position": [120, 120],
+				"classes": ["Structure", "Corral"],
+				"templateName": "structures/athen/corral",
+			}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }),
+		);
 
 		hq.manageCorral(world.gameState, world.ai.queues);
 
@@ -3901,16 +4917,26 @@ describe("a pen for the herd: manageCorral", () =>
 	{
 		const { world, hq } = seat();
 		world.templates["gaia/fauna_deer"] = huntable("gaia/fauna_deer");
-		world.addEntity(makeHqEntity({
-			"id": 2301, "owner": PLAYER, "position": [120, 120],
-			"classes": ["Structure", "Corral"], "templateName": "structures/athen/corral"
-		}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2301,
+				"owner": PLAYER,
+				"position": [120, 120],
+				"classes": ["Structure", "Corral"],
+				"templateName": "structures/athen/corral",
+			}, { "trainableEntities": () => ["gaia/fauna_deer"], "trainingQueue": () => [] }),
+		);
 		// two deer already walk the pen, more than its one place
 		for (const id of [2311, 2312])
-			world.addEntity(makeHqEntity({
-				"id": id, "owner": PLAYER, "position": [121, 121],
-				"classes": ["Unit", "Animal"], "templateName": "gaia/fauna_deer"
-			}));
+			world.addEntity(
+				makeHqEntity({
+					"id": id,
+					"owner": PLAYER,
+					"position": [121, 121],
+					"classes": ["Unit", "Animal"],
+					"templateName": "gaia/fauna_deer",
+				}),
+			);
 
 		hq.manageCorral(world.gameState, world.ai.queues);
 
@@ -3927,14 +4953,20 @@ describe("the wonder for a rich town: buildWonder", () =>
 	function seatWonder(world: HqWorld, hq: Headquarters): void
 	{
 		world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder", {
-			"classes": ["Structure", "Wonder"], "cost": WONDER_COST
+			"classes": ["Structure", "Wonder"],
+			"cost": WONDER_COST,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 2204, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) => ["structures/{civ}/wonder"].map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2204,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": (civ: string) =>
+					["structures/{civ}/wonder"].map(name => name.replace("{civ}", civ)),
+			}),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
@@ -3958,8 +4990,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 
 		hq.buildWonder(world.gameState, world.ai.queues);
 
-		assert.equal(world.ai.queues.wonder.plans.length, 0,
-			"the wonder waits until no more than one need runs thin");
+		assert.equal(world.ai.queues.wonder.plans.length, 0, "the wonder waits until no more than one need runs thin");
 	});
 
 	it("a town with nothing near the wonder's cost holds back as well", () =>
@@ -3986,15 +5017,19 @@ describe("the wonder for a rich town: buildWonder", () =>
 	{
 		const { world, hq } = seat({ "stock": { "food": 800, "wood": 800, "stone": 800 } });
 		seatWonder(world, hq);
-		world.addEntity(makeHqEntity({
-			"id": 2401, "owner": PLAYER, "position": [60, 60],
-			"classes": ["Structure", "Wonder"], "templateName": "structures/athen/wonder"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2401,
+				"owner": PLAYER,
+				"position": [60, 60],
+				"classes": ["Structure", "Wonder"],
+				"templateName": "structures/athen/wonder",
+			}),
+		);
 
 		hq.buildWonder(world.gameState, world.ai.queues, true);
 
-		assert.equal(world.ai.queues.wonder.plans.length, 0,
-			"one wonder per town, forced or not");
+		assert.equal(world.ai.queues.wonder.plans.length, 0, "one wonder per town, forced or not");
 	});
 });
 
@@ -4004,14 +5039,17 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 	function houseCards(world: HqWorld, hq: Headquarters, buildable: string[] = ["structures/{civ}/house"]): void
 	{
 		world.templates["structures/athen/house"] = structureTemplate("structures/athen/house", {
-			"classes": ["Structure", "House", "Village"], "popBonus": 10
+			"classes": ["Structure", "House", "Village"],
+			"popBonus": 10,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 2205, "owner": PLAYER, "position": [152, 152],
-			"classes": ["Unit", "Support", "Worker"]
-		}, {
-			"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2205,
+				"owner": PLAYER,
+				"position": [152, 152],
+				"classes": ["Unit", "Support", "Worker"],
+			}, { "buildableEntities": (civ: string) => buildable.map(name => name.replace("{civ}", civ)) }),
+		);
 		hq.buildManager = BuildManager.start(world.gameState);
 	}
 
@@ -4022,8 +5060,11 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
-		assert.equal(world.ai.queues.house.plans.length, 0,
-			"a town whose cap is its ceiling has nothing to build toward");
+		assert.equal(
+			world.ai.queues.house.plans.length,
+			0,
+			"a town whose cap is its ceiling has nothing to build toward",
+		);
 	});
 
 	it("a town at its cap, with no houses waiting, plans one marked as needed", () =>
@@ -4059,7 +5100,8 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 90, "population": 70 });
 		houseCards(world, hq, ["structures/{civ}/house", "structures/{civ}/apartment"]);
 		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
-			"classes": ["Structure", "House", "Village"], "popBonus": 20
+			"classes": ["Structure", "House", "Village"],
+			"popBonus": 20,
 		});
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -4072,12 +5114,15 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 	{
 		// the apartment needs a later phase: the game reports it disabled
 		const { world, hq } = seat({
-			"populationMax": 300, "populationLimit": 90, "population": 70,
-			"disabledTemplates": ["structures/athen/apartment"]
+			"populationMax": 300,
+			"populationLimit": 90,
+			"population": 70,
+			"disabledTemplates": ["structures/athen/apartment"],
 		});
 		houseCards(world, hq, ["structures/{civ}/house", "structures/{civ}/apartment"]);
 		world.templates["structures/athen/apartment"] = structureTemplate("structures/athen/apartment", {
-			"classes": ["Structure", "House", "Village"], "popBonus": 20
+			"classes": ["Structure", "House", "Village"],
+			"popBonus": 20,
 		});
 		hq.buildManager = BuildManager.start(world.gameState);
 
@@ -4089,8 +5134,10 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 	it("a phase that wants village buildings reopens a house spot the census had shut", () =>
 	{
 		const { world, hq } = seat({
-			"populationMax": 300, "populationLimit": 90, "population": 70,
-			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+			"populationMax": 300,
+			"populationLimit": 90,
+			"population": 70,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] },
 		});
 		houseCards(world, hq);
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
@@ -4101,22 +5148,32 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
 		assert.equal(hq.requireHouses, true, "the house is required until the phase's villages stand");
-		assert.equal(hq.buildManager.isUnbuildable(world.gameState, "structures/athen/house"), false,
-			"the shut spot is reopened for the phase");
+		assert.equal(
+			hq.buildManager.isUnbuildable(world.gameState, "structures/athen/house"),
+			false,
+			"the shut spot is reopened for the phase",
+		);
 	});
 
 	it("the phase's villages standing lift the house requirement", () =>
 	{
 		const { world, hq } = seat({
-			"populationMax": 300, "populationLimit": 90, "population": 70,
-			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+			"populationMax": 300,
+			"populationLimit": 90,
+			"population": 70,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] },
 		});
 		houseCards(world, hq);
 		for (const id of [2601, 2602, 2603])
-			world.addEntity(makeHqEntity({
-				"id": id, "owner": PLAYER, "position": [40 + id - 2601, 40],
-				"classes": ["Structure", "House", "Village"], "templateName": "structures/athen/house"
-			}));
+			world.addEntity(
+				makeHqEntity({
+					"id": id,
+					"owner": PLAYER,
+					"position": [40 + id - 2601, 40],
+					"classes": ["Structure", "House", "Village"],
+					"templateName": "structures/athen/house",
+				}),
+			);
 		hq.phasing = 2;
 		hq.requireHouses = true;
 
@@ -4145,8 +5202,10 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
-		assert.ok(doorCalls(hq.researchManager).some(([name]: [string, unknown[]]) => name === "researchPopulationBonus"),
-			"two souls of room left and no spot to build: the research office is asked");
+		assert.ok(
+			doorCalls(hq.researchManager).some(([name]: [string, unknown[]]) => name === "researchPopulationBonus"),
+			"two souls of room left and no spot to build: the research office is asked",
+		);
 	});
 
 	// only the port passes: Petra doubled the house queue's priority to 500,
@@ -4169,8 +5228,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		// the cap still sits below the ceiling, with a hundred free souls of room
 		const { world, hq } = seat({ "populationMax": 300, "populationLimit": 200, "population": 100 });
 		houseCards(world, hq);
-		world.ai.queueManager
-			.changePriority("house", 2 * hq.Config.priorities.house);
+		world.ai.queueManager.changePriority("house", 2 * hq.Config.priorities.house);
 
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
 
@@ -4181,18 +5239,23 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 /** a builder of ours who knows the named cards, as the town's workers do */
 function bookBuilder(world: HqWorld, hq: Headquarters, buildable: string[]): void
 {
-	world.addEntity(makeHqEntity({
-		"id": 2206, "owner": PLAYER, "position": [152, 152],
-		"classes": ["Unit", "Support", "Worker"]
-	}, {
-		"buildableEntities": (civ: string) => buildable.map((name) => name.replace("{civ}", civ))
-	}));
+	world.addEntity(
+		makeHqEntity(
+			{ "id": 2206, "owner": PLAYER, "position": [152, 152], "classes": ["Unit", "Support", "Worker"] },
+			{ "buildableEntities": (civ: string) => buildable.map(name => name.replace("{civ}", civ)) },
+		),
+	);
 	hq.buildManager = BuildManager.start(world.gameState);
 }
 
 /** a building of ours already standing */
-function standing(world: HqWorld, id: number, classes: string[], templateName: string,
-	position: [number, number] = [60, 60]): void
+function standing(
+	world: HqWorld,
+	id: number,
+	classes: string[],
+	templateName: string,
+	position: [number, number] = [60, 60],
+): void
 {
 	world.addEntity(makeHqEntity({ id, "owner": PLAYER, position, classes, templateName }));
 }
@@ -4275,9 +5338,7 @@ describe("the frontier's defences: buildDefenses", () =>
 	it("in the third phase a fortress is raised, and its queue doubled", () =>
 	{
 		const { world, hq } = seat({ "phase": 3, "population": 100 });
-		world.templates[FORTRESS] = structureTemplate(FORTRESS, {
-			"classes": ["Structure", "Fortress", "Defensive"]
-		});
+		world.templates[FORTRESS] = structureTemplate(FORTRESS, { "classes": ["Structure", "Fortress", "Defensive"] });
 		bookBuilder(world, hq, ["structures/{civ}/fortress"]);
 		world.ai.elapsedTime = seconds(hq.fortressLapseTime + hq.fortressStartTime + 1);
 
@@ -4286,15 +5347,14 @@ describe("the frontier's defences: buildDefenses", () =>
 		const plans = world.ai.queues.defenseBuilding.plans;
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, FORTRESS);
-		assert.equal(world.ai.queueManager.getPriority("defenseBuilding"),
-			2 * hq.Config.priorities.defenseBuilding);
+		assert.equal(world.ai.queueManager.getPriority("defenseBuilding"), 2 * hq.Config.priorities.defenseBuilding);
 	});
 
 	it("in the second phase, a stone defence tower goes up for the first time", () =>
 	{
 		const { world, hq } = seat({ "phase": 2, "population": 70 });
 		world.templates[TOWER] = structureTemplate(TOWER, {
-			"classes": ["Structure", "StoneTower", "Defensive", "Tower"]
+			"classes": ["Structure", "StoneTower", "Defensive", "Tower"],
 		});
 		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 
@@ -4313,11 +5373,14 @@ describe("the frontier's defences: buildDefenses", () =>
 		{
 			const { world, hq } = seat({ "phase": 2, "population": 70, "territoryOwner": () => PLAYER });
 			hq.updateTerritories(world.gameState);
-			world.templates[TOWER] = override(structureTemplate(TOWER, {
-				"classes": ["Structure", "StoneTower", "Defensive", "Tower"],
-				"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
-				"obstruction": { "min": 6, "max": 9.2 }
-			}), { "attackRange": () => ({ "min": 0, "max": 60 }) });
+			world.templates[TOWER] = override(
+				structureTemplate(TOWER, {
+					"classes": ["Structure", "StoneTower", "Defensive", "Tower"],
+					"getPaths": { "Footprint": { "Square": { "@width": 13, "@depth": 13 } } },
+					"obstruction": { "min": 6, "max": 9.2 },
+				}),
+				{ "attackRange": () => ({ "min": 0, "max": 60 }) },
+			);
 			bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 			hq.saveResources = true;
 			hq.canBarter = false;
@@ -4328,7 +5391,11 @@ describe("the frontier's defences: buildDefenses", () =>
 
 			hq.buildDefenses(world.gameState, world.ai.queues);
 
-			assert.equal(world.ai.queues.defenseBuilding.plans.length, busy ? 1 : 0, busy ? "a busy passage" : "an empty sea");
+			assert.equal(
+				world.ai.queues.defenseBuilding.plans.length,
+				busy ? 1 : 0,
+				busy ? "a busy passage" : "an empty sea",
+			);
 		}
 	});
 
@@ -4336,14 +5403,13 @@ describe("the frontier's defences: buildDefenses", () =>
 	{
 		const { world, hq } = seat({ "phase": 2, "population": 70 });
 		world.templates[TOWER] = structureTemplate(TOWER, {
-			"classes": ["Structure", "StoneTower", "Defensive", "Tower"]
+			"classes": ["Structure", "StoneTower", "Defensive", "Tower"],
 		});
 		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 		// the quota is two towers per base, three more, and the difficulty's extras
 		const quota = 2 * hq.numActiveBases() + 3 + hq.extraTowers;
 		for (let i = 0; i < quota; ++i)
-			standing(world, 2710 + i, ["Structure", "StoneTower", "Defensive", "Tower"], TOWER,
-				[30 + 4 * i, 30]);
+			standing(world, 2710 + i, ["Structure", "StoneTower", "Defensive", "Tower"], TOWER, [30 + 4 * i, 30]);
 		world.ai.elapsedTime = seconds(10000);
 
 		hq.buildDefenses(world.gameState, world.ai.queues);
@@ -4434,8 +5500,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, BARRACKS);
 		assert.equal(plans[0]?.metadata?.militaryBase, true);
-		assert.equal(world.ai.queueManager.getPriority("militaryBuilding"),
-			2 * hq.Config.priorities.militaryBuilding);
+		assert.equal(world.ai.queueManager.getPriority("militaryBuilding"), 2 * hq.Config.priorities.militaryBuilding);
 	});
 
 	it("a town of twenty souls builds no military house yet", () =>
@@ -4481,7 +5546,10 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		// three barracks and a range training 95% of the time; 2000 wood and
 		// 1000 stone lie in no queue's account, ten times a barracks' 300
 		const { world, hq } = seat({ "population": 160, "stock": { "wood": 2000, "stone": 1000 } });
-		world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"], "cost": { "wood": 200, "stone": 100 } });
+		world.templates[BARRACKS] = structureTemplate(BARRACKS, {
+			"classes": ["Structure", "Barracks"],
+			"cost": { "wood": 200, "stone": 100 },
+		});
 		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
 		armed(world, 3, 1, 1);
 		hq.productionLoad.trainers = 4;
@@ -4500,7 +5568,10 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		const town = (busy: number, trainers: number, stock: Record<string, number>) =>
 		{
 			const { world, hq } = seat({ "population": 160, stock });
-			world.templates[BARRACKS] = structureTemplate(BARRACKS, { "classes": ["Structure", "Barracks"], "cost": { "wood": 200, "stone": 100 } });
+			world.templates[BARRACKS] = structureTemplate(BARRACKS, {
+				"classes": ["Structure", "Barracks"],
+				"cost": { "wood": 200, "stone": 100 },
+			});
 			bookBuilder(world, hq, ["structures/{civ}/barracks"]);
 			armed(world, 3, 1, 1);
 			hq.productionLoad.trainers = trainers;
@@ -4525,8 +5596,11 @@ describe("the army's houses: constructTrainingBuildings", () =>
 
 		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
 
-		assert.equal(world.ai.queues.militaryBuilding.plans.length, 0,
-			"the saving town keeps its goods for the one barracks it has");
+		assert.equal(
+			world.ai.queues.militaryBuilding.plans.length,
+			0,
+			"the saving town keeps its goods for the one barracks it has",
+		);
 	});
 
 	it("in the third phase, the elephant stable goes up once the three houses stand", () =>
@@ -4536,8 +5610,12 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		card(world, RANGE, ["Structure", "Range"]);
 		card(world, STABLE, ["Structure", "Stable"]);
-		bookBuilder(world, hq, ["structures/{civ}/elephant_stable", "structures/{civ}/barracks",
-			"structures/{civ}/range", "structures/{civ}/stable"]);
+		bookBuilder(world, hq, [
+			"structures/{civ}/elephant_stable",
+			"structures/{civ}/barracks",
+			"structures/{civ}/range",
+			"structures/{civ}/stable",
+		]);
 		armed(world, 1, 1, 2);
 
 		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
@@ -4560,8 +5638,11 @@ describe("the army's houses: constructTrainingBuildings", () =>
 
 			hq.constructTrainingBuildings(world.gameState, world.ai.queues);
 
-			assert.deepEqual(world.ai.queues.militaryBuilding.plans.map(plan => plan.type), canBarter ? [ARSENAL] : [],
-				`market ${canBarter}`);
+			assert.deepEqual(
+				world.ai.queues.militaryBuilding.plans.map(plan => plan.type),
+				canBarter ? [ARSENAL] : [],
+				`market ${canBarter}`,
+			);
 		}
 	});
 
@@ -4572,8 +5653,12 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		card(world, RANGE, ["Structure", "Range"]);
 		card(world, STABLE, ["Structure", "Stable"]);
-		bookBuilder(world, hq, ["structures/{civ}/arsenal", "structures/{civ}/barracks",
-			"structures/{civ}/range", "structures/{civ}/stable"]);
+		bookBuilder(world, hq, [
+			"structures/{civ}/arsenal",
+			"structures/{civ}/barracks",
+			"structures/{civ}/range",
+			"structures/{civ}/stable",
+		]);
 		armed(world, 1, 1, 2);
 
 		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
@@ -4588,8 +5673,12 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		card(world, RANGE, ["Structure", "Range"]);
 		card(world, STABLE, ["Structure", "Stable"]);
-		bookBuilder(world, hq, ["structures/{civ}/gymnasium", "structures/{civ}/barracks",
-			"structures/{civ}/range", "structures/{civ}/stable"]);
+		bookBuilder(world, hq, [
+			"structures/{civ}/gymnasium",
+			"structures/{civ}/barracks",
+			"structures/{civ}/range",
+			"structures/{civ}/stable",
+		]);
 		armed(world, 1, 1, 2);
 		standing(world, 2740, ["Structure", "ElephantStable"], ELEPHANT);
 		standing(world, 2741, ["Structure", "Arsenal"], ARSENAL);
@@ -4685,8 +5774,7 @@ describe("the temple, the market and the farmstead", () =>
 		hq.buildMarket(world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans[0]?.type, MARKET);
-		assert.equal(world.ai.queueManager.getPriority("economicBuilding"),
-			3 * hq.Config.priorities.economicBuilding);
+		assert.equal(world.ai.queueManager.getPriority("economicBuilding"), 3 * hq.Config.priorities.economicBuilding);
 	});
 
 	// only the port passes: Petra's small-island town queued its market in the town phase, its wood long gone
@@ -4702,11 +5790,26 @@ describe("the temple, the market and the farmstead", () =>
 			return { world, hq };
 		};
 		const dry = town(true, 120);
-		assert.equal(dry.world.ai.queues.economicBuilding.plans[0]?.type, MARKET, "queued before the town phase allows it");
-		assert.equal(dry.world.ai.queueManager.getPriority("economicBuilding"), 3 * dry.hq.Config.priorities.economicBuilding,
-			"at the top, so it holds its wood");
-		assert.equal(town(false, 120).world.ai.queues.economicBuilding.plans.length, 0, "a town that does not save waits for the town phase");
-		assert.equal(town(true, 3000).world.ai.queues.economicBuilding.plans.length, 0, "wood still within reach: no hurry");
+		assert.equal(
+			dry.world.ai.queues.economicBuilding.plans[0]?.type,
+			MARKET,
+			"queued before the town phase allows it",
+		);
+		assert.equal(
+			dry.world.ai.queueManager.getPriority("economicBuilding"),
+			3 * dry.hq.Config.priorities.economicBuilding,
+			"at the top, so it holds its wood",
+		);
+		assert.equal(
+			town(false, 120).world.ai.queues.economicBuilding.plans.length,
+			0,
+			"a town that does not save waits for the town phase",
+		);
+		assert.equal(
+			town(true, 3000).world.ai.queues.economicBuilding.plans.length,
+			0,
+			"wood still within reach: no hurry",
+		);
 	});
 
 	it("the early market yields to the town phase: just below it while the phase is queued, back on top after", () =>
@@ -4743,8 +5846,15 @@ describe("the temple, the market and the farmstead", () =>
 		standing.world.templates[MARKET] = structureTemplate(MARKET, { "classes": ["Structure", "Market"] });
 		standing.hq.saveResources = true;
 		standing.hq.getTotalResourceLevel = () => ({ "wood": 0 });
-		standing.world.addEntity(makeHqEntity({ "id": 2900, "owner": PLAYER, "position": [40, 40], "classes": ["Structure", "Market"],
-			"templateName": MARKET }));
+		standing.world.addEntity(
+			makeHqEntity({
+				"id": 2900,
+				"owner": PLAYER,
+				"position": [40, 40],
+				"classes": ["Structure", "Market"],
+				"templateName": MARKET,
+			}),
+		);
 		standing.hq.buildEarlyMarket(standing.world.gameState, standing.world.ai.queues);
 		assert.equal(standing.world.ai.queues.economicBuilding.plans.length, 0);
 	});
@@ -4820,14 +5930,19 @@ describe("the last civil centre gone: checkBaseExpansion with no base", () =>
 	it("a town with no centre left lays the first one where its workers stand", () =>
 	{
 		// every base has been lost: the board keeps its ground, no base on it
-		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } },
-			{ "seatBases": false });
+		const { world, hq } = seat({ "stock": { "food": 500, "wood": 500, "stone": 500, "metal": 500 } }, {
+			"seatBases": false,
+		});
 		world.templates["structures/athen/civil_centre"] = ccTemplate();
 		bookBuilder(world, hq, ["structures/{civ}/civil_centre"]);
-		world.addEntity(makeHqEntity({
-			"id": 2207, "owner": PLAYER, "position": [50, 50],
-			"classes": ["Unit", "Support", "Worker"]
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2207,
+				"owner": PLAYER,
+				"position": [50, 50],
+				"classes": ["Unit", "Support", "Worker"],
+			}),
+		);
 
 		hq.checkBaseExpansion(world.gameState, world.ai.queues);
 
@@ -4916,10 +6031,15 @@ describe("placing a town: the rivals and allies around the lot", () =>
 	/** a town of ours or of a rival, as the world files it */
 	function town(world: HqWorld, id: number, owner: number, position: [number, number]): void
 	{
-		world.addEntity(makeHqEntity({
-			id, owner, position, "classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				id,
+				owner,
+				position,
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 	}
 
 	it("a lot a rival's town would crowd is passed over for one clear of it", () =>
@@ -4929,10 +6049,14 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		const { world, hq } = seat({ "territoryOwner": () => 0 });
 		town(world, 2400, ENEMY, [100, 100]);
 
-		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false });
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+			"fromStrategic": false,
+		});
 		assert.ok(Array.isArray(spot), "a clear lot is still found");
-		assert.ok(Math.hypot(spot[0] - 100, spot[1] - 100) >= 120,
-			"no town is planted within a hundred and twenty units of a rival");
+		assert.ok(
+			Math.hypot(spot[0] - 100, spot[1] - 100) >= 120,
+			"no town is planted within a hundred and twenty units of a rival",
+		);
 	});
 
 	it("the only lot a hundred and twenty to two hundred units from an allied town is refused", () =>
@@ -4940,12 +6064,15 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		// our own town is an ally to itself in the engine's diplomacy row; the
 		// lot at [220,100] sits 120 units from it, inside the ally's no-go ring
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => ix === 27 && iy === 12 ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => ix === 27 && iy === 12 ? 0 : PLAYER,
 		});
 		town(world, 2401, PLAYER, [100, 100]);
 
-		assert.equal(hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }), false,
-			"no lot is taken inside an allied town's two-hundred-unit ring");
+		assert.equal(
+			hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false }),
+			false,
+			"no lot is taken inside an allied town's two-hundred-unit ring",
+		);
 	});
 
 	it("a lot next to an allied town is refused by the strategic search, and the far lot taken", () =>
@@ -4954,18 +6081,21 @@ describe("placing a town: the rivals and allies around the lot", () =>
 		// lot a hundred and twenty-seven units from the first is too near it
 		const { world, hq } = seat({
 			"territoryOwner": (ix: number, iy: number) =>
-				(ix === 12 && iy === 12) || (ix === 7 && iy === 32) ? 0 : PLAYER
+				(ix === 12 && iy === 12) || (ix === 7 && iy === 32) ? 0 : PLAYER,
 		});
 		town(world, 2402, PLAYER, [308, 308]);
 
-		assert.deepEqual(hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())), [57, 257],
-			"the lot by the first town is refused; the lot on the diagonal is taken");
+		assert.deepEqual(
+			hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())),
+			[57, 257],
+			"the lot by the first town is refused; the lot on the diagonal is taken",
+		);
 	});
 
 	it("three allied towns weigh the lot against the nearest three", () =>
 	{
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER,
 		});
 		town(world, 2402, PLAYER, [308, 308]);
 		// the third town is placed between the other two in distance from the
@@ -4974,8 +6104,10 @@ describe("placing a town: the rivals and allies around the lot", () =>
 
 		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())) as [number, number];
 		for (const ally of [[10, 10], [308, 308], [280, 133]])
-			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
-				"every allied town keeps its distance from the new one");
+			assert.ok(
+				Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
+				"every allied town keeps its distance from the new one",
+			);
 	});
 
 	it("a lot across a strait is settled by sea, and the navy is told to ferry one ship", () =>
@@ -4986,15 +6118,20 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
 			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER,
 			"trajectories": { "2,3": [2, 8, 3] },
-			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+			"regionTypes": { 2: "land", 3: "land", 8: "water" },
 		}, { "landRegions": { 2: true, 3: true } });
 
-		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", { "fromStrategic": false });
+		const spot = hq.findEconomicCCLocation(world.gameState, structure(ccTemplate()), "wood", {
+			"fromStrategic": false,
+		});
 		assert.ok(Array.isArray(spot));
 		assert.ok(spot[0] >= 160, "the lot is on the island across the water");
-		assert.ok(doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
-			name === "setMinimalTransportShips" && args[1] === 8 && args[2] === 1),
-			"the strait's water gets one transport ship kept for the crossing");
+		assert.ok(
+			doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
+				name === "setMinimalTransportShips" && args[1] === 8 && args[2] === 1
+			),
+			"the strait's water gets one transport ship kept for the crossing",
+		);
 	});
 
 	it("a round-footprint structure is placed by its radius, as a square one is by its sides", () =>
@@ -5004,7 +6141,7 @@ describe("placing a town: the rivals and allies around the lot", () =>
 			"classes": ["Structure", "CivCentre"],
 			"territories": ["own", "neutral"],
 			"getPaths": { "Footprint": { "Circle": { "@radius": 16 } } },
-			"obstruction": { "min": 15, "max": 21.2 }
+			"obstruction": { "min": 15, "max": 21.2 },
 		});
 
 		const spot = hq.findEconomicCCLocation(world.gameState, structure(round), "wood", { "fromStrategic": false });
@@ -5023,7 +6160,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			"classes": ["Structure", "CivCentre"],
 			"territories": ["own", "neutral"],
 			"getPaths": { "Footprint": { "Circle": { "@radius": 16 } } },
-			"obstruction": { "min": 15, "max": 21.2 }
+			"obstruction": { "min": 15, "max": 21.2 },
 		});
 	}
 
@@ -5031,12 +6168,17 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 	{
 		const { world, hq } = seat({
 			"territoryOwner": (ix: number, iy: number) =>
-				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER
+				(ix === 7 && iy === 32) || (ix === 33 && iy === 32) ? 0 : PLAYER,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 2100, "owner": PLAYER, "position": [308, 308],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2100,
+				"owner": PLAYER,
+				"position": [308, 308],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
 		const spot = hq.findStrategicCCLocation(world.gameState, structure(roundCentre()));
 		assert.ok(Array.isArray(spot), "the round centre's claim is found too");
@@ -5050,19 +6192,27 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
 			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER,
 			"trajectories": { "2,3": [2, 8, 3] },
-			"regionTypes": { 2: "land", 3: "land", 8: "water" }
+			"regionTypes": { 2: "land", 3: "land", 8: "water" },
 		}, { "landRegions": { 2: true, 3: true } });
-		world.addEntity(makeHqEntity({
-			"id": 2101, "owner": PLAYER, "position": [40, 120],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2101,
+				"owner": PLAYER,
+				"position": [40, 120],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
 		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate()));
 		assert.ok(Array.isArray(spot));
 		assert.ok(spot[0] >= 160, "the strategic lot is across the water");
-		assert.ok(doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
-			name === "setMinimalTransportShips" && args[1] === 8),
-			"the same strait's water is kept for one ship");
+		assert.ok(
+			doorCalls(hq.navalManager).some(([name, args]: [string, unknown[]]) =>
+				name === "setMinimalTransportShips" && args[1] === 8
+			),
+			"the same strait's water is kept for one ship",
+		);
 	});
 
 	it("a round fortress braces the frontier as a square one does", () =>
@@ -5071,14 +6221,19 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		// frontier suites lay it out
 		const { world, hq } = seat({ "territoryOwner": (ix: number, iy: number) => iy >= 26 ? ENEMY : PLAYER });
 		hq.updateTerritories(world.gameState);
-		world.addEntity(makeHqEntity({
-			"id": 4000, "owner": ENEMY, "position": [204, 220],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 4000,
+				"owner": ENEMY,
+				"position": [204, 220],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 		const round = structureTemplate("structures/athen/round_fortress", {
 			"classes": ["Structure", "Fortress", "Defensive"],
 			"getPaths": { "Footprint": { "Circle": { "@radius": 15 } } },
-			"obstruction": { "min": 15, "max": 21.2 }
+			"obstruction": { "min": 15, "max": 21.2 },
 		});
 
 		const spot = hq.findDefensiveLocation(world.gameState, structure(round));
@@ -5113,10 +6268,15 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 	it("a decaying building under a force of more than eight is defended; eight are not", () =>
 	{
 		const { world, hq } = seat();
-		const building = world.addEntity(makeHqEntity({
-			"id": 2801, "owner": PLAYER, "position": [100, 100],
-			"classes": ["Structure", "Barracks"], "templateName": "structures/athen/barracks"
-		}));
+		const building = world.addEntity(
+			makeHqEntity({
+				"id": 2801,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": ["Structure", "Barracks"],
+				"templateName": "structures/athen/barracks",
+			}),
+		);
 		// a raid's army near the building, as the attack office books it
 		const raid = (size: number) => ({ "position": [110, 100], "unitCollection": { "length": size } });
 		const started = hq.attackManager.startedAttacks as Record<string, unknown[]>;
@@ -5146,8 +6306,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		const reloaded = new BasesManager(hq.Config, world.gameState, hq.basesManager.Serialize());
 
 		for (const j of base.territoryIndices)
-			assert.equal(reloaded.basesMap.map[j], base.ID,
-				"every cell of the base's ground answers its base again");
+			assert.equal(reloaded.basesMap.map[j], base.ID, "every cell of the base's ground answers its base again");
 	});
 
 	it("a queued market waiting on funds draws what the other queues hold", () =>
@@ -5156,7 +6315,8 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		// market has no free wood of its own, so it draws what the houses hold
 		const { world, hq } = seat({ "stock": { "food": 500, "wood": 400, "stone": 500, "metal": 500 } });
 		world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
-			"classes": ["Structure", "Market"], "cost": { "wood": 300 }
+			"classes": ["Structure", "Market"],
+			"cost": { "wood": 300 },
 		});
 		bookBuilder(world, hq, ["structures/{civ}/market"]);
 		hq.buildMarket(world.gameState, world.ai.queues);
@@ -5165,8 +6325,11 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		hq.buildMarket(world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "the market is still the one plan");
-		assert.equal(woodOf(world, "economicBuilding"), 300,
-			"the market's wood is drawn from the house queue, up to its cost");
+		assert.equal(
+			woodOf(world, "economicBuilding"),
+			300,
+			"the market's wood is drawn from the house queue, up to its cost",
+		);
 		assert.equal(woodOf(world, "house"), 100);
 	});
 
@@ -5175,11 +6338,14 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		// a quiet town of twenty-five: its houses are not needed yet, so the
 		// phase's three villages release the two planned houses from their need
 		const { world, hq } = seat({
-			"populationMax": 300, "populationLimit": 90, "population": 25,
-			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] }
+			"populationMax": 300,
+			"populationLimit": 90,
+			"population": 25,
+			"phaseRequirements": { 2: [{ "class": "Village", "count": 3 }] },
 		});
 		world.templates["structures/athen/house"] = structureTemplate("structures/athen/house", {
-			"classes": ["Structure", "House", "Village"], "popBonus": 10
+			"classes": ["Structure", "House", "Village"],
+			"popBonus": 10,
 		});
 		bookBuilder(world, hq, ["structures/{civ}/house"]);
 		hq.buildMoreHouses(world.gameState, world.ai.queues);
@@ -5191,8 +6357,11 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		// the house this turn adds is counted after the release, so it keeps its need
 		const plans = world.ai.queues.house.plans;
 		assert.equal(plans.length, 3);
-		assert.equal(plans[0]?.goRequirement, undefined,
-			"the phase wants three villages: the planned houses are not held back by need");
+		assert.equal(
+			plans[0]?.goRequirement,
+			undefined,
+			"the phase wants three villages: the planned houses are not held back by need",
+		);
 		assert.equal(plans[1]?.goRequirement, undefined);
 		assert.equal(plans[2]?.goRequirement, "houseNeeded", "the newest house still waits for its need");
 	});
@@ -5203,8 +6372,8 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 	it("a centre still being raised counts as a potential base, not an active one", () =>
 	{
 		const { world, hq } = seat();
-		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress =
-			() => 0.5;
+		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined }).foundationProgress = () =>
+			0.5;
 		hq.basesManager.resetBaseCache();
 
 		assert.equal(hq.numActiveBases(), 0, "no built centre yet");
@@ -5215,37 +6384,53 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 	it("a third allied town farther than the other two is weighed as the far one", () =>
 	{
 		const { world, hq } = seat({
-			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER
+			"territoryOwner": (ix: number, iy: number) => ix === 7 && iy === 32 ? 0 : PLAYER,
 		});
-		world.addEntity(makeHqEntity({
-			"id": 2402, "owner": PLAYER, "position": [308, 308],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
-		world.addEntity(makeHqEntity({
-			"id": 2404, "owner": PLAYER, "position": [300, 10],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 2402,
+				"owner": PLAYER,
+				"position": [308, 308],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 2404,
+				"owner": PLAYER,
+				"position": [300, 10],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 
 		const spot = hq.findStrategicCCLocation(world.gameState, structure(ccTemplate())) as [number, number];
 		for (const ally of [[10, 10], [308, 308], [300, 10]])
-			assert.ok(Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
-				"every allied town keeps its distance from the new one");
+			assert.ok(
+				Math.hypot(spot[0] - ally[0], spot[1] - ally[1]) >= 249,
+				"every allied town keeps its distance from the new one",
+			);
 	});
 
 	it("a round market is placed by its trade route as a square one is", () =>
 	{
 		const { world, hq } = seat({ "territoryOwner": () => PLAYER });
 		seatTraders(world);
-		world.addEntity(makeHqEntity({
-			"id": 3000, "owner": PLAYER, "position": [244, 76],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 3000,
+				"owner": PLAYER,
+				"position": [244, 76],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 		hq.updateTerritories(world.gameState);
 		const round = structureTemplate("structures/athen/round_market", {
 			"classes": ["Structure", "Trade", "Town", "Market"],
 			"getPaths": { "Footprint": { "Circle": { "@radius": 15 } } },
-			"obstruction": { "min": 13, "max": 21.96 }
+			"obstruction": { "min": 13, "max": 21.96 },
 		});
 
 		const result = hq.findMarketLocation(world.gameState, structure(round));
@@ -5259,19 +6444,25 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 		// (region 3) have no land route to it, so the route lands at home
 		const { world, hq } = seat({
 			"landPassMap": (px: number) => px >= 80 ? 3 : 2,
-			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER
+			"territoryOwner": (ix: number) => ix >= 20 ? 0 : PLAYER,
 		}, { "landRegions": { 2: true, 3: true } });
 		seatTraders(world);
-		world.addEntity(makeHqEntity({
-			"id": 3001, "owner": PLAYER, "position": [60, 60],
-			"classes": ["Structure", "Trade", "Town", "Market"],
-			"templateName": "structures/athen/market"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 3001,
+				"owner": PLAYER,
+				"position": [60, 60],
+				"classes": ["Structure", "Trade", "Town", "Market"],
+				"templateName": "structures/athen/market",
+			}),
+		);
 		hq.updateTerritories(world.gameState);
 
 		const result = hq.findMarketLocation(world.gameState, structure(marketTemplate()));
-		assert.ok(Array.isArray(result) && result[0] < 160,
-			"the second market is placed on the home side of the water, reachable by land");
+		assert.ok(
+			Array.isArray(result) && result[0] < 160,
+			"the second market is placed on the home side of the water, reachable by land",
+		);
 	});
 
 	it("a gatherer soldier, asked for by a raid, is a soldier of the barracks' own order", () =>
@@ -5280,14 +6471,24 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 		const { world, hq } = seat();
 		trainerTown(world);
 		world.templates["units/athen/infantry_spearman_b"] = makeTemplate("units/athen/infantry_spearman_b", {
-			"classes": ["Unit", "Human", "CitizenSoldier", "Soldier", "Infantry", "Melee", "Spearman", "Worker", "Citizen"],
-			"cost": { "food": 50, "wood": 50 }, "walkSpeed": 9.5,
+			"classes": [
+				"Unit",
+				"Human",
+				"CitizenSoldier",
+				"Soldier",
+				"Infantry",
+				"Melee",
+				"Spearman",
+				"Worker",
+				"Citizen",
+			],
+			"cost": { "food": 50, "wood": 50 },
+			"walkSpeed": 9.5,
 			"resourceGatherRates": { "wood.tree": 0.75 },
-			"getPaths": { "Cost": { "Population": 1 } }
+			"getPaths": { "Cost": { "Population": 1 } },
 		});
 
-		const pick = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry"]],
-			[["canGather", 1]]);
+		const pick = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry"]], [["canGather", 1]]);
 
 		assert.equal(pick, "units/athen/infantry_spearman_b");
 	});

@@ -1,12 +1,12 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
-import { Queue, type SerializedQueue } from "./queue.ts";
-import { Worker } from "./worker.ts";
+import { debugWarn } from "../adapter/debug.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import type { Config } from "../world/config.ts";
 import { hqOf } from "./hq.ts";
-import { requireValue } from "../adapter/entityExtend.ts";
-import { debugWarn } from "../adapter/debug.ts";
+import { Queue, type SerializedQueue } from "./queue.ts";
+import { Worker } from "./worker.ts";
 
 /**
  * This takes the input queues and picks which items to fund with resources until no more resources are left to distribute.
@@ -34,16 +34,18 @@ import { debugWarn } from "../adapter/debug.ts";
  * name. The keys of `queues` are unique, so a tie is always between two
  * different names and everything is strictly ordered.
  */
-function sortedQueues(queues: PetraRuntime.QueueCollection, priorities: PetraRuntime.Dict<number>): Array<[PetraRuntime.QueueName, Queue]>
+function sortedQueues(
+	queues: PetraRuntime.QueueCollection,
+	priorities: PetraRuntime.Dict<number>,
+): Array<[PetraRuntime.QueueName, Queue]>
 {
-	return [...queueEntries(queues)]
-		.sort(([a]: [string, Queue], [b]: [string, Queue]): number =>
-		{
-			const priorityDifference = priorities[b] - priorities[a];
-			if (priorityDifference !== 0)
-				return priorityDifference;
-			return a < b ? -1 : 1;
-		});
+	return [...queueEntries(queues)].sort(([a]: [string, Queue], [b]: [string, Queue]): number =>
+	{
+		const priorityDifference = priorities[b] - priorities[a];
+		if (priorityDifference !== 0)
+			return priorityDifference;
+		return a < b ? -1 : 1;
+	});
 }
 
 /** an attack plan's queues (attackPlan.ts): plan_<name>, with _champ or _siege */
@@ -59,11 +61,24 @@ export function isQueueName(config: Config, name: string): name is PetraRuntime.
 export function configuredQueues(): PetraRuntime.QueueCollection
 {
 	return {
-		"villager": new Queue(), "citizenSoldier": new Queue(), "trader": new Queue(), "healer": new Queue(),
-		"ships": new Queue(), "house": new Queue(), "dropsites": new Queue(), "field": new Queue(),
-		"dock": new Queue(), "corral": new Queue(), "economicBuilding": new Queue(),
-		"militaryBuilding": new Queue(), "defenseBuilding": new Queue(), "civilCentre": new Queue(),
-		"majorTech": new Queue(), "minorTech": new Queue(), "wonder": new Queue(), "emergency": new Queue()
+		"villager": new Queue(),
+		"citizenSoldier": new Queue(),
+		"trader": new Queue(),
+		"healer": new Queue(),
+		"ships": new Queue(),
+		"house": new Queue(),
+		"dropsites": new Queue(),
+		"field": new Queue(),
+		"dock": new Queue(),
+		"corral": new Queue(),
+		"economicBuilding": new Queue(),
+		"militaryBuilding": new Queue(),
+		"defenseBuilding": new Queue(),
+		"civilCentre": new Queue(),
+		"majorTech": new Queue(),
+		"minorTech": new Queue(),
+		"wonder": new Queue(),
+		"emergency": new Queue(),
 	};
 }
 
@@ -101,8 +116,15 @@ const RUN_WITHOUT_BASE: ReadonlySet<string> = new Set(["dock", "civilCentre"]);
 /** The queues that go on with under a third of the workers wanted. */
 const RUN_WITH_VERY_FEW_WORKERS: ReadonlySet<string> = new Set(["citizenSoldier", "villager", "emergency"]);
 /** The queues (besides the attacks') that wait with under two thirds of the workers wanted. */
-const WAIT_WITH_FEW_WORKERS: ReadonlySet<string> = new Set(["civilCentre", "economicBuilding", "militaryBuilding",
-	"defenseBuilding", "healer", "majorTech", "minorTech"]);
+const WAIT_WITH_FEW_WORKERS: ReadonlySet<string> = new Set([
+	"civilCentre",
+	"economicBuilding",
+	"militaryBuilding",
+	"defenseBuilding",
+	"healer",
+	"majorTech",
+	"minorTech",
+]);
 /** The queues (besides champions and siege) that wait short of the workers wanted. */
 const WAIT_SHORT_OF_WORKERS: ReadonlySet<string> = new Set(["civilCentre", "defenseBuilding", "majorTech"]);
 
@@ -178,8 +200,12 @@ export class QueueManager
 	 * their horizon: the first item ready to go in 30 s (short), the second in
 	 * 60 s (medium), one not yet ready in 300 s (long).
 	 */
-	addQueuedCosts(gameState: CommonGameState, totalShort: Record<string, number>,
-		totalMedium: Record<string, number>, totalLong: Record<string, number>): void
+	addQueuedCosts(
+		gameState: CommonGameState,
+		totalShort: Record<string, number>,
+		totalMedium: Record<string, number>,
+		totalLong: Record<string, number>,
+	): void
 	{
 		let total;
 		// queueArrays because it's faster.
@@ -252,8 +278,10 @@ export class QueueManager
 	}
 
 	/** What the queues hold, by horizon (short, medium, long), on top of `initial`'s amounts per resource. */
-	private queuedTotals(gameState: CommonGameState, initial: (res: string) => [number, number, number]):
-		{ totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number> }
+	private queuedTotals(
+		gameState: CommonGameState,
+		initial: (res: string) => [number, number, number],
+	): { totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number> }
 	{
 		const totalShort: Record<string, number> = {};
 		const totalMedium: Record<string, number> = {};
@@ -282,11 +310,14 @@ export class QueueManager
 		// short queue is the first item of a queue, assumed to be ready in 30s
 		// medium queue is the second item of a queue, assumed to be ready in 60s
 		// long queue contains the isGo=false items, assumed to be ready in 300s
-		const { totalShort, totalMedium, totalLong } = this.queuedTotals(gameState, (res) => [
-			this.Config.queues.short[res] || this.Config.queues.short.default,
-			this.Config.queues.medium[res] || this.Config.queues.medium.default,
-			this.Config.queues.long[res] || this.Config.queues.long.default
-		]);
+		const { totalShort, totalMedium, totalLong } = this.queuedTotals(
+			gameState,
+			res => [
+				this.Config.queues.short[res] || this.Config.queues.short.default,
+				this.Config.queues.medium[res] || this.Config.queues.medium.default,
+				this.Config.queues.long[res] || this.Config.queues.long.default,
+			],
+		);
 		// global rates
 		const rates: Record<string, number> = {};
 		let diff;
@@ -306,7 +337,7 @@ export class QueueManager
 						totalLong[res] -= Math.min(current[res], totalLong[res]);
 				}
 			}
-			rates[res] = totalShort[res]/30 + totalMedium[res]/60 + totalLong[res]/300;
+			rates[res] = totalShort[res] / 30 + totalMedium[res] / 60 + totalLong[res] / 300;
 		}
 
 		return rates;
@@ -315,22 +346,24 @@ export class QueueManager
 	printQueues(gameState: CommonGameState): void
 	{
 		let numWorkers = 0;
-		gameState.getOwnUnits().forEach((ent) =>
+		gameState.getOwnUnits().forEach(ent =>
 		{
-			if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER &&
-				ent.getMetadata(PlayerID, "plan") === undefined)
+			if (
+				ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER &&
+				ent.getMetadata(PlayerID, "plan") === undefined
+			)
 			{
 				numWorkers++;
 			}
 		});
-		aiWarn("---------- QUEUES ------------ with pop " + gameState.getPopulation() + " and workers " +
-			numWorkers);
+		aiWarn("---------- QUEUES ------------ with pop " + gameState.getPopulation() + " and workers " + numWorkers);
 		for (const [i, q] of queueEntries(this.queues))
 		{
 			if (q.hasQueuedUnits())
 			{
-				aiWarn(i + ": ( with priority " + this.priorities[i] +" and accounts " +
-					uneval(this.accounts[i]) +")");
+				aiWarn(
+					i + ": ( with priority " + this.priorities[i] + " and accounts " + uneval(this.accounts[i]) + ")",
+				);
 				aiWarn(" while maxAccountWanted(0.6) is " + uneval(q.maxAccountWanted(gameState, 0.6)));
 			}
 			for (const plan of q.plans)
@@ -361,7 +394,11 @@ export class QueueManager
 	/**
 	 * set accounts of queue i from the unaccounted resources
 	 */
-	setAccounts(gameState: CommonGameState, cost: ResourcesManager | Record<string, number>, i: PetraRuntime.QueueName): void
+	setAccounts(
+		gameState: CommonGameState,
+		cost: ResourcesManager | Record<string, number>,
+		i: PetraRuntime.QueueName,
+	): void
 	{
 		const available = this.getAvailableResources(gameState);
 		for (const res of Resources.GetCodes())
@@ -375,7 +412,11 @@ export class QueueManager
 	/**
 	 * transfer accounts from queue i to queue j
 	 */
-	transferAccounts(cost: ResourcesManager | Record<string, number>, i: PetraRuntime.QueueName, j: PetraRuntime.QueueName): void
+	transferAccounts(
+		cost: ResourcesManager | Record<string, number>,
+		i: PetraRuntime.QueueName,
+		j: PetraRuntime.QueueName,
+	): void
 	{
 		for (const res of Resources.GetCodes())
 		{
@@ -395,7 +436,7 @@ export class QueueManager
 		const availableRes = this.getAvailableResources(gameState);
 		for (const res of Resources.GetCodes())
 		{
-			if (availableRes[res] < 0)    // rescale the accounts if we've spent resources already accounted (e.g. by bartering)
+			if (availableRes[res] < 0) // rescale the accounts if we've spent resources already accounted (e.g. by bartering)
 				this.rescaleAccounts(gameState, res, availableRes);
 
 			if (!availableRes[res])
@@ -428,8 +469,8 @@ export class QueueManager
 	 * And the account is not high enough for it.
 	 * Then we add it to the total priority.
 	 * To try and be clever, we don't want a long queue to hog all resources. So two things:
-	 *	-if a queue has enough of resource X for the 1st element, its priority is decreased (factor 2).
-	 *	-queues accounts are capped at "resources for the first + 60% of the next"
+	 * 	-if a queue has enough of resource X for the 1st element, its priority is decreased (factor 2).
+	 * 	-queues accounts are capped at "resources for the first + 60% of the next"
 	 * This avoids getting a high priority queue with many elements hogging all of one resource
 	 * uselessly while it awaits for other resources. An account over its cap gives the rest back.
 	 */
@@ -475,7 +516,7 @@ export class QueueManager
 		for (const j in tempPrio)
 		{
 			// we'll add at much what can be allowed to this queue.
-			let toAdd = Math.floor(availableRes * tempPrio[j]/totalPriority);
+			let toAdd = Math.floor(availableRes * tempPrio[j] / totalPriority);
 			if (toAdd >= maxNeed[j])
 				toAdd = maxNeed[j];
 			else
@@ -484,8 +525,8 @@ export class QueueManager
 			maxNeed[j] -= toAdd;
 			available -= toAdd;
 		}
-		if (missing && available > 0)   // distribute the rest (due to floor) in any queue
-		{
+		if (missing && available > 0)
+		{ // distribute the rest (due to floor) in any queue
 			for (const j in tempPrio)
 			{
 				const toAdd = Math.min(maxNeed[j], available);
@@ -526,8 +567,11 @@ export class QueueManager
 				this.accounts[j][res] += diff;
 				this.accounts[i][res] -= diff;
 				++otherQueue.switched;
-				debugWarn(this.Config, 2, () => "switching queue " + res + " from " + i + " to " + j + " in amount " +
-					diff);
+				debugWarn(
+					this.Config,
+					2,
+					() => "switching queue " + res + " from " + i + " to " + j + " in amount " + diff,
+				);
 				break;
 			}
 		}
@@ -559,11 +603,14 @@ export class QueueManager
 			if (account.canAfford(cost))
 				return;
 			// the queues below this one, the lowest first
-			const donors = this.queueArrays.slice(k + 1)
-				.filter(([j]) => this.priorities[j] < this.priorities[name])
+			const donors = this.queueArrays.slice(k + 1).filter(([j]) => this.priorities[j] < this.priorities[name])
 				.reverse();
-			if (!codes.every(res => cost[res] - account[res] <=
-				Math.max(0, free[res]) + donors.reduce((sum, [j]) => sum + this.accounts[j][res], 0)))
+			if (
+				!codes.every(res =>
+					cost[res] - account[res] <=
+						Math.max(0, free[res]) + donors.reduce((sum, [j]) => sum + this.accounts[j][res], 0)
+				)
+			)
 				continue;
 			for (const res of codes)
 			{
@@ -622,12 +669,11 @@ export class QueueManager
 
 		for (const [i, queue] of queueEntries(this.queues))
 		{
-			queue.check(gameState);  // do basic sanity checks on the queue
+			queue.check(gameState); // do basic sanity checks on the queue
 			if (this.priorities[i] > 0)
 				continue;
-			aiWarn("QueueManager received bad priorities, please report this error: " +
-				uneval(this.priorities));
-			this.priorities[i] = 1;  // TODO: make the Queue Manager not die when priorities are zero.
+			aiWarn("QueueManager received bad priorities, please report this error: " + uneval(this.priorities));
+			this.priorities[i] = 1; // TODO: make the Queue Manager not die when priorities are zero.
 		}
 
 		// Pause or unpause queues depending on the situation
@@ -640,7 +686,7 @@ export class QueueManager
 		// Start the next item in the queue if we can afford it.
 		this.startNextItems(gameState);
 
-		if (this.Config.debug > 1 && gameState.ai.playedTurn%50 === 0)
+		if (this.Config.debug > 1 && gameState.ai.playedTurn % 50 === 0)
 			this.printQueues(gameState);
 
 		Engine.ProfileStop();
@@ -653,7 +699,8 @@ export class QueueManager
 		const workersMin = Math.min(Math.max(12, 24 * this.Config.popScaling), this.Config.Economy.popPhase2);
 		for (const [q, queue] of queueEntries(this.queues))
 		{
-			const toBePaused = this.pausedForWorkers(gameState, q, numWorkers, workersMin) && !this.feedsTheTown(gameState, q);
+			const toBePaused = this.pausedForWorkers(gameState, q, numWorkers, workersMin) &&
+				!this.feedsTheTown(gameState, q);
 			if (!queue.paused && toBePaused)
 			{
 				queue.paused = true;
@@ -673,7 +720,12 @@ export class QueueManager
 	}
 
 	/** Whether queue q waits while we are short of workers: the fewer, the more queues wait. */
-	private pausedForWorkers(gameState: CommonGameState, q: PetraRuntime.QueueName, numWorkers: number, workersMin: number): boolean
+	private pausedForWorkers(
+		gameState: CommonGameState,
+		q: PetraRuntime.QueueName,
+		numWorkers: number,
+		workersMin: number,
+	): boolean
 	{
 		if (!hqOf(gameState).hasPotentialBase())
 			return !RUN_WITHOUT_BASE.has(q);
@@ -750,7 +802,6 @@ export class QueueManager
 				queue.paused = false;
 	}
 
-
 	/** An attack plan's queue at this priority, made unless it exists (then it keeps its priority) */
 	addQueue(queueName: PetraRuntime.AttackQueueName, priority: number): Queue
 	{
@@ -786,8 +837,13 @@ export class QueueManager
 
 	changePriority(queueName: PetraRuntime.QueueName, newPriority: number): void
 	{
-		debugWarn(this.Config, 1, () => ">>> Priority of queue " + queueName + " changed from " + this.priorities[queueName] +
-			" to " + newPriority);
+		debugWarn(
+			this.Config,
+			1,
+			() =>
+				">>> Priority of queue " + queueName + " changed from " + this.priorities[queueName] +
+				" to " + newPriority,
+		);
 		if (this.queues[queueName] !== undefined)
 			this.priorities[queueName] = newPriority;
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
@@ -807,16 +863,14 @@ export class QueueManager
 			accounts[q] = this.accounts[q].Serialize();
 			if (this.Config.debug === -100)
 			{
-				aiWarn("queueManager serialization: queue " + q + " >>> " + uneval(queues[q]) +
-					" with accounts " + uneval(accounts[q]));
+				aiWarn(
+					"queueManager serialization: queue " + q + " >>> " + uneval(queues[q]) +
+						" with accounts " + uneval(accounts[q]),
+				);
 			}
 		}
 
-		return {
-			"priorities": this.priorities,
-			"queues": queues,
-			"accounts": accounts
-		};
+		return { "priorities": this.priorities, "queues": queues, "accounts": accounts };
 	}
 
 	/** A saved queue manager: its priorities, its queues with their plans, and their accounts */

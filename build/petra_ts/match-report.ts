@@ -51,7 +51,9 @@ export interface MatchResult
 const [dir, ...nameArgs] = process.argv.slice(2);
 if (!dir || nameArgs.length < 4 || nameArgs.length % 2)
 {
-	console.error("usage: node match-report.ts <match dir> <player id> <name> <player id> <name> [<player id> <name>]...");
+	console.error(
+		"usage: node match-report.ts <match dir> <player id> <name> <player id> <name> [<player id> <name>]...",
+	);
 	process.exit(2);
 }
 const names = new Map<number, string>();
@@ -106,10 +108,10 @@ if (commands && existsSync(commands))
 {
 	const start = readFileSync(commands, "utf8").split("\n", 1)[0];
 	const settings = JSON.parse(start.replace(/^start /, "")).settings;
-	const picked = [["biome", settings.Biome], ["placement", settings.PlayerPlacement],
-		["daytime", settings.Daytime], ["landscape", settings.Landscape]]
-		.filter(([, value]) => value !== undefined)
-		.map(([name, value]) => `${name} ${value}`);
+	const picked = [["biome", settings.Biome], ["placement", settings.PlayerPlacement], ["daytime", settings.Daytime], [
+		"landscape",
+		settings.Landscape,
+	]].filter(([, value]) => value !== undefined).map(([name, value]) => `${name} ${value}`);
 	if (picked.length)
 		console.log(`picked by the game setup: ${picked.join(", ")}`);
 }
@@ -121,8 +123,11 @@ else if (played)
 
 if (players.length)
 {
-	console.log("result: " + players.map(p => `${botName(p.playerID)} ${p.playerState}` +
-		(reasons.has(p.playerID) ? ` (${reasons.get(p.playerID)})` : "")).join(", "));
+	console.log(
+		"result: " + players.map(p =>
+			`${botName(p.playerID)} ${p.playerState}` + (reasons.has(p.playerID) ? ` (${reasons.get(p.playerID)})` : "")
+		).join(", "),
+	);
 	// The "total" of the lost/killed/destroyed counters is never incremented
 	// (StatisticsTracker.js): count the Unit and Structure classes instead.
 	type Row = [string, (p: PlayerStatistics) => string | number];
@@ -140,8 +145,11 @@ if (players.length)
 	const rows: Row[] = [
 		["state", p => p.playerState],
 		["units trained", count("unitsTrained", "Unit")],
-		["  of which soldiers", p => count("unitsTrained", "Infantry")(p) + count("unitsTrained", "Cavalry")(p) +
-			count("unitsTrained", "Champion")(p)],
+		[
+			"  of which soldiers",
+			p => count("unitsTrained", "Infantry")(p) + count("unitsTrained", "Cavalry")(p) +
+				count("unitsTrained", "Champion")(p),
+		],
 		["units lost", count("unitsLost", "Unit")],
 		["enemy units killed", count("enemyUnitsKilled", "Unit")],
 		["buildings constructed", count("buildingsConstructed", "Structure")],
@@ -152,14 +160,17 @@ if (players.length)
 		["resources used", p => resources.reduce((sum, type) => sum + count("resourcesUsed", type)(p), 0)],
 		["loot collected", value("lootCollected")],
 		["map explored %", value("percentMapExplored")],
-		["peak map controlled %", value("peakPercentMapControlled")]
+		["peak map controlled %", value("peakPercentMapControlled")],
 	];
 	const header = ["", ...players.map(p => name(p.playerID))];
 	const table = [header, ...rows.map(([label, cell]) => [label, ...players.map(p => String(cell(p)))])];
 	const widths = header.map((_, column) => Math.max(...table.map(row => row[column].length)));
 	for (const row of table)
-		console.log("  " + row.map((cell, column) =>
-			column ? cell.padStart(widths[column] + 2) : cell.padEnd(widths[column])).join("").trimEnd());
+		console.log(
+			"  " + row.map((cell, column) =>
+				column ? cell.padStart(widths[column] + 2) : cell.padEnd(widths[column])
+			).join("").trimEnd(),
+		);
 }
 else
 	console.log("result: undecided (the game was closed before one bot defeated the others)");
@@ -187,9 +198,12 @@ const fingerprint = createHash("sha256").update(`${decided}\n${JSON.stringify(pl
 console.log(`fingerprint: ${fingerprint} (the same seeds and code give the same fingerprint)`);
 
 const sum = (counts: number | Counts | undefined, keys?: string[]): number =>
-	typeof counts == "number" ? counts : Object.entries(counts ?? {})
-		.filter(([key]) => keys ? keys.includes(key) : true)
-		.reduce((total, [, n]) => total + n, 0);
+	typeof counts == "number" ?
+		counts :
+		Object.entries(counts ?? {}).filter(([key]) => keys ? keys.includes(key) : true).reduce(
+			(total, [, n]) => total + n,
+			0,
+		);
 const resourceTypes = ["food", "wood", "stone", "metal"];
 const result: MatchResult = {
 	decided,
@@ -209,11 +223,11 @@ const result: MatchResult = {
 			"enemyBuildingsDestroyed": sum(p.statistics.enemyBuildingsDestroyed, ["Structure"]),
 			"resourcesGathered": sum(p.statistics.resourcesGathered, resourceTypes),
 			"resourcesUsed": sum(p.statistics.resourcesUsed, resourceTypes),
-			"peakPercentMapControlled": sum(p.statistics.peakPercentMapControlled)
-		}
+			"peakPercentMapControlled": sum(p.statistics.peakPercentMapControlled),
+		},
 	})),
 	"errors": levelCounts.get("ERROR") ?? 0,
 	"warnings": levelCounts.get("WARNING") ?? 0,
-	fingerprint
+	fingerprint,
 };
 writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, "\t") + "\n");

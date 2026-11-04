@@ -57,6 +57,15 @@ repos:
         types: [text]
         files: ^binaries/
         exclude: (^binaries/data/mods/(mod|public)/art/.*\.xml|\.dae$)
+      - id: petra-ts-format
+        name: check Petra TypeScript formatting
+        entry: dprint check
+        language: node
+        language_version: 22.14.0
+        additional_dependencies:
+          - dprint@0.64.3
+        pass_filenames: false
+        files: ^(?:dprint\.json|build/petra_ts/.*\.ts|binaries/.*/petra_ts/.*\.ts)$
   - repo: https://github.com/scop/pre-commit-shfmt
     rev: v3.13.1-1
     hooks:

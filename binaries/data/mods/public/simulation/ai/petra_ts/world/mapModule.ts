@@ -1,11 +1,11 @@
-import { requireValue } from "../adapter/entityExtend.ts";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { getMapIndices } from "simulation/ai/common-api/utils.js";
-import * as mapMask from "./mapMask.ts";
 import { cellIndex, playerId } from "../adapter/brands.ts";
 import { debugShade } from "../adapter/commands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import * as mapMask from "./mapMask.ts";
 
 /** map functions */
 
@@ -26,7 +26,7 @@ function buildRules(template: CommonTemplate | undefined): BuildRules
 		"own": template.hasBuildTerritory("own") === true,
 		"ally": template.hasBuildTerritory("ally") === true,
 		"neutral": template.hasBuildTerritory("neutral") === true,
-		"enemy": template.hasBuildTerritory("enemy") === true
+		"enemy": template.hasBuildTerritory("enemy") === true,
 	};
 }
 
@@ -45,8 +45,11 @@ function territoryAllows(gameState: CommonGameState, rules: BuildRules, cell: nu
 	return rules.enemy;
 }
 
-export function createObstructionMap(gameState: CommonGameState, accessIndex: AccessIndex | undefined,
-	template?: CommonTemplate): InfoMap
+export function createObstructionMap(
+	gameState: CommonGameState,
+	accessIndex: AccessIndex | undefined,
+	template?: CommonTemplate,
+): InfoMap
 {
 	const passabilityMap = gameState.getPassabilityMap();
 	const territoryMap = gameState.ai.territoryMap;
@@ -68,7 +71,7 @@ export function createObstructionMap(gameState: CommonGameState, accessIndex: Ac
 		{
 			for (let iy = 0; iy < ratio; ++iy)
 			{
-				const i = x + ix + (y + iy)*passabilityMap.width;
+				const i = x + ix + (y + iy) * passabilityMap.width;
 				if (!shore && accessIndex && accessIndex !== passMap[i])
 					continue;
 				if (!(passabilityMap.data[i] & obstructionMask))
@@ -98,9 +101,7 @@ function keepMinDistance(gameState: CommonGameState, map: InfoMap, template: Com
 	const fromClass = distance.FromClass;
 	const cellSize = gameState.getPassabilityMap().cellSize;
 	const cellDist = 1 + minDist / cellSize;
-	const structures = fromClass !== undefined ?
-		gameState.getOwnStructures().filter(filters.byClass(fromClass)) :
-		[];
+	const structures = fromClass !== undefined ? gameState.getOwnStructures().filter(filters.byClass(fromClass)) : [];
 	for (const ent of structures.values())
 	{
 		const pos = ent.position();
@@ -109,7 +110,6 @@ function keepMinDistance(gameState: CommonGameState, map: InfoMap, template: Com
 		map.addInfluence(x, z, cellDist, -255, "constant");
 	}
 }
-
 
 /** The territory grid with its owner and blinking bits read out. */
 /** Who owns each territory cell, read from the engine's territory grid. */
@@ -168,14 +168,14 @@ export function createBorderMap(gameState: CommonGameState): InfoMap
 	const nearEdge = gameState.circularMap ?
 		(j: number): boolean =>
 		{
-			const dx = j%width - ic;
-			const dy = Math.floor(j/width) - ic;
-			return dx*dx + dy*dy >= radcut;
+			const dx = j % width - ic;
+			const dy = Math.floor(j / width) - ic;
+			return dx * dx + dy * dy >= radcut;
 		} :
 		(j: number): boolean =>
 		{
-			const ix = j%width;
-			const iy = Math.floor(j/width);
+			const ix = j % width;
+			const iy = Math.floor(j / width);
 			return ix < border || ix >= borderCut || iy < border || iy >= borderCut;
 		};
 	for (let jIndex = 0; jIndex < map.length; ++jIndex)
@@ -203,14 +203,14 @@ export function debugMap(gameState: CommonGameState, map: CommonInfoMap): void
 {
 	const width = map.width;
 	const cell = map.cellSize;
-	gameState.getEntities().forEach((ent) =>
+	gameState.getEntities().forEach(ent =>
 	{
 		if (!isPlaced(ent))
 			return;
 		const pos = ent.position();
 		const x = Math.round(pos[0] / cell);
 		const z = Math.round(pos[1] / cell);
-		const id = x + width*z;
+		const id = x + width * z;
 		if (map.map[id] === 1)
 			debugShade([ent.id()], [2, 0, 0]);
 		else if (map.map[id] === 2)

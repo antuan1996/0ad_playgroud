@@ -55,7 +55,7 @@
  * its steps stays one group: a large LCOM4 says a split is easy, a small
  * one in a large class only that its methods call one another.
  */
-import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
@@ -126,7 +126,7 @@ function lineOf(source: ts.SourceFile, pos: number): number
 
 function hasExportModifier(node: ts.Node): boolean
 {
-	return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+	return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some(m => m.kind === ts.SyntaxKind.ExportKeyword);
 }
 
 function memberName(name: ts.PropertyName | undefined): string | undefined
@@ -161,7 +161,11 @@ const HUB_MIN_METHODS = 9;
 const HUB_SHARE = 8;
 
 /** A class's cohesion: its methods linked when they share a field or one calls the other, hubs apart */
-function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclaration | ts.ClassExpression): ClassCohesion
+function classCohesion(
+	file: string,
+	source: ts.SourceFile,
+	cls: ts.ClassDeclaration | ts.ClassExpression,
+): ClassCohesion
 {
 	const fields = new Set<string>();
 	const methods = new Map<string, ts.Node>();
@@ -170,8 +174,12 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 		const name = memberName(member.name);
 		if (ts.isPropertyDeclaration(member) && name)
 			fields.add(name);
-		else if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) &&
-			name && !(ts.getModifiers(member) ?? []).some((m) => m.kind === ts.SyntaxKind.StaticKeyword))
+		else if (
+			(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
+				ts.isSetAccessorDeclaration(member)) && name && !(ts.getModifiers(member) ?? []).some(m =>
+					m.kind === ts.SyntaxKind.StaticKeyword
+				)
+		)
 			methods.set(name, member);
 		else if (ts.isConstructorDeclaration(member))
 		{
@@ -181,8 +189,10 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 			// fields assigned in the constructor
 			const visit = (node: ts.Node): void =>
 			{
-				if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-					ts.isPropertyAccessExpression(node.left) && node.left.expression.kind === ts.SyntaxKind.ThisKeyword)
+				if (
+					ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+					ts.isPropertyAccessExpression(node.left) && node.left.expression.kind === ts.SyntaxKind.ThisKeyword
+				)
 					fields.add(node.left.name.text);
 				ts.forEachChild(node, visit);
 			};
@@ -192,7 +202,7 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 	}
 	// a getter and setter of one name are one member
 	const names = [...methods.keys()];
-	const parent = new Map<string, string>(names.map((n) => [n, n]));
+	const parent = new Map<string, string>(names.map(n => [n, n]));
 	const find = (n: string): string =>
 	{
 		let root = n;
@@ -216,7 +226,7 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 		{
 			if (ts.isPropertyAccessExpression(inner) && inner.expression.kind === ts.SyntaxKind.ThisKeyword)
 			{
-				usesThis = true;	// a member of a base class too
+				usesThis = true; // a member of a base class too
 				if (fields.has(inner.name.text) || methods.has(inner.name.text) && inner.name.text !== name)
 					used.add(inner.name.text);
 			}
@@ -233,7 +243,8 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 		for (const member of used)
 			userCount.set(member, (userCount.get(member) ?? 0) + 1);
 	const hubs = names.length >= HUB_MIN_METHODS ?
-		[...userCount].filter(([, n]) => n > names.length / HUB_SHARE).map(([member]) => member).sort() : [];
+		[...userCount].filter(([, n]) => n > names.length / HUB_SHARE).map(([member]) => member).sort() :
+		[];
 	const fieldUser = new Map<string, string>();
 	for (const [name, used] of uses)
 		for (const member of used)
@@ -271,7 +282,7 @@ function classCohesion(file: string, source: ts.SourceFile, cls: ts.ClassDeclara
 		"lcom4": groups.length,
 		groups,
 		hubs,
-		thisless
+		thisless,
 	};
 }
 
@@ -280,8 +291,16 @@ export function analyseModule(file: string, text: string): ModuleInfo
 {
 	const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 	const layer = layerOf(file);
-	const info: ModuleInfo = { file, layer, "imports": [], "exports": [], "identifiers": new Map(), "methods": [],
-		"classes": [], "findings": [] };
+	const info: ModuleInfo = {
+		file,
+		layer,
+		"imports": [],
+		"exports": [],
+		"identifiers": new Map(),
+		"methods": [],
+		"classes": [],
+		"findings": [],
+	};
 	const finding = (rule: string, node: ts.Node, what: string): void =>
 	{
 		info.findings.push({ rule, file, "line": lineOf(source, node.getStart(source)), "text": what });
@@ -313,9 +332,15 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				for (const element of elements)
 					names.push((element.propertyName ?? element.name).text);
 				if (!clauseTypeOnly && !clause.name)
-					allTypes = elements.length > 0 && elements.every((e) => e.isTypeOnly);
+					allTypes = elements.length > 0 && elements.every(e => e.isTypeOnly);
 			}
-			info.imports.push({ "from": file, to, "typeOnly": allTypes, "line": lineOf(source, statement.getStart(source)), names });
+			info.imports.push({
+				"from": file,
+				to,
+				"typeOnly": allTypes,
+				"line": lineOf(source, statement.getStart(source)),
+				names,
+			});
 			continue;
 		}
 		if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause))
@@ -333,12 +358,15 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				if (ts.isIdentifier(decl.name))
 					info.exports.push({ "name": decl.name.text, line });
 		}
-		else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
-			ts.isInterfaceDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name)
+		else if (
+			(ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) ||
+				ts.isTypeAliasDeclaration(statement) ||
+				ts.isInterfaceDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name
+		)
 			info.exports.push({ "name": statement.name.text, line, "todo": markedNeverCalled(statement, source) });
 	}
 
-	const exportNames = new Set(info.exports.map((e) => e.name));
+	const exportNames = new Set(info.exports.map(e => e.name));
 	const visit = (node: ts.Node): void =>
 	{
 		if (ts.isImportDeclaration(node))
@@ -348,10 +376,13 @@ export function analyseModule(file: string, text: string): ModuleInfo
 			// an export's own declaration is no use of it
 			const parent = node.parent;
 			const declares = parent && "name" in parent && parent.name === node && exportNames.has(node.text) &&
-				(ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) || ts.isVariableDeclaration(parent) ||
-					ts.isTypeAliasDeclaration(parent) || ts.isInterfaceDeclaration(parent) || ts.isEnumDeclaration(parent));
+				(ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) ||
+					ts.isVariableDeclaration(parent) ||
+					ts.isTypeAliasDeclaration(parent) || ts.isInterfaceDeclaration(parent) ||
+					ts.isEnumDeclaration(parent));
 			const declaresMember = parent && "name" in parent && parent.name === node &&
-				(ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent));
+				(ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) ||
+					ts.isSetAccessorDeclaration(parent));
 			if (!declares && !declaresMember)
 				count(node.text);
 		}
@@ -359,7 +390,8 @@ export function analyseModule(file: string, text: string): ModuleInfo
 			count(node.text);
 		if (ts.isAsExpression(node))
 		{
-			const isConst = ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) && node.type.typeName.text === "const";
+			const isConst = ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) &&
+				node.type.typeName.text === "const";
 			if (!isConst && file !== "adapter/brands.ts")
 				finding("cast", node, node.getText(source).slice(0, 80));
 		}
@@ -377,8 +409,10 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				if (layer !== "adapter" && what !== "ProfileStart" && what !== "ProfileStop")
 					finding("engine", node, "Engine." + what);
 			}
-			if (node.name.text === "HQ" && layer === "execution" && file !== "execution/hq.ts" &&
-				ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "ai")
+			if (
+				node.name.text === "HQ" && layer === "execution" && file !== "execution/hq.ts" &&
+				ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "ai"
+			)
 				finding("hq-access", node, node.getText(source));
 		}
 		if ((ts.isClassDeclaration(node) || ts.isClassExpression(node)))
@@ -388,9 +422,17 @@ export function analyseModule(file: string, text: string): ModuleInfo
 			for (const member of node.members)
 			{
 				const name = memberName(member.name);
-				if (name && (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)))
-					info.methods.push({ "cls": clsName, name, "line": lineOf(source, member.getStart(source)),
-						"todo": markedNeverCalled(member, source) });
+				if (
+					name &&
+					(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
+						ts.isSetAccessorDeclaration(member))
+				)
+					info.methods.push({
+						"cls": clsName,
+						name,
+						"line": lineOf(source, member.getStart(source)),
+						"todo": markedNeverCalled(member, source),
+					});
 			}
 		}
 		ts.forEachChild(node, visit);
@@ -399,7 +441,12 @@ export function analyseModule(file: string, text: string): ModuleInfo
 
 	for (const edge of info.imports)
 		if (layer === "execution" && file !== "execution/hq.ts" && edge.to === "decision/headquarters.ts")
-			info.findings.push({ "rule": "hq-access", file, "line": edge.line, "text": "imports decision/headquarters.ts" });
+			info.findings.push({
+				"rule": "hq-access",
+				file,
+				"line": edge.line,
+				"text": "imports decision/headquarters.ts",
+			});
 	return info;
 }
 
@@ -408,7 +455,7 @@ export function importCycles(modules: ModuleInfo[]): string[][]
 {
 	const graph = new Map<string, string[]>();
 	for (const mod of modules)
-		graph.set(mod.file, mod.imports.filter((e) => !e.typeOnly && e.to !== mod.file).map((e) => e.to));
+		graph.set(mod.file, mod.imports.filter(e => !e.typeOnly && e.to !== mod.file).map(e => e.to));
 	let index = 0;
 	const indices = new Map<string, number>();
 	const low = new Map<string, number>();
@@ -445,7 +492,8 @@ export function importCycles(modules: ModuleInfo[]): string[][]
 				break;
 			onStack.delete(w);
 			component.push(w);
-		} while (w !== v);
+		}
+		while (w !== v);
 		if (component.length > 1)
 			cycles.push(component.sort());
 	};
@@ -490,7 +538,13 @@ export interface DeadCode
  */
 export function deadCode(modules: ModuleInfo[], users: ModuleInfo[], calledMethods?: Set<string>): DeadCode
 {
-	const result: DeadCode = { "deadExports": [], "testOnlyExports": [], "localOnlyExports": [], "deadMethods": [], "staleTodos": [] };
+	const result: DeadCode = {
+		"deadExports": [],
+		"testOnlyExports": [],
+		"localOnlyExports": [],
+		"deadMethods": [],
+		"staleTodos": [],
+	};
 	// the names imported from each module, by the port and by the users; namespace imports by their member accesses
 	const importedBy = (importers: ModuleInfo[]): Map<string, Set<string>> =>
 	{
@@ -515,8 +569,10 @@ export function deadCode(modules: ModuleInfo[], users: ModuleInfo[], calledMetho
 		if (names.has(name))
 			return true;
 		// a namespace import: the export is used when a module importing it so names it
-		return names.has("*") && importers.some((m) => m.imports.some((e) => e.to === file && e.names.includes("*")) &&
-			(m.identifiers.get(name) ?? 0) > 0);
+		return names.has("*") &&
+			importers.some(m =>
+				m.imports.some(e => e.to === file && e.names.includes("*")) && (m.identifiers.get(name) ?? 0) > 0
+			);
 	};
 	for (const mod of modules)
 		for (const exp of mod.exports)
@@ -535,13 +591,18 @@ export function deadCode(modules: ModuleInfo[], users: ModuleInfo[], calledMetho
 	// a method is dead when no code of the port (nor the build's scripts) names it; stale when the type checker
 	// resolves a call of the port to its very declaration (by name when no checker is given)
 	const named = new Map<string, number>();
-	for (const mod of [...modules, ...users.filter((u) => !u.file.startsWith("tests/") && !u.file.endsWith(".d.ts"))])
+	for (const mod of [...modules, ...users.filter(u => !u.file.startsWith("tests/") && !u.file.endsWith(".d.ts"))])
 		for (const [name, n] of mod.identifiers)
 			named.set(name, (named.get(name) ?? 0) + n);
 	for (const mod of modules)
 		for (const method of mod.methods)
 		{
-			const finding = { "rule": "", "file": mod.file, "line": method.line, "text": method.cls + "." + method.name };
+			const finding = {
+				"rule": "",
+				"file": mod.file,
+				"line": method.line,
+				"text": method.cls + "." + method.name,
+			};
 			const named_ = (named.get(method.name) ?? 0) > 0;
 			const called = calledMethods ? calledMethods.has(`${mod.file}:${method.line}`) : named_;
 			if (!named_ && !method.todo && !ENTRY_POINTS.has(method.name))
@@ -579,7 +640,10 @@ export function calledMethods(program: ts.Program, port: string): Set<string>
 			const symbol = at && checker.getSymbolAtLocation(at);
 			for (const decl of symbol?.declarations ?? [])
 			{
-				if (!ts.isMethodDeclaration(decl) && !ts.isGetAccessorDeclaration(decl) && !ts.isSetAccessorDeclaration(decl))
+				if (
+					!ts.isMethodDeclaration(decl) && !ts.isGetAccessorDeclaration(decl) &&
+					!ts.isSetAccessorDeclaration(decl)
+				)
 					continue;
 				// a method calling itself is no call of it
 				if (node.pos >= decl.pos && node.end <= decl.end && decl.getSourceFile() === source)
@@ -598,7 +662,10 @@ export function calledMethods(program: ts.Program, port: string): Set<string>
 /** The program of the port and its tests, as tsconfig.tests.json makes it */
 function portProgram(configPath: string): ts.Program
 {
-	const config = ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, "onUnRecoverableConfigFileDiagnostic": () => undefined });
+	const config = ts.getParsedCommandLineOfConfigFile(configPath, {}, {
+		...ts.sys,
+		"onUnRecoverableConfigFileDiagnostic": () => undefined,
+	});
 	if (!config)
 		throw new Error("cannot read " + configPath);
 	return ts.createProgram(config.fileNames, config.options);
@@ -628,14 +695,14 @@ export function trackedCounts(structure: Structure): Record<string, number>
 		"engine": structure.engine.length,
 		"dead-export": structure.dead.deadExports.length,
 		"dead-method": structure.dead.deadMethods.length,
-		"stale-todo": structure.dead.staleTodos.length
+		"stale-todo": structure.dead.staleTodos.length,
 	};
 }
 
 /** The structure of the port from its modules and their users */
 export function analyse(modules: ModuleInfo[], users: ModuleInfo[], called?: Set<string>): Structure
 {
-	const findings = modules.flatMap((m) => m.findings);
+	const findings = modules.flatMap(m => m.findings);
 	const fanIn = new Map<string, Set<string>>();
 	for (const mod of modules)
 		for (const edge of mod.imports)
@@ -646,14 +713,17 @@ export function analyse(modules: ModuleInfo[], users: ModuleInfo[], called?: Set
 		}
 	return {
 		modules,
-		"rules": findings.filter((f) => f.rule !== "engine"),
+		"rules": findings.filter(f => f.rule !== "engine"),
 		"layer": layerViolations(modules),
 		"cycles": importCycles(modules),
-		"engine": findings.filter((f) => f.rule === "engine"),
+		"engine": findings.filter(f => f.rule === "engine"),
 		"dead": deadCode(modules, users, called),
-		"fan": modules.map((m) => ({ "file": m.file, "fanIn": fanIn.get(m.file)?.size ?? 0,
-			"fanOut": new Set(m.imports.map((e) => e.to)).size })),
-		"classes": modules.flatMap((m) => m.classes)
+		"fan": modules.map(m => ({
+			"file": m.file,
+			"fanIn": fanIn.get(m.file)?.size ?? 0,
+			"fanOut": new Set(m.imports.map(e => e.to)).size,
+		})),
+		"classes": modules.flatMap(m => m.classes),
 	};
 }
 
@@ -673,9 +743,10 @@ function listFiles(dir: string, keep: (path: string) => boolean): string[]
 
 function table(header: string[], rows: Array<Array<string | number>>, right: number[] = []): string
 {
-	const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => String(r[i]).length)));
+	const widths = header.map((h, i) => Math.max(h.length, ...rows.map(r => String(r[i]).length)));
 	const line = (cells: Array<string | number>): string =>
-		cells.map((c, i) => right.includes(i) ? String(c).padStart(widths[i]) : String(c).padEnd(widths[i])).join("  ").trimEnd();
+		cells.map((c, i) => right.includes(i) ? String(c).padStart(widths[i]) : String(c).padEnd(widths[i])).join("  ")
+			.trimEnd();
 	return [line(header), ...rows.map(line)].join("\n");
 }
 
@@ -692,14 +763,16 @@ function main(args: string[]): void
 	const baselineFile = join(import.meta.dirname, "structure-baseline.json");
 	const top = Number(option(args, "--top") ?? 15);
 
-	const modules = listFiles(port, (p) => p.endsWith(".ts") && !p.endsWith(".d.ts") && !relative(port, p).startsWith("tests"))
-		.map((p) => analyseModule(relative(port, p).replace(/\\/g, "/"), readFileSync(p, "utf8")));
+	const modules = listFiles(
+		port,
+		p => p.endsWith(".ts") && !p.endsWith(".d.ts") && !relative(port, p).startsWith("tests"),
+	).map(p => analyseModule(relative(port, p).replace(/\\/g, "/"), readFileSync(p, "utf8")));
 	const userFiles = [
-		...listFiles(join(port, "tests"), (p) => p.endsWith(".ts")),
-		...listFiles(port, (p) => p.endsWith(".d.ts")),
-		join(import.meta.dirname, "bot-state.js")
-	].filter((p) => existsSync(p));
-	const users = userFiles.map((p) => analyseModule(relative(port, p).replace(/\\/g, "/"), readFileSync(p, "utf8")));
+		...listFiles(join(port, "tests"), p => p.endsWith(".ts")),
+		...listFiles(port, p => p.endsWith(".d.ts")),
+		join(import.meta.dirname, "bot-state.js"),
+	].filter(p => existsSync(p));
+	const users = userFiles.map(p => analyseModule(relative(port, p).replace(/\\/g, "/"), readFileSync(p, "utf8")));
 	// the declarations name the port's types as import("./x.ts").Name
 	for (const user of users)
 	{
@@ -711,25 +784,51 @@ function main(args: string[]): void
 				user.imports.push({ "from": user.file, to, "typeOnly": true, "line": 0, "names": [m[2]] });
 		}
 	}
-	const structure = analyse(modules, users, calledMethods(portProgram(join(import.meta.dirname, "tsconfig.tests.json")), port));
+	const structure = analyse(
+		modules,
+		users,
+		calledMethods(portProgram(join(import.meta.dirname, "tsconfig.tests.json")), port),
+	);
 	const counts = trackedCounts(structure);
-	const baseline: Record<string, number> = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8")) : {};
+	const baseline: Record<string, number> = existsSync(baselineFile) ?
+		JSON.parse(readFileSync(baselineFile, "utf8")) :
+		{};
 
 	const out: string[] = [];
-	out.push(`Petra TS structure: ${modules.length} modules, ${structure.classes.length} classes, ` +
-		`${modules.reduce((n, m) => n + m.imports.length, 0)} imports`);
-	out.push(`rules broken: ${structure.rules.length}` +
-		(structure.rules.length ? "\n" + structure.rules.map((f) => `  ${f.rule}  ${f.file}:${f.line}  ${f.text}`).join("\n") : ""));
-	out.push("tracked counts (baseline):  " + Object.entries(counts)
-		.map(([k, v]) => `${k} ${v}${baseline[k] === undefined ? "" : ` (${baseline[k]})`}`).join(", "));
+	out.push(
+		`Petra TS structure: ${modules.length} modules, ${structure.classes.length} classes, ` +
+			`${modules.reduce((n, m) => n + m.imports.length, 0)} imports`,
+	);
+	out.push(
+		`rules broken: ${structure.rules.length}` + (structure.rules.length ?
+			"\n" + structure.rules.map(f =>
+				`  ${f.rule}  ${f.file}:${f.line}  ${f.text}`
+			).join("\n") :
+			""),
+	);
+	out.push(
+		"tracked counts (baseline):  " + Object.entries(counts).map(([k, v]) =>
+			`${k} ${v}${baseline[k] === undefined ? "" : ` (${baseline[k]})`}`
+		).join(", "),
+	);
 
 	out.push("\nimports against the layers (adapter < world < execution < decision < root):");
-	out.push(structure.layer.length ? table(["from", "to", "kind"], structure.layer.map((e) =>
-		[`${e.from}:${e.line}`, e.to, e.typeOnly ? "type" : "value"])) : "  none");
+	out.push(
+		structure.layer.length ?
+			table(
+				["from", "to", "kind"],
+				structure.layer.map(e => [`${e.from}:${e.line}`, e.to, e.typeOnly ? "type" : "value"]),
+			) :
+			"  none",
+	);
 	out.push("\nvalue-import cycles:");
-	out.push(structure.cycles.length ? structure.cycles.map((c) => `  ${c.length}: ${c.join(" ")}`).join("\n") : "  none");
+	out.push(
+		structure.cycles.length ? structure.cycles.map(c => `  ${c.length}: ${c.join(" ")}`).join("\n") : "  none",
+	);
 	out.push("\nEngine outside adapter/ (profiling apart):");
-	out.push(structure.engine.length ? structure.engine.map((f) => `  ${f.file}:${f.line}  ${f.text}`).join("\n") : "  none");
+	out.push(
+		structure.engine.length ? structure.engine.map(f => `  ${f.file}:${f.line}  ${f.text}`).join("\n") : "  none",
+	);
 
 	const list = (title: string, findings: Finding[]): void =>
 	{
@@ -746,19 +845,44 @@ function main(args: string[]): void
 	list("exports only the tests or the build use", structure.dead.testOnlyExports);
 
 	out.push("\nmodules, by fan-in:");
-	out.push(table(["module", "fan-in", "fan-out"], [...structure.fan].sort((a, b) => b.fanIn - a.fanIn || b.fanOut - a.fanOut)
-		.slice(0, top).map((f) => [f.file, f.fanIn, f.fanOut]), [1, 2]));
+	out.push(
+		table(
+			["module", "fan-in", "fan-out"],
+			[...structure.fan].sort((a, b) => b.fanIn - a.fanIn || b.fanOut - a.fanOut).slice(0, top).map(
+				f => [f.file, f.fanIn, f.fanOut]
+			),
+			[1, 2],
+		),
+	);
 	out.push("\nclasses, by methods (LCOM4: groups of methods sharing no field nor call, the hubs apart):");
 	const classes = [...structure.classes].sort((a, b) => b.methods - a.methods).slice(0, top);
-	out.push(table(["class", "where", "methods", "fields", "lcom4", "no this", "groups (sizes)"], classes.map((c) =>
-		[c.name, `${c.file}:${c.line}`, c.methods, c.fields, c.lcom4, c.thisless.length,
-			c.groups.filter((g) => g.length > 1).map((g) => g.length).join(" ")]), [2, 3, 4, 5]));
+	out.push(
+		table(
+			["class", "where", "methods", "fields", "lcom4", "no this", "groups (sizes)"],
+			classes.map(
+				c => [
+					c.name,
+					`${c.file}:${c.line}`,
+					c.methods,
+					c.fields,
+					c.lcom4,
+					c.thisless.length,
+					c.groups.filter(g => g.length > 1).map(g => g.length).join(" "),
+				]
+			),
+			[2, 3, 4, 5],
+		),
+	);
 	for (const c of classes)
 	{
 		if (c.hubs.length)
 			out.push(`  ${c.name}, hubs: ${c.hubs.join(", ")}`);
-		for (const group of c.groups.filter((g) => g.length > 1).slice(1, 4))
-			out.push(`  ${c.name}, a group of ${group.length}: ${group.slice(0, 8).join(", ")}${group.length > 8 ? ", ..." : ""}`);
+		for (const group of c.groups.filter(g => g.length > 1).slice(1, 4))
+			out.push(
+				`  ${c.name}, a group of ${group.length}: ${group.slice(0, 8).join(", ")}${
+					group.length > 8 ? ", ..." : ""
+				}`,
+			);
 		if (c.thisless.length)
 			out.push(`  ${c.name}, using no field nor method: ${c.thisless.join(", ")}`);
 	}
@@ -766,9 +890,23 @@ function main(args: string[]): void
 
 	const jsonFile = option(args, "--json");
 	if (jsonFile)
-		writeFileSync(jsonFile, JSON.stringify({ counts, "rules": structure.rules, "layer": structure.layer,
-			"cycles": structure.cycles, "engine": structure.engine, "dead": structure.dead, "fan": structure.fan,
-			"classes": structure.classes }, null, "\t"));
+		writeFileSync(
+			jsonFile,
+			JSON.stringify(
+				{
+					counts,
+					"rules": structure.rules,
+					"layer": structure.layer,
+					"cycles": structure.cycles,
+					"engine": structure.engine,
+					"dead": structure.dead,
+					"fan": structure.fan,
+					"classes": structure.classes,
+				},
+				null,
+				"\t",
+			),
+		);
 	if (args.includes("--update-baseline"))
 	{
 		writeFileSync(baselineFile, JSON.stringify(counts, null, "\t") + "\n");

@@ -46,14 +46,17 @@ for (const dir of dirs)
 		console.error(`${dir}: no idle.txt (play the match with -i)`);
 		continue;
 	}
-	const lines: IdleLine[] = readFileSync(file, "utf8").split("\n").filter(line => line.startsWith("{"))
-		.map(line => JSON.parse(line));
+	const lines: IdleLine[] = readFileSync(file, "utf8").split("\n").filter(line => line.startsWith("{")).map(line =>
+		JSON.parse(line)
+	);
 	if (dirs.length > 1)
 		console.log(`== ${dir}`);
 	const byPlayer = new Map<number, IdleLine[]>();
 	for (const line of lines)
 		byPlayer.set(line.player, [...byPlayer.get(line.player) ?? [], line]);
-	console.log(`idle time (units of each kind idle, not garrisoned; sampled every 5 s), ${BAND_MINUTES}-minute bands:`);
+	console.log(
+		`idle time (units of each kind idle, not garrisoned; sampled every 5 s), ${BAND_MINUTES}-minute bands:`,
+	);
 	for (const [player, series] of [...byPlayer].sort((a, b) => a[0] - b[0]))
 	{
 		const last = series[series.length - 1];
@@ -64,7 +67,7 @@ for (const dir of dirs)
 			// the share in each band: the difference of the running totals at its ends
 			const bands: string[] = [];
 			let previous: IdleLine | undefined;
-			for (let end = BAND_MINUTES; ; end += BAND_MINUTES)
+			for (let end = BAND_MINUTES;; end += BAND_MINUTES)
 			{
 				const at = series.filter(line => line.minute <= end).at(-1);
 				if (!at)
@@ -79,12 +82,16 @@ for (const dir of dirs)
 			const meanIdle = (last.idleSeconds[cat] ?? 0) / (60 * last.minute);
 			const spells = BANDS.map(band => `${band} s ${last.spells[cat]?.[band] ?? 0}`).join(", ");
 			const longest = last.longest[cat];
-			console.log(`  ${cat.padEnd(15)} idle ${percent(last.idleSeconds[cat] ?? 0, last.aliveSeconds[cat]).padStart(6)}` +
-				`, ${meanIdle.toFixed(1)} idle on average; by band: ${bands.join(" ")}`);
+			console.log(
+				`  ${cat.padEnd(15)} idle ${percent(last.idleSeconds[cat] ?? 0, last.aliveSeconds[cat]).padStart(6)}` +
+					`, ${meanIdle.toFixed(1)} idle on average; by band: ${bands.join(" ")}`,
+			);
 			console.log(`  ${"".padEnd(15)} spells: ${spells}`);
 			if (longest)
-				console.log(`  ${"".padEnd(15)} longest: ${Math.round(longest.seconds)} s, ${longest.template} #${longest.id}` +
-					(longest.x !== undefined ? ` at (${longest.x}, ${longest.z})` : ""));
+				console.log(
+					`  ${"".padEnd(15)} longest: ${Math.round(longest.seconds)} s, ${longest.template} #${longest.id}` +
+						(longest.x !== undefined ? ` at (${longest.x}, ${longest.z})` : ""),
+				);
 		}
 	}
 }

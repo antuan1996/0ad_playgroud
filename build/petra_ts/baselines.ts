@@ -30,7 +30,7 @@
  * `npm run build:petra:baselines` runs it.
  */
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,7 +54,7 @@ function run(command: string, args: string[], options: { cwd?: string; input?: B
 		"cwd": options.cwd ?? repoRoot,
 		"input": options.input,
 		"stdio": [options.input ? "pipe" : "inherit", "pipe", "inherit"],
-		"maxBuffer": 1 << 30
+		"maxBuffer": 1 << 30,
 	});
 	if (result.status !== 0)
 		fail(`${command} ${args.join(" ")} failed (status ${result.status})`);
@@ -64,20 +64,32 @@ function run(command: string, args: string[], options: { cwd?: string; input?: B
 /** Compiles the port's sources at a tag into simulation/ai/<bot> and finishes it as that bot. */
 function buildFromTag(tag: string, bot: string): void
 {
-	const commit = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${tag}^{commit}`],
-		{ "cwd": repoRoot, "encoding": "utf8" }).stdout.trim();
+	const commit = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${tag}^{commit}`], {
+		"cwd": repoRoot,
+		"encoding": "utf8",
+	}).stdout.trim();
 	if (!commit)
 		fail(`no tag ${tag}: it marks the port the baseline ${bot} is built from (PLAN.md §2)`);
 	const sources = mkdtempSync(join(tmpdir(), `${bot}-`));
 	try
 	{
-		const archive = run("git", ["archive", commit, "binaries/data/mods/public/simulation/ai/petra_ts",
-			"build/petra_ts/tsconfig.json", "build/petra_ts/tsconfig.build.json"]);
+		const archive = run("git", [
+			"archive",
+			commit,
+			"binaries/data/mods/public/simulation/ai/petra_ts",
+			"build/petra_ts/tsconfig.json",
+			"build/petra_ts/tsconfig.build.json",
+		]);
 		run("tar", ["-x", "-C", sources], { "input": archive });
 		const outDir = join(aiDir, bot);
 		rmSync(outDir, { "recursive": true, "force": true });
-		run(process.execPath, [join(repoRoot, "node_modules/typescript/bin/tsc"),
-			"-p", join(sources, "build/petra_ts/tsconfig.build.json"), "--outDir", outDir]);
+		run(process.execPath, [
+			join(repoRoot, "node_modules/typescript/bin/tsc"),
+			"-p",
+			join(sources, "build/petra_ts/tsconfig.build.json"),
+			"--outDir",
+			outDir,
+		]);
 		process.stdout.write(run(process.execPath, [join(repoRoot, "build/petra_ts/prepare-bot.ts"), `--bot=${bot}`]));
 		console.log(`baselines: ${bot} built from ${tag} (${commit.slice(0, 10)})`);
 	}
@@ -93,10 +105,14 @@ function buildFixed(): void
 	rmSync(outDir, { "recursive": true, "force": true });
 	cpSync(join(aiDir, "petra"), outDir, { "recursive": true });
 	// The patch is against petra/: strip a/binaries/data/mods/public/simulation/ai/petra/.
-	run("git", ["apply", "-p8", "--directory=binaries/data/mods/public/simulation/ai/petra_fixed",
-		"build/petra_ts/upstream/petra-fixes.patch"]);
+	run("git", [
+		"apply",
+		"-p8",
+		"--directory=binaries/data/mods/public/simulation/ai/petra_fixed",
+		"build/petra_ts/upstream/petra-fixes.patch",
+	]);
 	let rewritten = 0;
-	for (const file of readdirSync(outDir).filter((name) => name.endsWith(".js")))
+	for (const file of readdirSync(outDir).filter(name => name.endsWith(".js")))
 	{
 		const path = join(outDir, file);
 		const source = readFileSync(path, "utf8");
@@ -108,13 +124,21 @@ function buildFixed(): void
 		writeFileSync(path, code);
 	}
 	const metadata = JSON.parse(readFileSync(join(outDir, "data.json"), "utf8"));
-	writeFileSync(join(outDir, "data.json"), JSON.stringify({
-		...metadata,
-		"name": "Petra fixed",
-		"description": "Petra, the default 0 A.D. AI bot, with the fixes of build/petra_ts/upstream/petra-fixes.patch: " +
-			"the baseline Petra TS is measured against.\n\n" +
-			"The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard."
-	}, null, "\t") + "\n");
+	writeFileSync(
+		join(outDir, "data.json"),
+		JSON.stringify(
+			{
+				...metadata,
+				"name": "Petra fixed",
+				"description":
+					"Petra, the default 0 A.D. AI bot, with the fixes of build/petra_ts/upstream/petra-fixes.patch: " +
+					"the baseline Petra TS is measured against.\n\n" +
+					"The AI has six levels of difficulty: Sandbox, Very Easy, Easy, Medium, Hard, and Very Hard.",
+			},
+			null,
+			"\t",
+		) + "\n",
+	);
 	console.log(`baselines: petra_fixed built from petra/ and petra-fixes.patch (${rewritten} imports rewritten)`);
 }
 
@@ -147,8 +171,10 @@ function buildHybrid(id: string, modules: string[]): void
 			fail(`no module ${file} in petra_parity`);
 		cpSync(join(parity, file), join(outDir, file));
 	}
-	const helpers: [string, string[]][] = [["entityExtend.js", ["requireValue", "requireTemplate", "requireMetadata"]],
-		["queueplan.js", ["samePlanType"]]];
+	const helpers: [string, string[]][] = [
+		["entityExtend.js", ["requireValue", "requireTemplate", "requireMetadata"]],
+		["queueplan.js", ["samePlanType"]],
+	];
 	for (const [file, names] of helpers)
 	{
 		const path = join(outDir, file);
@@ -158,17 +184,27 @@ function buildHybrid(id: string, modules: string[]): void
 		if (missing.length)
 			writeFileSync(path, source + "\n" + missing.map(name => exportedFunction(port, name)).join("\n"));
 	}
-	for (const file of readdirSync(outDir).filter((name) => name.endsWith(".js")))
+	for (const file of readdirSync(outDir).filter(name => name.endsWith(".js")))
 	{
 		const path = join(outDir, file);
-		writeFileSync(path, readFileSync(path, "utf8").replace(/simulation\/ai\/petra_(parity|fixed)\//g, `simulation/ai/${id}/`));
+		writeFileSync(
+			path,
+			readFileSync(path, "utf8").replace(/simulation\/ai\/petra_(parity|fixed)\//g, `simulation/ai/${id}/`),
+		);
 	}
 	const metadata = JSON.parse(readFileSync(join(outDir, "data.json"), "utf8"));
-	writeFileSync(join(outDir, "data.json"), JSON.stringify({
-		...metadata,
-		"name": `Petra hybrid ${id.slice("petra_hybrid".length).replace(/^_/, "")}`.trim(),
-		"description": `petra_fixed with these modules from petra_parity: ${modules.join(", ") || "none"}.`
-	}, null, "\t") + "\n");
+	writeFileSync(
+		join(outDir, "data.json"),
+		JSON.stringify(
+			{
+				...metadata,
+				"name": `Petra hybrid ${id.slice("petra_hybrid".length).replace(/^_/, "")}`.trim(),
+				"description": `petra_fixed with these modules from petra_parity: ${modules.join(", ") || "none"}.`,
+			},
+			null,
+			"\t",
+		) + "\n",
+	);
 }
 
 const wanted = process.argv.slice(2);

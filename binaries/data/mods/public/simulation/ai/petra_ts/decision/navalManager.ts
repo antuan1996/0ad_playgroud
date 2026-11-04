@@ -1,11 +1,18 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import { gatherTreasure, getLandAccess, getSeaAccess, isSiegeUnit, requireMetadata, requireValue, setSeaAccess } from
-	"../adapter/entityExtend.ts";
+import {
+	gatherTreasure,
+	getLandAccess,
+	getSeaAccess,
+	isSiegeUnit,
+	requireMetadata,
+	requireValue,
+	setSeaAccess,
+} from "../adapter/entityExtend.ts";
+import { plansIn } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import { type SeaFleet, TransportPlan } from "../execution/transportPlan.ts";
-import { plansIn } from "../execution/attackPlan.ts";
+import { TransportPlan, type SeaFleet } from "../execution/transportPlan.ts";
 import { threatsAt } from "../world/seaRoute.ts";
 
 /** Warships wanted on a sea where the enemy fishes or trades (huntWithFleet). */
@@ -20,13 +27,13 @@ const DEFAULT_TOWER_REACH = 60;
 /** Food of fish per fishing boat wanted on a sea (fishByWhatIsLeft), and the most boats a sea gets. */
 export const FISH_PER_BOAT = 1500;
 export const FISH_MAX_BOATS = 8;
+import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
+import { debugWarn } from "../adapter/debug.ts";
+import { isPlaced } from "../adapter/placed.ts";
+import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
-import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
-import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
-import { debugWarn } from "../adapter/debug.ts";
-import { isPlaced } from "../adapter/placed.ts";
 
 /**
  * Naval Manager
@@ -58,7 +65,11 @@ function enemyPreyBySea(gameState: CommonGameState): Map<number, CommonPlacedEnt
 }
 
 /** The nearest prey within HUNT_RANGE of pos and out of the towers' reach */
-function nearestPrey(list: CommonPlacedEntity[], pos: CommonPosition, towers: Parameters<typeof threatsAt>[1]): CommonEntity | undefined
+function nearestPrey(
+	list: CommonPlacedEntity[],
+	pos: CommonPosition,
+	towers: Parameters<typeof threatsAt>[1],
+): CommonEntity | undefined
 {
 	let best: CommonEntity | undefined;
 	let bestDist = HUNT_RANGE * HUNT_RANGE;
@@ -85,10 +96,10 @@ function approachesSupply(ship: CommonEntity): boolean
 /** Our merchant ships trading, which the trade manager steers */
 function tradingShips(gameState: CommonGameState): CommonEntity[]
 {
-	return gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).toEntityArray().filter((ship) =>
+	return gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).toEntityArray().filter(ship =>
 	{
 		const role = ship.getMetadata(PlayerID, "role");
-		return role !== undefined && role === Worker.ROLE_TRADER;	// others already accounted before
+		return role !== undefined && role === Worker.ROLE_TRADER; // others already accounted before
 	});
 }
 
@@ -119,7 +130,7 @@ function shipScore(template: CommonTemplate, goal: "attack" | "transport" | "fis
 		let capacity = +(template.garrisonMax() || 0);
 		if (capacity < 2)
 			return undefined;
-		capacity += 10*arrows;
+		capacity += 10 * arrows;
 		if (MatchesClassList(template.garrisonableClasses(), "Siege"))
 			capacity += 50;
 		return capacity;
@@ -135,7 +146,9 @@ function setNewShipsSeas(gameState: CommonGameState, events: EngineAIEvents): vo
 		if (!evt.entity)
 			continue;
 		const ent = gameState.getEntityById(evt.entity);
-		if (ent && ent.isOwn(PlayerID) && ent.foundationProgress() !== undefined && ent.hasClasses(["Dock", "Shipyard"]))
+		if (
+			ent && ent.isOwn(PlayerID) && ent.foundationProgress() !== undefined && ent.hasClasses(["Dock", "Shipyard"])
+		)
 			setSeaAccess(gameState, ent);
 	}
 
@@ -161,13 +174,13 @@ function keepRoomyCells(landing: Set<number>, width: number): void
 	for (const i of landing)
 	{
 		let nb = 0;
-		if (landing.has(i-1))
+		if (landing.has(i - 1))
 			nb++;
-		if (landing.has(i+1))
+		if (landing.has(i + 1))
 			nb++;
-		if (landing.has(i+width))
+		if (landing.has(i + width))
 			nb++;
-		if (landing.has(i-width))
+		if (landing.has(i - width))
 			nb++;
 		nbaround[i] = nb;
 		nbcut = Math.max(nb, nbcut);
@@ -181,14 +194,18 @@ function keepRoomyCells(landing: Set<number>, width: number): void
 }
 
 /** The cell index of the t-th of ntry steps towards pos from radius*ntry cells in direction a, or undefined off the map */
-function ringCell(ring: { pos: number[]; radius: number; ntry: number; width: number }, a: number[], t: number): number | undefined
+function ringCell(
+	ring: { pos: number[]; radius: number; ntry: number; width: number },
+	a: number[],
+	t: number,
+): number | undefined
 {
 	const { pos, radius, ntry, width } = ring;
-	const i = pos[0] + Math.round(a[0]*radius*(ntry-t));
-	const j = pos[1] + Math.round(a[1]*radius*(ntry-t));
+	const i = pos[0] + Math.round(a[0] * radius * (ntry - t));
+	const j = pos[1] + Math.round(a[1] * radius * (ntry - t));
 	if (i < 0 || i >= width || j < 0 || j >= width)
 		return undefined;
-	return i + j*width;
+	return i + j * width;
 }
 
 export class NavalManager
@@ -224,11 +241,13 @@ export class NavalManager
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
 		this.docks.registerUpdates();
 
-		this.ships = gameState.getOwnUnits().filter(filters.and(filters.byClass("Ship"),
-			filters.not(filters.byMetadata(PlayerID, "role", Worker.ROLE_TRADER))));
+		this.ships = gameState.getOwnUnits().filter(
+			filters.and(filters.byClass("Ship"), filters.not(filters.byMetadata(PlayerID, "role", Worker.ROLE_TRADER))),
+		);
 		// note: those two can overlap (some transport ships are warships too and vice-versa).
-		this.transportShips = this.ships.filter(filters.and(filters.byCanGarrison(),
-			filters.not(filters.byClass("FishingBoat"))));
+		this.transportShips = this.ships.filter(
+			filters.and(filters.byCanGarrison(), filters.not(filters.byClass("FishingBoat"))),
+		);
 		this.warShips = this.ships.filter(filters.byClass("Warship"));
 		this.fishShips = this.ships.filter(filters.byClass("FishingBoat"));
 
@@ -273,8 +292,12 @@ export class NavalManager
 				collec.registerUpdates();
 				return collec;
 			};
-			this.fleets.set(i, { "ships": onSea(this.ships), "transports": onSea(this.transportShips),
-				"warShips": onSea(this.warShips), "fishers": onSea(this.fishShips) });
+			this.fleets.set(i, {
+				"ships": onSea(this.ships),
+				"transports": onSea(this.transportShips),
+				"warShips": onSea(this.warShips),
+				"fishers": onSea(this.fishShips),
+			});
 			this.wantedTransportShips.push(0);
 			this.wantedWarShips.push(0);
 			if (availableFishes[i] && availableFishes[i] > 1000)
@@ -318,8 +341,12 @@ export class NavalManager
 	}
 
 	/** A saved naval manager: its wishes, landing zones and transports from the save */
-	static restore(Config: Config, gameState: CommonGameState, geography: Geography,
-		data: ReturnType<NavalManager["Serialize"]>): NavalManager
+	static restore(
+		Config: Config,
+		gameState: CommonGameState,
+		geography: Geography,
+		data: ReturnType<NavalManager["Serialize"]>,
+	): NavalManager
 	{
 		const manager = new NavalManager(Config, gameState, geography);
 		manager.resume(gameState, data);
@@ -355,7 +382,10 @@ export class NavalManager
 		}
 		for (let sea = 0; sea < this.wantedFishShips.length; ++sea)
 			if (this.wantedFishShips[sea])
-				this.wantedFishShips[sea] = Math.min(FISH_MAX_BOATS, Math.max(1, Math.ceil((fishLeft[sea] ?? 0) / FISH_PER_BOAT)));
+				this.wantedFishShips[sea] = Math.min(
+					FISH_MAX_BOATS,
+					Math.max(1, Math.ceil((fishLeft[sea] ?? 0) / FISH_PER_BOAT)),
+				);
 	}
 
 	updateFishingBoats(sea: SeaIndex, num: number): void
@@ -382,29 +412,31 @@ export class NavalManager
 		const around = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
 		const pos = gameState.ai.accessibility.gamePosToMapPos(fish.position());
 		const width = gameState.ai.accessibility.width;
-		const k = pos[0] + pos[1]*width;
+		const k = pos[0] + pos[1] * width;
 		sea = gameState.ai.accessibility.navalPassMap[k];
 		fish.setMetadata(PlayerID, "sea", sea);
 		const radius = 120 / gameState.ai.accessibility.cellSize / ntry;
-		if (around.every((a: number[]): boolean =>
-		{
-			for (let t = 0; t < ntry; ++t)
+		if (
+			around.every((a: number[]): boolean =>
 			{
-				const cell = ringCell({ pos, radius, ntry, width }, a, t);
-				if (cell === undefined)
-					continue;
-				if (gameState.ai.accessibility.landPassMap[cell] === 1)
+				for (let t = 0; t < ntry; ++t)
 				{
-					const navalPass = gameState.ai.accessibility.navalPassMap[cell];
-					if (navalPass === sea)
-						return true;
-					else if (navalPass === 1)  // we could be outside the map
+					const cell = ringCell({ pos, radius, ntry, width }, a, t);
+					if (cell === undefined)
 						continue;
+					if (gameState.ai.accessibility.landPassMap[cell] === 1)
+					{
+						const navalPass = gameState.ai.accessibility.navalPassMap[cell];
+						if (navalPass === sea)
+							return true;
+						else if (navalPass === 1) // we could be outside the map
+							continue;
+					}
+					return false;
 				}
-				return false;
-			}
-			return true;
-		}))
+				return true;
+			})
+		)
 			fish.setMetadata(PlayerID, "opensea", true);
 		return sea;
 	}
@@ -440,7 +472,7 @@ export class NavalManager
 	{
 		// a land region links only to seas
 		const seas = gameState.ai.accessibility.regionLinks[region].map(seaRegion);
-		this.docks.forEach((dock) =>
+		this.docks.forEach(dock =>
 		{
 			if (!dock.hasClass("Dock") || getLandAccess(gameState, dock) !== region)
 				return;
@@ -467,8 +499,8 @@ export class NavalManager
 			this.onShipLost(gameState, plan, evt.entity);
 		}
 
-		for (const evt of events.OwnershipChanged)	// capture events
-		{
+		for (const evt of events.OwnershipChanged)
+		{ // capture events
 			if (evt.to !== PlayerID)
 				continue;
 			const ent = gameState.getEntityById(evt.entity);
@@ -477,19 +509,23 @@ export class NavalManager
 		}
 	}
 
-
 	/** A ship of a transport plan was destroyed: the units it was to carry wait for another, those landed ask anew. */
 	private onShipLost(gameState: CommonGameState, plan: TransportPlan, shipId: EntityId): void
 	{
-		debugWarn(this.Config, 1, () => "one ship " + shipId + " from plan " + plan.ID + " destroyed during " +
-			plan.state);
+		debugWarn(
+			this.Config,
+			1,
+			() => "one ship " + shipId + " from plan " + plan.ID + " destroyed during " + plan.state,
+		);
 		if (plan.state === TransportPlan.BOARDING)
 		{
 			// just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
-			plan.units.forEach((ent) =>
+			plan.units.forEach(ent =>
 			{
-				if (ent.getMetadata(PlayerID, "onBoard") === "onBoard" && isPlaced(ent) ||
-				    ent.getMetadata(PlayerID, "onBoard") === shipId)
+				if (
+					ent.getMetadata(PlayerID, "onBoard") === "onBoard" && isPlaced(ent) ||
+					ent.getMetadata(PlayerID, "onBoard") === shipId
+				)
 					ent.setMetadata(PlayerID, "onBoard", undefined);
 			});
 			plan.needTransportShips = !plan.transportShips.hasEntities();
@@ -499,7 +535,7 @@ export class NavalManager
 			const endIndex = plan.endIndex;
 			for (const ent of plan.units.values())
 			{
-				if (!isPlaced(ent))  // unit from another ship of this plan ... do nothing
+				if (!isPlaced(ent)) // unit from another ship of this plan ... do nothing
 					continue;
 				const access = getLandAccess(gameState, ent);
 				const endPos = plan.destinationOf(ent);
@@ -535,29 +571,36 @@ export class NavalManager
 	 * (many units can then call this separately and end up in the same plan)
 	 * TODO  check garrison classes
 	 */
-	requireTransport(gameState: CommonGameState, ent: CommonEntity, startIndex: AccessIndex, endIndex: AccessIndex,
-		endPos: CommonPosition): boolean
+	requireTransport(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		startIndex: AccessIndex,
+		endIndex: AccessIndex,
+		endPos: CommonPosition,
+	): boolean
 	{
 		if (!ent.canGarrison())
 			return false;
 
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			debugWarn(this.Config, 0, () => "Petra naval manager error: unit " + ent.id() +
-				" has already required a transport");
+			debugWarn(
+				this.Config,
+				0,
+				() => "Petra naval manager error: unit " + ent.id() + " has already required a transport",
+			);
 			return false;
 		}
 
 		const plans: TransportPlan[] = [];
 		for (const plan of this.transportPlans)
 		{
-			if (plan.startIndex !== startIndex || plan.endIndex !== endIndex ||
-				plan.state !== TransportPlan.BOARDING)
+			if (plan.startIndex !== startIndex || plan.endIndex !== endIndex || plan.state !== TransportPlan.BOARDING)
 			{
 				continue;
 			}
 			// Limit the number of siege units per transport to avoid problems when ungarrisoning
-			if (isSiegeUnit(ent) && plan.units.filter((unit) => isSiegeUnit(unit)).length > 3)
+			if (isSiegeUnit(ent) && plan.units.filter(unit => isSiegeUnit(unit)).length > 3)
 				continue;
 			plans.push(plan);
 		}
@@ -593,7 +636,7 @@ export class NavalManager
 
 		for (const ent of needSplit)
 		{
-			if (ent.getMetadata(PlayerID, "onBoard"))	// Should never happen.
+			if (ent.getMetadata(PlayerID, "onBoard")) // Should never happen.
 				continue;
 			newplan.addUnit(ent, plan.destinationOf(ent));
 			plan.units.updateEnt(ent);
@@ -608,8 +651,12 @@ export class NavalManager
 	 * create a transport from a garrisoned ship to a land location
 	 * needed at start game when starting with a garrisoned ship
 	 */
-	createTransportIfNeeded(gameState: CommonGameState, fromPos: CommonPosition, toPos: CommonPosition,
-		toAccess: AccessIndex): void
+	createTransportIfNeeded(
+		gameState: CommonGameState,
+		fromPos: CommonPosition,
+		toPos: CommonPosition,
+		toAccess: AccessIndex,
+	): void
 	{
 		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
 		if (fromAccess !== 1)
@@ -623,10 +670,15 @@ export class NavalManager
 				continue;
 			if (ship.getMetadata(PlayerID, "transporter") !== undefined)
 				continue;
-			const units = ship.garrisoned().map((entId: EntityId): CommonEntity => requireValue(gameState.getEntityById(entId)));
+			const units = ship.garrisoned().map((entId: EntityId): CommonEntity =>
+				requireValue(gameState.getEntityById(entId))
+			);
 			// TODO check that the garrisoned units have not another purpose
-			const plan = TransportPlan.create(gameState, units,
-				{ "startIndex": fromAccess, "endIndex": toAccess, "endPos": toPos }, ship);
+			const plan = TransportPlan.create(gameState, units, {
+				"startIndex": fromAccess,
+				"endIndex": toAccess,
+				"endPos": toPos,
+			}, ship);
 			if (!plan)
 				continue;
 			this.transportPlans.push(plan);
@@ -657,7 +709,10 @@ export class NavalManager
 				continue;
 			const sea = plan.sea;
 			const seaTransports = plan.seaFleet.transports.length;
-			if (gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 || seaTransports < this.wantedTransportShips[sea])
+			if (
+				gameState.countOwnQueuedEntitiesWithMetadata("sea", sea) > 0 ||
+				seaTransports < this.wantedTransportShips[sea]
+			)
 				continue;
 			++this.neededTransportShips[sea];
 			if (this.wantedTransportShips[sea] === 0 || seaTransports < plan.transportShips.length + 2)
@@ -684,7 +739,9 @@ export class NavalManager
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
 		const waiting = this.transportPlans.some(plan => plan.needTransportShips && plan.units.length > 0) ||
 			[...plansIn(gameState.ai.HQ.attackManager.upcomingAttacks)].some(plan =>
-				plan.overseas !== 0 && plan.unitCollection.hasEntities() && !this.fleet(plan.overseas)?.transports.length);
+				plan.overseas !== 0 && plan.unitCollection.hasEntities() &&
+				!this.fleet(plan.overseas)?.transports.length
+			);
 		const priority = waiting ? Math.max(priorities.villager, priorities.citizenSoldier) + 2 : priorities.ships;
 		if (gameState.ai.queueManager.getPriority("ships") !== priority)
 			gameState.ai.queueManager.changePriority("ships", priority);
@@ -716,14 +773,20 @@ export class NavalManager
 				}
 			}
 
-
 			if (fishers.length < this.wantedFishShips[sea])
 			{
 				const template = this.getBestShip(gameState, sea, "fishing");
 				if (template)
 				{
-					queues.ships.addPlan(new TrainingPlan(gameState, template,
-						{ "base": NO_BASE, "role": Worker.ROLE_WORKER, "sea": sea }, 1, 1));
+					queues.ships.addPlan(
+						new TrainingPlan(
+							gameState,
+							template,
+							{ "base": NO_BASE, "role": Worker.ROLE_WORKER, "sea": sea },
+							1,
+							1,
+						),
+					);
 					continue;
 				}
 			}
@@ -763,9 +826,9 @@ export class NavalManager
 				this.wantedWarShips[sea] = HUNTERS_PER_SEA;
 		}
 		// the enemy's towers, fortresses and civic centres: prey in their reach is let be
-		const towers = gameState.getEnemyStructures().toEntityArray()
-			.filter(ent => ent.owner() !== GAIA && ent.hasDefensiveFire())
-			.map(ent => ({ "pos": ent.position(), "range": ent.attackRange("Ranged")?.max ?? DEFAULT_TOWER_REACH }));
+		const towers = gameState.getEnemyStructures().toEntityArray().filter(ent =>
+			ent.owner() !== GAIA && ent.hasDefensiveFire()
+		).map(ent => ({ "pos": ent.position(), "range": ent.attackRange("Ranged")?.max ?? DEFAULT_TOWER_REACH }));
 		for (const ship of this.warShips.values())
 		{
 			const pos = ship.position();
@@ -815,8 +878,10 @@ export class NavalManager
 		const now = gameState.ai.elapsedTime;
 		const angle = ship.angle();
 		const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-		if (!previousPosition || previousPosition[0] !== shipPosition[0] ||
-		    previousPosition[1] !== shipPosition[1] || ship.getMetadata(PlayerID, "previousAngle") !== angle)
+		if (
+			!previousPosition || previousPosition[0] !== shipPosition[0] ||
+			previousPosition[1] !== shipPosition[1] || ship.getMetadata(PlayerID, "previousAngle") !== angle
+		)
 		{
 			ship.setMetadata(PlayerID, "previousPosition", shipPosition);
 			ship.setMetadata(PlayerID, "previousAngle", angle);
@@ -892,7 +957,8 @@ export class NavalManager
 		{
 			if (blockedIds.indexOf(blockingShip.id()) !== -1 || !isPlaced(blockingShip))
 				continue;
-			const atWork = blockingShip.getMetadata(PlayerID, "transporter") !== undefined || approachesSupply(blockingShip);
+			const atWork = blockingShip.getMetadata(PlayerID, "transporter") !== undefined ||
+				approachesSupply(blockingShip);
 			makeWay(blockingShip, shipPosition, atWork);
 		}
 
@@ -910,8 +976,10 @@ export class NavalManager
 	moveIdleShipApart(gameState: CommonGameState, ship: CommonPlacedEntity, shipPosition: CommonPosition): void
 	{
 		const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-		if (!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
-			                       previousIdlePosition[1] !== shipPosition[1])
+		if (
+			!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
+			previousIdlePosition[1] !== shipPosition[1]
+		)
 		{
 			ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
 			ship.setMetadata(PlayerID, "stationnary", undefined);
@@ -941,11 +1009,13 @@ export class NavalManager
 		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.hasPotentialBase())
 			return;
 
-		if (gameState.ai.HQ.getAccountedPopulation(gameState) > this.Config.Economy.popForDock &&
+		if (
+			gameState.ai.HQ.getAccountedPopulation(gameState) > this.Config.Economy.popForDock &&
 			queues.dock.countQueuedUnitsWithClass("Dock") === 0 &&
-			!gameState.getOwnStructures().filter(filters.and(filters.byClass("Dock"),
-				filters.isFoundation())).hasEntities() &&
-			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/dock"))
+			!gameState.getOwnStructures().filter(filters.and(filters.byClass("Dock"), filters.isFoundation()))
+				.hasEntities() &&
+			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/dock")
+		)
 			this.queueDock(gameState, queues);
 		this.queueShipyard(gameState, queues);
 	}
@@ -953,17 +1023,24 @@ export class NavalManager
 	/** A shipyard once in town phase with a dock and a market, if none stands yet */
 	private queueShipyard(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		if (gameState.currentPhase() < 2 || gameState.ai.HQ.getAccountedPopulation(gameState) < this.Config.Economy.popPhase2 + 15 ||
-		    queues.militaryBuilding.hasQueuedUnits())
+		if (
+			gameState.currentPhase() < 2 ||
+			gameState.ai.HQ.getAccountedPopulation(gameState) < this.Config.Economy.popPhase2 + 15 ||
+			queues.militaryBuilding.hasQueuedUnits()
+		)
 			return;
-		if (!this.docks.filter(filters.byClass("Dock")).hasEntities() ||
-			this.docks.filter(filters.byClass("Shipyard")).hasEntities())
+		if (
+			!this.docks.filter(filters.byClass("Dock")).hasEntities() ||
+			this.docks.filter(filters.byClass("Shipyard")).hasEntities()
+		)
 		{
 			return;
 		}
 		// Use in priority resources to build a Market.
-		if (!gameState.getOwnEntitiesByClass("Market", true).hasEntities() &&
-		    gameState.ai.HQ.canBuild(gameState, "structures/{civ}/market"))
+		if (
+			!gameState.getOwnEntitiesByClass("Market", true).hasEntities() &&
+			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/market")
+		)
 			return;
 		let template;
 		if (gameState.ai.HQ.canBuild(gameState, "structures/{civ}/super_dock"))
@@ -978,8 +1055,7 @@ export class NavalManager
 				wantedLand[requireValue(base.accessIndex)] = true;
 		// our docks always have their sea set (see init and checkEvents)
 		const sea = getSeaAccess(gameState, this.docks.toEntityArray()[0]);
-		queues.militaryBuilding.addPlan(
-			new ConstructionPlan(gameState, template, { "land": wantedLand, "sea": sea }));
+		queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, template, { "land": wantedLand, "sea": sea }));
 	}
 
 	/** A dock for the first built base with a sea we can sail and no dock of ours on it */
@@ -991,13 +1067,16 @@ export class NavalManager
 				continue;
 			// set with the anchor
 			const baseAccessIndex = requireValue(base.accessIndex);
-			const sea = this.getUnconnectedSeas(gameState, baseAccessIndex).find((s) => gameState.ai.HQ.geography.navalRegions[s]);
+			const sea = this.getUnconnectedSeas(gameState, baseAccessIndex).find(s =>
+				gameState.ai.HQ.geography.navalRegions[s]
+			);
 			if (sea === undefined)
 				continue;
 			const wantedLand: Record<number, boolean> = {};
 			wantedLand[baseAccessIndex] = true;
-			queues.dock.addPlan(new ConstructionPlan(gameState, "structures/{civ}/dock",
-				{ "land": wantedLand, "sea": sea }));
+			queues.dock.addPlan(
+				new ConstructionPlan(gameState, "structures/{civ}/dock", { "land": wantedLand, "sea": sea }),
+			);
 			return;
 		}
 	}
@@ -1019,7 +1098,8 @@ export class NavalManager
 					if (template && template.hasClass("Ship") && !trainableShips.has(trainable))
 						trainableShips.set(trainable, template);
 				}
-			});
+			},
+		);
 
 		let best = 0;
 		let bestShip;
@@ -1095,12 +1175,15 @@ export class NavalManager
 			"wantedFishShips": this.wantedFishShips,
 			"neededTransportShips": this.neededTransportShips,
 			"neededWarShips": this.neededWarShips,
-			"landingZones": this.landingZones
+			"landingZones": this.landingZones,
 		};
 
 		const transports: Record<string, ReturnType<TransportPlan["Serialize"]>> = {};
 		// keyed by the plan's place in the list, as the save always was
-		this.transportPlans.forEach((plan, i) => { transports[i] = plan.Serialize(); });
+		this.transportPlans.forEach((plan, i) =>
+		{
+			transports[i] = plan.Serialize();
+		});
 
 		return { "properties": properties, "transports": transports };
 	}

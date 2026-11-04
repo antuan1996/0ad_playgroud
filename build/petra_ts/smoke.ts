@@ -93,7 +93,7 @@ function readReference(): ReferenceGame[]
 {
 	if (!existsSync(referencePath))
 		fail(`no reference at ${referencePath}`);
-	const lines = readFileSync(referencePath, "utf8").split("\n").filter((line) => line && !line.startsWith("#"));
+	const lines = readFileSync(referencePath, "utf8").split("\n").filter(line => line && !line.startsWith("#"));
 	const [header, ...rows] = lines;
 	if (header !== COLUMNS.join("\t"))
 		fail(`the reference's columns are not ${COLUMNS.join(", ")}`);
@@ -101,9 +101,14 @@ function readReference(): ReferenceGame[]
 	{
 		const cells = line.split("\t");
 		return {
-			"game": Number(cells[0]), "mapSeed": Number(cells[1]), "aiSeed": Number(cells[2]),
-			"swapped": cells[3] === "true", "outcome": cells[4], "reason": cells[5],
-			"decided": Number(cells[6]), "fingerprint": cells[7]
+			"game": Number(cells[0]),
+			"mapSeed": Number(cells[1]),
+			"aiSeed": Number(cells[2]),
+			"swapped": cells[3] === "true",
+			"outcome": cells[4],
+			"reason": cells[5],
+			"decided": Number(cells[6]),
+			"fingerprint": cells[7],
 		};
 	});
 }
@@ -126,8 +131,10 @@ function readRows(batch: string): BatchRow[]
 	const path = join(batch, "results.jsonl");
 	if (!existsSync(path))
 		fail(`no results.jsonl in ${batch}`);
-	return readFileSync(path, "utf8").split("\n").filter(Boolean).map((line): BatchRow => JSON.parse(line))
-		.sort((a, b) => a.game - b.game);
+	return readFileSync(path, "utf8").split("\n").filter(Boolean).map((line): BatchRow => JSON.parse(line)).sort((
+		a,
+		b,
+	) => a.game - b.game);
 }
 
 function git(...args: string[]): string
@@ -148,15 +155,28 @@ function play(pairs: string, jobs: number): string
 {
 	const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
 	const out = join(repoRoot, "build/petra_ts/batches", `smoke-${stamp}`);
-	const args = ["build/petra_ts/batch.ts", "--blue", "petra_out", "--red", "petra_parity",
-		"--pairs", pairs, "--slots", "both", "--jobs", String(jobs), "--out", out];
+	const args = [
+		"build/petra_ts/batch.ts",
+		"--blue",
+		"petra_out",
+		"--red",
+		"petra_parity",
+		"--pairs",
+		pairs,
+		"--slots",
+		"both",
+		"--jobs",
+		String(jobs),
+		"--out",
+		out,
+	];
 	for (let attempt = 0; attempt < 3; ++attempt)
 	{
 		// a later attempt resumes the batch: only the games without a result play again
 		const run = spawnSync(process.execPath, args, { "cwd": repoRoot, "stdio": ["ignore", "inherit", "inherit"] });
 		if (run.status !== 0 && !existsSync(join(out, "results.jsonl")))
 			fail(`the batch did not run (status ${run.status})`);
-		if (!readRows(out).some((row) => row.outcome === "failed"))
+		if (!readRows(out).some(row => row.outcome === "failed"))
 			break;
 		if (attempt < 2)
 			console.log("smoke: replaying the games the engine did not finish");
@@ -174,12 +194,24 @@ function record(rows: BatchRow[], batch: string): void
 		"# conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the",
 		"# decision's game time and both players' end statistics (match-report.ts).",
 		`# Recorded from commit ${git("rev-parse", "HEAD")}${dirty ? " with uncommitted changes to the game" : ""},`,
-		`# petra_parity from tag petra-ts-parity (${git("rev-parse", "--short", "petra-ts-parity^{commit}")}); batch ${batch.replace(repoRoot + "/", "")}.`,
+		`# petra_parity from tag petra-ts-parity (${git("rev-parse", "--short", "petra-ts-parity^{commit}")}); batch ${
+			batch.replace(repoRoot + "/", "")
+		}.`,
 		"# A change to the bot's play, the game data or the engine moves fingerprints:",
 		"# record anew with --update when it is meant, and commit this file with it.",
 		COLUMNS.join("\t"),
-		...rows.map((row) => [row.game, row.mapSeed, row.aiSeed, row.swapped, row.outcome, row.reason ?? "",
-			row.decided ?? "", row.fingerprint ?? ""].join("\t"))
+		...rows.map(row =>
+			[
+				row.game,
+				row.mapSeed,
+				row.aiSeed,
+				row.swapped,
+				row.outcome,
+				row.reason ?? "",
+				row.decided ?? "",
+				row.fingerprint ?? "",
+			].join("\t")
+		),
 	];
 	writeFileSync(referencePath, lines.join("\n") + "\n");
 	console.log(`smoke: recorded ${rows.length} games as the reference (${referencePath.replace(repoRoot + "/", "")})`);
@@ -187,7 +219,7 @@ function record(rows: BatchRow[], batch: string): void
 
 function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 {
-	const byGame = new Map(rows.map((row) => [row.game, row]));
+	const byGame = new Map(rows.map(row => [row.game, row]));
 	const differing: string[] = [];
 	const broken: string[] = [];
 	for (const expected of reference)
@@ -205,11 +237,13 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 			broken.push(`game ${expected.game} (${seeds}): ${row.errors} errors, ${row.warnings} warnings`);
 		if (row.fingerprint !== expected.fingerprint)
 		{
-			differing.push(`game ${expected.game} (${seeds}): ${expected.outcome} at ${clock(expected.decided)}` +
-				` -> ${row.outcome} at ${clock(row.decided)}  (${expected.fingerprint} -> ${row.fingerprint})`);
+			differing.push(
+				`game ${expected.game} (${seeds}): ${expected.outcome} at ${clock(expected.decided)}` +
+					` -> ${row.outcome} at ${clock(row.decided)}  (${expected.fingerprint} -> ${row.fingerprint})`,
+			);
 		}
 	}
-	const same = reference.length - differing.length - broken.filter((b) => b.includes("not played")).length;
+	const same = reference.length - differing.length - broken.filter(b => b.includes("not played")).length;
 	console.log(`smoke: ${same} of ${reference.length} games identical to the reference`);
 	for (const line of differing)
 		console.log(`  differs: ${line}`);
@@ -217,7 +251,9 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 		console.log(`  ${line}`);
 	if (differing.length)
 	{
-		console.log("smoke: replay a game with the rerun line of its match.txt (games/<n>/), with -l to log its commands;");
+		console.log(
+			"smoke: replay a game with the rerun line of its match.txt (games/<n>/), with -l to log its commands;",
+		);
 		console.log("  where two command logs part: node build/petra_ts/command-diff.ts <dir> <dir>");
 	}
 	return differing.length || broken.length ? 1 : 0;
@@ -231,7 +267,7 @@ const batch = options.from ?? play(pairsOf(reference), options.jobs);
 const rows = readRows(batch);
 if (options.update)
 {
-	if (rows.some((row) => row.outcome === "failed" || row.errors || row.warnings))
+	if (rows.some(row => row.outcome === "failed" || row.errors || row.warnings))
 		fail("a game failed or had errors: not recorded");
 	record(rows, batch);
 	process.exit(0);

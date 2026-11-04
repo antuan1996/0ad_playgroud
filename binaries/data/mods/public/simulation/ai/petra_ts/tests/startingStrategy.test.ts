@@ -19,16 +19,27 @@ import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
 import {
-	doorCalls, doorManagers, GAIA, type HqWorld, type HqWorldOptions, makeHQConfig, makeHqEntity,
-	makeHqWorld, MAP_CELLS, PASS_RATIO, PLAYER, seatHQ, structureTemplate
+	GAIA,
+	MAP_CELLS,
+	PASS_RATIO,
+	PLAYER,
+	doorCalls,
+	doorManagers,
+	makeHQConfig,
+	makeHqEntity,
+	makeHqWorld,
+	seatHQ,
+	structureTemplate,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
+import { entityId, landRegion } from "../adapter/brands.ts";
+import { isStructure } from "../adapter/placed.ts";
+import { BuildManager } from "../decision/buildManager.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
-import { entityId, landRegion } from "../adapter/brands.ts";
 import { analyseMap } from "../world/geography.ts";
-import { BuildManager } from "../decision/buildManager.ts";
-import { isStructure } from "../adapter/placed.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
@@ -49,7 +60,9 @@ function startWorld(options: StartOptions = {}): HqWorld
 	if (options.cc === false)
 		world.removeEntity(1000);
 	const accessibility = world.ai.accessibility as unknown as Record<string, unknown> & {
-		landPassMap: Uint8Array; navalPassMap: Uint8Array; width: number;
+		landPassMap: Uint8Array;
+		navalPassMap: Uint8Array;
+		width: number;
 		gamePosToMapPos(pos: [number, number]): [number, number];
 	};
 	const naval = new Uint8Array(PASS_WIDTH * PASS_WIDTH);
@@ -82,8 +95,14 @@ function freshHQ(world: HqWorld, config = makeHQConfig()): Headquarters
 {
 	// the regions the bot finds on this map before it makes its headquarters
 	const found = analyseMap(world.gameState, config.debug);
-	const hq = seatHQ(world, { "stubs": doorManagers, "seatBases": false, config,
-		"landRegions": found?.landRegions ?? {}, "navalRegions": found?.navalRegions ?? {}, "navalMap": found?.navalMap ?? false });
+	const hq = seatHQ(world, {
+		"stubs": doorManagers,
+		"seatBases": false,
+		config,
+		"landRegions": found?.landRegions ?? {},
+		"navalRegions": found?.navalRegions ?? {},
+		"navalMap": found?.navalMap ?? false,
+	});
 	// as constructed: gameAnalysis decides whether the AI builds and expands
 	Reflect.deleteProperty(hq, "canBuildUnits");
 	Reflect.deleteProperty(hq, "canExpand");
@@ -102,45 +121,66 @@ const unitAnswers = {
 	"stopMoving": () => undefined,
 	"canAttackClass": () => false,
 	"isGarrisonHolder": () => false,
-	"isTreasureCollector": () => true
+	"isTreasureCollector": () => true,
 };
 
 /** a starting villager; without a position it is garrisoned somewhere */
-function villager(world: HqWorld, id: number, position: [number, number] | undefined,
-	methods: Record<string, unknown> = {}): CommonEntity
+function villager(
+	world: HqWorld,
+	id: number,
+	position: [number, number] | undefined,
+	methods: Record<string, unknown> = {},
+): CommonEntity
 {
-	return world.addEntity(makeHqEntity({
-		id, "owner": PLAYER, position,
-		"classes": ["Unit", "Support", "Civilian", "Worker", "Female"],
-		"templateName": "units/athen/support_female_citizen"
-	}, {
-		...unitAnswers,
-		"buildableEntities": () => ["structures/athen/civil_centre", "structures/athen/dock"],
-		...methods
-	}));
+	return world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": PLAYER,
+			position,
+			"classes": ["Unit", "Support", "Civilian", "Worker", "Female"],
+			"templateName": "units/athen/support_female_citizen",
+		}, {
+			...unitAnswers,
+			"buildableEntities": () => ["structures/athen/civil_centre", "structures/athen/dock"],
+			...methods,
+		}),
+	);
 }
 
 /** a citizen soldier of the given classes */
-function soldier(world: HqWorld, id: number, position: [number, number] | undefined, classes: string[],
-	methods: Record<string, unknown> = {}): CommonEntity
+function soldier(
+	world: HqWorld,
+	id: number,
+	position: [number, number] | undefined,
+	classes: string[],
+	methods: Record<string, unknown> = {},
+): CommonEntity
 {
-	return world.addEntity(makeHqEntity({
-		id, "owner": PLAYER, position,
-		"classes": ["Unit", "CitizenSoldier", "Worker", ...classes],
-		"templateName": "units/athen/" + classes.join("_").toLowerCase()
-	}, { ...unitAnswers, "buildableEntities": () => [], ...methods }));
+	return world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": PLAYER,
+			position,
+			"classes": ["Unit", "CitizenSoldier", "Worker", ...classes],
+			"templateName": "units/athen/" + classes.join("_").toLowerCase(),
+		}, { ...unitAnswers, "buildableEntities": () => [], ...methods }),
+	);
 }
 
 /** the civil centre and dock templates as the game ships them (both may stand outside our land) */
 function addFoundingTemplates(world: HqWorld, ccCost = { "wood": 500, "stone": 500, "metal": 500 }): void
 {
 	world.templates["structures/athen/civil_centre"] = structureTemplate("structures/athen/civil_centre", {
-		"classes": ["Structure", "CivCentre", "Defensive"], "cost": ccCost,
-		"territories": ["own", "neutral"], "placement": "land"
+		"classes": ["Structure", "CivCentre", "Defensive"],
+		"cost": ccCost,
+		"territories": ["own", "neutral"],
+		"placement": "land",
 	});
 	world.templates["structures/athen/dock"] = structureTemplate("structures/athen/dock", {
-		"classes": ["Structure", "Dock", "Naval"], "cost": { "wood": 200 },
-		"territories": ["own", "neutral"], "placement": "shore"
+		"classes": ["Structure", "Dock", "Naval"],
+		"cost": { "wood": 200 },
+		"territories": ["own", "neutral"],
+		"placement": "shore",
 	});
 }
 
@@ -162,9 +202,9 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 			"regions": {
 				2: { "type": "land", "size": 12000 },
 				3: { "type": "water", "size": 3000 },
-				4: { "type": "land", "size": 4000 }
+				4: { "type": "land", "size": 4000 },
 			},
-			"trajectories": { "2,4": [2, 3, 4] }
+			"trajectories": { "2,4": [2, 3, 4] },
 		});
 		const hq = analyseMap(world.gameState, 0);
 		assert.ok(hq, "the map was read");
@@ -186,9 +226,9 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 				4: { "type": "land", "size": 500 },
 				// a rock of 50 cells (200 square map units) and a puddle of 500 (2000)
 				5: { "type": "land", "size": 50 },
-				6: { "type": "water", "size": 500 }
+				6: { "type": "water", "size": 500 },
 			},
-			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 6, 5] }
+			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 6, 5] },
 		});
 		const hq = analyseMap(world.gameState, 0);
 		assert.ok(hq, "the map was read");
@@ -208,9 +248,9 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 				// small, but reached over the open sea
 				4: { "type": "land", "size": 500 },
 				// land that no single sea connects to us (a lake island behind the coast)
-				5: { "type": "land", "size": 4000 }
+				5: { "type": "land", "size": 4000 },
 			},
-			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 3, 4, 7, 5] }
+			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 3, 4, 7, 5] },
 		});
 		const hq = analyseMap(world.gameState, 0);
 		assert.ok(hq, "the map was read");
@@ -229,16 +269,25 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 			"regions": {
 				3: { "type": "land", "size": 12000 },
 				5: { "type": "water", "size": 3000 },
-				4: { "type": "land", "size": 6000 }
+				4: { "type": "land", "size": 6000 },
 			},
-			"trajectories": { "3,4": [3, 5, 4] }
+			"trajectories": { "3,4": [3, 5, 4] },
 		});
 		// a house first in the list: buildings that train nobody do not say where home is
-		world.addEntity(makeHqEntity({
-			"id": 30, "owner": PLAYER, "position": [200, 200], "classes": ["Structure", "House"],
-			"templateName": "structures/athen/house"
-		}, { "trainableEntities": () => undefined, "isGarrisonHolder": () => false,
-			"resourceDropsiteTypes": () => undefined, "decaying": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 30,
+				"owner": PLAYER,
+				"position": [200, 200],
+				"classes": ["Structure", "House"],
+				"templateName": "structures/athen/house",
+			}, {
+				"trainableEntities": () => undefined,
+				"isGarrisonHolder": () => false,
+				"resourceDropsiteTypes": () => undefined,
+				"decaying": () => false,
+			}),
+		);
 		villager(world, 31, [100, 100]);
 		villager(world, 32, [102, 100]);
 		const hq = analyseMap(world.gameState, 0);
@@ -253,24 +302,35 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 		const world = startWorld({
 			"cc": false,
 			// the west half is sea 5, the east half land 2
-			"landPassMap": (px) => px < 80 ? 1 : 2,
-			"navalPassMap": (px) => px < 80 ? 5 : 1,
+			"landPassMap": px => px < 80 ? 1 : 2,
+			"navalPassMap": px => px < 80 ? 5 : 1,
 			"regions": {
 				2: { "type": "land", "size": 12800 },
 				5: { "type": "water", "size": 12800 },
 				// a land two seas away: not reachable straight from the ship's sea
-				6: { "type": "land", "size": 4000 }
+				6: { "type": "land", "size": 4000 },
 			},
-			"trajectories": { "5,2": [5, 2], "5,6": [5, 7, 6] }
+			"trajectories": { "5,2": [5, 2], "5,6": [5, 7, 6] },
 		});
 		// the villagers ride inside the ship
 		villager(world, 41, undefined);
 		villager(world, 42, undefined);
-		world.addEntity(makeHqEntity({
-			"id": 40, "owner": PLAYER, "position": [40, 40], "classes": ["Unit", "Ship", "Warship"],
-			"templateName": "units/athen/ship_trireme"
-		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [41, 42],
-			"canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 40,
+				"owner": PLAYER,
+				"position": [40, 40],
+				"classes": ["Unit", "Ship", "Warship"],
+				"templateName": "units/athen/ship_trireme",
+			}, {
+				...unitAnswers,
+				"isGarrisonHolder": () => true,
+				"garrisoned": () => [41, 42],
+				"canGather": () => false,
+				"isGatherer": () => false,
+				"isBuilder": () => false,
+			}),
+		);
 		const hq = analyseMap(world.gameState, 0);
 		assert.ok(hq, "the map was read");
 
@@ -289,12 +349,12 @@ describe("game start: which regions of the map Petra plays on (analyseMap)", () 
 			// everything reads impassable for both land units and ships
 			"landPassMap": () => 0,
 			"navalPassMap": () => 0,
-			"regions": {}
+			"regions": {},
 		});
 		villager(world, 51, [100, 100]);
 		assert.equal(analyseMap(world.gameState, 0), undefined, "no geography, so no headquarters is made");
 
-		assert.ok(logs.some((line) => line.includes("it does not know how to interpret this map")));
+		assert.ok(logs.some(line => line.includes("it does not know how to interpret this map")));
 	});
 });
 
@@ -309,8 +369,9 @@ describe("game start: what the first turn books", () =>
 		const world = startWorld();
 		// athen lists gymnasium, prytaneion and theater; this game has no prytaneion
 		for (const name of ["gymnasium", "theater"])
-			world.templates[`structures/athen/${name}`] = structureTemplate(`structures/athen/${name}`,
-				{ "classes": ["Structure"] });
+			world.templates[`structures/athen/${name}`] = structureTemplate(`structures/athen/${name}`, {
+				"classes": ["Structure"],
+			});
 		const hq = freshHQ(world);
 
 		gameAnalysis(hq, world.gameState);
@@ -368,21 +429,31 @@ describe("game start: what the first turn books", () =>
 	it("land traders go to the trade manager at once; merchant ships wait (they may carry troops)", () =>
 	{
 		const world = startWorld();
-		world.addEntity(makeHqEntity({
-			"id": 60, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Trader"],
-			"templateName": "units/athen/support_trader"
-		}, { ...unitAnswers, "canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
-		world.addEntity(makeHqEntity({
-			"id": 61, "owner": PLAYER, "position": [104, 100], "classes": ["Unit", "Trader", "Ship"],
-			"templateName": "units/athen/ship_merchant"
-		}, { ...unitAnswers, "canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 60,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": ["Unit", "Trader"],
+				"templateName": "units/athen/support_trader",
+			}, { ...unitAnswers, "canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 61,
+				"owner": PLAYER,
+				"position": [104, 100],
+				"classes": ["Unit", "Trader", "Ship"],
+				"templateName": "units/athen/ship_merchant",
+			}, { ...unitAnswers, "canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }),
+		);
 		const hq = freshHQ(world);
 
 		gameAnalysis(hq, world.gameState);
 
-		const assigned = doorCalls(hq.tradeManager)
-			.filter(([name]) => name === "assignTrader")
-			.map(([, args]) => (args[0] as CommonEntity).id());
+		const assigned = doorCalls(hq.tradeManager).filter(([name]) => name === "assignTrader").map(([, args]) =>
+			(args[0] as CommonEntity).id()
+		);
 		assert.deepEqual(assigned, [60]);
 	});
 
@@ -392,12 +463,21 @@ describe("game start: what the first turn books", () =>
 		const unloaded: number[] = [];
 		villager(world, 71, undefined);
 		villager(world, 72, undefined);
-		world.addEntity(makeHqEntity({
-			"id": 70, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Tower", "Defensive"],
-			"templateName": "structures/athen/sentry_tower"
-		}, { "isGarrisonHolder": () => true, "garrisoned": () => [71, 72],
-			"unload": (id: number) => unloaded.push(id),
-			"resourceDropsiteTypes": () => undefined, "decaying": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 70,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": ["Structure", "Tower", "Defensive"],
+				"templateName": "structures/athen/sentry_tower",
+			}, {
+				"isGarrisonHolder": () => true,
+				"garrisoned": () => [71, 72],
+				"unload": (id: number) => unloaded.push(id),
+				"resourceDropsiteTypes": () => undefined,
+				"decaying": () => false,
+			}),
+		);
 		const hq = freshHQ(world);
 
 		gameAnalysis(hq, world.gameState);
@@ -411,21 +491,43 @@ describe("game start: what the first turn books", () =>
 		const world = startWorld();
 		// a ram (holding a soldier) carried inside a ship
 		soldier(world, 82, undefined, ["Infantry", "Melee"]);
-		world.addEntity(makeHqEntity({
-			"id": 81, "owner": PLAYER, "position": undefined, "classes": ["Unit", "Siege", "Ram"],
-			"templateName": "units/athen/siege_ram"
-		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [82],
-			"canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
-		world.addEntity(makeHqEntity({
-			"id": 80, "owner": PLAYER, "position": [100, 100], "classes": ["Unit", "Ship", "Warship"],
-			"templateName": "units/athen/ship_trireme"
-		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [81],
-			"canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 81,
+				"owner": PLAYER,
+				"position": undefined,
+				"classes": ["Unit", "Siege", "Ram"],
+				"templateName": "units/athen/siege_ram",
+			}, {
+				...unitAnswers,
+				"isGarrisonHolder": () => true,
+				"garrisoned": () => [82],
+				"canGather": () => false,
+				"isGatherer": () => false,
+				"isBuilder": () => false,
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({
+				"id": 80,
+				"owner": PLAYER,
+				"position": [100, 100],
+				"classes": ["Unit", "Ship", "Warship"],
+				"templateName": "units/athen/ship_trireme",
+			}, {
+				...unitAnswers,
+				"isGarrisonHolder": () => true,
+				"garrisoned": () => [81],
+				"canGather": () => false,
+				"isGatherer": () => false,
+				"isBuilder": () => false,
+			}),
+		);
 		const hq = freshHQ(world);
 
 		assert.equal(gameAnalysis(hq, world.gameState), true);
 
-		assert.ok(logs.some((line) => line.includes("garrisoned units inside garrisoned holders")));
+		assert.ok(logs.some(line => line.includes("garrisoned units inside garrisoned holders")));
 	});
 
 	it("a unit standing on a small island keeps that island on the map", () =>
@@ -433,10 +535,7 @@ describe("game start: what the first turn books", () =>
 		const world = startWorld({
 			// a 4x4-cell islet (region 7) in the corner of the board
 			"landPassMap": (px, pz) => px >= 150 && pz >= 150 ? 7 : 2,
-			"regions": {
-				2: { "type": "land", "size": 20000 },
-				7: { "type": "land", "size": 16 }
-			}
+			"regions": { 2: { "type": "land", "size": 20000 }, 7: { "type": "land", "size": 16 } },
 		});
 		villager(world, 90, [305, 305]);
 		const hq = freshHQ(world);
@@ -454,13 +553,18 @@ describe("game start: what the first turn books", () =>
 			"regions": {
 				2: { "type": "land", "size": 25500 },
 				// 100 cells, 400 square map units: under the 3600 a fishing lake needs
-				6: { "type": "water", "size": 100 }
-			}
+				6: { "type": "water", "size": 100 },
+			},
 		});
-		world.addEntity(makeHqEntity({
-			"id": 95, "owner": PLAYER, "position": [310, 310], "classes": ["Unit", "Ship", "FishingBoat"],
-			"templateName": "units/athen/ship_fishing"
-		}, { ...unitAnswers, "isBuilder": () => false }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 95,
+				"owner": PLAYER,
+				"position": [310, 310],
+				"classes": ["Unit", "Ship", "FishingBoat"],
+				"templateName": "units/athen/ship_fishing",
+			}, { ...unitAnswers, "isBuilder": () => false }),
+		);
 		const hq = freshHQ(world);
 
 		gameAnalysis(hq, world.gameState);
@@ -496,10 +600,15 @@ describe("game start without a civil centre", () =>
 	{
 		const world = startWorld({ "cc": false });
 		world.gameState.playerData.isMutualAlly[ALLY] = true;
-		world.addEntity(makeHqEntity({
-			"id": 100, "owner": ALLY, "position": [200, 200], "classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre"
-		}, { "footprintRadius": () => 20 }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 100,
+				"owner": ALLY,
+				"position": [200, 200],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}, { "footprintRadius": () => 20 }),
+		);
 		const moves: Array<[number, unknown[]]> = [];
 		// ten units on our land: three archers, three spearmen, two horsemen, two women
 		for (const id of [101, 102, 103])
@@ -531,14 +640,19 @@ describe("game start without a civil centre", () =>
 		const world = startWorld({
 			"cc": false,
 			// the ally sits on land 4 in the east, we are on land 2
-			"landPassMap": (px) => px < 80 ? 2 : 4,
-			"regions": { 2: { "type": "land", "size": 12800 }, 4: { "type": "land", "size": 12800 } }
+			"landPassMap": px => px < 80 ? 2 : 4,
+			"regions": { 2: { "type": "land", "size": 12800 }, 4: { "type": "land", "size": 12800 } },
 		});
 		world.gameState.playerData.isMutualAlly[ALLY] = true;
-		world.addEntity(makeHqEntity({
-			"id": 100, "owner": ALLY, "position": [250, 250], "classes": ["Structure", "CivCentre"],
-			"templateName": "structures/athen/civil_centre"
-		}, { "footprintRadius": () => 20 }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 100,
+				"owner": ALLY,
+				"position": [250, 250],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}, { "footprintRadius": () => 20 }),
+		);
 		// the common-api books a structure's access in its metadata
 		world.ents.get(100)!.setMetadata(PLAYER, "access", landRegion(4));
 		const moves: Array<[number, unknown[]]> = [];
@@ -619,9 +733,9 @@ describe("buildFirstBase: founding a town from nothing", () =>
 	{
 		const { world, hq } = homeless({
 			// a river: cells with px < 50 are land 2, the others land 4
-			"landPassMap": (px) => px < 50 ? 2 : 4,
+			"landPassMap": px => px < 50 ? 2 : 4,
 			"regions": { 2: { "type": "land", "size": 8000 }, 4: { "type": "land", "size": 17600 } },
-			"stock": { "food": 0, "wood": 600, "stone": 600, "metal": 600 }
+			"stock": { "food": 0, "wood": 600, "stone": 600, "metal": 600 },
 		});
 		villager(world, 211, [96, 100]);
 		villager(world, 212, [104, 100]);
@@ -639,10 +753,15 @@ describe("buildFirstBase: founding a town from nothing", () =>
 		villager(world, 221, undefined);
 		villager(world, 222, undefined);
 		villager(world, 223, [280, 280]);
-		world.addEntity(makeHqEntity({
-			"id": 220, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship"],
-			"templateName": "units/athen/ship_merchant"
-		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [221, 222] }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 220,
+				"owner": PLAYER,
+				"position": [60, 60],
+				"classes": ["Unit", "Ship"],
+				"templateName": "units/athen/ship_merchant",
+			}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [221, 222] }),
+		);
 		initBuilders(world, hq);
 
 		buildFirstBase(hq, world.gameState);
@@ -665,8 +784,10 @@ describe("buildFirstBase: founding a town from nothing", () =>
 	it("nothing is planned when the centre is disabled, or nobody can build it", () =>
 	{
 		{
-			const { world, hq } = homeless({ "stock": { "food": 0, "wood": 2000, "stone": 2000, "metal": 2000 },
-				"disabledTemplates": ["structures/athen/civil_centre"] });
+			const { world, hq } = homeless({
+				"stock": { "food": 0, "wood": 2000, "stone": 2000, "metal": 2000 },
+				"disabledTemplates": ["structures/athen/civil_centre"],
+			});
 			villager(world, 241, [100, 100]);
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
@@ -684,8 +805,9 @@ describe("buildFirstBase: founding a town from nothing", () =>
 	it("nothing is planned when only horsemen are left", () =>
 	{
 		const { world, hq } = homeless({ "stock": { "food": 0, "wood": 2000, "stone": 2000, "metal": 2000 } });
-		soldier(world, 251, [100, 100], ["Cavalry", "FastMoving"],
-			{ "buildableEntities": () => ["structures/athen/civil_centre"] });
+		soldier(world, 251, [100, 100], ["Cavalry", "FastMoving"], {
+			"buildableEntities": () => ["structures/athen/civil_centre"],
+		});
 		initBuilders(world, hq);
 
 		buildFirstBase(hq, world.gameState);
@@ -698,12 +820,20 @@ describe("buildFirstBase: founding a town from nothing", () =>
 		const world = startWorld({ "cc": false, "stock": { "food": 0, "wood": 300, "stone": 500, "metal": 500 } });
 		addFoundingTemplates(world);
 		// the treasure lies on the map before the bot's first turn
-		world.addEntity(makeHqEntity({
-			"id": 260, "owner": GAIA, "position": [120, 100], "classes": ["Treasure"],
-			"templateName": "gaia/treasure/wood"
-		}, { "isTreasure": () => true, "treasureResources": () => ({ "wood": 300 }) }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 260,
+				"owner": GAIA,
+				"position": [120, 100],
+				"classes": ["Treasure"],
+				"templateName": "gaia/treasure/wood",
+			}, { "isTreasure": () => true, "treasureResources": () => ({ "wood": 300 }) }),
+		);
 		const collected: unknown[] = [];
-		villager(world, 261, [100, 100], { "isIdle": () => true, "collectTreasure": (t: CommonEntity) => collected.push(t.id()) });
+		villager(world, 261, [100, 100], {
+			"isIdle": () => true,
+			"collectTreasure": (t: CommonEntity) => collected.push(t.id()),
+		});
 		const hq = freshHQ(world);
 		initBuilders(world, hq);
 
@@ -734,9 +864,9 @@ describe("buildFirstBase: founding a town from nothing", () =>
 	it("villagers wading in the shallows name the sea the dock is for", () =>
 	{
 		const { world, hq } = homeless({
-			"navalPassMap": (px) => px < 60 ? 3 : 1,
+			"navalPassMap": px => px < 60 ? 3 : 1,
 			"regions": { 2: { "type": "land", "size": 20000 }, 3: { "type": "water", "size": 3000 } },
-			"stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 }
+			"stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 },
 		});
 		villager(world, 281, [100, 100]);
 		initBuilders(world, hq);
@@ -765,8 +895,10 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			assert.equal(world.ai.queues.dock.plans.length, 1);
 		}
 		{
-			const { world, hq } = homeless({ "stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 },
-				"disabledTemplates": ["structures/athen/dock"] });
+			const { world, hq } = homeless({
+				"stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 },
+				"disabledTemplates": ["structures/athen/dock"],
+			});
 			villager(world, 293, [100, 100]);
 			initBuilders(world, hq);
 			buildFirstBase(hq, world.gameState);
@@ -794,10 +926,15 @@ describe("buildFirstBase: founding a town from nothing", () =>
 		// a villager rides in the ship; another was sent last turn to a treasure
 		// someone else has picked up since (the entity is gone)
 		villager(world, 266, undefined);
-		world.addEntity(makeHqEntity({
-			"id": 265, "owner": PLAYER, "position": [60, 60], "classes": ["Unit", "Ship"],
-			"templateName": "units/athen/ship_merchant"
-		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [266] }));
+		world.addEntity(
+			makeHqEntity({
+				"id": 265,
+				"owner": PLAYER,
+				"position": [60, 60],
+				"classes": ["Unit", "Ship"],
+				"templateName": "units/athen/ship_merchant",
+			}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [266] }),
+		);
 		villager(world, 267, [100, 100]);
 		world.ents.get(267)!.setMetadata(PLAYER, "treasure", entityId(999));
 		const hq = freshHQ(world);
@@ -812,10 +949,15 @@ describe("buildFirstBase: founding a town from nothing", () =>
 	it("too poor with a dock already standing: the centre is planned anyway and waits for the money", () =>
 	{
 		const { world, hq } = homeless({ "stock": { "food": 0, "wood": 300, "stone": 0, "metal": 0 } });
-		world.addEntity(makeHqEntity({
-			"id": 300, "owner": PLAYER, "position": [40, 100], "classes": ["Structure", "Dock", "Naval"],
-			"templateName": "structures/athen/dock"
-		}));
+		world.addEntity(
+			makeHqEntity({
+				"id": 300,
+				"owner": PLAYER,
+				"position": [40, 100],
+				"classes": ["Structure", "Dock", "Naval"],
+				"templateName": "structures/athen/dock",
+			}),
+		);
 		villager(world, 301, [100, 100]);
 		hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false).filter(isStructure);
 		initBuilders(world, hq);

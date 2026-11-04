@@ -42,7 +42,10 @@ export function incomeOf(economy: Readonly<GatherEconomy>, type: string): number
  * rate it multiplies, what that supply type brings in times the gain. Other
  * effects (capacities, speeds, armour) count nothing here.
  */
-export function incomeGain(economy: Readonly<GatherEconomy>, modifications: readonly CommonTechnologyModification[]): number
+export function incomeGain(
+	economy: Readonly<GatherEconomy>,
+	modifications: readonly CommonTechnologyModification[],
+): number
 {
 	let gain = 0;
 	for (const modification of modifications)

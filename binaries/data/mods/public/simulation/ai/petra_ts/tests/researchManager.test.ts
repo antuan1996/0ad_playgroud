@@ -11,12 +11,18 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { techName } from "../adapter/brands.ts";
 import { fake } from "./harness/fakes.ts";
 import {
-	doorManagers, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld, PLAYER, seatHQ
+	PLAYER,
+	doorManagers,
+	makeHqEntity,
+	makeHqWorld,
+	seatHQ,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 import { modsPublic } from "./harness/paths.ts";
-import { techName } from "../adapter/brands.ts";
 
 import { ResearchManager } from "../decision/researchManager.ts";
 import type { Queue } from "../execution/queue.ts";
@@ -26,15 +32,18 @@ import { ResearchPlan } from "../execution/queueplanResearch.ts";
  * a game tech, read from its file as the engine's TechnologyTemplates does,
  * answering as common-api's Technology (a missing field reads undefined)
  */
-function tech(world: HqWorld, name: string, edit: (json: Record<string, unknown>) => void = () => {}): [TechName, CommonTechnology]
+function tech(world: HqWorld, name: string, edit: (json: Record<string, unknown>) => void = () =>
+{}): [TechName, CommonTechnology]
 {
-	const json = JSON.parse(readFileSync(path.join(modsPublic, "simulation/data/technologies", name + ".json"), "utf8"));
+	const json = JSON.parse(
+		readFileSync(path.join(modsPublic, "simulation/data/technologies", name + ".json"), "utf8"),
+	);
 	edit(json);
 	const technology = fake<CommonTechnology>({
 		"researchTime": () => json.researchTime ?? 0,
 		"cost": () => json.cost ? { ...json.cost } : undefined,
 		"modifications": () => json.modifications || undefined,
-		"affects": () => json.affects || undefined
+		"affects": () => json.affects || undefined,
 	});
 	world.templates[name] = fake<CommonTemplate>(technology);
 	return [techName(name), technology];
@@ -45,7 +54,7 @@ function seat(options: Partial<HqWorldOptions> = {}, techs: string[] = [])
 {
 	const world = makeHqWorld(options);
 	const hq = seatHQ(world, { "stubs": doorManagers });
-	const listed = techs.map((name) => tech(world, name));
+	const listed = techs.map(name => tech(world, name));
 	const gs = world.gameState as unknown as Record<string, unknown>;
 	gs.findAvailableTech = () => [...listed];
 	// a new research plan looks for its researchers; none here, so the plain cost stands
@@ -61,17 +70,24 @@ function workers(world: HqWorld, count: number): void
 {
 	const first = 5000 + world.ents.size;
 	for (let i = 0; i < count; ++i)
-		world.addEntity(makeHqEntity({ "id": first + i, "owner": PLAYER, "position": [40, 40], "classes": ["Unit", "Worker"] },
-			{}, { "role": "worker" }));
+		world.addEntity(
+			makeHqEntity(
+				{ "id": first + i, "owner": PLAYER, "position": [40, 40], "classes": ["Unit", "Worker"] },
+				{},
+				{ "role": "worker" },
+			),
+		);
 }
 
-const queued = (queue: Queue): string[] => queue.plans.map((p) => p.type);
+const queued = (queue: Queue): string[] => queue.plans.map(p => p.type);
 
 describe("the next phase: checkPhase", () =>
 {
 	it("a town with the people for it researches the next phase, in a hurry", () =>
 	{
-		const { world, hq, manager, queues } = seat({ "population": 150, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
+		const { world, hq, manager, queues } = seat({ "population": 150, "phaseName": "phase_town_generic" }, [
+			"phase_town_generic",
+		]);
 		const queueManager = world.ai.queueManager;
 		queueManager.changePriority("majorTech", 1);
 
@@ -102,7 +118,9 @@ describe("the next phase: checkPhase", () =>
 	{
 		for (const [woodLeft, expected] of [[100, ["phase_town_generic"]], [3000, []]] as const)
 		{
-			const { world, hq, manager, queues } = seat({ "population": 60, "phaseName": "phase_town_generic" }, ["phase_town_generic"]);
+			const { world, hq, manager, queues } = seat({ "population": 60, "phaseName": "phase_town_generic" }, [
+				"phase_town_generic",
+			]);
 			hq.saveResources = true;
 			hq.getTotalResourceLevel = () => ({ "wood": woodLeft });
 
@@ -122,18 +140,25 @@ describe("the next phase: checkPhase", () =>
 			s.manager.checkPhase(s.world.gameState, s.queues);
 			assert.equal(s.hq.phasing, 0, `with ${queue} busy`);
 		}
-		const last = seat({ "population": 150 });	// no phase name for the next phase
+		const last = seat({ "population": 150 }); // no phase name for the next phase
 		last.manager.checkPhase(last.world.gameState, last.queues);
 		assert.deepEqual(queued(last.queues.majorTech), []);
 	});
 
 	it("later phases follow the number of workers", () =>
 	{
-		for (const [phase, key, next] of [[2, "workPhase3", "phase_city_generic"], [3, "workPhase4", "phase_town_generic"]] as const)
+		for (
+			const [phase, key, next] of [[2, "workPhase3", "phase_city_generic"], [
+				3,
+				"workPhase4",
+				"phase_town_generic",
+			]] as const
+		)
 		{
 			const s = seat({ phase }, [next]);
-			(s.world.gameState as unknown as { getPhaseName: (p: number) => string | undefined }).getPhaseName =
-				(p: number) => p === phase + 1 ? next : undefined;
+			(s.world.gameState as unknown as { getPhaseName: (p: number) => string | undefined }).getPhaseName = (
+				p: number,
+			) => p === phase + 1 ? next : undefined;
 			// a small map's config: few workers make a phase
 			s.hq.Config.Economy[key] = 5;
 			workers(s.world, 5);
@@ -153,18 +178,31 @@ describe("the techs asked for by the other managers", () =>
 {
 	it("a town short of houses researches the first tech that raises their population", () =>
 	{
-		const { world, manager, queues } = seat({}, ["barracks_batch_training", "unlock_champion_infantry", "pop_house_01", "pop_house_02"]);
+		const { world, manager, queues } = seat({}, [
+			"barracks_batch_training",
+			"unlock_champion_infantry",
+			"pop_house_01",
+			"pop_house_02",
+		]);
 		manager.researchPopulationBonus(world.gameState, queues);
 		assert.deepEqual(queued(queues.minorTech), ["pop_house_01"]);
 	});
 
 	it("traders get faster or richer, not anyone else", () =>
 	{
-		const { world, manager, queues } = seat({},
-			["cavalry_movement_speed", "unlock_champion_infantry", "hoplite_tradition", "exploration", "trade_gain_01"]);
+		const { world, manager, queues } = seat({}, [
+			"cavalry_movement_speed",
+			"unlock_champion_infantry",
+			"hoplite_tradition",
+			"exploration",
+			"trade_gain_01",
+		]);
 		manager.researchTradeBonus(world.gameState, queues);
-		assert.deepEqual(queued(queues.minorTech), ["trade_gain_01"],
-			"the cavalry's speed and the hoplites are not for traders, and exploration gives traders only vision");
+		assert.deepEqual(
+			queued(queues.minorTech),
+			["trade_gain_01"],
+			"the cavalry's speed and the hoplites are not for traders, and exploration gives traders only vision",
+		);
 	});
 
 	it("a busy minor queue takes neither", () =>
@@ -189,10 +227,14 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 
 	it("champions are unlocked first, and in a hurry", () =>
 	{
-		assert.deepEqual(wanted(["gather_lumbering_ironaxes", "unlock_champion_infantry"]),
-			{ "name": "gather_lumbering_ironaxes", "increasePriority": true }, "the tech listed first wins");
-		assert.deepEqual(wanted(["unlock_champion_infantry", "gather_lumbering_ironaxes"]),
-			{ "name": "unlock_champion_infantry", "increasePriority": true });
+		assert.deepEqual(wanted(["gather_lumbering_ironaxes", "unlock_champion_infantry"]), {
+			"name": "gather_lumbering_ironaxes",
+			"increasePriority": true,
+		}, "the tech listed first wins");
+		assert.deepEqual(wanted(["unlock_champion_infantry", "gather_lumbering_ironaxes"]), {
+			"name": "unlock_champion_infantry",
+			"increasePriority": true,
+		});
 	});
 
 	it("the Seleucid army reform is one of its two choices, in a hurry", () =>
@@ -204,15 +246,28 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 
 	it("gathering techs: cheap ones in a hurry, farming and baskets in their turn, fishing only on a naval map", () =>
 	{
-		assert.deepEqual(wanted(["gather_lumbering_ironaxes"]), { "name": "gather_lumbering_ironaxes", "increasePriority": true },
-			"300 resources: cheap");
-		assert.deepEqual(wanted(["gather_wicker_baskets"]), { "name": "gather_wicker_baskets", "increasePriority": true });
-		assert.deepEqual(wanted(["gather_farming_chain_pump"]), { "name": "gather_farming_chain_pump", "increasePriority": false });
-		assert.deepEqual(wanted(["gather_capacity_basket"]), { "name": "gather_capacity_basket", "increasePriority": false });
+		assert.deepEqual(wanted(["gather_lumbering_ironaxes"]), {
+			"name": "gather_lumbering_ironaxes",
+			"increasePriority": true,
+		}, "300 resources: cheap");
+		assert.deepEqual(wanted(["gather_wicker_baskets"]), {
+			"name": "gather_wicker_baskets",
+			"increasePriority": true,
+		});
+		assert.deepEqual(wanted(["gather_farming_chain_pump"]), {
+			"name": "gather_farming_chain_pump",
+			"increasePriority": false,
+		});
+		assert.deepEqual(wanted(["gather_capacity_basket"]), {
+			"name": "gather_capacity_basket",
+			"increasePriority": false,
+		});
 		assert.deepEqual(wanted(["archery_tradition"]), { "name": "archery_tradition", "increasePriority": false });
 		assert.equal(wanted(["fishing_boat_gather_rate"]), undefined, "no fishing on a land map");
-		assert.deepEqual(wanted(["fishing_boat_gather_rate"], { "phase": 2 }, true),
-			{ "name": "fishing_boat_gather_rate", "increasePriority": true });
+		assert.deepEqual(wanted(["fishing_boat_gather_rate"], { "phase": 2 }, true), {
+			"name": "fishing_boat_gather_rate",
+			"increasePriority": true,
+		});
 		assert.equal(wanted(["gather_lumbering_sharpaxes"])?.increasePriority, false, "900 resources: not cheap");
 	});
 
@@ -220,14 +275,22 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 	{
 		const s = seat({ "phase": 2 });
 		// the tech, as a civ bonus that costs nothing would be written
-		const techs = [tech(s.world, "gather_lumbering_ironaxes", (json) => { delete json.cost; })];
-		assert.deepEqual(s.manager.researchWantedTechs(s.world.gameState, techs),
-			{ "name": "gather_lumbering_ironaxes", "increasePriority": true });
+		const techs = [tech(s.world, "gather_lumbering_ironaxes", json =>
+		{
+			delete json.cost;
+		})];
+		assert.deepEqual(s.manager.researchWantedTechs(s.world.gameState, techs), {
+			"name": "gather_lumbering_ironaxes",
+			"increasePriority": true,
+		});
 	});
 
 	it("techs of no use now, or with no modification at all, are not wanted", () =>
 	{
-		assert.equal(wanted(["hoplite_tradition", "barracks_batch_training", "phase_town_generic", "equine_transports"]), undefined);
+		assert.equal(
+			wanted(["hoplite_tradition", "barracks_batch_training", "phase_town_generic", "equine_transports"]),
+			undefined,
+		);
 	});
 
 	it("in the first phase, a tech the workforce cannot soon afford waits", () =>
@@ -236,7 +299,11 @@ describe("the techs wanted as soon as they are available: researchWantedTechs", 
 		assert.equal(wanted(["gather_lumbering_ironaxes"], { "phase": 1 }), undefined);
 		const s = seat({ "phase": 1, "stock": { "wood": 200, "metal": 100 } }, ["gather_lumbering_ironaxes"]);
 		const techs = s.world.gameState.findAvailableTech();
-		assert.equal(s.manager.researchWantedTechs(s.world.gameState, techs)?.name, "gather_lumbering_ironaxes", "affordable now");
+		assert.equal(
+			s.manager.researchWantedTechs(s.world.gameState, techs)?.name,
+			"gather_lumbering_ironaxes",
+			"affordable now",
+		);
 	});
 });
 
@@ -251,12 +318,20 @@ describe("the techs preferred from the second phase: researchPreferredTechs", ()
 
 	it("mining, arrows and healing", () =>
 	{
-		assert.deepEqual(preferred(["gather_mining_servants"]), { "name": "gather_mining_servants", "increasePriority": true },
-			"300 resources: cheap");
-		assert.deepEqual(preferred(["gather_mining_shaftmining"]), { "name": "gather_mining_shaftmining", "increasePriority": false });
+		assert.deepEqual(preferred(["gather_mining_servants"]), {
+			"name": "gather_mining_servants",
+			"increasePriority": true,
+		}, "300 resources: cheap");
+		assert.deepEqual(preferred(["gather_mining_shaftmining"]), {
+			"name": "gather_mining_shaftmining",
+			"increasePriority": false,
+		});
 		assert.deepEqual(preferred(["tower_garrison"]), { "name": "tower_garrison", "increasePriority": false });
 		assert.deepEqual(preferred(["arsenal_philon"]), { "name": "arsenal_philon", "increasePriority": false });
-		assert.deepEqual(preferred(["health_regen_units"]), { "name": "health_regen_units", "increasePriority": false });
+		assert.deepEqual(preferred(["health_regen_units"]), {
+			"name": "health_regen_units",
+			"increasePriority": false,
+		});
 		assert.equal(preferred(["hoplite_tradition", "unlock_champion_infantry"]), undefined);
 	});
 
@@ -266,8 +341,11 @@ describe("the techs preferred from the second phase: researchPreferredTechs", ()
 		const s = seat({ "phase": 2 }, ["gather_mining_servants"]);
 		workers(s.world, 30);
 		const techs = s.world.gameState.findAvailableTech();
-		assert.equal(s.manager.researchPreferredTechs(s.world.gameState, techs)?.name, "gather_mining_servants",
-			"thirty workers make up 300 resources soon enough");
+		assert.equal(
+			s.manager.researchPreferredTechs(s.world.gameState, techs)?.name,
+			"gather_mining_servants",
+			"thirty workers make up 300 resources soon enough",
+		);
 	});
 });
 
@@ -281,8 +359,7 @@ describe("the research of a turn: update", () =>
 
 		assert.deepEqual(queued(queues.minorTech), ["unlock_champion_infantry"]);
 		assert.equal(queues.minorTech.plans[0].queueToReset, "minorTech");
-		assert.equal(world.ai.queueManager.priorities.minorTech,
-			2 * hq.Config.priorities.minorTech);
+		assert.equal(world.ai.queueManager.priorities.minorTech, 2 * hq.Config.priorities.minorTech);
 	});
 
 	it("a wanted tech in no hurry is just queued", () =>
@@ -291,8 +368,7 @@ describe("the research of a turn: update", () =>
 		manager.update(world.gameState, queues);
 		assert.deepEqual(queued(queues.minorTech), ["gather_farming_chain_pump"]);
 		assert.equal(queues.minorTech.plans[0].queueToReset, undefined);
-		assert.equal(world.ai.queueManager.priorities.minorTech,
-			hq.Config.priorities.minorTech);
+		assert.equal(world.ai.queueManager.priorities.minorTech, hq.Config.priorities.minorTech);
 	});
 
 	it("a preferred tech waits for the second phase, then is queued, in a hurry if cheap", () =>
@@ -374,8 +450,11 @@ describe("the techs that pay back within the horizon", () =>
 		manager.update(world.gameState, queues);
 
 		assert.deepEqual(queued(queues.minorTech), ["gather_farming_plows"]);
-		assert.equal(world.ai.queueManager.getPriority("minorTech"), hq.Config.priorities.villager + 1,
-			"the research queue goes just above the women's");
+		assert.equal(
+			world.ai.queueManager.getPriority("minorTech"),
+			hq.Config.priorities.villager + 1,
+			"the research queue goes just above the women's",
+		);
 		const plan = queues.minorTech.plans[0];
 		assert.ok(plan instanceof ResearchPlan);
 		assert.equal(plan.queueToReset, "minorTech", "and back to its own priority once the plough starts");
@@ -391,7 +470,11 @@ describe("the techs that pay back within the horizon", () =>
 		manager.update(world.gameState, queues);
 
 		assert.deepEqual(queued(queues.minorTech), []);
-		assert.equal(world.ai.queueManager.getPriority("minorTech"), hq.Config.priorities.minorTech, "at its own priority");
+		assert.equal(
+			world.ai.queueManager.getPriority("minorTech"),
+			hq.Config.priorities.minorTech,
+			"at its own priority",
+		);
 	});
 
 	it("a paying tech takes the place of one of Petra's rules waiting unpaid", () =>
@@ -402,7 +485,11 @@ describe("the techs that pay back within the horizon", () =>
 
 		manager.update(world.gameState, queues);
 
-		assert.deepEqual(queued(queues.minorTech), ["gather_farming_plows"], "the capacity tech waited from minute 5 to 15 in a game");
+		assert.deepEqual(
+			queued(queues.minorTech),
+			["gather_farming_plows"],
+			"the capacity tech waited from minute 5 to 15 in a game",
+		);
 	});
 
 	it("the paying tech already waiting is left in its place", () =>

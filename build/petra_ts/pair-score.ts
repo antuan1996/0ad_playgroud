@@ -112,8 +112,8 @@ function pairsOf(games: Game[]): Map<string, [Game, Game]>
 	const pairs = new Map<string, [Game, Game]>();
 	for (const [key, list] of bySeeds)
 	{
-		const straight = list.find((g) => !g.row.swapped);
-		const swapped = list.find((g) => g.row.swapped);
+		const straight = list.find(g => !g.row.swapped);
+		const swapped = list.find(g => g.row.swapped);
 		if (straight && swapped)
 			pairs.set(key, [straight, swapped]);
 	}
@@ -184,23 +184,30 @@ function main(args: string[]): void
 		fail("usage: node build/petra_ts/pair-score.ts <batch dir> [--minute M] [--compare <batch dir>]");
 	const games = readGames(dirs[0]);
 	const pairs = pairsOf(games);
-	const out = [`${games.length} games, ${pairs.size} complete seed pairs; blue's lead at minute ${minute}, mean of a pair's two games:`];
+	const out = [
+		`${games.length} games, ${pairs.size} complete seed pairs; blue's lead at minute ${minute}, mean of a pair's two games:`,
+	];
 	for (const metric of METRICS)
 		out.push(describe(metric, [...pairScores(pairs, metric, minute).values()]));
 
-	const decided = games.filter((g) => blueResult(g) !== 0);
-	out.push("", `as a proxy, over ${decided.length} decided games: how often the side ahead won (ties left out),`,
-		"and the correlation of blue's lead with its result:");
-	out.push("  minute  " + METRICS.map((m) => `${m}: ahead won  corr`.padStart(24)).join(""));
+	const decided = games.filter(g => blueResult(g) !== 0);
+	out.push(
+		"",
+		`as a proxy, over ${decided.length} decided games: how often the side ahead won (ties left out),`,
+		"and the correlation of blue's lead with its result:",
+	);
+	out.push("  minute  " + METRICS.map(m => `${m}: ahead won  corr`.padStart(24)).join(""));
 	for (const m of [...new Set([...VALIDATION_MINUTES, minute])].sort((a, b) => a - b))
 	{
-		const cells = METRICS.map((metric) =>
+		const cells = METRICS.map(metric =>
 		{
-			const leads = decided.map((g) => lead(g, metric, m));
+			const leads = decided.map(g => lead(g, metric, m));
 			const results = decided.map(blueResult);
 			const counted = leads.map((l, i) => [l, results[i]]).filter(([l]) => l !== 0);
 			const right = counted.filter(([l, r]) => Math.sign(l) === r).length;
-			return `${fmt(100 * right / counted.length, 0)}% of ${counted.length}  ${fmt(correlation(leads, results), 2)}`.padStart(24);
+			return `${fmt(100 * right / counted.length, 0)}% of ${counted.length}  ${
+				fmt(correlation(leads, results), 2)
+			}`.padStart(24);
 		});
 		out.push(`  ${String(m).padStart(6)}  ${cells.join("")}`);
 	}
@@ -208,17 +215,22 @@ function main(args: string[]): void
 	if (compare)
 	{
 		const other = pairsOf(readGames(compare));
-		const shared = [...pairs.keys()].filter((key) => other.has(key));
-		out.push("", `against ${compare}: ${shared.length} shared seed pairs, this batch minus that one, pair by pair:`);
+		const shared = [...pairs.keys()].filter(key => other.has(key));
+		out.push(
+			"",
+			`against ${compare}: ${shared.length} shared seed pairs, this batch minus that one, pair by pair:`,
+		);
 		for (const metric of METRICS)
 		{
 			const mine = pairScores(pairs, metric, minute);
 			const theirs = pairScores(other, metric, minute);
-			out.push(describe(metric, shared.map((key) => (mine.get(key) ?? NaN) - (theirs.get(key) ?? NaN))));
+			out.push(describe(metric, shared.map(key => (mine.get(key) ?? NaN) - (theirs.get(key) ?? NaN))));
 		}
 		const wins = (list: Map<string, [Game, Game]>, key: string): number =>
 			(list.get(key) ?? []).reduce((n, g) => n + (blueResult(g) === 1 ? 1 : 0), 0);
-		out.push(describe("wins", shared.map((key) => wins(pairs, key) - wins(other, key))) + "  (blue's wins per pair, of 2)");
+		out.push(
+			describe("wins", shared.map(key => wins(pairs, key) - wins(other, key))) + "  (blue's wins per pair, of 2)",
+		);
 	}
 	console.log(out.join("\n"));
 }

@@ -26,18 +26,37 @@
  * - functions: function bodies V8 saw called at least once.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { petraModuleDir, type PetraTarget } from "./harness/paths.ts";
 import { testArgs } from "./run.ts";
 
-interface V8Range { startOffset: number; endOffset: number; count: number }
-interface V8Function { functionName: string; ranges: V8Range[]; isBlockCoverage: boolean }
-interface V8Script { url: string; functions: V8Function[] }
+interface V8Range
+{
+	startOffset: number;
+	endOffset: number;
+	count: number;
+}
+interface V8Function
+{
+	functionName: string;
+	ranges: V8Range[];
+	isBlockCoverage: boolean;
+}
+interface V8Script
+{
+	url: string;
+	functions: V8Function[];
+}
 
-interface Block { line: number; column: number; text: string }
+interface Block
+{
+	line: number;
+	column: number;
+	text: string;
+}
 
 interface ModuleCoverage
 {
@@ -66,7 +85,7 @@ function runSuite(target: PetraTarget): { dir: string; tests: TargetCoverage["te
 	const result = spawnSync(process.execPath, testArgs(), {
 		"env": { ...process.env, "PETRA_TARGET": target, "NODE_V8_COVERAGE": dir },
 		"encoding": "utf8",
-		"maxBuffer": 256 * 1024 * 1024
+		"maxBuffer": 256 * 1024 * 1024,
 	});
 	if (result.error)
 		throw result.error;
@@ -101,7 +120,10 @@ function codeMask(source: string): Uint8Array
 			i = end === -1 ? source.length : end + 2;
 			continue;
 		}
-		if (c === "\"" || c === "'" || c === "`" || c === "/" && (previous === "" || "(,=:[!&|?{};+-*%<>~^".includes(previous)))
+		if (
+			c === "\"" || c === "'" || c === "`" ||
+			c === "/" && (previous === "" || "(,=:[!&|?{};+-*%<>~^".includes(previous))
+		)
 		{
 			const start = i++;
 			let inClass = false;
@@ -197,8 +219,9 @@ function characterCounts(scripts: V8Script[], length: number): Int32Array
 	for (const script of scripts)
 	{
 		const counts = new Int32Array(length);
-		const ranges = script.functions.flatMap((fn) => fn.ranges)
-			.sort((a, b) => (b.endOffset - b.startOffset) - (a.endOffset - a.startOffset));
+		const ranges = script.functions.flatMap(fn => fn.ranges).sort((a, b) =>
+			(b.endOffset - b.startOffset) - (a.endOffset - a.startOffset)
+		);
 		for (const range of ranges)
 			counts.fill(range.count, range.startOffset, Math.min(range.endOffset, length));
 		for (let i = 0; i < length; ++i)
@@ -311,8 +334,10 @@ function analyseModule(coverageDir: string, file: string): ModuleCoverage
 			if (start === 0 && fn.functionName === "")
 				continue;
 			const known = seen.get(start);
-			seen.set(start, { "name": fn.functionName || `<anonymous>@${lineOf(start) + 1}`,
-				"count": Math.max(known?.count ?? 0, fn.ranges[0].count) });
+			seen.set(start, {
+				"name": fn.functionName || `<anonymous>@${lineOf(start) + 1}`,
+				"count": Math.max(known?.count ?? 0, fn.ranges[0].count),
+			});
 		}
 	const fns = [...seen.values()];
 
@@ -324,8 +349,8 @@ function analyseModule(coverageDir: string, file: string): ModuleCoverage
 		missedLines,
 		missedBlocks,
 		"functions": fns.length,
-		"runFunctions": fns.filter((f) => f.count > 0).length,
-		"missedFunctions": fns.filter((f) => f.count === 0).map((f) => f.name)
+		"runFunctions": fns.filter(f => f.count > 0).length,
+		"missedFunctions": fns.filter(f => f.count === 0).map(f => f.name),
 	};
 }
 
@@ -335,12 +360,12 @@ function analyseTarget(target: PetraTarget): TargetCoverage
 	try
 	{
 		const { "dir": moduleDir, ext } = petraModuleDir(target);
-		const files = (readdirSync(moduleDir, { "recursive": true }) as string[])
-			.map((name) => name.split(path.sep).join("/"))
-			.filter((name) => name.endsWith(ext) && !name.endsWith(".d.ts") && !name.startsWith("tests/"))
-			.sort((a, b) => path.posix.basename(a).localeCompare(path.posix.basename(b)))
-			.map((name) => path.join(moduleDir, name));
-		return { target, tests, "modules": files.map((file) => analyseModule(dir, file)) };
+		const files = (readdirSync(moduleDir, { "recursive": true }) as string[]).map(name =>
+			name.split(path.sep).join("/")
+		).filter(name => name.endsWith(ext) && !name.endsWith(".d.ts") && !name.startsWith("tests/")).sort((a, b) =>
+			path.posix.basename(a).localeCompare(path.posix.basename(b))
+		).map(name => path.join(moduleDir, name));
+		return { target, tests, "modules": files.map(file => analyseModule(dir, file)) };
 	}
 	finally
 	{
@@ -348,7 +373,8 @@ function analyseTarget(target: PetraTarget): TargetCoverage
 	}
 }
 
-const pct = (part: number, whole: number): string => whole ? (100 * part / whole).toFixed(1).padStart(5) + "%" : "    –";
+const pct = (part: number, whole: number): string =>
+	whole ? (100 * part / whole).toFixed(1).padStart(5) + "%" : "    –";
 
 /** Collapse sorted line numbers into "3-7 12 15-16". */
 function ranges(lines: number[]): string
@@ -367,11 +393,16 @@ function ranges(lines: number[]): string
 
 function totals(modules: ModuleCoverage[])
 {
-	return modules.reduce((sum, m) => ({
-		"codeLines": sum.codeLines + m.codeLines, "runLines": sum.runLines + m.runLines,
-		"blocks": sum.blocks + m.missedBlocks.length,
-		"functions": sum.functions + m.functions, "runFunctions": sum.runFunctions + m.runFunctions
-	}), { "codeLines": 0, "runLines": 0, "blocks": 0, "functions": 0, "runFunctions": 0 });
+	return modules.reduce(
+		(sum, m) => ({
+			"codeLines": sum.codeLines + m.codeLines,
+			"runLines": sum.runLines + m.runLines,
+			"blocks": sum.blocks + m.missedBlocks.length,
+			"functions": sum.functions + m.functions,
+			"runFunctions": sum.runFunctions + m.runFunctions,
+		}),
+		{ "codeLines": 0, "runLines": 0, "blocks": 0, "functions": 0, "runFunctions": 0 },
+	);
 }
 
 function printTable(result: TargetCoverage): void
@@ -382,34 +413,48 @@ function printTable(result: TargetCoverage): void
 	for (const m of result.modules)
 	{
 		const name = (m.loaded ? m.module : m.module + " *").padEnd(20);
-		console.log(`${name} ${`${m.runLines}/${m.codeLines}`.padStart(14)} ${pct(m.runLines, m.codeLines)}` +
-			`   ${String(m.missedBlocks.length).padStart(13)}   ${`${m.runFunctions}/${m.functions}`.padStart(17)} ${pct(m.runFunctions, m.functions)}`);
+		console.log(
+			`${name} ${`${m.runLines}/${m.codeLines}`.padStart(14)} ${pct(m.runLines, m.codeLines)}` +
+				`   ${String(m.missedBlocks.length).padStart(13)}   ${
+					`${m.runFunctions}/${m.functions}`.padStart(17)
+				} ${pct(m.runFunctions, m.functions)}`,
+		);
 	}
 	const t = totals(result.modules);
-	console.log(`${"all modules".padEnd(20)} ${`${t.runLines}/${t.codeLines}`.padStart(14)} ${pct(t.runLines, t.codeLines)}` +
-		`   ${String(t.blocks).padStart(13)}   ${`${t.runFunctions}/${t.functions}`.padStart(17)} ${pct(t.runFunctions, t.functions)}`);
-	if (result.modules.some((m) => !m.loaded))
+	console.log(
+		`${"all modules".padEnd(20)} ${`${t.runLines}/${t.codeLines}`.padStart(14)} ${pct(t.runLines, t.codeLines)}` +
+			`   ${String(t.blocks).padStart(13)}   ${`${t.runFunctions}/${t.functions}`.padStart(17)} ${
+				pct(t.runFunctions, t.functions)
+			}`,
+	);
+	if (result.modules.some(m => !m.loaded))
 		console.log("* not loaded by any test");
 }
 
 function printModule(result: TargetCoverage, name: string): void
 {
-	const m = result.modules.find((mod) => mod.module === name);
+	const m = result.modules.find(mod => mod.module === name);
 	if (!m)
 	{
 		console.error(`${result.target}: no module "${name}"`);
 		process.exitCode = 2;
 		return;
 	}
-	console.log(`\n${result.target} ${m.module}: lines ${m.runLines}/${m.codeLines} (${pct(m.runLines, m.codeLines).trim()}),` +
-		` functions ${m.runFunctions}/${m.functions}, ${m.missedBlocks.length} blocks never run` +
-		(m.loaded ? "" : " — not loaded by any test"));
+	console.log(
+		`\n${result.target} ${m.module}: lines ${m.runLines}/${m.codeLines} (${pct(m.runLines, m.codeLines).trim()}),` +
+			` functions ${m.runFunctions}/${m.functions}, ${m.missedBlocks.length} blocks never run` +
+			(m.loaded ? "" : " — not loaded by any test"),
+	);
 	if (m.missedFunctions.length)
 		console.log(`functions never called: ${m.missedFunctions.join(", ")}`);
 	if (m.missedLines.length)
 		console.log(`lines never run: ${ranges(m.missedLines)}`);
 	for (const block of m.missedBlocks)
-		console.log(`  ${`${block.line}:${block.column}`.padEnd(9)} ${block.text.length > 100 ? block.text.slice(0, 97) + "..." : block.text}`);
+		console.log(
+			`  ${`${block.line}:${block.column}`.padEnd(9)} ${
+				block.text.length > 100 ? block.text.slice(0, 97) + "..." : block.text
+			}`,
+		);
 }
 
 const args = process.argv.slice(2);
@@ -428,7 +473,7 @@ const results = [analyseTarget(mode)];
 const file = option("--file");
 
 if (file)
-	results.forEach((result) => printModule(result, file));
+	results.forEach(result => printModule(result, file));
 else
 	printTable(results[0]);
 

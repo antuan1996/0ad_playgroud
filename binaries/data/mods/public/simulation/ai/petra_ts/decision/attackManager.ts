@@ -1,32 +1,39 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import { aiWarn, SquareVectorDistance, VectorDistance } from "simulation/ai/common-api/utils.js";
-import { ATTACK_TYPES, AttackPlan, type AttackType, type SerializedAttackPlan, byAttackType, plansIn } from "../execution/attackPlan.ts";
-import * as chat from "../adapter/chatHelper.ts";
-import { Config } from "../world/config.ts";
-import * as difficulty from "../world/difficultyLevel.ts";
-import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
-import { Worker, marchesWithAttack } from "../execution/worker.ts";
-import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { GAIA, playerId, worldPos } from "../adapter/brands.ts";
-import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import * as chat from "../adapter/chatHelper.ts";
 import { debugWarn } from "../adapter/debug.ts";
+import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import {
+	ATTACK_TYPES,
+	AttackPlan,
+	byAttackType,
+	plansIn,
+	type AttackType,
+	type SerializedAttackPlan,
+} from "../execution/attackPlan.ts";
+import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import { Worker, marchesWithAttack } from "../execution/worker.ts";
+import { Config } from "../world/config.ts";
+import * as difficulty from "../world/difficultyLevel.ts";
 
 export type SerializedAttackManager = {
-    properties: {
-        totalNumber: number;
-        attackNumber: number;
-        rushNumber: number;
-        raidNumber: number;
-        debugTime: number;
-        maxRushes: number;
-        rushSize: number[];
-        currentEnemyPlayer: PlayerId | undefined;
-        defeated: Record<number, boolean>;
-    };
-    upcomingAttacks: Record<AttackType, SerializedAttackPlan[]>;
-    startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
+	properties: {
+		totalNumber: number;
+		attackNumber: number;
+		rushNumber: number;
+		raidNumber: number;
+		debugTime: number;
+		maxRushes: number;
+		rushSize: number[];
+		currentEnemyPlayer: PlayerId | undefined;
+		defeated: Record<number, boolean>;
+	};
+	upcomingAttacks: Record<AttackType, SerializedAttackPlan[]>;
+	startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
 };
 
 /** The fewest of a leaving plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
@@ -66,7 +73,12 @@ function nearestLocalTarget(enemies: readonly CommonPlacedEntity[], from: Common
 }
 
 /** A defense army dissolved into the attack: its units on the target's land that the attack may take join it */
-function enlistArmy(gameState: CommonGameState, army: DefenseArmy, attackPlan: AttackPlan, targetAccess: AccessIndex): void
+function enlistArmy(
+	gameState: CommonGameState,
+	army: DefenseArmy,
+	attackPlan: AttackPlan,
+	targetAccess: AccessIndex,
+): void
 {
 	while (army.foeEntities.length > 0)
 		army.removeFoe(gameState, army.foeEntities[0]);
@@ -80,8 +92,10 @@ function enlistArmy(gameState: CommonGameState, army: DefenseArmy, attackPlan: A
 		// the original ORed in "transport metadata exists" here, but
 		// isAvailableUnit below always rejects transport-marked units, so the
 		// clause could never lead to an enlistment and was dropped
-		if (isPlaced(unit) && getLandAccess(gameState, unit) === targetAccess &&
-			attackPlan.isAvailableUnit(gameState, unit))
+		if (
+			isPlaced(unit) && getLandAccess(gameState, unit) === targetAccess &&
+			attackPlan.isAvailableUnit(gameState, unit)
+		)
 		{
 			unit.setMetadata(PlayerID, "plan", attackPlan.name);
 			unit.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
@@ -155,7 +169,7 @@ function stillBombing(ent: CommonEntity, targetId: EntityId): boolean
 {
 	const plan = ent.getMetadata(PlayerID, "plan");
 	const orders = ordersOf(ent);
-	const lastOrder = orders && orders.length ? orders[orders.length-1] : null;
+	const lastOrder = orders && orders.length ? orders[orders.length - 1] : null;
 	return !!lastOrder && !!lastOrder.target && lastOrder.target === targetId && !isLent(plan);
 }
 
@@ -163,25 +177,32 @@ function stillBombing(ent: CommonEntity, targetId: EntityId): boolean
  * Where a bomber out of range goes to shoot the structure: at range on the line to it, on our territory and land,
  * with the structure's surroundings not the enemy's; undefined if there is no such place.
  */
-function bombingSpot(gameState: CommonGameState, from: { pos: CommonPosition; access: AccessIndex },
-	struct: CommonStructureEntity, dist: number, range: number): CommonPosition | undefined
+function bombingSpot(
+	gameState: CommonGameState,
+	from: { pos: CommonPosition; access: AccessIndex },
+	struct: CommonStructureEntity,
+	dist: number,
+	range: number,
+): CommonPosition | undefined
 {
 	const entPos = from.pos;
 	const structPos = struct.position();
 	const safety = struct.footprintRadius() + 30;
 	const safePos = worldPos(
 		structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
-		structPos[1] + (entPos[1] - structPos[1]) * safety / dist
+		structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
 	);
 	const owner = gameState.ai.HQ.geography.territoryMap.getOwner(safePos);
 	if (owner !== 0 && gameState.isPlayerEnemy(owner))
 		return undefined;
 	const targetPos = worldPos(
 		structPos[0] + (entPos[0] - structPos[0]) * range / dist,
-		structPos[1] + (entPos[1] - structPos[1]) * range / dist
+		structPos[1] + (entPos[1] - structPos[1]) * range / dist,
 	);
-	if (gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
-	    gameState.ai.accessibility.getAccessValue(targetPos) !== from.access)
+	if (
+		gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
+		gameState.ai.accessibility.getAccessValue(targetPos) !== from.access
+	)
 		return undefined;
 	return targetPos;
 }
@@ -198,7 +219,7 @@ export class AttackManager
 	raidNumber = 0;
 	upcomingAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
 	startedAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
-	bombingAttacks = new Map<EntityId, Set<EntityId>>();// Temporary attacks for siege units while waiting their current attack to start
+	bombingAttacks = new Map<EntityId, Set<EntityId>>(); // Temporary attacks for siege units while waiting their current attack to start
 	debugTime = 0;
 	maxRushes = 0;
 	rushSize: number[] = [];
@@ -216,7 +237,12 @@ export class AttackManager
 	}
 
 	/** A saved attack manager with its plans; canBuildUnits is the restored headquarters' */
-	static restore(config: Config, gameState: CommonGameState, data: SerializedAttackManager, canBuildUnits: boolean): AttackManager
+	static restore(
+		config: Config,
+		gameState: CommonGameState,
+		data: SerializedAttackManager,
+		canBuildUnits: boolean,
+	): AttackManager
 	{
 		const manager = new AttackManager(config, gameState);
 		manager.resume(gameState, data, canBuildUnits);
@@ -230,17 +256,17 @@ export class AttackManager
 		if (this.Config.personality.aggressive > this.Config.personalityCut.strong && allowed > 2)
 		{
 			this.maxRushes = 3;
-			this.rushSize = [ 16, 20, 24 ];
+			this.rushSize = [16, 20, 24];
 		}
 		else if (this.Config.personality.aggressive > this.Config.personalityCut.medium && allowed > 1)
 		{
 			this.maxRushes = 2;
-			this.rushSize = [ 18, 22 ];
+			this.rushSize = [18, 22];
 		}
 		else if (this.Config.personality.aggressive > this.Config.personalityCut.weak && allowed > 0)
 		{
 			this.maxRushes = 1;
-			this.rushSize = [ 20 ];
+			this.rushSize = [20];
 		}
 	}
 
@@ -251,7 +277,7 @@ export class AttackManager
 
 		this.onAttackRequest(gameState, events);
 
-		for (const evt of events.EntityRenamed)	// take care of packing units in bombing attacks
+		for (const evt of events.EntityRenamed) // take care of packing units in bombing attacks
 			this.renameInBombings(evt.entity, evt.newentity);
 	}
 
@@ -269,15 +295,14 @@ export class AttackManager
 			const aimed = this.aimUpcomingAttacks(targetPlayer);
 			other = aimed.other;
 
-			if (aimed.available > 12)	// launch the attack immediately
-			{
+			if (aimed.available > 12)
+			{ // launch the attack immediately
 				for (const attack of plansIn(this.upcomingAttacks))
 				{
 					// every non-completing attack was re-aimed at targetPlayer by the
 					// loop above, so the original targetPlayer re-check here could
 					// never fire and was dropped
-					if (attack.state === AttackPlan.STATE_COMPLETING ||
-						attack.unitCollection.length < 3)
+					if (attack.state === AttackPlan.STATE_COMPLETING || attack.unitCollection.length < 3)
 						continue;
 					attack.forceStart();
 					attack.requested = true;
@@ -286,7 +311,7 @@ export class AttackManager
 			}
 			else if (other !== undefined)
 				answer = "other";
-			break;  // take only the first attack request into account
+			break; // take only the first attack request into account
 		}
 		if (targetPlayer !== undefined)
 			chat.answerRequestAttack(gameState, targetPlayer, answer, other);
@@ -344,8 +369,11 @@ export class AttackManager
 	{
 		this.cleanBombings(gameState);
 
-		const bombers = gameState.updatingCollection("bombers",
-			filters.byClasses(["BoltShooter", "StoneThrower"]), gameState.getOwnUnits());
+		const bombers = gameState.updatingCollection(
+			"bombers",
+			filters.byClasses(["BoltShooter", "StoneThrower"]),
+			gameState.getOwnUnits(),
+		);
 		for (const ent of bombers.values())
 		{
 			// Filtered on having a Ranged attack, so attackRange("Ranged") is defined.
@@ -407,8 +435,10 @@ export class AttackManager
 			const structPos = struct.position();
 			if (struct.hasClass("Field"))
 			{
-				if (!struct.resourceSupplyNumGatherers() ||
-				    !gameState.isPlayerEnemy(gameState.ai.HQ.geography.territoryMap.getOwner(structPos)))
+				if (
+					!struct.resourceSupplyNumGatherers() ||
+					!gameState.isPlayerEnemy(gameState.ai.HQ.geography.territoryMap.getOwner(structPos))
+				)
 					continue;
 			}
 			const dist = VectorDistance(entPos, structPos);
@@ -422,7 +452,7 @@ export class AttackManager
 			}
 			let attackingUnits = this.bombingAttacks.get(struct.id());
 			if (attackingUnits && attackingUnits.size > 4)
-				continue;	// already enough units against that target
+				continue; // already enough units against that target
 			if (!attackingUnits)
 			{
 				attackingUnits = new Set<EntityId>();
@@ -461,8 +491,7 @@ export class AttackManager
 		this.createAttacks(gameState, unexecutedAttacks);
 		Engine.ProfileStop();
 
-		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 &&
-			gameState.ai.HQ.defenseManager.targetList.length)
+		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 && gameState.ai.HQ.defenseManager.targetList.length)
 		{
 			let target;
 			for (const targetId of gameState.ai.HQ.defenseManager.targetList)
@@ -492,8 +521,10 @@ export class AttackManager
 		{
 			for (const attack of this.upcomingAttacks[attackType])
 			{
-				aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
-					" units " + attack.unitCollection.length);
+				aiWarn(
+					" plan " + attack.name + " type " + attackType + " state " + attack.state +
+						" units " + attack.unitCollection.length,
+				);
 			}
 		}
 		aiWarn(" started attacks ==================");
@@ -501,8 +532,10 @@ export class AttackManager
 		{
 			for (const attack of this.startedAttacks[attackType])
 			{
-				aiWarn(" plan " + attack.name + " type " + attackType + " state " + attack.state +
-					" units " + attack.unitCollection.length);
+				aiWarn(
+					" plan " + attack.name + " type " + attackType + " state " + attack.state +
+						" units " + attack.unitCollection.length,
+				);
 			}
 		}
 		aiWarn(" ==================================");
@@ -515,7 +548,7 @@ export class AttackManager
 			[AttackPlan.TYPE_RUSH]: 0,
 			[AttackPlan.TYPE_RAID]: 0,
 			[AttackPlan.TYPE_DEFAULT]: 0,
-			[AttackPlan.TYPE_HUGE_ATTACK]: 0
+			[AttackPlan.TYPE_HUGE_ATTACK]: 0,
 		};
 		for (const attackType of ATTACK_TYPES)
 		{
@@ -536,8 +569,12 @@ export class AttackManager
 	 * One preparation step of an upcoming attack: "done" when it was aborted or started (and so is no more upcoming),
 	 * "unexecuted" when it goes on unexecuted, else "preparing".
 	 */
-	private prepare(gameState: CommonGameState, attack: AttackPlan, attackType: AttackType, events: EngineAIEvents):
-		"done" | "unexecuted" | "preparing"
+	private prepare(
+		gameState: CommonGameState,
+		attack: AttackPlan,
+		attackType: AttackType,
+		events: EngineAIEvents,
+	): "done" | "unexecuted" | "preparing"
 	{
 		attack.checkEvents(gameState, events);
 		if (attack.state === AttackPlan.STATE_COMPLETING)
@@ -545,8 +582,7 @@ export class AttackManager
 
 		if (attack.isStarted())
 		{
-			aiWarn("Petra problem in attackManager: attack in preparation has already " +
-				"started ???");
+			aiWarn("Petra problem in attackManager: attack in preparation has already " + "started ???");
 		}
 
 		Engine.ProfileStart("attack preparation " + attackType);
@@ -560,8 +596,11 @@ export class AttackManager
 		}
 		if (updateStep === AttackPlan.PREPARATION_FAILED)
 		{
-			debugWarn(this.Config, 1, () => "Attack Manager: " + attack.getType() + " plan " + attack.getName() +
-				" aborted.");
+			debugWarn(
+				this.Config,
+				1,
+				() => "Attack Manager: " + attack.getType() + " plan " + attack.getName() + " aborted.",
+			);
 			attack.Abort(gameState);
 			return "done";
 		}
@@ -569,10 +608,17 @@ export class AttackManager
 		{
 			if (attack.StartAttack(gameState))
 			{
-				debugWarn(this.Config, 1, () => "Attack Manager: Starting " + attack.getType() + " plan " +
-					attack.getName());
+				debugWarn(
+					this.Config,
+					1,
+					() => "Attack Manager: Starting " + attack.getType() + " plan " + attack.getName(),
+				);
 				if (this.Config.chat)
-					chat.launchAttack(gameState, requireValue(attack.targetPlayer), attack.type === AttackPlan.TYPE_HUGE_ATTACK);
+					chat.launchAttack(
+						gameState,
+						requireValue(attack.targetPlayer),
+						attack.type === AttackPlan.TYPE_HUGE_ATTACK,
+					);
 				this.startedAttacks[attackType].push(attack);
 			}
 			else
@@ -597,8 +643,13 @@ export class AttackManager
 				const remaining = attack.update(gameState, events);
 				if (!remaining)
 				{
-					debugWarn(this.Config, 1, () => "Military Manager: " + attack.getType() + " plan " +
-						attack.getName() + " is finished with remaining " + remaining);
+					debugWarn(
+						this.Config,
+						1,
+						() =>
+							"Military Manager: " + attack.getType() + " plan " +
+							attack.getName() + " is finished with remaining " + remaining,
+					);
 					attack.Abort(gameState);
 					this.startedAttacks[attackType].splice(i--, 1);
 				}
@@ -618,8 +669,11 @@ export class AttackManager
 		else if (this.wantsMainAttack(gameState, unexecutedAttacks))
 		{
 			const phase2 = gameState.getPhaseName(2);
-			if (barracksNb >= 1 && (gameState.currentPhase() > 1 || (phase2 !== undefined && gameState.isResearching(phase2))) ||
-				!gameState.ai.HQ.hasPotentialBase())	// if we have no base ... nothing else to do than attack
+			if (
+				barracksNb >= 1 &&
+					(gameState.currentPhase() > 1 || (phase2 !== undefined && gameState.isResearching(phase2))) ||
+				!gameState.ai.HQ.hasPotentialBase()
+			) // if we have no base ... nothing else to do than attack
 				this.createMainAttack(gameState);
 		}
 	}
@@ -628,12 +682,14 @@ export class AttackManager
 	private createRush(gameState: CommonGameState): void
 	{
 		const data = { "targetSize": this.rushSize[this.rushNumber] };
-		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber,
-			AttackPlan.TYPE_RUSH, data);
+		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, AttackPlan.TYPE_RUSH, data);
 		if (attackPlan)
 		{
-			debugWarn(this.Config, 1, () => "Military Manager: Rushing plan " + this.totalNumber +
-				" with maxRushes " + this.maxRushes);
+			debugWarn(
+				this.Config,
+				1,
+				() => "Military Manager: Rushing plan " + this.totalNumber + " with maxRushes " + this.maxRushes,
+			);
 			this.totalNumber++;
 			this.upcomingAttacks[AttackPlan.TYPE_RUSH].push(attackPlan);
 		}
@@ -657,16 +713,15 @@ export class AttackManager
 	/** A default attack, or a huge one after two attacks while none is started */
 	private createMainAttack(gameState: CommonGameState): void
 	{
-		const type = this.attackNumber < 2 ||
-			this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length > 0 ?
-			AttackPlan.TYPE_DEFAULT : AttackPlan.TYPE_HUGE_ATTACK;
+		const type = this.attackNumber < 2 || this.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length > 0 ?
+			AttackPlan.TYPE_DEFAULT :
+			AttackPlan.TYPE_HUGE_ATTACK;
 		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, type);
 		// the original wrote a write-only "attackPlansEncounteredWater" hack flag
 		// on failure; nothing ever read it, so the port drops the dead write
 		if (attackPlan)
 		{
-			debugWarn(this.Config, 1, () => "Military Manager: Creating the plan " + type + "  " +
-				this.totalNumber);
+			debugWarn(this.Config, 1, () => "Military Manager: Creating the plan " + type + "  " + this.totalNumber);
 			this.totalNumber++;
 			this.upcomingAttacks[type].push(attackPlan);
 		}
@@ -741,8 +796,10 @@ export class AttackManager
 			enemyPlayer = this.getWonderEnemyPlayer(gameState, attack);
 
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
+		{
 			if (!enemyPlayer || randBool())
 				enemyPlayer = this.getRelicEnemyPlayer(gameState, attack) || enemyPlayer;
+		}
 
 		if (enemyPlayer)
 			return enemyPlayer;
@@ -753,8 +810,10 @@ export class AttackManager
 		// otherwise target the most accessible one
 		if (attack.type !== AttackPlan.TYPE_HUGE_ATTACK)
 		{
-			if (attack.targetPlayer === undefined && this.currentEnemyPlayer !== undefined &&
-				this.stillToFight(gameState, this.currentEnemyPlayer))
+			if (
+				attack.targetPlayer === undefined && this.currentEnemyPlayer !== undefined &&
+				this.stillToFight(gameState, this.currentEnemyPlayer)
+			)
 				return this.currentEnemyPlayer;
 
 			const ccmin = nearestEnemyCivCentre(gameState, veto);
@@ -852,11 +911,13 @@ export class AttackManager
 		for (let iIndex = 0; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
 			const i = playerId(iIndex);
-			if (!gameState.isPlayerEnemy(i) || this.defeated[i] ||
-			    i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic)
+			if (
+				!gameState.isPlayerEnemy(i) || this.defeated[i] ||
+				i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic
+			)
 				continue;
 
-			const relicsCount = allRelics.filter((relic) => relic.owner() === i).length;
+			const relicsCount = allRelics.filter(relic => relic.owner() === i).length;
 			if (relicsCount <= maxRelicsOwned)
 				continue;
 			maxRelicsOwned = relicsCount;
@@ -894,8 +955,7 @@ export class AttackManager
 	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlan | undefined
 	{
 		const data = { "target": ent };
-		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber,
-			AttackPlan.TYPE_RAID, data);
+		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, AttackPlan.TYPE_RAID, data);
 		if (!attackPlan)
 			return undefined;
 		debugWarn(this.Config, 1, () => "Military Manager: Raiding plan " + this.totalNumber);
@@ -913,9 +973,9 @@ export class AttackManager
 		let num = 0;
 		for (const attack of plansIn(this.startedAttacks))
 		{
-			if (!attack.position)	// this attack may be inside a transport
+			if (!attack.position) // this attack may be inside a transport
 				continue;
-			if (SquareVectorDistance(pos, attack.position) < dist*dist)
+			if (SquareVectorDistance(pos, attack.position) < dist * dist)
 				num += attack.unitCollection.length;
 		}
 		return num;
@@ -934,8 +994,10 @@ export class AttackManager
 		this.enemyLands = new Map();
 		for (const enemy of gameState.getEnemyEntities().values())
 		{
-			if (enemy.owner() === GAIA || !isPlaced(enemy) || enemy.hasClass("Ship") ||
-			    !enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"]))
+			if (
+				enemy.owner() === GAIA || !isPlaced(enemy) || enemy.hasClass("Ship") ||
+				!enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"])
+			)
 				continue;
 			// 1 marks an impassable cell (a cliff's edge, the map's), no land
 			const land = getLandAccess(gameState, enemy);
@@ -998,8 +1060,13 @@ export class AttackManager
 			local.targetPos = target.position();
 			local.target = target;
 			local.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
-			debugWarn(this.Config, 1, () => "Military Manager: local attack " + local.name + " on land " + land +
-				" with " + soldiers.length + " units left by " + leaving.name);
+			debugWarn(
+				this.Config,
+				1,
+				() =>
+					"Military Manager: local attack " + local.name + " on land " + land +
+					" with " + soldiers.length + " units left by " + leaving.name,
+			);
 		}
 	}
 
@@ -1009,7 +1076,11 @@ export class AttackManager
 	 * data.armyID: transform only the defense army ID into a new attack
 	 * data.uniqueTarget: the attack will stop when the target is destroyed or captured
 	 */
-	switchDefenseToAttack(gameState: CommonGameState, target: CommonEntity, data: { range?: number; armyID?: ArmyId; uniqueTarget?: boolean }): boolean
+	switchDefenseToAttack(
+		gameState: CommonGameState,
+		target: CommonEntity,
+		data: { range?: number; armyID?: ArmyId; uniqueTarget?: boolean },
+	): boolean
 	{
 		if (!target || !isPlaced(target))
 			return false;
@@ -1067,7 +1138,7 @@ export class AttackManager
 			"maxRushes": this.maxRushes,
 			"rushSize": this.rushSize,
 			"currentEnemyPlayer": this.currentEnemyPlayer,
-			"defeated": this.defeated
+			"defeated": this.defeated,
 		};
 
 		const upcomingAttacks = byAttackType(type => this.upcomingAttacks[type].map(attack => attack.Serialize()));

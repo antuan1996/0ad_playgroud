@@ -8,18 +8,22 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { emptyEvents, eventsWith, fake, makeTemplate, override, placed } from "./harness/fakes.ts";
-import {
-	ENEMY, makeGaiaSupply, makeHqEntity, MAP_CELLS, PLAYER, structureTemplate
-} from "./harness/hqWorld.ts";
-import { board, type HqWorld, ISLAND, navalWorld, SEA, ship, soldier, WEST } from "./harness/navalWorld.ts";
+import { ENEMY, MAP_CELLS, PLAYER, makeGaiaSupply, makeHqEntity, structureTemplate } from "./harness/hqWorld.ts";
+import { ISLAND, SEA, WEST, board, navalWorld, ship, soldier, type HqWorld } from "./harness/navalWorld.ts";
 
 import { entityId, landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 import * as baseModule from "../decision/baseManager.ts";
-import { FISH_MAX_BOATS, FISH_PER_BOAT, HUNTERS_PER_SEA, NavalManager, STUCK_SECONDS } from "../decision/navalManager.ts";
+import { BuildManager } from "../decision/buildManager.ts";
+import {
+	FISH_MAX_BOATS,
+	FISH_PER_BOAT,
+	HUNTERS_PER_SEA,
+	NavalManager,
+	STUCK_SECONDS,
+} from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
-import { BuildManager } from "../decision/buildManager.ts";
-import { requireValue } from "../adapter/entityExtend.ts";
 
 const PlayerID = PLAYER;
 
@@ -28,10 +32,18 @@ function seat(options: Parameters<typeof navalWorld>[0] = {})
 {
 	const s = navalWorld(options);
 	// the trade office's merchants, as TradeManager.init collects them (role trader)
-	const traders = s.world.gameState.getOwnUnits().filter((e: CommonEntity) => e.getMetadata(PlayerID, "role") === "trader");
+	const traders = s.world.gameState.getOwnUnits().filter((e: CommonEntity) =>
+		e.getMetadata(PlayerID, "role") === "trader"
+	);
 	traders.registerUpdates();
 	s.hq.tradeManager.traders = traders;
-	return { ...s, get naval(): NavalManager { return s.hq.navalManager; } };
+	return {
+		...s,
+		get naval(): NavalManager
+		{
+			return s.hq.navalManager;
+		},
+	};
 }
 
 /**
@@ -43,8 +55,14 @@ function seat(options: Parameters<typeof navalWorld>[0] = {})
 /** a plan at sea, as onBoarding leaves it, with its ships' points as they were */
 function setSail(p: TransportPlan): void
 {
-	p.stage = { "state": TransportPlan.SAILING, "landingPos": p.shipPoints(), "nTry": {}, "unloaded": [], "recovered": [],
-		"canceled": undefined };
+	p.stage = {
+		"state": TransportPlan.SAILING,
+		"landingPos": p.shipPoints(),
+		"nTry": {},
+		"unloaded": [],
+		"recovered": [],
+		"canceled": undefined,
+	};
 }
 
 /** a plan back at the shore, its points kept: a test's set-up only (a plan never goes back) */
@@ -64,34 +82,58 @@ const queues = (world: HqWorld) => world.ai.queues;
 /** a shoal of fish */
 function fish(world: HqWorld, id: number, position: [number, number], amount = 1000)
 {
-	return world.addEntity(makeGaiaSupply({ id, position, "generic": "food", "specific": "fish", "classes": ["SeaCreature"], amount }));
+	return world.addEntity(
+		makeGaiaSupply({ id, position, "generic": "food", "specific": "fish", "classes": ["SeaCreature"], amount }),
+	);
 }
 
 /** a dock of ours, which may train the given ships */
-function dock(world: HqWorld, id: number, position: [number, number], trainable: string[] = [],
-	options: { foundation?: boolean; classes?: string[]; owner?: number } = {})
+function dock(
+	world: HqWorld,
+	id: number,
+	position: [number, number],
+	trainable: string[] = [],
+	options: { foundation?: boolean; classes?: string[]; owner?: number } = {},
+)
 {
-	return world.addEntity(makeHqEntity({
-		id, "owner": options.owner ?? PLAYER, position, "classes": options.classes ?? ["Structure", "Dock"],
-		"templateName": (options.foundation ? "foundation|" : "") + "structures/athen/dock"
-	}, {
-		"trainingQueue": () => [],
-		"trainableEntities": () => trainable,
-		"foundationProgress": () => options.foundation ? 0.5 : undefined
-	}));
+	return world.addEntity(
+		makeHqEntity({
+			id,
+			"owner": options.owner ?? PLAYER,
+			position,
+			"classes": options.classes ?? ["Structure", "Dock"],
+			"templateName": (options.foundation ? "foundation|" : "") + "structures/athen/dock",
+		}, {
+			"trainingQueue": () => [],
+			"trainableEntities": () => trainable,
+			"foundationProgress": () => options.foundation ? 0.5 : undefined,
+		}),
+	);
 }
 
 /** a ship card, answering what the common-api Template reads for ships */
-function shipCard(world: HqWorld, name: string, detail: {
-	classes?: string[]; capacity?: number; arrows?: number; garrisonable?: string[]; available?: boolean; category?: string;
-} = {}): string
+function shipCard(
+	world: HqWorld,
+	name: string,
+	detail: {
+		classes?: string[];
+		capacity?: number;
+		arrows?: number;
+		garrisonable?: string[];
+		available?: boolean;
+		category?: string;
+	} = {},
+): string
 {
 	world.templates[name] = fake<CommonTemplate>({
-		...makeTemplate(name, { "classes": detail.classes ?? ["Unit", "Ship"], "available": detail.available ?? true,
-			"trainingCategory": detail.category }),
+		...makeTemplate(name, {
+			"classes": detail.classes ?? ["Unit", "Ship"],
+			"available": detail.available ?? true,
+			"trainingCategory": detail.category,
+		}),
 		"getDefaultArrow": () => detail.arrows,
 		"garrisonMax": () => detail.capacity,
-		"garrisonableClasses": () => detail.garrisonable ?? ["Infantry"]
+		"garrisonableClasses": () => detail.garrisonable ?? ["Infantry"],
 	});
 	return name;
 }
@@ -147,11 +189,15 @@ describe("the fleet counted at the start: init", () =>
 		busy.state.idle = false;
 		const boat = (id: number, pos: [number, number], classes = ["Unit", "Ship", "FishingBoat"]) =>
 			ship(s.world, id, pos, { "owner": ENEMY, classes });
-		boat(300, [200, 60]);	// 40 m, under the tower below
-		boat(301, [210, 160]);	// 61 m, free
-		boat(302, [200, 450]);	// out of range
-		s.world.addEntity(makeHqEntity({ "id": 400, "owner": ENEMY, "position": [240, 40], "classes": ["Structure", "Tower"] },
-			{ "hasDefensiveFire": () => true, "attackRange": () => ({ "max": 60, "min": 0 }) }));
+		boat(300, [200, 60]); // 40 m, under the tower below
+		boat(301, [210, 160]); // 61 m, free
+		boat(302, [200, 450]); // out of range
+		s.world.addEntity(
+			makeHqEntity({ "id": 400, "owner": ENEMY, "position": [240, 40], "classes": ["Structure", "Tower"] }, {
+				"hasDefensiveFire": () => true,
+				"attackRange": () => ({ "max": 60, "min": 0 }),
+			}),
+		);
 		init(s);
 		s.hq.navalMap = true;
 
@@ -272,7 +318,7 @@ describe("how many fishing boats a sea gets", () =>
 		s.naval.updateFishingBoats(SEA, 4);
 		s.naval.wantedFishShips[SEA] = 3;
 		s.naval.resetFishingBoats(s.world.gameState);
-		assert.ok(s.naval.wantedFishShips.every((n) => n === 0));
+		assert.ok(s.naval.wantedFishShips.every(n => n === 0));
 	});
 });
 
@@ -298,14 +344,14 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 
 		const rocks = seat({ "island": false });
 		const byRocks = fish(rocks.world, 400, [300, 160]);
-		access(rocks).landPassMap[sample] = 1;	// neither land nor sea: region 1 on both grids
+		access(rocks).landPassMap[sample] = 1; // neither land nor sea: region 1 on both grids
 		access(rocks).navalPassMap[sample] = 1;
-		init(rocks);	// counting the fish measures each shoal's sea
+		init(rocks); // counting the fish measures each shoal's sea
 		assert.equal(byRocks.getMetadata(PlayerID, "opensea"), true, "the next sample inward is open water");
 
 		const islet = seat({ "island": false });
 		const byLand = fish(islet.world, 400, [300, 160]);
-		access(islet).landPassMap[sample] = WEST;	// a scrap of land there instead
+		access(islet).landPassMap[sample] = WEST; // a scrap of land there instead
 		init(islet);
 		assert.equal(byLand.getMetadata(PlayerID, "opensea"), undefined);
 	});
@@ -328,9 +374,13 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const s = seat();
 		const shoal = fish(s.world, 400, [200, 160]);
 		init(s);
-		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), true, "our ground and the open water around it");
+		assert.equal(
+			s.naval.canFishSafely(s.world.gameState, placed(shoal)),
+			true,
+			"our ground and the open water around it",
+		);
 
-		s.world.map.setTerritoryOwner(33, 20, ENEMY);	// on the island, 60 m east
+		s.world.map.setTerritoryOwner(33, 20, ENEMY); // on the island, 60 m east
 		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), false);
 	});
 });
@@ -408,7 +458,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		for (const smallFirst of [false, true])
 		{
 			const s = seat();
-			const big = [0, 1, 2].map((k) => soldier(s.world, 100 + k, [140, 150 + 5 * k]));
+			const big = [0, 1, 2].map(k => soldier(s.world, 100 + k, [140, 150 + 5 * k]));
 			const lone = soldier(s.world, 110, [140, 200]);
 			const newcomer = soldier(s.world, 120, [140, 210]);
 			init(s);
@@ -434,8 +484,11 @@ describe("units asking to cross the sea: requireTransport", () =>
 
 			s.naval.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
 
-			assert.equal(newcomer.ent.getMetadata(PlayerID, "transport"), lone.ent.getMetadata(PlayerID, "transport"),
-				smallFirst ? "the small passage opened first" : "the small passage opened second");
+			assert.equal(
+				newcomer.ent.getMetadata(PlayerID, "transport"),
+				lone.ent.getMetadata(PlayerID, "transport"),
+				smallFirst ? "the small passage opened first" : "the small passage opened second",
+			);
 		}
 	});
 
@@ -456,9 +509,11 @@ describe("units asking to cross the sea: requireTransport", () =>
 	it("a passage with four siege engines takes no fifth", () =>
 	{
 		const s = seat();
-		const rams = [0, 1, 2, 3, 4].map((k) => soldier(s.world, 110 + k, [140, 150 + k * 4], {}, {
-			"hasClasses": (list: string[]) => list.includes("Siege")
-		}));
+		const rams = [0, 1, 2, 3, 4].map(k =>
+			soldier(s.world, 110 + k, [140, 150 + k * 4], {}, {
+				"hasClasses": (list: string[]) => list.includes("Siege"),
+			})
+		);
 		init(s);
 
 		for (const ram of rams)
@@ -474,7 +529,10 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)), false);
+		assert.equal(
+			s.naval.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)),
+			false,
+		);
 		assert.equal(s.naval.transportPlans.length, 0);
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
@@ -507,7 +565,7 @@ describe("a ship that starts the game with units aboard: createTransportIfNeeded
 	{
 		const s = seat();
 		const carrier = loaded(s);
-		ship(s.world, 201, [200, 200]);	// an empty ship has nothing to carry
+		ship(s.world, 201, [200, 200]); // an empty ship has nothing to carry
 		init(s);
 
 		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
@@ -556,8 +614,13 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	function waiting(s: ReturnType<typeof seat>, first = 100)
 	{
 		for (const k of [0, 1])
-			s.naval.requireTransport(s.world.gameState, soldier(s.world, first + k, [140, 150 + 10 * k]).ent,
-				WEST, ISLAND, worldPos(280, 160));
+			s.naval.requireTransport(
+				s.world.gameState,
+				soldier(s.world, first + k, [140, 150 + 10 * k]).ent,
+				WEST,
+				ISLAND,
+				worldPos(280, 160),
+			);
 	}
 
 	it("a passage of several units waiting with no ship wanted makes the sea want one", () =>
@@ -575,15 +638,20 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	{
 		const lone = seat();
 		init(lone);
-		lone.naval.requireTransport(lone.world.gameState, soldier(lone.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
+		lone.naval.requireTransport(
+			lone.world.gameState,
+			soldier(lone.world, 100, [140, 160]).ent,
+			WEST,
+			ISLAND,
+			worldPos(280, 160),
+		);
 		lone.naval.checkLevels(lone.world.gameState, queues(lone.world));
 		assert.equal(lone.naval.wantedTransportShips[SEA], 0, "one unit");
 
 		const training = seat();
 		init(training);
 		waiting(training);
-		training.world.gameState
-			.countOwnQueuedEntitiesWithMetadata = () => 1;
+		training.world.gameState.countOwnQueuedEntitiesWithMetadata = () => 1;
 		training.naval.checkLevels(training.world.gameState, queues(training.world));
 		assert.equal(training.naval.wantedTransportShips[SEA], 0, "a ship in training");
 
@@ -629,7 +697,10 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 	it("trains a transport for a sea short of them, and a fishing boat for a sea short of those", () =>
 	{
 		const s = seat();
-		const bireme = shipCard(s.world, "units/athen/ship_bireme", { "classes": ["Unit", "Ship", "Warship"], "capacity": 20 });
+		const bireme = shipCard(s.world, "units/athen/ship_bireme", {
+			"classes": ["Unit", "Ship", "Warship"],
+			"capacity": 20,
+		});
 		const boat = shipCard(s.world, "units/athen/ship_fishing", { "classes": ["Unit", "Ship", "FishingBoat"] });
 		yard(s, [bireme, boat]);
 		fish(s.world, 400, [200, 100], 2000);
@@ -664,14 +735,12 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		yard(t, [card]);
 		init(t);
 		t.naval.wantedTransportShips[SEA] = 1;
-		t.world.gameState
-			.countOwnQueuedEntitiesWithMetadata = () => 1;
+		t.world.gameState.countOwnQueuedEntitiesWithMetadata = () => 1;
 		t.naval.maintainFleet(t.world.gameState, queues(t.world));
 		assert.equal(queues(t.world).ships.plans.length, 0, "a ship already in training there");
 
 		queues(t.world).ships.addPlan(new TrainingPlan(t.world.gameState, card, { "sea": SEA }, 1, 1));
-		t.world.gameState
-			.countOwnQueuedEntitiesWithMetadata = () => 0;
+		t.world.gameState.countOwnQueuedEntitiesWithMetadata = () => 0;
 		t.naval.maintainFleet(t.world.gameState, queues(t.world));
 		assert.equal(queues(t.world).ships.plans.length, 1, "the queue is busy");
 	});
@@ -682,18 +751,28 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		const small = shipCard(s.world, "units/athen/ship_small", { "capacity": 10 });
 		const archers = shipCard(s.world, "units/athen/ship_archers", { "capacity": 10, "arrows": 2 });
 		const raft = shipCard(s.world, "units/athen/ship_raft", { "capacity": 1 });
-		const siege = shipCard(s.world, "units/athen/ship_siege", { "capacity": 10, "garrisonable": ["Infantry", "Siege"] });
+		const siege = shipCard(s.world, "units/athen/ship_siege", {
+			"capacity": 10,
+			"garrisonable": ["Infantry", "Siege"],
+		});
 		yard(s, [siege, small, archers, raft]);
 		init(s);
 
-		assert.equal(s.naval.getBestShip(s.world.gameState, SEA, "transport"), siege, "10 + 50 for siege beats 10 + 20");
+		assert.equal(
+			s.naval.getBestShip(s.world.gameState, SEA, "transport"),
+			siege,
+			"10 + 50 for siege beats 10 + 20",
+		);
 	});
 
 	it("a warship is the one with most arrows, a fishing boat a FishingBoat", () =>
 	{
 		const s = seat();
 		const two = shipCard(s.world, "units/athen/ship_two", { "classes": ["Unit", "Ship", "Warship"], "arrows": 2 });
-		const five = shipCard(s.world, "units/athen/ship_five", { "classes": ["Unit", "Ship", "Warship"], "arrows": 5 });
+		const five = shipCard(s.world, "units/athen/ship_five", {
+			"classes": ["Unit", "Ship", "Warship"],
+			"arrows": 5,
+		});
 		const one = shipCard(s.world, "units/athen/ship_one", { "classes": ["Unit", "Ship", "Warship"], "arrows": 1 });
 		const boat = shipCard(s.world, "units/athen/ship_fishing", { "classes": ["Unit", "Ship", "FishingBoat"] });
 		yard(s, [two, five, one, boat]);
@@ -705,10 +784,13 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 
 	it("leaves out ships the civ cannot train now, those disabled, those at their limit, and other units", () =>
 	{
-		const s = seat({ "worldOptions": {
-			"disabledTemplates": ["units/athen/ship_disabled"],
-			"entityLimits": { "Hero": 1 }, "entityCounts": { "Hero": 1 }
-		} });
+		const s = seat({
+			"worldOptions": {
+				"disabledTemplates": ["units/athen/ship_disabled"],
+				"entityLimits": { "Hero": 1 },
+				"entityCounts": { "Hero": 1 },
+			},
+		});
 		const locked = shipCard(s.world, "units/athen/ship_locked", { "capacity": 30, "available": false });
 		const disabled = shipCard(s.world, "units/athen/ship_disabled", { "capacity": 30 });
 		const hero = shipCard(s.world, "units/athen/ship_hero", { "capacity": 30, "category": "Hero" });
@@ -726,7 +808,13 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		const s = seat();
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
+		s.naval.requireTransport(
+			s.world.gameState,
+			soldier(s.world, 100, [140, 160]).ent,
+			WEST,
+			ISLAND,
+			worldPos(280, 160),
+		);
 
 		s.naval.assignShipsToPlans(s.world.gameState);
 
@@ -741,7 +829,13 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	{
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
+		s.naval.requireTransport(
+			s.world.gameState,
+			soldier(s.world, 100, [140, 160]).ent,
+			WEST,
+			ISLAND,
+			worldPos(280, 160),
+		);
 		const p = s.naval.transportPlans[0];
 		s.naval.assignShipsToPlans(s.world.gameState);
 		p.update(s.world.gameState);
@@ -773,22 +867,30 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	{
 		const s = seat();
 		const { carrier, p } = boarding(s);
-		delete p.routes[200];	// sent straight: no route of its plan
+		delete p.routes[200]; // sent straight: no route of its plan
 		// ships trained since the fleet was counted: they learned their sea then (checkEvents)
 		const idle = ship(s.world, 201, [210, 165], { "metadata": { "sea": SEA } });
 		const otherTransport = ship(s.world, 202, [205, 170], { "metadata": { "transporter": 99, "sea": SEA } });
 		const ranged: Array<[number, number[]]> = [];
-		for (const [ent, id] of [[carrier.ent, 200], [idle.ent, 201], [otherTransport.ent, 202]] as Array<[CommonEntity, number]>)
+		for (
+			const [ent, id] of [[carrier.ent, 200], [idle.ent, 201], [otherTransport.ent, 202]] as Array<
+				[CommonEntity, number]
+			>
+		)
 			override(ent, { "moveToRange": (...args: number[]) => ranged.push([id, args]) });
 
-		s.naval.moveApart(s.world.gameState);	// position noted
+		s.naval.moveApart(s.world.gameState); // position noted
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + STUCK_SECONDS);
-		otherTransport.state.pos = [204, 170];	// that one is under way
-		s.naval.moveApart(s.world.gameState);	// the first is still there STUCK_SECONDS later
+		otherTransport.state.pos = [204, 170]; // that one is under way
+		s.naval.moveApart(s.world.gameState); // the first is still there STUCK_SECONDS later
 
 		// the stuck ship moves a little around itself; the others make way, away from it
-		const pushed = (id: number, min: number) => ranged.some(([who, args]) => who === id && args[0] === 200 && args[1] === 160 && args[2] === min);
-		assert.ok(ranged.some(([id, args]) => id === 200 && args[2] === 30 && args[3] === 35), "the stuck ship moves a little");
+		const pushed = (id: number, min: number) =>
+			ranged.some(([who, args]) => who === id && args[0] === 200 && args[1] === 160 && args[2] === min);
+		assert.ok(
+			ranged.some(([id, args]) => id === 200 && args[2] === 30 && args[3] === 35),
+			"the stuck ship moves a little",
+		);
 		assert.ok(pushed(201, 40), "the idle ship makes way, 40 m off");
 		assert.ok(pushed(202, 30), "another passage's ship under way keeps 30 m off");
 	});
@@ -817,12 +919,12 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 
 		s.naval.moveApart(s.world.gameState);
 		carrier.state.pos = [195, 160];
-		s.naval.moveApart(s.world.gameState);	// it moved
+		s.naval.moveApart(s.world.gameState); // it moved
 		s.world.ai.playedTurn += 1;
-		s.naval.moveApart(s.world.gameState);	// stuck one turn only
+		s.naval.moveApart(s.world.gameState); // stuck one turn only
 		carrier.state.pos = p.shipPoints()[200];
 		s.world.ai.playedTurn += 5;
-		s.naval.moveApart(s.world.gameState);	// boarding at the shore
+		s.naval.moveApart(s.world.gameState); // boarding at the shore
 		s.naval.moveApart(s.world.gameState);
 
 		assert.deepEqual(ranged, []);
@@ -837,14 +939,14 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const near = dock(s.world, 300, [180, 160]);
 		const far = dock(s.world, 301, [156, 40]);
 		init(s);
-		near.setMetadata(PlayerID, "sea", seaRegion(9));	// a dock on another sea
+		near.setMetadata(PlayerID, "sea", seaRegion(9)); // a dock on another sea
 		void far;
 
-		s.naval.moveApart(s.world.gameState);	// noted
+		s.naval.moveApart(s.world.gameState); // noted
 		parked.state.pos = [201, 160];
-		s.naval.moveApart(s.world.gameState);	// it drifted: noted again
-		s.naval.moveApart(s.world.gameState);	// now it stays: no dock of its sea near
-		s.naval.moveApart(s.world.gameState);	// already looked
+		s.naval.moveApart(s.world.gameState); // it drifted: noted again
+		s.naval.moveApart(s.world.gameState); // now it stays: no dock of its sea near
+		s.naval.moveApart(s.world.gameState); // already looked
 
 		assert.deepEqual(ranged, []);
 	});
@@ -858,8 +960,8 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		dock(s.world, 300, [156, 160]);
 		init(s);
 
-		s.naval.moveApart(s.world.gameState);	// position noted
-		s.naval.moveApart(s.world.gameState);	// it did not move
+		s.naval.moveApart(s.world.gameState); // position noted
+		s.naval.moveApart(s.world.gameState); // it did not move
 
 		assert.deepEqual(ranged, [[156, 160, 70, 75]]);
 	});
@@ -882,19 +984,25 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		s.naval.moveApart(s.world.gameState);
 
 		assert.ok(ranged.some(([id, args]) => id === 210 && args[2] === 30), "the stuck merchant");
-		assert.ok(ranged.some(([id, args]) => id === 211 && args[0] === 200 && args[2] === 40), "the merchant in its way");
+		assert.ok(
+			ranged.some(([id, args]) => id === 211 && args[0] === 200 && args[2] === 40),
+			"the merchant in its way",
+		);
 	});
 
 	it("a merchant on its way to market keeps 30 m off a stuck one, and merchants of other seas are left be", () =>
 	{
 		const s = seat();
-		const merchant = (sea: number, role = "trader") => ({ "classes": ["Unit", "Ship", "Trader"], "metadata": { role, sea } });
+		const merchant = (sea: number, role = "trader") => ({
+			"classes": ["Unit", "Ship", "Trader"],
+			"metadata": { role, sea },
+		});
 		const stuck = ship(s.world, 210, [200, 160], merchant(SEA));
 		stuck.state.aiState = "INDIVIDUAL.TRADE.APPROACHINGMARKET";
 		const sailing = ship(s.world, 211, [205, 170], merchant(SEA));
 		sailing.state.aiState = "INDIVIDUAL.TRADE.APPROACHINGMARKET";
 		const foreign = ship(s.world, 212, [205, 150], merchant(9));
-		ship(s.world, 214, undefined, merchant(SEA));	// aboard nothing, nowhere: a ship being built
+		ship(s.world, 214, undefined, merchant(SEA)); // aboard nothing, nowhere: a ship being built
 		init(s);
 		const ranged: Array<[number, number[]]> = [];
 		for (const c of [stuck, sailing, foreign])
@@ -905,7 +1013,10 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		sailing.state.pos = [204, 170];
 		s.naval.moveApart(s.world.gameState);
 
-		assert.ok(ranged.some(([id, args]) => id === 211 && args[0] === 200 && args[2] === 30), "the moving merchant keeps off");
+		assert.ok(
+			ranged.some(([id, args]) => id === 211 && args[0] === 200 && args[2] === 30),
+			"the moving merchant keeps off",
+		);
 		assert.ok(!ranged.some(([id]) => id === 212), "the merchant of another sea is left be");
 	});
 
@@ -914,7 +1025,10 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	it("a merchant stopped, or turning, on its way to market is not nudged before STUCK_SECONDS", () =>
 	{
 		const s = seat();
-		const merchant = ship(s.world, 210, [200, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
+		const merchant = ship(s.world, 210, [200, 160], {
+			"classes": ["Unit", "Ship", "Trader"],
+			"metadata": { "role": "trader", "sea": SEA },
+		});
 		merchant.state.aiState = "INDIVIDUAL.TRADE.APPROACHINGMARKET";
 		const ranged: number[][] = [];
 		override(merchant.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
@@ -923,35 +1037,38 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		let heading = 0;
 		override(merchant.ent, { "angle": () => heading });
 		const start = s.world.ai.elapsedTime;
-		s.naval.moveApart(s.world.gameState);	// position noted
+		s.naval.moveApart(s.world.gameState); // position noted
 		s.world.ai.playedTurn += 2;
 		s.world.ai.elapsedTime = seconds(start + STUCK_SECONDS - 1);
-		s.naval.moveApart(s.world.gameState);	// two turns, but not yet STUCK_SECONDS
+		s.naval.moveApart(s.world.gameState); // two turns, but not yet STUCK_SECONDS
 		assert.deepEqual(ranged, []);
 
-		heading = 1;	// it turned in place
+		heading = 1; // it turned in place
 		s.world.ai.elapsedTime = seconds(start + STUCK_SECONDS);
 		s.naval.moveApart(s.world.gameState);
 		assert.deepEqual(ranged, [], "turning: not stuck");
 
 		s.world.ai.elapsedTime = seconds(start + 2 * STUCK_SECONDS);
-		s.naval.moveApart(s.world.gameState);	// still, neither moved nor turned, for STUCK_SECONDS
+		s.naval.moveApart(s.world.gameState); // still, neither moved nor turned, for STUCK_SECONDS
 		assert.equal(ranged.length, 1);
 	});
 
 	it("an idle merchant stays put when no dock of its sea is near", () =>
 	{
 		const s = seat();
-		const parked = ship(s.world, 210, [200, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
+		const parked = ship(s.world, 210, [200, 160], {
+			"classes": ["Unit", "Ship", "Trader"],
+			"metadata": { "role": "trader", "sea": SEA },
+		});
 		const ranged: number[][] = [];
 		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
-		const near = dock(s.world, 300, [180, 160]);	// near, but on another sea
-		dock(s.world, 301, [156, 40]);	// on its sea, but far
+		const near = dock(s.world, 300, [180, 160]); // near, but on another sea
+		dock(s.world, 301, [156, 40]); // on its sea, but far
 		init(s);
 		near.setMetadata(PlayerID, "sea", seaRegion(9));
 
-		s.naval.moveApart(s.world.gameState);	// noted
-		s.naval.moveApart(s.world.gameState);	// still: it looks around once
+		s.naval.moveApart(s.world.gameState); // noted
+		s.naval.moveApart(s.world.gameState); // still: it looks around once
 
 		assert.deepEqual(ranged, []);
 	});
@@ -959,7 +1076,10 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	it("an idle merchant parked by a dock moves off it", () =>
 	{
 		const s = seat();
-		const parked = ship(s.world, 210, [170, 160], { "classes": ["Unit", "Ship", "Trader"], "metadata": { "role": "trader", "sea": SEA } });
+		const parked = ship(s.world, 210, [170, 160], {
+			"classes": ["Unit", "Ship", "Trader"],
+			"metadata": { "role": "trader", "sea": SEA },
+		});
 		const ranged: number[][] = [];
 		override(parked.ent, { "moveToRange": (...args: number[]) => ranged.push(args) });
 		dock(s.world, 300, [156, 160]);
@@ -967,9 +1087,9 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 
 		s.naval.moveApart(s.world.gameState);
 		parked.state.pos = [171, 160];
-		s.naval.moveApart(s.world.gameState);	// it drifted
-		s.naval.moveApart(s.world.gameState);	// now still
-		s.naval.moveApart(s.world.gameState);	// already moved off once
+		s.naval.moveApart(s.world.gameState); // it drifted
+		s.naval.moveApart(s.world.gameState); // now still
+		s.naval.moveApart(s.world.gameState); // already moved off once
 
 		assert.deepEqual(ranged, [[156, 160, 70, 75]]);
 	});
@@ -984,11 +1104,20 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 		for (const name of ["dock", "shipyard", "super_dock", "market"])
 			s.world.templates["structures/athen/" + name] = structureTemplate("structures/athen/" + name, {
 				"classes": ["Structure", name === "market" ? "Market" : name === "dock" ? "Dock" : "Shipyard"],
-				"placement": name === "market" ? undefined : "shore", "territories": ["own", "ally", "neutral"]
+				"placement": name === "market" ? undefined : "shore",
+				"territories": ["own", "ally", "neutral"],
 			});
-		s.world.addEntity(makeHqEntity({ "id": 9001, "owner": PLAYER, "position": [30, 30], "classes": ["Unit", "Support", "Worker"] }, {
-			"buildableEntities": () => ["dock", "shipyard", "super_dock", "market"].map((n) => "structures/athen/" + n)
-		}));
+		s.world.addEntity(
+			makeHqEntity({
+				"id": 9001,
+				"owner": PLAYER,
+				"position": [30, 30],
+				"classes": ["Unit", "Support", "Worker"],
+			}, {
+				"buildableEntities": () =>
+					["dock", "shipyard", "super_dock", "market"].map(n => "structures/athen/" + n),
+			}),
+		);
 		s.hq.buildManager = BuildManager.start(s.world.gameState);
 		init(s);
 		return s;
@@ -1021,7 +1150,9 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 	{
 		const s = harbourTown(200, { "worldOptions": { "phase": 2 } });
 		dock(s.world, 300, [156, 160]).setMetadata(PlayerID, "sea", SEA);
-		s.world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }),
+		);
 		s.hq.currentPhase = 2;
 
 		s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
@@ -1034,17 +1165,27 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 
 	it("a civ with no super dock builds an ordinary shipyard, and with neither builds none", () =>
 	{
-		const s = harbourTown(200, { "worldOptions": { "phase": 2, "disabledTemplates": ["structures/athen/super_dock"] } });
+		const s = harbourTown(200, {
+			"worldOptions": { "phase": 2, "disabledTemplates": ["structures/athen/super_dock"] },
+		});
 		dock(s.world, 300, [156, 160]).setMetadata(PlayerID, "sea", SEA);
-		s.world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }),
+		);
 		s.hq.currentPhase = 2;
 		s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
 		assert.equal(queues(s.world).militaryBuilding.plans.at(-1)?.type, "structures/athen/shipyard");
 
-		const none = harbourTown(200, { "worldOptions": { "phase": 2,
-			"disabledTemplates": ["structures/athen/super_dock", "structures/athen/shipyard"] } });
+		const none = harbourTown(200, {
+			"worldOptions": {
+				"phase": 2,
+				"disabledTemplates": ["structures/athen/super_dock", "structures/athen/shipyard"],
+			},
+		});
 		dock(none.world, 300, [156, 160]).setMetadata(PlayerID, "sea", SEA);
-		none.world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }));
+		none.world.addEntity(
+			makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }),
+		);
 		none.hq.currentPhase = 2;
 		none.naval.buildNavalStructures(none.world.gameState, queues(none.world));
 		assert.equal(queues(none.world).militaryBuilding.plans.length, 0);
@@ -1055,7 +1196,9 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 		const s = harbourTown(200, { "worldOptions": { "phase": 2 } });
 		dock(s.world, 300, [156, 160]).setMetadata(PlayerID, "sea", SEA);
 		dock(s.world, 301, [156, 220], [], { "classes": ["Structure", "Shipyard"] }).setMetadata(PlayerID, "sea", SEA);
-		s.world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }));
+		s.world.addEntity(
+			makeHqEntity({ "id": 310, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Market"] }),
+		);
 		s.hq.currentPhase = 2;
 
 		s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
@@ -1067,8 +1210,15 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 	{
 		const s = harbourTown(40);
 		// a second town on the island, with its own sea to reach, and a colony still being raised
-		const colony = s.world.addEntity(makeHqEntity({ "id": 320, "owner": PLAYER, "position": [280, 160],
-			"classes": ["Structure", "CivCentre"], "templateName": "structures/athen/civil_centre" }));
+		const colony = s.world.addEntity(
+			makeHqEntity({
+				"id": 320,
+				"owner": PLAYER,
+				"position": [280, 160],
+				"classes": ["Structure", "CivCentre"],
+				"templateName": "structures/athen/civil_centre",
+			}),
+		);
 		const BaseManagerModule = s.hq.basesManager;
 		BaseManagerModule.createBase(s.world.gameState, colony, "withAnchor");
 		const rising = BaseManagerModule.createBase(s.world.gameState, colony, "withAnchor");
@@ -1079,7 +1229,11 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 		s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
 
 		assert.equal(queues(s.world).dock.plans.length, 1, "one dock this turn");
-		assert.deepEqual(queues(s.world).dock.plans[0].metadata, { "land": { [WEST]: true }, "sea": SEA }, "sea 9 is not sailed");
+		assert.deepEqual(
+			queues(s.world).dock.plans[0].metadata,
+			{ "land": { [WEST]: true }, "sea": SEA },
+			"sea 9 is not sailed",
+		);
 	});
 
 	it("no dock is queued for a town with no civic centre, or one still being raised; a standing one gets it", () =>
@@ -1100,11 +1254,19 @@ describe("docks and shipyards raised: buildNavalStructures", () =>
 			if (kind === "anchorless")
 				create(islandDock, BaseManager.STATE_ANCHORLESS);
 			else
-				create(s.world.addEntity(makeHqEntity({
-					"id": 320, "owner": PLAYER, "position": [280, 160], "classes": ["Structure", "CivCentre"],
-					"templateName": (kind === "unconstructed" ? "foundation|" : "") + "structures/athen/civil_centre"
-				}, { "foundationProgress": () => kind === "unconstructed" ? 0.2 : undefined })),
-				kind === "unconstructed" ? BaseManager.STATE_UNCONSTRUCTED : BaseManager.STATE_WITH_ANCHOR);
+				create(
+					s.world.addEntity(
+						makeHqEntity({
+							"id": 320,
+							"owner": PLAYER,
+							"position": [280, 160],
+							"classes": ["Structure", "CivCentre"],
+							"templateName": (kind === "unconstructed" ? "foundation|" : "") +
+								"structures/athen/civil_centre",
+						}, { "foundationProgress": () => kind === "unconstructed" ? 0.2 : undefined }),
+					),
+					kind === "unconstructed" ? BaseManager.STATE_UNCONSTRUCTED : BaseManager.STATE_WITH_ANCHOR,
+				);
 			s.naval.buildNavalStructures(s.world.gameState, queues(s.world));
 			return queues(s.world).dock.plans;
 		};
@@ -1150,11 +1312,15 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		const trained = ship(s.world, 200, [200, 160]);
 		const captured = dock(s.world, 301, [156, 200]);
 
-		s.naval.checkEvents(s.world.gameState, queues(s.world), events({
-			"Create": [{ "entity": 300 }],
-			"TrainingFinished": [{ "entities": [200] }],
-			"OwnershipChanged": [{ "entity": 301, "to": PLAYER }, { "entity": 300, "to": ENEMY }]
-		}));
+		s.naval.checkEvents(
+			s.world.gameState,
+			queues(s.world),
+			events({
+				"Create": [{ "entity": 300 }],
+				"TrainingFinished": [{ "entities": [200] }],
+				"OwnershipChanged": [{ "entity": 301, "to": PLAYER }, { "entity": 300, "to": ENEMY }],
+			}),
+		);
 
 		for (const ent of [rising, trained.ent, captured])
 			assert.equal(ent.getMetadata(PlayerID, "sea"), SEA);
@@ -1165,16 +1331,25 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		const s = seat();
 		init(s);
 		const theirs = dock(s.world, 300, [156, 120], [], { "foundation": true, "owner": ENEMY });
-		const house = s.world.addEntity(makeHqEntity({ "id": 301, "owner": PLAYER, "position": [80, 80],
-			"classes": ["Structure", "House"] }, { "foundationProgress": () => 0.2 }));
+		const house = s.world.addEntity(
+			makeHqEntity({ "id": 301, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "House"] }, {
+				"foundationProgress": () => 0.2,
+			}),
+		);
 		const recruit = soldier(s.world, 100, [80, 90]);
 
-		assert.doesNotThrow(() => s.naval.checkEvents(s.world.gameState, queues(s.world), events({
-			"Create": [{}, { "entity": 300 }, { "entity": 301 }],
-			"TrainingFinished": [{}, { "entities": [100, 999] }],
-			"Destroy": [{ "entity": 400, "metadata": { [PlayerID]: { "transporter": 77 } } }],
-			"OwnershipChanged": [{ "entity": 999, "to": PLAYER }]
-		})));
+		assert.doesNotThrow(() =>
+			s.naval.checkEvents(
+				s.world.gameState,
+				queues(s.world),
+				events({
+					"Create": [{}, { "entity": 300 }, { "entity": 301 }],
+					"TrainingFinished": [{}, { "entities": [100, 999] }],
+					"Destroy": [{ "entity": 400, "metadata": { [PlayerID]: { "transporter": 77 } } }],
+					"OwnershipChanged": [{ "entity": 999, "to": PLAYER }],
+				}),
+			)
+		);
 
 		for (const ent of [theirs, house, recruit.ent])
 			assert.equal(ent.getMetadata(PlayerID, "sea"), undefined);
@@ -1189,12 +1364,14 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		s.naval.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		setSail(p);
-		aboard.state.pos = undefined;	// aboard the plan's other ship
+		aboard.state.pos = undefined; // aboard the plan's other ship
 		s.world.removeEntity(200);
 
-		s.naval.checkEvents(s.world.gameState, queues(s.world), events({
-			"Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }]
-		}));
+		s.naval.checkEvents(
+			s.world.gameState,
+			queues(s.world),
+			events({ "Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }] }),
+		);
 
 		assert.equal(aboard.ent.getMetadata(PlayerID, "transport"), p.ID);
 	});
@@ -1211,9 +1388,11 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		p.update(s.world.gameState);
 		s.world.removeEntity(200);
 
-		s.naval.checkEvents(s.world.gameState, queues(s.world), events({
-			"Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }]
-		}));
+		s.naval.checkEvents(
+			s.world.gameState,
+			queues(s.world),
+			events({ "Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }] }),
+		);
 
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
 		assert.equal(p.needTransportShips, true);
@@ -1231,12 +1410,16 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 			s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 		const p = s.naval.transportPlans[0];
 		setSail(p);
-		b.state.pos = [250, 160];	// already landed on the island
+		b.state.pos = [250, 160]; // already landed on the island
 		s.world.removeEntity(200);
 
-		s.naval.checkEvents(s.world.gameState, queues(s.world), events({
-			"Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }, { "entity": 999 }]
-		}));
+		s.naval.checkEvents(
+			s.world.gameState,
+			queues(s.world),
+			events({
+				"Destroy": [{ "entity": 200, "metadata": { [PlayerID]: { "transporter": p.ID } } }, { "entity": 999 }],
+			}),
+		);
 
 		assert.notEqual(a.ent.getMetadata(PlayerID, "transport"), p.ID);
 		assert.equal(s.naval.transportPlans.length, 2, "a new passage for the one still on our land");
@@ -1258,7 +1441,7 @@ describe("the fleet through its turn: update", () =>
 		s.naval.requireTransport(s.world.gameState, finished.ent, ISLAND, WEST, worldPos(100, 260));
 		const old = s.naval.transportPlans[1];
 		done.ent.setMetadata(PlayerID, "transporter", old.ID);
-		s.world.removeEntity(101);	// its last unit died
+		s.world.removeEntity(101); // its last unit died
 
 		s.world.ai.playedTurn = 3;
 		s.naval.update(s.world.gameState, queues(s.world), emptyEvents());
@@ -1275,7 +1458,13 @@ describe("the fleet saved and loaded", () =>
 	{
 		const s = seat();
 		init(s);
-		s.naval.requireTransport(s.world.gameState, soldier(s.world, 100, [140, 160]).ent, WEST, ISLAND, worldPos(280, 160));
+		s.naval.requireTransport(
+			s.world.gameState,
+			soldier(s.world, 100, [140, 160]).ent,
+			WEST,
+			ISLAND,
+			worldPos(280, 160),
+		);
 		s.naval.wantedTransportShips[SEA] = 2;
 		const saved = s.naval.Serialize();
 

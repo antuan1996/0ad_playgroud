@@ -103,7 +103,8 @@ type UnitAIRole = "INDIVIDUAL" | "FORMATIONCONTROLLER" | "FORMATIONMEMBER";
 
 /** The second part of a state name, what the unit does: "GATHER", "COMBAT", "FLEEING", ... */
 type UnitAIActivity = UnitAIStateName extends infer N ?
-	N extends `${string}.${infer A}.${string}` ? A : N extends `${string}.${infer A}` ? A : never : never;
+	N extends `${string}.${infer A}.${string}` ? A : N extends `${string}.${infer A}` ? A : never :
+	never;
 
 export type UnitState =
 	/** The engine reported no state. */
@@ -175,12 +176,12 @@ export function activityOf(state: UnitState): string | undefined
 {
 	switch (state.kind)
 	{
-	case "none":
-		return undefined;
-	case "known":
-		return state.activity;
-	case "other":
-		return state.raw.split(".")[1];
+		case "none":
+			return undefined;
+		case "known":
+			return state.activity;
+		case "other":
+			return state.raw.split(".")[1];
 	}
 }
 

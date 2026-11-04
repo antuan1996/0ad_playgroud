@@ -9,14 +9,21 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { eventsWith, fake, makeTemplate, type Methods, override, placed } from "./harness/fakes.ts";
+import { eventsWith, fake, makeTemplate, override, placed, type Methods } from "./harness/fakes.ts";
 import {
-	doorCalls, doorManagers, ENEMY, type HqWorld, type HqWorldOptions, makeHqEntity, makeHqWorld,
-	PLAYER, seatHQ
+	ENEMY,
+	PLAYER,
+	doorCalls,
+	doorManagers,
+	makeHqEntity,
+	makeHqWorld,
+	seatHQ,
+	type HqWorld,
+	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
 import { armyId, entityId, playerId, seconds, transportPlanId } from "../adapter/brands.ts";
-import { type SerializedVictoryManager, VictoryManager } from "../decision/victoryManager.ts";
+import { VictoryManager, type SerializedVictoryManager } from "../decision/victoryManager.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
 
 /** the relic raids a victory manager books, its own private record */
@@ -38,29 +45,43 @@ function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions>
 	hq.updateTerritories(world.gameState);
 	// the military office's answers: no plan unless a test gives one, no army
 	hq.attackManager.getPlan = () => undefined;
-	hq.attackManager.outOfPlan = world.gameState.getOwnUnits().filter((e: CommonEntity) => e.getMetadata(PlayerID, "plan") === -1);
+	hq.attackManager.outOfPlan = world.gameState.getOwnUnits().filter((e: CommonEntity) =>
+		e.getMetadata(PlayerID, "plan") === -1
+	);
 	hq.defenseManager.getArmy = () => undefined;
 	const manager = new VictoryManager(hq.Config);
 	return { world, hq, manager, "queues": world.ai.queues };
 }
 
 /** a unit of ours at the given spot, recording its orders */
-function unit(world: HqWorld, id: number, classes: string[], position: [number, number] | undefined = [40, 40],
-	metadata: Record<string, unknown> = {}, methods: Methods = {}, owner = PLAYER)
+function unit(
+	world: HqWorld,
+	id: number,
+	classes: string[],
+	position: [number, number] | undefined = [40, 40],
+	metadata: Record<string, unknown> = {},
+	methods: Methods = {},
+	owner = PLAYER,
+)
 {
 	const orders: unknown[][] = [];
 	let stance = "aggressive";
-	const ent = world.addEntity(makeHqEntity({ id, owner, position, "classes": ["Unit", ...classes] }, {
-		"canGuard": () => true,
-		"guard": (target: CommonEntity, queued: boolean) => orders.push(["guard", target.id(), queued]),
-		"removeGuard": () => orders.push(["removeGuard"]),
-		"stopMoving": () => orders.push(["stop"]),
-		"moveToRange": (x: number, z: number, min: number, max: number) => orders.push(["range", x, z, min, max]),
-		"setStance": (s: string) => { stance = s; },
-		"getStance": () => stance,
-		"healthLevel": () => 1,
-		...methods
-	}, metadata));
+	const ent = world.addEntity(
+		makeHqEntity({ id, owner, position, "classes": ["Unit", ...classes] }, {
+			"canGuard": () => true,
+			"guard": (target: CommonEntity, queued: boolean) => orders.push(["guard", target.id(), queued]),
+			"removeGuard": () => orders.push(["removeGuard"]),
+			"stopMoving": () => orders.push(["stop"]),
+			"moveToRange": (x: number, z: number, min: number, max: number) => orders.push(["range", x, z, min, max]),
+			"setStance": (s: string) =>
+			{
+				stance = s;
+			},
+			"getStance": () => stance,
+			"healthLevel": () => 1,
+			...methods,
+		}, metadata),
+	);
 	return { ent, orders };
 }
 
@@ -71,10 +92,17 @@ describe("the victory-critical entities at the start: init", () =>
 	it("in a wonder game, our wonders, raised or rising, are to be guarded", () =>
 	{
 		const { world, manager } = seat(["wonder"]);
-		world.addEntity(makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }));
-		world.addEntity(makeHqEntity({ "id": 501, "owner": PLAYER, "position": [200, 100], "classes": ["Structure", "Wonder"] },
-			{ "foundationProgress": () => 0.5 }));
-		world.addEntity(makeHqEntity({ "id": 502, "owner": ENEMY, "position": [200, 200], "classes": ["Structure", "Wonder"] }));
+		world.addEntity(
+			makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }),
+		);
+		world.addEntity(
+			makeHqEntity({ "id": 501, "owner": PLAYER, "position": [200, 100], "classes": ["Structure", "Wonder"] }, {
+				"foundationProgress": () => 0.5,
+			}),
+		);
+		world.addEntity(
+			makeHqEntity({ "id": 502, "owner": ENEMY, "position": [200, 200], "classes": ["Structure", "Wonder"] }),
+		);
 
 		manager.findCriticalEnts(world.gameState);
 
@@ -123,13 +151,18 @@ describe("a wonder game: the wonder's builders and guards", () =>
 		const { world, hq, manager } = seat(["wonder"]);
 		const helpers = [unit(world, 800, ["Worker"]).ent, unit(world, 801, ["Worker"]).ent];
 		const asked: unknown[] = [];
-		override(hq, { "bulkPickWorkers": (_gs: unknown, base: { ID: number }, number: number) =>
-		{
-			asked.push([base.ID, number]);
-			return { "values": () => helpers };
-		} });
-		world.addEntity(makeHqEntity({ "id": 501, "owner": PLAYER, "position": [200, 100], "classes": ["Structure", "Wonder"] },
-			{ "foundationProgress": () => 0.1 }, { "base": 2 }));
+		override(hq, {
+			"bulkPickWorkers": (_gs: unknown, base: { ID: number }, number: number) =>
+			{
+				asked.push([base.ID, number]);
+				return { "values": () => helpers };
+			},
+		});
+		world.addEntity(
+			makeHqEntity({ "id": 501, "owner": PLAYER, "position": [200, 100], "classes": ["Structure", "Wonder"] }, {
+				"foundationProgress": () => 0.1,
+			}, { "base": 2 }),
+		);
 
 		manager.checkEvents(world.gameState, events({ "Create": [{ "entity": 501 }, { "entity": 999 }] }));
 
@@ -145,13 +178,20 @@ describe("a wonder game: the wonder's builders and guards", () =>
 	it("a wonder just finished, or captured, is to be guarded", () =>
 	{
 		const { world, manager } = seat(["wonder"]);
-		world.addEntity(makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }));
-		world.addEntity(makeHqEntity({ "id": 503, "owner": PLAYER, "position": [150, 100], "classes": ["Structure", "Wonder"] }));
+		world.addEntity(
+			makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }),
+		);
+		world.addEntity(
+			makeHqEntity({ "id": 503, "owner": PLAYER, "position": [150, 100], "classes": ["Structure", "Wonder"] }),
+		);
 
-		manager.checkEvents(world.gameState, events({
-			"ConstructionFinished": [{ "newentity": 500 }, {}],
-			"OwnershipChanged": [{ "entity": 503, "from": ENEMY, "to": PLAYER }]
-		}));
+		manager.checkEvents(
+			world.gameState,
+			events({
+				"ConstructionFinished": [{ "newentity": 500 }, {}],
+				"OwnershipChanged": [{ "entity": 503, "from": ENEMY, "to": PLAYER }],
+			}),
+		);
 
 		assert.deepEqual([...manager.criticalEnts.keys()].sort(), [500, 503]);
 	});
@@ -180,8 +220,12 @@ describe("regicide: the hero under attack", () =>
 	{
 		const left: string[] = [];
 		const { world, hq, manager, hero } = heroAt(0.6, { "plan": 4, "PartOfArmy": 7 });
-		override(hq.attackManager, { "getPlan": (id: number) => id === 4 ? { "removeUnit": () => left.push("attack") } : undefined });
-		override(hq.defenseManager, { "getArmy": (id: number) => id === 7 ? { "removeOwn": () => left.push("army") } : undefined });
+		override(hq.attackManager, {
+			"getPlan": (id: number) => id === 4 ? { "removeUnit": () => left.push("attack") } : undefined,
+		});
+		override(hq.defenseManager, {
+			"getArmy": (id: number) => id === 7 ? { "removeOwn": () => left.push("army") } : undefined,
+		});
 
 		manager.checkEvents(world.gameState, events({ "Attacked": [{ "target": 600 }] }));
 
@@ -216,14 +260,20 @@ describe("regicide: the hero under attack", () =>
 	it("a hero garrisoned in a building has its guards gather round it; healers on their way to heal stay", () =>
 	{
 		const { world, manager } = heroAt(0.9);
-		const fort = world.addEntity(makeHqEntity({ "id": 650, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Fortress"] },
-			{ "obstructionRadius": () => ({ "min": 8, "max": 12 }) }));
+		const fort = world.addEntity(
+			makeHqEntity({ "id": 650, "owner": PLAYER, "position": [80, 80], "classes": ["Structure", "Fortress"] }, {
+				"obstructionRadius": () => ({ "min": 8, "max": 12 }),
+			}),
+		);
 		const soldier = unit(world, 610, ["Soldier"]);
 		const healer = unit(world, 611, ["Healer"], [40, 40], { "plan": -2 });
 		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard").set(entityId(611), "healer");
 		manager.criticalEnts.get(entityId(600))!.garrisonEmergency = true;
 
-		manager.checkEvents(world.gameState, events({ "Garrison": [{ "entity": 600, "holder": 650 }, { "entity": 999, "holder": 650 }] }));
+		manager.checkEvents(
+			world.gameState,
+			events({ "Garrison": [{ "entity": 600, "holder": 650 }, { "entity": 999, "holder": 650 }] }),
+		);
 
 		assert.deepEqual(soldier.orders, [["range", 80, 80, 12, 17]]);
 		assert.deepEqual(healer.orders, []);
@@ -234,7 +284,9 @@ describe("regicide: the hero under attack", () =>
 	it("a hero aboard a ship lets its guards go", () =>
 	{
 		const { world, manager } = heroAt(0.9);
-		world.addEntity(makeHqEntity({ "id": 651, "owner": PLAYER, "position": [200, 80], "classes": ["Unit", "Ship"] }));
+		world.addEntity(
+			makeHqEntity({ "id": 651, "owner": PLAYER, "position": [200, 80], "classes": ["Unit", "Ship"] }),
+		);
 		const soldier = unit(world, 610, ["Soldier"]);
 		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard").set(entityId(698), "guard");
 		manager.guardEnts.set(entityId(610), true);
@@ -270,7 +322,10 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard");
 		manager.guardEnts.set(entityId(610), true);
 
-		manager.checkEvents(world.gameState, events({ "EntityRenamed": [{ "entity": 610, "newentity": 611 }, { "entity": 999, "newentity": 1 }] }));
+		manager.checkEvents(
+			world.gameState,
+			events({ "EntityRenamed": [{ "entity": 610, "newentity": 611 }, { "entity": 999, "newentity": 1 }] }),
+		);
 
 		assert.equal(manager.criticalEnts.get(entityId(600))?.guards.get(entityId(611)), "guard");
 		assert.equal(manager.guardEnts.get(entityId(611)), true);
@@ -299,9 +354,16 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 		const { world, manager } = seat(["regicide"]);
 		unit(world, 600, ["Hero"]);
 		manager.findCriticalEnts(world.gameState);
-		const soldier = unit(world, 610, ["Soldier"], [40, 40], { "plan": -2, "role": "criticalEntGuard", "guardedEnt": 600 });
+		const soldier = unit(world, 610, ["Soldier"], [40, 40], {
+			"plan": -2,
+			"role": "criticalEntGuard",
+			"guardedEnt": 600,
+		});
 		unit(world, 611, ["Healer"], [40, 40], { "role": "criticalEntHealer" });
-		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard").set(entityId(611), "healer").set(entityId(612), "guard");
+		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard").set(entityId(611), "healer").set(
+			entityId(612),
+			"guard",
+		);
 		manager.guardEnts.set(entityId(610), true).set(entityId(611), true);
 
 		manager.checkEvents(world.gameState, events({ "Destroy": [{ "entity": 600 }] }));
@@ -320,7 +382,10 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 		unit(world, 700, ["Relic"]);
 		manager.findCriticalEnts(world.gameState);
 
-		manager.checkEvents(world.gameState, events({ "OwnershipChanged": [{ "entity": 700, "from": PLAYER, "to": ENEMY }] }));
+		manager.checkEvents(
+			world.gameState,
+			events({ "OwnershipChanged": [{ "entity": 700, "from": PLAYER, "to": ENEMY }] }),
+		);
 
 		assert.equal(manager.criticalEnts.size, 0);
 	});
@@ -330,7 +395,10 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 		const { world, hq, manager } = seat(["capture_the_relic"]);
 		const relic = unit(world, 700, ["Relic"], [60, 60]);
 
-		manager.checkEvents(world.gameState, events({ "OwnershipChanged": [{ "entity": 700, "from": 0, "to": PLAYER }] }));
+		manager.checkEvents(
+			world.gameState,
+			events({ "OwnershipChanged": [{ "entity": 700, "from": 0, "to": PLAYER }] }),
+		);
 
 		assert.ok(manager.criticalEnts.has(entityId(700)));
 		assert.ok(doorCalls(hq.defenseManager).some(([m]) => m === "garrisonAttackedUnit"));
@@ -361,7 +429,10 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 		override(hq.attackManager, { "getPlan": (id: number) => ({ "Abort": () => aborted.push(id) }) });
 		raids(manager).set(entityId(701), [3, 4]);
 
-		manager.checkEvents(world.gameState, events({ "OwnershipChanged": [{ "entity": 701, "from": 0, "to": ENEMY }] }));
+		manager.checkEvents(
+			world.gameState,
+			events({ "OwnershipChanged": [{ "entity": 701, "from": 0, "to": ENEMY }] }),
+		);
 
 		assert.deepEqual(aborted, [3, 4]);
 		assert.equal(raids(manager).size, 0);
@@ -375,9 +446,13 @@ describe("healers and guards for the critical entities", () =>
 	{
 		const s = seat(["regicide"], { population, "populationMax": 300 });
 		unit(s.world, 600, ["Hero"], [60, 60]);
-		s.world.addEntity(makeHqEntity({ "id": 660, "owner": PLAYER, "position": [80, 60], "classes": ["Structure", "Temple"] }));
-		s.world.templates["units/athen/support_healer_b"] = makeTemplate("units/athen/support_healer_b",
-			{ "classes": ["Unit", "Support", "Healer"], "cost": { "food": 100 } });
+		s.world.addEntity(
+			makeHqEntity({ "id": 660, "owner": PLAYER, "position": [80, 60], "classes": ["Structure", "Temple"] }),
+		);
+		s.world.templates["units/athen/support_healer_b"] = makeTemplate("units/athen/support_healer_b", {
+			"classes": ["Unit", "Support", "Healer"],
+			"cost": { "food": 100 },
+		});
 		s.manager.findCriticalEnts(s.world.gameState);
 		return s;
 	}
@@ -386,8 +461,10 @@ describe("healers and guards for the critical entities", () =>
 	{
 		const { world, manager, queues } = regicide();
 		manager.manageCriticalEntHealers(world.gameState, queues);
-		assert.deepEqual(queues.healer.plans.map((p) => [p.type, p.metadata]),
-			[["units/athen/support_healer_b", { "role": "criticalEntHealer", "base": 0 }]]);
+		assert.deepEqual(queues.healer.plans.map(p => [p.type, p.metadata]), [["units/athen/support_healer_b", {
+			"role": "criticalEntHealer",
+			"base": 0,
+		}]]);
 	});
 
 	it("no healer is trained while saving, while one is queued, with no temple, with guards enough, or for a hero fully healed", () =>
@@ -419,8 +496,15 @@ describe("healers and guards for the critical entities", () =>
 	it("with workers short, citizen-soldier guards go back to work", () =>
 	{
 		const { world, manager } = regicide();
-		const guard = unit(world, 610, ["Soldier", "CitizenSoldier"], [60, 60], { "role": "criticalEntGuard", "plan": -2, "guardedEnt": 600 });
-		const champion = unit(world, 611, ["Soldier", "Champion"], [60, 60], { "role": "criticalEntGuard", "plan": -2 });
+		const guard = unit(world, 610, ["Soldier", "CitizenSoldier"], [60, 60], {
+			"role": "criticalEntGuard",
+			"plan": -2,
+			"guardedEnt": 600,
+		});
+		const champion = unit(world, 611, ["Soldier", "Champion"], [60, 60], {
+			"role": "criticalEntGuard",
+			"plan": -2,
+		});
 		manager.criticalEnts.get(entityId(600))?.guards.set(entityId(610), "guard").set(entityId(611), "guard");
 		manager.guardEnts.set(entityId(610), true).set(entityId(611), true);
 
@@ -436,8 +520,13 @@ describe("healers and guards for the critical entities", () =>
 	it("guards are drawn from the champions first, then units out of any plan, then soldiers, while workers suffice", () =>
 	{
 		const { world, manager } = seat(["wonder"]);
-		world.addEntity(makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] },
-			{}, { "base": 2 }));
+		world.addEntity(
+			makeHqEntity(
+				{ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] },
+				{},
+				{ "base": 2 },
+			),
+		);
 		manager.findCriticalEnts(world.gameState);
 		for (let i = 0; i < 40; ++i)
 			unit(world, 1100 + i, ["Worker"], [30, 30], { "role": "worker" });
@@ -464,16 +553,22 @@ describe("healers and guards for the critical entities", () =>
 	it("a military guard is refused when planned, in transport, critical itself, or on another land", () =>
 	{
 		const { world, manager } = seat(["wonder"]);
-		const wonder = world.addEntity(makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }));
+		const wonder = world.addEntity(
+			makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }),
+		);
 		manager.findCriticalEnts(world.gameState);
 		world.accessAt.set("250,250", 3);
 		const cases = [
 			unit(world, 1300, ["Soldier"], [90, 90], { "plan": 1 }),
 			unit(world, 1301, ["Soldier"], [90, 90], { "transport": 2 }),
-			unit(world, 1302, ["Soldier"], [250, 250])
+			unit(world, 1302, ["Soldier"], [250, 250]),
 		];
 		for (const c of cases)
-			assert.equal(manager.tryAssignMilitaryGuard(world.gameState, c.ent, wonder, true), false, String(c.ent.id()));
+			assert.equal(
+				manager.tryAssignMilitaryGuard(world.gameState, c.ent, wonder, true),
+				false,
+				String(c.ent.id()),
+			);
 		assert.equal(manager.tryAssignMilitaryGuard(world.gameState, wonder, wonder, false), false, "critical itself");
 	});
 });
@@ -485,8 +580,20 @@ describe("sending a guard to its post: assignGuardToCriticalEnt", () =>
 		const { world, manager } = seat(["regicide"]);
 		unit(world, 600, ["Hero"]);
 		manager.findCriticalEnts(world.gameState);
-		assert.equal(manager.assignGuardToCriticalEnt(world.gameState, unit(world, 610, ["Soldier"], [40, 40], {}, { "canGuard": () => false }).ent), false);
-		assert.equal(manager.assignGuardToCriticalEnt(world.gameState, unit(world, 611, ["Soldier"], [40, 40], { "transport": 1 }).ent), false);
+		assert.equal(
+			manager.assignGuardToCriticalEnt(
+				world.gameState,
+				unit(world, 610, ["Soldier"], [40, 40], {}, { "canGuard": () => false }).ent,
+			),
+			false,
+		);
+		assert.equal(
+			manager.assignGuardToCriticalEnt(
+				world.gameState,
+				unit(world, 611, ["Soldier"], [40, 40], { "transport": 1 }).ent,
+			),
+			false,
+		);
 	});
 
 	it("a guard sent to a critical entity that is gone is sent to the one with fewest guards", () =>
@@ -507,7 +614,9 @@ describe("sending a guard to its post: assignGuardToCriticalEnt", () =>
 	it("a healer is sent to a hero, never to a wonder", () =>
 	{
 		const { world, manager } = seat(["wonder"]);
-		world.addEntity(makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }));
+		world.addEntity(
+			makeHqEntity({ "id": 500, "owner": PLAYER, "position": [100, 100], "classes": ["Structure", "Wonder"] }),
+		);
 		manager.findCriticalEnts(world.gameState);
 		const healer = unit(world, 620, ["Healer"], [40, 40], { "guardedEnt": 650 });
 
@@ -518,7 +627,7 @@ describe("sending a guard to its post: assignGuardToCriticalEnt", () =>
 	it("a guard for a hero out of sight waits", () =>
 	{
 		const { world, manager } = seat(["regicide"]);
-		unit(world, 600, ["Hero"], [60, 60], {}, { "position": () => undefined });	// garrisoned
+		unit(world, 600, ["Hero"], [60, 60], {}, { "position": () => undefined }); // garrisoned
 		manager.findCriticalEnts(world.gameState);
 		const guard = unit(world, 610, ["Soldier"]);
 
@@ -549,17 +658,23 @@ describe("the relic game: raids on gaia relics", () =>
 	{
 		const s = seat(["capture_the_relic"]);
 		const relic = unit(s.world, 701, ["Relic"], relicAt, {}, {
-			"defaultRegenRate": () => 1, "capturePoints": () => [500, 0, 0]
+			"defaultRegenRate": () => 1,
+			"capturePoints": () => [500, 0, 0],
 		}, playerId(0));
-		const units = [...Array(capturers).keys()].map((i) => unit(s.world, 1400 + i, ["Soldier", "Infantry"], [100 + i, 100], {}, {
-			"canCapture": () => true, "captureStrength": () => 2.5, "get": () => undefined, "visionRange": () => 80
-		}));
+		const units = [...Array(capturers).keys()].map(i =>
+			unit(s.world, 1400 + i, ["Soldier", "Infantry"], [100 + i, 100], {}, {
+				"canCapture": () => true,
+				"captureStrength": () => 2.5,
+				"get": () => undefined,
+				"visionRange": () => 80,
+			})
+		);
 		const forced: unknown[] = [];
 		const raid = fake<AttackPlan>({
 			"name": 9,
 			"rallyPoint": undefined,
 			"unitCollection": { "updateEnt": () => undefined, "values": () => [] },
-			"forceStart": () => forced.push(true)
+			"forceStart": () => forced.push(true),
 		});
 		s.hq.attackManager.raidTargetEntity = () => raid;
 		return { ...s, relic, units, raid, forced };
@@ -573,7 +688,7 @@ describe("the relic game: raids on gaia relics", () =>
 		manager.update(world.gameState, events({}), world.ai.queues);
 
 		assert.deepEqual(raids(manager).get(entityId(701)), [9]);
-		assert.ok(units.some((u) => u.ent.getMetadata(PlayerID, "plan") === 9));
+		assert.ok(units.some(u => u.ent.getMetadata(PlayerID, "plan") === 9));
 		assert.deepEqual(forced, [true]);
 		assert.ok(raid.rallyPoint, "the raid gathers where its first unit stands");
 	});
@@ -616,8 +731,16 @@ describe("the relic game: raids on gaia relics", () =>
 	it("a raid already strong enough is not reinforced; units already busy are not taken", () =>
 	{
 		const { world, hq, manager, units, forced } = relicGame([60, 60]);
-		override(hq.attackManager, { "getPlan": (id: number) => id === 5 ?
-			{ "unitCollection": { "values": () => units.map((u) => u.ent) }, "state": "arrived", "type": "Raid" } : undefined });
+		override(hq.attackManager, {
+			"getPlan": (id: number) =>
+				id === 5 ?
+					{
+						"unitCollection": { "values": () => units.map(u => u.ent) },
+						"state": "arrived",
+						"type": "Raid",
+					} :
+					undefined,
+		});
 		raids(manager).set(entityId(701), [5]);
 		manager_relic(world).capturePoints = () => [200, 0, 0];
 
@@ -640,10 +763,20 @@ describe("the relic game: raids on gaia relics", () =>
 	{
 		const { world, hq, manager, units, forced } = relicGame([60, 60]);
 		const ram = unit(world, 1410, ["Siege", "Ram"], [100, 110], { "plan": 5 }, {
-			"canCapture": () => false, "captureStrength": () => undefined, "get": () => undefined
+			"canCapture": () => false,
+			"captureStrength": () => undefined,
+			"get": () => undefined,
 		});
-		override(hq.attackManager, { "getPlan": (id: number) => id === 5 ?
-			{ "unitCollection": { "values": () => [...units.map((u) => u.ent), ram.ent] }, "state": "arrived", "type": "Raid" } : undefined });
+		override(hq.attackManager, {
+			"getPlan": (id: number) =>
+				id === 5 ?
+					{
+						"unitCollection": { "values": () => [...units.map(u => u.ent), ram.ent] },
+						"state": "arrived",
+						"type": "Raid",
+					} :
+					undefined,
+		});
 		raids(manager).set(entityId(701), [5]);
 		manager_relic(world).capturePoints = () => [200, 0, 0];
 
@@ -655,10 +788,11 @@ describe("the relic game: raids on gaia relics", () =>
 	{
 		const { world, hq, manager } = relicGame([60, 60]);
 		const aborted: number[] = [];
-		override(hq.attackManager, { "getPlan": (id: number) => ({ "Abort": () => aborted.push(id),
-			"unitCollection": { "values": () => [] } }) });
+		override(hq.attackManager, {
+			"getPlan": (id: number) => ({ "Abort": () => aborted.push(id), "unitCollection": { "values": () => [] } }),
+		});
 		raids(manager).set(entityId(701), [5]);
-		raids(manager).set(entityId(702), [6]);	// a relic that no longer exists
+		raids(manager).set(entityId(702), [6]); // a relic that no longer exists
 		world.ai.playedTurn = 20;
 
 		manager.update(world.gameState, events({}), world.ai.queues);
@@ -745,4 +879,3 @@ describe("the victory manager saved and loaded", () =>
 		assert.deepEqual(loaded.Serialize(), defaults);
 	});
 });
-

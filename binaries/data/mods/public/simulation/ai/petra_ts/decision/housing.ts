@@ -40,7 +40,9 @@ export function houseNeeded(census: Readonly<Census>, saving: boolean): boolean
  * queues, since a house blocks every unit after it; Petra's double priority
  * stayed below the citizen soldiers', which took the wood (FINDINGS §22).
  */
-export function urgentHousePriority(priorities: Readonly<Record<"house" | "villager" | "citizenSoldier", number>>): number
+export function urgentHousePriority(
+	priorities: Readonly<Record<"house" | "villager" | "citizenSoldier", number>>,
+): number
 {
 	return Math.max(2 * priorities.house, Math.max(priorities.villager, priorities.citizenSoldier) + 1);
 }

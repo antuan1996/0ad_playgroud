@@ -11,8 +11,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, makeEntity, type Methods, orders, override } from "./harness/fakes.ts";
-import { ENEMY, GAIA, makeWorld, PLAYER, type World } from "./harness/world.ts";
+import { emptyEvents, makeEntity, orders, override, type Methods } from "./harness/fakes.ts";
+import { ENEMY, GAIA, PLAYER, makeWorld, type World } from "./harness/world.ts";
 
 import { armyId, entityId, seconds, templateName, worldPos } from "../adapter/brands.ts";
 import { DefenseArmy } from "../execution/defenseArmy.ts";
@@ -24,19 +24,18 @@ import { Worker } from "../execution/worker.ts";
 const hackOf = (strength: number) => 0.075 * strength / 4;
 
 /** a raider: any attacking soldier the defense manager would spot */
-function makeSoldier(id: number, position: [number, number], spec: {
-	owner?: number;
-	strength?: number;
-	classes?: string[];
-} = {}): CommonEntity
+function makeSoldier(
+	id: number,
+	position: [number, number],
+	spec: { owner?: number; strength?: number; classes?: string[] } = {},
+): CommonEntity
 {
 	return makeEntity({
-		id, owner: spec.owner ?? ENEMY, position,
-		classes: ["Unit", "Infantry", ...(spec.classes ?? [])]
-	}, {
-		attackTypes: () => ["Melee"],
-		attackStrengths: () => ({ "Hack": spec.strength ?? 100 })
-	});
+		id,
+		owner: spec.owner ?? ENEMY,
+		position,
+		classes: ["Unit", "Infantry", ...(spec.classes ?? [])],
+	}, { attackTypes: () => ["Melee"], attackStrengths: () => ({ "Hack": spec.strength ?? 100 }) });
 }
 
 /** a structure a capture army chases: a gaia ruin inside our territory */
@@ -46,16 +45,18 @@ function makeStructure(id: number, position: [number, number], owner = GAIA): Co
 }
 
 /** the defender Petra takes home from the army: a citizen soldier */
-function makeDefender(id: number, position: [number, number] | undefined,
-	methods: Methods = {}, metadata: Record<string, unknown> = {}): CommonEntity
+function makeDefender(
+	id: number,
+	position: [number, number] | undefined,
+	methods: Methods = {},
+	metadata: Record<string, unknown> = {},
+): CommonEntity
 {
-	return makeEntity({
-		id, owner: PLAYER, position, classes: ["Unit", "Infantry", "CitizenSoldier"]
-	}, {
+	return makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Infantry", "CitizenSoldier"] }, {
 		attackTypes: () => ["Melee"],
 		attackStrengths: () => ({ "Hack": 100 }),
 		canAttackTarget: () => true,
-		...methods
+		...methods,
 	}, metadata);
 }
 
@@ -81,8 +82,11 @@ describe("raising an army", () =>
 		assert.equal(army.getType(), "default", "an unnamed army is a default one");
 		assert.deepEqual(army.foeEntities, [2000], "the raider is the army's first foe");
 		assert.deepEqual(army.foePosition, [40, 40], "the army sits at the raider");
-		assert.equal(world.ents.get(2000)!.getMetadata(PLAYER, "PartOfArmy"), army.ID,
-			"the raider remembers which army it belongs to");
+		assert.equal(
+			world.ents.get(2000)!.getMetadata(PLAYER, "PartOfArmy"),
+			army.ID,
+			"the raider remembers which army it belongs to",
+		);
 	});
 
 	it("takes an army type for the capture hunts", () =>
@@ -182,8 +186,7 @@ describe("facing raiders again", () =>
 		assert.equal(army.assignedAgainst[2000], undefined, "nobody is sent against it anymore");
 		assert.notEqual(army.assignedTo[3000], 2000, "our defender was un-hooked from him");
 		assert.equal(army.foeStrength, before - hackOf(100), "its strength was given back");
-		assert.equal(world.ents.get(2000)!.getMetadata(PLAYER, "PartOfArmy"), undefined,
-			"the raider forgot its army");
+		assert.equal(world.ents.get(2000)!.getMetadata(PLAYER, "PartOfArmy"), undefined, "the raider forgot its army");
 	});
 
 	it("survives a raider destroyed while being captured (capture plus destroy)", () =>
@@ -224,8 +227,7 @@ describe("calling defenders", () =>
 		const defender = world.ents.get(3000)!;
 		assert.equal(defender.getMetadata(PLAYER, "plan"), -3, "marked as fresh defense duty");
 		assert.equal(defender.getMetadata(PLAYER, "subrole"), Worker.SUBROLE_DEFENDER);
-		assert.equal(defender.getMetadata(PLAYER, "formerSubrole"), undefined,
-			"he had no former role to stash");
+		assert.equal(defender.getMetadata(PLAYER, "formerSubrole"), undefined, "he had no former role to stash");
 	});
 
 	it("recalls a defender away from an attack plan and keeps his attacking role", () =>
@@ -238,8 +240,11 @@ describe("calling defenders", () =>
 		army.addOwn(world.gameState, entityId(3000));
 		const defender = world.ents.get(3000)!;
 		assert.equal(defender.getMetadata(PLAYER, "plan"), -2, "his attack plan is suspended");
-		assert.equal(defender.getMetadata(PLAYER, "formerSubrole"), Worker.SUBROLE_ATTACKING,
-			"his attacking role was stashed");
+		assert.equal(
+			defender.getMetadata(PLAYER, "formerSubrole"),
+			Worker.SUBROLE_ATTACKING,
+			"his attacking role was stashed",
+		);
 	});
 
 	it("leaves a pure defender's book untouched", () =>
@@ -251,8 +256,7 @@ describe("calling defenders", () =>
 
 		army.addOwn(world.gameState, entityId(3000));
 		const defender = world.ents.get(3000)!;
-		assert.equal(defender.getMetadata(PLAYER, "formerSubrole"), undefined,
-			"no role stash was kept for a defender");
+		assert.equal(defender.getMetadata(PLAYER, "formerSubrole"), undefined, "no role stash was kept for a defender");
 	});
 
 	it("declines a defender who is elsewhere aboard a ship", () =>
@@ -261,8 +265,7 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		world.addEntity(makeDefender(3000, undefined));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
-		assert.equal(army.addOwn(world.gameState, entityId(3000)), false,
-			"the positionless defender was refused");
+		assert.equal(army.addOwn(world.gameState, entityId(3000)), false, "the positionless defender was refused");
 	});
 
 	it("waves a transportee through when armies merge", () =>
@@ -307,8 +310,11 @@ describe("calling defenders", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		army.removeOwn(world.gameState, entityId(3000));
-		assert.equal(world.ents.get(3000)!.getMetadata(PLAYER, "plan"), undefined,
-			"no attack plan was ever his to resume");
+		assert.equal(
+			world.ents.get(3000)!.getMetadata(PLAYER, "plan"),
+			undefined,
+			"no attack plan was ever his to resume",
+		);
 	});
 
 	it("takes back a defender whose body went to the dead list", () =>
@@ -331,10 +337,13 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 12 }));
-		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) => name === 12 ? {
-			state: TransportPlan.BOARDING,
-			removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id())
-		} as never : undefined;
+		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
+			name === 12 ?
+				{
+					state: TransportPlan.BOARDING,
+					removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id()),
+				} as never :
+				undefined;
 
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		army.addOwn(world.gameState, entityId(3000));
@@ -348,10 +357,13 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { "transport": 13 }));
-		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) => name === 13 ? {
-			state: "sailing",
-			removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id())
-		} as never : undefined;
+		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
+			name === 13 ?
+				{
+					state: "sailing",
+					removeUnit: (_gs: CommonGameState, ent: CommonEntity) => boardingCalls.push(ent.id()),
+				} as never :
+				undefined;
 
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		army.addOwn(world.gameState, entityId(3000));
@@ -370,8 +382,9 @@ describe("choosing whom to fight", () =>
 		world.ents.get(2000)!.unitAIOrderData = () => orders({ "target": entityId(3000) });
 
 		const strikes: unknown[][] = [];
-		override(defender, { "attack": (target: unknown, capture?: unknown, queued?: unknown) =>
-			strikes.push([target, capture, queued]) });
+		override(defender, {
+			"attack": (target: unknown, capture?: unknown, queued?: unknown) => strikes.push([target, capture, queued]),
+		});
 
 		assert.equal(army.assignUnit(world.gameState, entityId(3000)), true, "an order was given");
 		assert.deepEqual(strikes[0], [2000, false, false], "retaliate first, not whatever is nearest");
@@ -508,7 +521,7 @@ describe("choosing whom to fight", () =>
 		world.addEntity(makeDefender(3000, [20, 10]));
 
 		army.assignUnit(world.gameState, entityId(3000));
-		const call = world.transportCalls.find((row) => row[0].id() === 3000);
+		const call = world.transportCalls.find(row => row[0].id() === 3000);
 		assert.ok(call, "a ferry was asked for");
 		assert.deepEqual(army.assignedAgainst[2000], [], "no strike was booked before the ride");
 		assert.deepEqual([call![1], call![2], call![3]], [2, 3, [50, 10]], "there and then");
@@ -521,13 +534,13 @@ describe("choosing whom to fight", () =>
 		world.accessAt.set("40,40", 4);
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
-		const defender = world.addEntity(makeEntity({
-			id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Ship"]
-		}, {
-			attackTypes: () => ["Melee"],
-			attackStrengths: () => ({ "Hack": 100 }),
-			canAttackTarget: () => true
-		}));
+		const defender = world.addEntity(
+			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Ship"] }, {
+				attackTypes: () => ["Melee"],
+				attackStrengths: () => ({ "Hack": 100 }),
+				canAttackTarget: () => true,
+			}),
+		);
 
 		const strikes: unknown[][] = [];
 		override(defender, { "attack": (target: unknown) => strikes.push([target]) });
@@ -541,23 +554,38 @@ describe("choosing whom to fight", () =>
 		const { world, army } = raidedWorld();
 		const defender = world.ents.get(3000)!;
 		defender.resourceCarrying = () => [{ "type": "wood", "amount": 10 }];
-		const dropsite = world.addEntity(makeEntity({
-			id: 6000, owner: PLAYER, position: [10, 10], classes: ["Structure"]
-		}));
+		const dropsite = world.addEntity(
+			makeEntity({ id: 6000, owner: PLAYER, position: [10, 10], classes: ["Structure"] }),
+		);
 		world.gameState.getOwnDropsites = () => ({
 			values: () => [dropsite][Symbol.iterator](),
-			filter: function() { return this; }
+			filter: function()
+			{
+				return this;
+			},
 		} as never);
 
 		const order: string[] = [];
-		override(defender, { "returnResources": () => { order.push("returns"); return true; } });
-		override(defender, { "attack": (target: unknown, _c?: unknown, queued?: unknown) => {
-			order.push(`attack ${String(target)} queued=${String(queued)}`);
-		} });
+		override(defender, {
+			"returnResources": () =>
+			{
+				order.push("returns");
+				return true;
+			},
+		});
+		override(defender, {
+			"attack": (target: unknown, _c?: unknown, queued?: unknown) =>
+			{
+				order.push(`attack ${String(target)} queued=${String(queued)}`);
+			},
+		});
 
 		army.assignUnit(world.gameState, entityId(3000));
-		assert.deepEqual(order, ["returns", "attack 2000 queued=true"],
-			"the harvest went home and the strike queued after it");
+		assert.deepEqual(
+			order,
+			["returns", "attack 2000 queued=true"],
+			"the harvest went home and the strike queued after it",
+		);
 	});
 });
 
@@ -578,8 +606,7 @@ describe("asking for defenders", () =>
 		world.addEntity(makeDefender(3000, [10, 10]));
 		army.addOwn(world.gameState, entityId(3000));
 		// two defenders per raider point
-		assert.equal(army.needsDefenders(world.gameState),
-			hackOf(400) * 2 - hackOf(100), "the own-territory ratio");
+		assert.equal(army.needsDefenders(world.gameState), hackOf(400) * 2 - hackOf(100), "the own-territory ratio");
 	});
 
 	it("demands less on ally ground", () =>
@@ -587,8 +614,7 @@ describe("asking for defenders", () =>
 		const { world, army } = armyOn(new Map([["40,40", 3]]), 400);
 		world.gameState.playerData.isAlly[3] = true;
 		// we are the owner's only ally so far, so the ratio stays whole
-		assert.equal(army.needsDefenders(world.gameState), hackOf(400) * 1.4,
-			"the ally ratio, unshared");
+		assert.equal(army.needsDefenders(world.gameState), hackOf(400) * 1.4, "the ally ratio, unshared");
 	});
 
 	it("softens the ally demand the more allies stand by", () =>
@@ -601,15 +627,17 @@ describe("asking for defenders", () =>
 		playersData[2] = { "isAlly": [false, false, true, true] };
 
 		const need = army.needsDefenders(world.gameState) as number;
-		assert.ok(Math.abs(need - hackOf(400) * 1.4 / 1.5) < 1e-10,
-			"two sharers split their share of the ratio");
+		assert.ok(Math.abs(need - hackOf(400) * 1.4 / 1.5) < 1e-10, "two sharers split their share of the ratio");
 	});
 
 	it("demands the neutral ratio on ground nobody holds", () =>
 	{
 		const { world, army } = armyOn(new Map([["40,40", 0]]));
-		assert.equal(army.needsDefenders(world.gameState), hackOf(100) * 1.8,
-			"neutral ground demands the neutral ratio");
+		assert.equal(
+			army.needsDefenders(world.gameState),
+			hackOf(100) * 1.8,
+			"neutral ground demands the neutral ratio",
+		);
 	});
 
 	it("says no once our defenders balance the raiders", () =>
@@ -619,8 +647,7 @@ describe("asking for defenders", () =>
 		world.addEntity(makeDefender(3001, [10, 10]));
 		army.addOwn(world.gameState, entityId(3000));
 		army.addOwn(world.gameState, entityId(3001));
-		assert.equal(army.needsDefenders(world.gameState), false,
-			"two defenders cover a raider twice over");
+		assert.equal(army.needsDefenders(world.gameState), false, "two defenders cover a raider twice over");
 	});
 
 	it("recounts the book when a slow upgrade left it negative", () =>
@@ -632,8 +659,8 @@ describe("asking for defenders", () =>
 		// removal subtracts the upgraded strength, more than it added
 		// the blacksmith finished between the enlistment and the discharge: the
 		// removal subtracts the upgraded strength, more than it added
-		world.ents.get(3000)!
-			.attackStrengths = () => ({ "Hack": 600 });		army.removeOwn(world.gameState, entityId(3000));
+		world.ents.get(3000)!.attackStrengths = () => ({ "Hack": 600 });
+		army.removeOwn(world.gameState, entityId(3000));
 		assert.ok(army.ownStrength < 0, "the book went negative");
 
 		const need = army.needsDefenders(world.gameState);
@@ -659,12 +686,17 @@ describe("scattering home", () =>
 		army.addOwn(world.gameState, entityId(3002));
 
 		const walks: unknown[][] = [];
-		override(lost, { "moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]) });
+		override(lost, {
+			"moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
+		});
 
 		army.clear(world.gameState);
 		assert.deepEqual(army.ownEntities, [], "everybody was released");
-		assert.deepEqual(walks, [[10, 12, 0, 5]],
-			"the lost one walked to the centre of the ones who knew their way, radius 0");
+		assert.deepEqual(
+			walks,
+			[[10, 12, 0, 5]],
+			"the lost one walked to the centre of the ones who knew their way, radius 0",
+		);
 		assert.deepEqual(army.assignedAgainst, {}, "the assignment book reset");
 		assert.deepEqual(army.assignedTo, {});
 	});
@@ -679,9 +711,17 @@ describe("scattering home", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		const stops: unknown[] = [];
-		onGoal.stopMoving = () => { stops.push("stop"); };
+		onGoal.stopMoving = () =>
+		{
+			stops.push("stop");
+		};
 		const walks: unknown[] = [];
-		override(onGoal, { "moveToRange": () => { walks.push("walk"); } });
+		override(onGoal, {
+			"moveToRange": () =>
+			{
+				walks.push("walk");
+			},
+		});
 
 		army.clear(world.gameState);
 		assert.equal(stops.length, 1, "the settled defender stood at ease");
@@ -690,9 +730,9 @@ describe("scattering home", () =>
 
 	it("rallies stranded defenders at the nearest shooting ally stronghold", () =>
 	{
-		const world = makeWorld({ territory: new Map([
-			["60,40", 0], ["61,61", 3], ["70,70", 3], ["80,80", 3], ["90,90", 3]
-		]) });
+		const world = makeWorld({
+			territory: new Map([["60,40", 0], ["61,61", 3], ["70,70", 3], ["80,80", 3], ["90,90", 3]]),
+		});
 		world.gameState.playerData.isMutualAlly[3] = true;
 		world.addEntity(makeSoldier(2000, [40, 10]));
 		const walker = world.addEntity(makeDefender(3000, [60, 40]));
@@ -701,24 +741,29 @@ describe("scattering home", () =>
 
 		// our homesteads are long gone; on the stranded defender's land stand
 		// a plain ally workshop, a farther one, and a defensive tower
-		world.addEntity(makeEntity({
-			id: 6000, owner: 3, position: [61, 61], classes: ["Structure", "Tower"]
-		}, { hasDefensiveFire: () => true }));
-		world.addEntity(makeEntity({
-			id: 6001, owner: 3, position: [70, 70], classes: ["Structure"]
-		}));
-		world.addEntity(makeEntity({
-			id: 6002, owner: 3, position: [80, 80], classes: ["Structure"]
-		}));
-		world.addEntity(makeEntity({
-			id: 6003, owner: 3, position: [90, 90], classes: ["Structure", "Tower"]
-		}, { hasDefensiveFire: () => true }));
+		world.addEntity(
+			makeEntity({ id: 6000, owner: 3, position: [61, 61], classes: ["Structure", "Tower"] }, {
+				hasDefensiveFire: () => true,
+			}),
+		);
+		world.addEntity(makeEntity({ id: 6001, owner: 3, position: [70, 70], classes: ["Structure"] }));
+		world.addEntity(makeEntity({ id: 6002, owner: 3, position: [80, 80], classes: ["Structure"] }));
+		world.addEntity(
+			makeEntity({ id: 6003, owner: 3, position: [90, 90], classes: ["Structure", "Tower"] }, {
+				hasDefensiveFire: () => true,
+			}),
+		);
 		const walks: unknown[][] = [];
-		override(walker, { "moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]) });
+		override(walker, {
+			"moveToRange": (x: number, z: number, min: unknown, max: number) => walks.push([x, z, min, max]),
+		});
 
 		army.clear(world.gameState);
-		assert.deepEqual(walks, [[61, 61, 2, 7]],
-			"the tower and its two-tile ring was the rally-point: the farther buildings never displaced it");
+		assert.deepEqual(
+			walks,
+			[[61, 61, 2, 7]],
+			"the tower and its two-tile ring was the rally-point: the farther buildings never displaced it",
+		);
 	});
 
 	it("garrisons the wounded instead of walking them through the raid", () =>
@@ -732,7 +777,12 @@ describe("scattering home", () =>
 		army.addOwn(world.gameState, entityId(3000));
 
 		const walks: unknown[] = [];
-		override(wounded, { "moveToRange": () => { walks.push("walk"); } });
+		override(wounded, {
+			"moveToRange": () =>
+			{
+				walks.push("walk");
+			},
+		});
 		army.clear(world.gameState);
 		assert.deepEqual(walks, [], "the wounded never walked");
 		assert.deepEqual(army.ownEntities, [], "the army still emptied out");
@@ -767,8 +817,16 @@ describe("scattering home", () =>
 		army.addOwn(world.gameState, entityId(3000), true);
 
 		const moves: unknown[] = [];
-		override(aboard, { "moveToRange": () => { moves.push("move"); } });
-		aboard.stopMoving = () => { moves.push("stop"); };
+		override(aboard, {
+			"moveToRange": () =>
+			{
+				moves.push("move");
+			},
+		});
+		aboard.stopMoving = () =>
+		{
+			moves.push("stop");
+		};
 		army.clear(world.gameState);
 		assert.deepEqual(moves, [], "no order reached a shipped-out defender");
 	});
@@ -885,8 +943,11 @@ describe("hearing events", () =>
 		assert.deepEqual(army.assignedAgainst[2005], [3000], "the opponent list was carried over");
 		assert.equal(army.assignedAgainst[2000], undefined, "and the old id let go");
 		assert.equal(army.assignedTo[3000], 2005);
-		assert.equal(army.foeStrength, hackOf(200) - hackOf(100),
-			"the old strength was backed out, the promoted one counted in");
+		assert.equal(
+			army.foeStrength,
+			hackOf(200) - hackOf(100),
+			"the old strength was backed out, the promoted one counted in",
+		);
 	});
 
 	it("ignores the corpse of a foe it watched all along", () =>
@@ -931,8 +992,12 @@ describe("hearing events", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		world.addEntity(makeDefender(3000, [10, 10]));
-		world.addEntity(makeEntity({ id: 3020, owner: PLAYER, position: [10, 10], classes: ["Unit"] },
-			{ hasUnitAI: () => true, attackTypes: () => undefined }));
+		world.addEntity(
+			makeEntity({ id: 3020, owner: PLAYER, position: [10, 10], classes: ["Unit"] }, {
+				hasUnitAI: () => true,
+				attackTypes: () => undefined,
+			}),
+		);
 		army.addOwn(world.gameState, entityId(3000));
 
 		const events = emptyEvents();
@@ -1047,9 +1112,11 @@ describe("walking the daily cycle", () =>
 		const world = makeWorld();
 		// our ally recaptured enough points to hold this outpost; the defender
 		// was already sent to finish the recapture
-		world.addEntity(makeEntity({ id: 2000, owner: 3, position: [40, 40], classes: ["Structure"] }, {
-			isCapturable: () => true
-		}));
+		world.addEntity(
+			makeEntity({ id: 2000, owner: 3, position: [40, 40], classes: ["Structure"] }, {
+				isCapturable: () => true,
+			}),
+		);
 		world.gameState.playerData.isAlly[3] = true;
 		const army = new DefenseArmy(world.gameState, [entityId(2000)]);
 		const capturer = world.addEntity(makeDefender(3000, [20, 20]));
@@ -1186,8 +1253,11 @@ describe("walking the daily cycle", () =>
 		const breakaways = army.update(world.gameState);
 		assert.deepEqual(breakaways, [2001], "the wanderer was handed back");
 		assert.deepEqual(army.foeEntities, [2000, 2002], "the army kept the mass");
-		assert.equal(world.ents.get(2001)!.getMetadata(PLAYER, "PartOfArmy"), undefined,
-			"the wanderer forgot the army");
+		assert.equal(
+			world.ents.get(2001)!.getMetadata(PLAYER, "PartOfArmy"),
+			undefined,
+			"the wanderer forgot the army",
+		);
 	});
 
 	it("retains patience when a capture army's ruin fell mid-turn", () =>
@@ -1219,8 +1289,16 @@ describe("saved and restored", () =>
 
 		const data = army.Serialize();
 		assert.deepEqual(Object.keys(data).sort(), [
-			"ID", "assignedAgainst", "assignedTo", "foeEntities", "foePosition",
-			"foeStrength", "ownEntities", "ownStrength", "positionLastUpdate", "type"
+			"ID",
+			"assignedAgainst",
+			"assignedTo",
+			"foeEntities",
+			"foePosition",
+			"foeStrength",
+			"ownEntities",
+			"ownStrength",
+			"positionLastUpdate",
+			"type",
 		], "exactly the ten properties the game saves");
 
 		// the way the defense manager rebuilds its armies after a load
@@ -1237,12 +1315,25 @@ describe("saved and restored", () =>
 	it("rehydrates the book the manager rebuilds into after a load", () =>
 	{
 		const world = makeWorld();
-		const data = { "ID": armyId(77), "type": "default", "foePosition": worldPos(5, 5), "positionLastUpdate": 3,
-			"assignedAgainst": { "99": [entityId(7)] }, "assignedTo": { "7": entityId(99) }, "foeEntities": [entityId(99)],
-			"foeStrength": 12, "ownEntities": [entityId(55)], "ownStrength": 3 };
+		const data = {
+			"ID": armyId(77),
+			"type": "default",
+			"foePosition": worldPos(5, 5),
+			"positionLastUpdate": 3,
+			"assignedAgainst": { "99": [entityId(7)] },
+			"assignedTo": { "7": entityId(99) },
+			"foeEntities": [entityId(99)],
+			"foeStrength": 12,
+			"ownEntities": [entityId(55)],
+			"ownStrength": 3,
+		};
 		const shell = DefenseArmy.restore(world.gameState, data);
-		assert.deepEqual(
-			[shell.ID, shell.type, shell.foeEntities, shell.ownEntities, shell.assignedAgainst["99"]],
-			[77, "default", [99], [55], [7]], "the rehydrated army carried its whole book");
+		assert.deepEqual([shell.ID, shell.type, shell.foeEntities, shell.ownEntities, shell.assignedAgainst["99"]], [
+			77,
+			"default",
+			[99],
+			[55],
+			[7],
+		], "the rehydrated army carried its whole book");
 	});
 });

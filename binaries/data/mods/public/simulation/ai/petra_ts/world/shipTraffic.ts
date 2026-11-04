@@ -97,8 +97,15 @@ export class ShipTraffic
 	/** The busiest cells, for the bot's state dump: [x, z, ship-seconds] of the `count` highest. */
 	busiest(count: number): Array<[number, number, number]>
 	{
-		const order = [...this.cells.keys()].filter(i => this.cells[i] >= 1).sort((a, b) => this.cells[b] - this.cells[a]);
-		return order.slice(0, count).map(i =>
-			[(i % this.width + 0.5) * TRAFFIC_CELL, (Math.floor(i / this.width) + 0.5) * TRAFFIC_CELL, Math.round(this.cells[i])]);
+		const order = [...this.cells.keys()].filter(i => this.cells[i] >= 1).sort((a, b) =>
+			this.cells[b] - this.cells[a]
+		);
+		return order.slice(0, count).map(
+			i => [
+				(i % this.width + 0.5) * TRAFFIC_CELL,
+				(Math.floor(i / this.width) + 0.5) * TRAFFIC_CELL,
+				Math.round(this.cells[i]),
+			]
+		);
 	}
 }

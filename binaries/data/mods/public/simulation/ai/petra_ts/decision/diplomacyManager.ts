@@ -1,10 +1,10 @@
 import * as filters from "simulation/ai/common-api/filters.js";
-import * as chat from "../adapter/chatHelper.ts";
-import type { Config } from "../world/config.ts";
 import { playerId, seconds } from "../adapter/brands.ts";
+import * as chat from "../adapter/chatHelper.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { Config } from "../world/config.ts";
 
 type DiplomacyRequestType = "ally" | "neutral";
 type DiplomacyRequestStatus = "accepted" | "allianceBroken" | "declinedRequest" | "waitingForTribute";
@@ -16,10 +16,7 @@ type DiplomacyRequest = {
 	warnTime?: GameSeconds;
 	sentWarning?: boolean;
 };
-type SentDiplomacyRequest = {
-	requestType: DiplomacyRequestType;
-	timeSent: GameSeconds;
-};
+type SentDiplomacyRequest = { requestType: DiplomacyRequestType; timeSent: GameSeconds };
 /**
  * Manage the diplomacy:
  *     update our cooperative trait
@@ -30,7 +27,17 @@ type SentDiplomacyRequest = {
  */
 
 /** The fields a save keeps. */
-export type SerializedDiplomacyManager = Pick<DiplomacyManager, "nextTributeUpdate" | "nextTributeRequest" | "betrayLapseTime" | "waitingToBetray" | "betrayWeighting" | "receivedDiplomacyRequests" | "sentDiplomacyRequests" | "sentDiplomacyRequestLapseTime">;
+export type SerializedDiplomacyManager = Pick<
+	DiplomacyManager,
+	| "nextTributeUpdate"
+	| "nextTributeRequest"
+	| "betrayLapseTime"
+	| "waitingToBetray"
+	| "betrayWeighting"
+	| "receivedDiplomacyRequests"
+	| "sentDiplomacyRequests"
+	| "sentDiplomacyRequestLapseTime"
+>;
 
 /** Our answer to a request repeated while the first is still open */
 const REPEATED_REQUEST_ANSWER: Record<DiplomacyRequestStatus, string> = {
@@ -38,42 +45,51 @@ const REPEATED_REQUEST_ANSWER: Record<DiplomacyRequestStatus, string> = {
 	// Previous alliance was broken, so decline
 	"allianceBroken": "declineRepeatedOffer",
 	"waitingForTribute": "waitingForTribute",
-	"accepted": ""
+	"accepted": "",
 };
 
 /** Whether a player's stance towards us is below what its request asked for */
 function stanceBelow(stance: { isAlly: boolean[]; isEnemy: boolean[] }, requestType: DiplomacyRequestType): boolean
 {
-	return !stance.isAlly[PlayerID] && requestType === "ally" ||
-		stance.isEnemy[PlayerID] && requestType === "neutral";
+	return !stance.isAlly[PlayerID] && requestType === "ally" || stance.isEnemy[PlayerID] && requestType === "neutral";
 }
 
 /**
  * For any given diplomacy request be likely to permanently decline: a first one from another civilisation
  * most often, and always while we have no more enemies than allies or the player is our target.
  */
-function declineAtOnce(gameState: CommonGameState, player: PlayerId, request: DiplomacyRequest | undefined,
-	moreEnemiesThanAllies: boolean): boolean
+function declineAtOnce(
+	gameState: CommonGameState,
+	player: PlayerId,
+	request: DiplomacyRequest | undefined,
+	moreEnemiesThanAllies: boolean,
+): boolean
 {
 	return !request && gameState.getPlayerCiv() !== gameState.getPlayerCiv(player) && randBool(0.6) ||
 		!moreEnemiesThanAllies || gameState.ai.HQ.attackManager.currentEnemyPlayer === player;
 }
 
 /** Whether we accept without a tribute: an alliance with a weaker player sometimes, neutrality mostly. */
-function acceptAtOnce(gameState: CommonGameState, player: PlayerId, requestType: DiplomacyRequestType,
-	moreEnemiesThanAllies: boolean): boolean
+function acceptAtOnce(
+	gameState: CommonGameState,
+	player: PlayerId,
+	requestType: DiplomacyRequestType,
+	moreEnemiesThanAllies: boolean,
+): boolean
 {
-	return requestType === "ally" && gameState.getEntities(player).length < gameState.getOwnEntities().length && randBool(0.4) ||
-		requestType === "neutral" && moreEnemiesThanAllies && randBool(0.8);
+	return requestType === "ally" && gameState.getEntities(player).length < gameState.getOwnEntities().length &&
+			randBool(0.4) || requestType === "neutral" && moreEnemiesThanAllies && randBool(0.8);
 }
 
 /** Whether an ally attacks an enemy inside our territory */
 function alliedDefence(gameState: CommonGameState, targetId: EntityId, attackerId: EntityId): boolean
 {
 	const target = gameState.getEntityById(targetId);
-	if (!target || !isPlaced(target) ||
+	if (
+		!target || !isPlaced(target) ||
 		gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
-		!gameState.isPlayerEnemy(target.owner()))
+		!gameState.isPlayerEnemy(target.owner())
+	)
 		return false;
 	const attacker = gameState.getEntityById(attackerId);
 	return !!attacker && attacker.owner() !== PlayerID && gameState.isPlayerAlly(attacker.owner());
@@ -165,7 +181,7 @@ export class DiplomacyManager
 			"codes": resTribCodes,
 			"total": gameState.getResources(),
 			"available": gameState.ai.queueManager.getAvailableResources(gameState),
-			"mostNeeded": () => mostNeeded ??= gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes)
+			"mostNeeded": () => mostNeeded ??= gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes),
 		};
 		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
@@ -180,7 +196,8 @@ export class DiplomacyManager
 	private tributeTo(gameState: CommonGameState, i: PlayerId, stock: TributeStock): void
 	{
 		const { total, available } = stock;
-		const donor = gameState.getAlliedVictory() || gameState.getEntities(i).length < gameState.getOwnEntities().length;
+		const donor = gameState.getAlliedVictory() ||
+			gameState.getEntities(i).length < gameState.getOwnEntities().length;
 		const allyResources = gameState.sharedScript.playersData[i].resourceCounts;
 		const allyPop = gameState.sharedScript.playersData[i].popCount;
 		const tribute: Record<string, number> = {};
@@ -189,10 +206,13 @@ export class DiplomacyManager
 		{
 			if (donor && available[res] > 200 && allyResources[res] < 0.2 * available[res])
 			{
-				tribute[res] = Math.floor(0.3*available[res] - allyResources[res]);
+				tribute[res] = Math.floor(0.3 * available[res] - allyResources[res]);
 				toSend = true;
 			}
-			else if (donor && allyPop < Math.min(30, 0.5*gameState.getPopulation()) && total[res] > 500 && allyResources[res] < 100)
+			else if (
+				donor && allyPop < Math.min(30, 0.5 * gameState.getPopulation()) && total[res] > 500 &&
+				allyResources[res] < 100
+			)
 			{
 				tribute[res] = 100;
 				toSend = true;
@@ -217,7 +237,7 @@ export class DiplomacyManager
 		const nextRes = this.nextTributeRequest.get(res);
 		if (nextRes !== undefined && gameState.ai.elapsedTime < nextRes)
 			return;
-		if (!stock.mostNeeded().some((needed) => needed.type === res && needed.wanted > 0))
+		if (!stock.mostNeeded().some(needed => needed.type === res && needed.wanted > 0))
 			return;
 		this.nextTributeRequest.set("all", seconds(gameState.ai.elapsedTime + 90));
 		this.nextTributeRequest.set(res, seconds(gameState.ai.elapsedTime + 240));
@@ -230,7 +250,9 @@ export class DiplomacyManager
 	{
 		for (const evt of events.TributeExchanged)
 		{
-			if (evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from))
+			if (
+				evt.to === PlayerID && !gameState.isPlayerAlly(evt.from) && this.receivedDiplomacyRequests.has(evt.from)
+			)
 			{
 				const request = this.receivedDiplomacyRequests.get(evt.from);
 				if (!request)
@@ -246,14 +268,19 @@ export class DiplomacyManager
 				if (key === "food")
 					tributes += evt.amounts[key];
 				else
-					tributes += 2*evt.amounts[key];
+					tributes += 2 * evt.amounts[key];
 			}
 			this.Config.personality.cooperative = Math.min(1, this.Config.personality.cooperative + 0.0001 * tributes);
 		}
 	}
 
 	/** A tribute from a player whose request waits for one: the request is accepted once paid in full. */
-	private payTowards(gameState: CommonGameState, from: PlayerId, request: DiplomacyRequest, amounts: Record<string, number>): void
+	private payTowards(
+		gameState: CommonGameState,
+		from: PlayerId,
+		request: DiplomacyRequest,
+		amounts: Record<string, number>,
+	): void
 	{
 		if (request.status !== "waitingForTribute" || request.type === undefined || !(request.type in amounts))
 			return;
@@ -261,8 +288,7 @@ export class DiplomacyManager
 
 		if (request.wanted <= 0)
 		{
-			debugWarn(this.Config, 1, () => "Player " + uneval(from) +
-				" has sent the required tribute amount");
+			debugWarn(this.Config, 1, () => "Player " + uneval(from) + " has sent the required tribute amount");
 
 			this.changePlayerDiplomacy(gameState, from, request.requestType);
 			request.status = "accepted";
@@ -283,13 +309,17 @@ export class DiplomacyManager
 			if (evt.otherPlayer !== PlayerID)
 				continue;
 
-			if (this.sentDiplomacyRequests.has(evt.player)) // If another player has accepted a diplomacy request we sent
-			{
+			if (this.sentDiplomacyRequests.has(evt.player))
+			{ // If another player has accepted a diplomacy request we sent
 				const sentRequest = this.sentDiplomacyRequests.get(evt.player);
 				if (!sentRequest)
 					continue;
-				if (gameState.sharedScript.playersData[evt.player].isAlly[PlayerID] && sentRequest.requestType === "ally" ||
-				    gameState.sharedScript.playersData[evt.player].isNeutral[PlayerID] && sentRequest.requestType === "neutral")
+				if (
+					gameState.sharedScript.playersData[evt.player].isAlly[PlayerID] &&
+						sentRequest.requestType === "ally" ||
+					gameState.sharedScript.playersData[evt.player].isNeutral[PlayerID] &&
+						sentRequest.requestType === "neutral"
+				)
 					this.changePlayerDiplomacy(gameState, evt.player, sentRequest.requestType);
 
 				// Just remove the request if the other player switched their stance to a different and/or more negative state
@@ -317,8 +347,10 @@ export class DiplomacyManager
 		}
 		else if (stance.isAlly[PlayerID] && gameState.isPlayerEnemy(player))
 		{
-			const response = request !== undefined && (request.status === "declinedRequest" || request.status === "allianceBroken") ?
-				"decline" : "declineSuggestNeutral";
+			const response =
+				request !== undefined && (request.status === "declinedRequest" || request.status === "allianceBroken") ?
+					"decline" :
+					"declineSuggestNeutral";
 			chat.answerRequestDiplomacy(gameState, player, "ally", response);
 		}
 		else if (stance.isAlly[PlayerID] && gameState.isPlayerNeutral(player))
@@ -340,8 +372,11 @@ export class DiplomacyManager
 			const request = this.receivedDiplomacyRequests.get(evt.source);
 			if (!request)
 				continue;
-			debugWarn(this.Config, 0, () => "Responding to diplomacy request from AI player " + evt.source + " with " +
-				uneval(request));
+			debugWarn(
+				this.Config,
+				0,
+				() => "Responding to diplomacy request from AI player " + evt.source + " with " + uneval(request),
+			);
 
 			// Our diplomacy will have changed already if the response was "accept"
 			if (request.status === "waitingForTribute" && request.wanted !== undefined && request.type !== undefined)
@@ -351,7 +386,7 @@ export class DiplomacyManager
 					"source": PlayerID,
 					"player": evt.source,
 					"resourceWanted": request.wanted,
-					"resourceType": request.type
+					"resourceType": request.type,
 				});
 			}
 		}
@@ -398,8 +433,13 @@ export class DiplomacyManager
 			{
 				const responseTribute: Record<string, number> = {};
 				responseTribute[evt.resourceType] = evt.resourceWanted;
-				debugWarn(this.Config, 0, () => "Responding to tribute request from AI player " + evt.source + " with " +
-					uneval(responseTribute));
+				debugWarn(
+					this.Config,
+					0,
+					() =>
+						"Responding to tribute request from AI player " + evt.source + " with " +
+						uneval(responseTribute),
+				);
 				postCommand({ "type": "tribute", "player": evt.source, "amounts": responseTribute });
 				this.nextTributeUpdate = seconds(gameState.ai.elapsedTime + 15);
 			}
@@ -412,8 +452,10 @@ export class DiplomacyManager
 	 */
 	lastManStandingCheck(gameState: CommonGameState): void
 	{
-		if (gameState.sharedScript.playersData[PlayerID].teamLocked || gameState.isCeasefireActive() ||
-		    gameState.getAlliedVictory() && gameState.hasAllies())
+		if (
+			gameState.sharedScript.playersData[PlayerID].teamLocked || gameState.isCeasefireActive() ||
+			gameState.getAlliedVictory() && gameState.hasAllies()
+		)
 			return;
 
 		if (gameState.hasEnemies())
@@ -494,8 +536,10 @@ export class DiplomacyManager
 
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
 		{
-			const relicsCount = gameState.updatingGlobalCollection("allRelics",
-				filters.byClass("Relic")).filter((relic) => relic.owner() === i).length;
+			const relicsCount =
+				gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter(relic =>
+					relic.owner() === i
+				).length;
 			turnFactor += relicsCount * this.betrayWeighting;
 		}
 		return turnFactor;
@@ -552,8 +596,15 @@ export class DiplomacyManager
 			requiredTribute = this.demandTribute(gameState, player, requestType);
 			response = requiredTribute ? "acceptWithTribute" : "decline";
 		}
-		chat.answerRequestDiplomacy(gameState, player, requestType, response,
-			requiredTribute === undefined ? undefined : { "wanted": requiredTribute.wanted ?? 0, "type": requiredTribute.type ?? "" });
+		chat.answerRequestDiplomacy(
+			gameState,
+			player,
+			requestType,
+			response,
+			requiredTribute === undefined ?
+				undefined :
+				{ "wanted": requiredTribute.wanted ?? 0, "type": requiredTribute.type ?? "" },
+		);
 	}
 
 	/**
@@ -561,8 +612,11 @@ export class DiplomacyManager
 	 * If a resource is not tributable, do not request it.
 	 * If no resources are tributable, decline (undefined).
 	 */
-	private demandTribute(gameState: CommonGameState, player: PlayerId, requestType: DiplomacyRequestType):
-		{ type: string; wanted: number } | undefined
+	private demandTribute(
+		gameState: CommonGameState,
+		player: PlayerId,
+		requestType: DiplomacyRequestType,
+	): { type: string; wanted: number } | undefined
 	{
 		const resTribCodes = Resources.GetTributableCodes();
 		if (!resTribCodes.length)
@@ -578,12 +632,16 @@ export class DiplomacyManager
 			"type": requiredTribute.type,
 			"warnTime": seconds(gameState.ai.elapsedTime + 60),
 			"sentWarning": false,
-			"requestType": requestType
+			"requestType": requestType,
 		});
 		return requiredTribute;
 	}
 
-	changePlayerDiplomacy(gameState: CommonGameState, player: PlayerId, newDiplomaticStance: DiplomacyRequestType | "enemy"): void
+	changePlayerDiplomacy(
+		gameState: CommonGameState,
+		player: PlayerId,
+		newDiplomaticStance: DiplomacyRequestType | "enemy",
+	): void
 	{
 		if (gameState.isPlayerEnemy(player) && (newDiplomaticStance === "ally" || newDiplomaticStance === "neutral"))
 			gameState.ai.HQ.attackManager.cancelAttacksAgainstPlayer(gameState, player);
@@ -596,7 +654,10 @@ export class DiplomacyManager
 	checkRequestedTributes(gameState: CommonGameState): void
 	{
 		for (const [player, data] of this.receivedDiplomacyRequests)
-			if (data.status === "waitingForTribute" && data.wanted !== undefined && data.type !== undefined && data.warnTime !== undefined && gameState.ai.elapsedTime > data.warnTime)
+			if (
+				data.status === "waitingForTribute" && data.wanted !== undefined && data.type !== undefined &&
+				data.warnTime !== undefined && gameState.ai.elapsedTime > data.warnTime
+			)
 			{
 				if (data.sentWarning)
 				{
@@ -609,7 +670,7 @@ export class DiplomacyManager
 					data.warnTime = seconds(gameState.ai.elapsedTime + 60);
 					chat.answerRequestDiplomacy(gameState, player, data.requestType, "waitingForTribute", {
 						"wanted": data.wanted,
-						"type": data.type
+						"type": data.type,
 					});
 				}
 			}
@@ -634,8 +695,10 @@ export class DiplomacyManager
 			for (let jIndex = 1; jIndex < gameState.sharedScript.playersData.length; ++jIndex)
 			{
 				const j = playerId(jIndex);
-				if (gameState.sharedScript.playersData[i].isEnemy[j] && gameState.isPlayerEnemy(j) &&
-				    !gameState.ai.HQ.attackManager.defeated[j])
+				if (
+					gameState.sharedScript.playersData[i].isEnemy[j] && gameState.isPlayerEnemy(j) &&
+					!gameState.ai.HQ.attackManager.defeated[j]
+				)
 					++mutualEnemies;
 
 				if (mutualEnemies < max)
@@ -650,10 +713,7 @@ export class DiplomacyManager
 
 		const requestType = gameState.isPlayerNeutral(player) ? "ally" : "neutral";
 
-		this.sentDiplomacyRequests.set(player, {
-			"requestType": requestType,
-			"timeSent": gameState.ai.elapsedTime
-		});
+		this.sentDiplomacyRequests.set(player, { "requestType": requestType, "timeSent": gameState.ai.elapsedTime });
 
 		debugWarn(this.Config, 0, () => "Sending diplomacy request to player " + player + " with " + requestType);
 		postCommand({ "type": "diplomacy-request", "source": PlayerID, "player": player, "to": requestType });
@@ -671,8 +731,10 @@ export class DiplomacyManager
 	checkSentDiplomacyRequests(gameState: CommonGameState): void
 	{
 		for (const [player, data] of this.sentDiplomacyRequests)
-			if (gameState.ai.elapsedTime > data.timeSent + 60 && !gameState.ai.HQ.saveResources &&
-			    gameState.getPopulation() > 70)
+			if (
+				gameState.ai.elapsedTime > data.timeSent + 60 && !gameState.ai.HQ.saveResources &&
+				gameState.getPopulation() > 70
+			)
 			{
 				chat.newRequestDiplomacy(gameState, player, data.requestType, "requestExpired");
 				this.sentDiplomacyRequests.delete(player);
@@ -683,7 +745,10 @@ export class DiplomacyManager
 	{
 		this.checkEvents(gameState, events);
 
-		if (Resources.GetTributableCodes().length && !gameState.ai.HQ.saveResources && gameState.ai.elapsedTime > this.nextTributeUpdate)
+		if (
+			Resources.GetTributableCodes().length && !gameState.ai.HQ.saveResources &&
+			gameState.ai.elapsedTime > this.nextTributeUpdate
+		)
 			this.tributes(gameState);
 
 		if (this.waitingToBetray && gameState.ai.elapsedTime > this.betrayLapseTime)
@@ -717,7 +782,7 @@ export class DiplomacyManager
 			"betrayWeighting": this.betrayWeighting,
 			"receivedDiplomacyRequests": this.receivedDiplomacyRequests,
 			"sentDiplomacyRequests": this.sentDiplomacyRequests,
-			"sentDiplomacyRequestLapseTime": this.sentDiplomacyRequestLapseTime
+			"sentDiplomacyRequestLapseTime": this.sentDiplomacyRequestLapseTime,
 		};
 	}
 

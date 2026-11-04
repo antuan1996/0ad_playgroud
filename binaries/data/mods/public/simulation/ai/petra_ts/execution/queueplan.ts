@@ -1,7 +1,8 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 
 /** Land access index -> whether a dock may be built on that landmass. */
-interface PlanLandSet {
+interface PlanLandSet
+{
 	[landAccess: number]: boolean;
 }
 
@@ -9,7 +10,8 @@ interface PlanLandSet {
  * A plan's metadata: what it hands on to the entities it trains or builds
  * (typed as theirs), and what only the plan reads.
  */
-export interface PlanMetadata extends Partial<PetraEntityMetadata> {
+export interface PlanMetadata extends Partial<PetraEntityMetadata>
+{
 	expectedGain?: number;
 	favoredBase?: BaseId;
 	index?: number;

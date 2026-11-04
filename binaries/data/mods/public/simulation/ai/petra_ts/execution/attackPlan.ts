@@ -1,25 +1,42 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import {
+	INVALID_PLAYER,
+	NO_BASE,
+	NO_LAND,
+	NO_REGION,
+	attackPlanId,
+	playerId,
+	seconds,
+	worldPos,
+} from "../adapter/brands.ts";
+import { debugShade, postCommand } from "../adapter/commands.ts";
+import { debugWarn } from "../adapter/debug.ts";
+import {
+	allowCapture,
+	dumpEntity,
+	getHolder,
+	getLandAccess,
+	isSiegeUnit,
+	requireTemplate,
+	requireValue,
+	returnResources,
+} from "../adapter/entityExtend.ts";
+import { ordersOf } from "../adapter/orders.ts";
+import { computePath } from "../adapter/pathfinder.ts";
+import { isPlaced } from "../adapter/placed.ts";
+import { obstructionShape } from "../adapter/templateData.ts";
+import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
+import { basesOf } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
-import { allowCapture, dumpEntity, getHolder, getLandAccess, isSiegeUnit, returnResources, requireTemplate, requireValue } from
-	"../adapter/entityExtend.ts";
-import { obstructionShape } from "../adapter/templateData.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
-import { Worker } from "./worker.ts";
-import type { Queue } from "./queue.ts";
-import { INVALID_PLAYER, NO_BASE, NO_LAND, NO_REGION, attackPlanId, playerId, seconds, worldPos } from "../adapter/brands.ts";
-import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
-import { debugShade, postCommand } from "../adapter/commands.ts";
-import { computePath } from "../adapter/pathfinder.ts";
-import { basesOf } from "../world/bases.ts";
 import { hqOf } from "./hq.ts";
-import { PLAN_RESERVE } from "./unitPlan.ts";
+import type { Queue } from "./queue.ts";
 import { type PlanMetadata } from "./queueplan.ts";
-import { debugWarn } from "../adapter/debug.ts";
-import { ordersOf } from "../adapter/orders.ts";
-import { isPlaced } from "../adapter/placed.ts";
+import { TrainingPlan } from "./queueplanTraining.ts";
+import { PLAN_RESERVE } from "./unitPlan.ts";
+import { Worker } from "./worker.ts";
 
 export type AttackUnitStat = {
 	priority: number;
@@ -30,13 +47,7 @@ export type AttackUnitStat = {
 	interests?: Array<[string, number, ...string[]]>;
 };
 
-type AttackBuildOrder = [
-	number,
-	string[],
-	CommonEntityCollection,
-	AttackUnitStat,
-	string
-];
+type AttackBuildOrder = [number, string[], CommonEntityCollection, AttackUnitStat, string];
 
 /** What an attack plan looks like once serialized: `Serialize` builds it, `Deserialize` reads it. */
 export type SerializedAttackPlan = {
@@ -142,8 +153,13 @@ type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0 };
  * Whether one of the plan's units answers a blow: while completing, one bound for a ship, on the attacker's land
  * within ANSWER_RANGE of the unit hit; otherwise one bound for a ship still ashore on the attacker's land, or an idle one
  */
-function answersBlow(gameState: CommonGameState, ent: CommonEntity, completing: boolean, attackerLand: AccessIndex | undefined,
-	near: CommonPosition | undefined): boolean
+function answersBlow(
+	gameState: CommonGameState,
+	ent: CommonEntity,
+	completing: boolean,
+	attackerLand: AccessIndex | undefined,
+	near: CommonPosition | undefined,
+): boolean
 {
 	const pos = ent.position();
 	if (completing)
@@ -206,8 +222,13 @@ function busyFighting(gameState: CommonGameState, ent: CommonEntity, attacker: C
  * ("maybe": a siege engine on a unit; a land unit on a ship, on a field while a structure hits it, or a slow one
  * after a fleeing civilian), or keeps it
  */
-function targetVerdict(gameState: CommonGameState, ent: CommonEntity, targetId: EntityId, unitTargets: Record<number, number>,
-	attackedByStructure: Record<number, boolean>): "needs" | "maybe" | "keeps"
+function targetVerdict(
+	gameState: CommonGameState,
+	ent: CommonEntity,
+	targetId: EntityId,
+	unitTargets: Record<number, number>,
+	attackedByStructure: Record<number, boolean>,
+): "needs" | "maybe" | "keeps"
 {
 	const target = gameState.getEntityById(targetId);
 	if (!target || gameState.isPlayerAlly(target.owner()))
@@ -223,8 +244,10 @@ function targetVerdict(gameState: CommonGameState, ent: CommonEntity, targetId: 
 		return "maybe";
 	if (attackedByStructure[ent.id()] && target.hasClass("Field"))
 		return "maybe";
-	if (!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
-		target.hasClass("Civilian") && requiredActivityIs(target, "FLEEING"))
+	if (
+		!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
+		target.hasClass("Civilian") && requiredActivityIs(target, "FLEEING")
+	)
 		return "maybe";
 	return "keeps";
 }
@@ -246,11 +269,16 @@ function structureValue(struct: CommonEntity, ent: CommonEntity, defensiveBonus:
  * The enemy units in the attacker's reach on its land, but animals, fleeing civilians for a slow one, and those
  * too many of ours aim at while the target is far; each marked with its distance
  */
-function enemyUnitsInReach(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach, ctx: AttackerContext): CommonEntity[]
+function enemyUnitsInReach(
+	gameState: CommonGameState,
+	ent: CommonEntity,
+	reach: AttackerReach,
+	ctx: AttackerContext,
+): CommonEntity[]
 {
 	const { targetPos, veto, enemyUnits } = ctx;
 	const nearby = !ent.hasClasses(["FastMoving", "Ranged"]);
-	return enemyUnits.filter((enemy) =>
+	return enemyUnits.filter(enemy =>
 	{
 		const enemyPos = enemy.position();
 		if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
@@ -265,8 +293,7 @@ function enemyUnitsInReach(gameState: CommonGameState, ent: CommonEntity, reach:
 		if (getLandAccess(gameState, enemy) !== reach.access)
 			return false;
 		// if already too much units targeting this enemy, let's continue towards our main target
-		if (veto[enemy.id()] &&
-			SquareVectorDistance(targetPos, reach.pos) > 2500)
+		if (veto[enemy.id()] && SquareVectorDistance(targetPos, reach.pos) > 2500)
 		{
 			return false;
 		}
@@ -280,15 +307,19 @@ function marchOn(ent: CommonEntity, maybeUpdate: boolean, ctx: AttackerContext):
 {
 	const { targetPos, veto, targetClassesUnit } = ctx;
 	let targetClasses = targetClassesUnit;
-	if (maybeUpdate && isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING"))	// we may be blocked by walls, attack everything
-	{
+	if (maybeUpdate && isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING"))
+	{ // we may be blocked by walls, attack everything
 		if (!ent.hasClasses(["Ranged", "Ship"]))
 			targetClasses = { "attack": ["Unit", "Structure"], "avoid": ["Ship"], "vetoEntities": veto };
 		else
 			targetClasses = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
 	}
 	else if (!ent.hasClasses(["Ranged", "Ship"]))
-		targetClasses = { "attack": targetClassesUnit.attack, "avoid": targetClassesUnit.avoid.concat("Ship"), "vetoEntities": veto };
+		targetClasses = {
+			"attack": targetClassesUnit.attack,
+			"avoid": targetClassesUnit.avoid.concat("Ship"),
+			"vetoEntities": veto,
+		};
 	ent.attackMove(targetPos[0], targetPos[1], targetClasses);
 }
 
@@ -298,7 +329,7 @@ function countUnitTargets(gameState: CommonGameState, units: CommonEntityCollect
 	const unitTargets: Record<number, number> = {};
 	for (const ent of units.values())
 	{
-		if (ent.hasClass("Ship"))	// TODO What to do with ships
+		if (ent.hasClass("Ship")) // TODO What to do with ships
 			continue;
 		const orderData = ordersOf(ent);
 		if (!orderData || !orderData.length || !orderData[0].target)
@@ -325,8 +356,11 @@ function countUnitTargets(gameState: CommonGameState, units: CommonEntityCollect
  * The nearest base anchors to the target position: on its land, and elsewhere (the distance weighted by the
  * size of the island)
  */
-function nearestBaseAnchors(gameState: CommonGameState, targetIndex: AccessIndex, targetPos: CommonPosition):
-	{ rallySame: CommonPosition | undefined; rallyDiff: CommonPosition | undefined }
+function nearestBaseAnchors(
+	gameState: CommonGameState,
+	targetIndex: AccessIndex,
+	targetPos: CommonPosition,
+): { rallySame: CommonPosition | undefined; rallyDiff: CommonPosition | undefined }
 {
 	let distminSame = Math.min();
 	let rallySame;
@@ -379,12 +413,16 @@ function isDefended(pos: CommonPosition, buildings: CommonStructureEntity[]): bo
  * Whether a structure blocks the way: the point (x, y), relative to it, a step ahead on the path, is inside its
  * obstruction, or the path crosses a gate (that could happen if not locked) out of its door
  */
-function blocksWay(struct: CommonEntity, shape: NonNullable<ReturnType<typeof obstructionShape>>, at: { x: number; y: number },
-	path: Array<{ x: number; y: number }>): boolean
+function blocksWay(
+	struct: CommonEntity,
+	shape: NonNullable<ReturnType<typeof obstructionShape>>,
+	at: { x: number; y: number },
+	path: Array<{ x: number; y: number }>,
+): boolean
 {
 	const { x, y } = at;
 	if (shape.kind !== "static" && shape.kind !== "gate")
-		return x*x + y*y < shape.radius*shape.radius;
+		return x * x + y * y < shape.radius * shape.radius;
 	const angle = struct.angle();
 	if (angle === undefined)
 		return false;
@@ -393,25 +431,30 @@ function blocksWay(struct: CommonEntity, shape: NonNullable<ReturnType<typeof ob
 	const sina = Math.sin(angle);
 	const u = x * cosa - y * sina;
 	const v = x * sina + y * cosa;
-	if (Math.abs(u) < width/2 && Math.abs(v) < depth/2)
+	if (Math.abs(u) < width / 2 && Math.abs(v) < depth / 2)
 		return true;
 	return shape.kind === "gate" && crossesGate(struct, shape.doorHalfWidth, cosa, sina, path);
 }
 
 /** Whether the path crosses the gate's line out of its door */
-function crossesGate(struct: CommonEntity, doorHalfWidth: number, cosa: number, sina: number,
-	path: Array<{ x: number; y: number }>): boolean
+function crossesGate(
+	struct: CommonEntity,
+	doorHalfWidth: number,
+	cosa: number,
+	sina: number,
+	path: Array<{ x: number; y: number }>,
+): boolean
 {
 	const structPos = requireValue(struct.position());
 	for (let i = 1; i < path.length; ++i)
 	{
-		const u1 = (path[i-1].x - structPos[0]) * cosa - (path[i-1].y - structPos[1]) * sina;
-		const v1 = (path[i-1].x - structPos[0]) * sina + (path[i-1].y - structPos[1]) * cosa;
+		const u1 = (path[i - 1].x - structPos[0]) * cosa - (path[i - 1].y - structPos[1]) * sina;
+		const v1 = (path[i - 1].x - structPos[0]) * sina + (path[i - 1].y - structPos[1]) * cosa;
 		const u2 = (path[i].x - structPos[0]) * cosa - (path[i].y - structPos[1]) * sina;
 		const v2 = (path[i].x - structPos[0]) * sina + (path[i].y - structPos[1]) * cosa;
 		if (v1 * v2 < 0)
 		{
-			const u0 = (u1*v2 - u2*v1) / (v2-v1);
+			const u0 = (u1 * v2 - u2 * v1) / (v2 - v1);
 			if (Math.abs(u0) > doorHalfWidth)
 				continue;
 			return true;
@@ -426,10 +469,10 @@ function crossesGate(struct: CommonEntity, doorHalfWidth: number, cosa: number, 
  */
 function byTrainingAdvancement(a: AttackBuildOrder, b: AttackBuildOrder): number
 {
-	let va = a[0]/a[3].targetSize - a[3].priority;
+	let va = a[0] / a[3].targetSize - a[3].priority;
 	if (a[0] >= a[3].targetSize)
 		va += 1000;
-	let vb = b[0]/b[3].targetSize - b[3].priority;
+	let vb = b[0] / b[3].targetSize - b[3].priority;
 	if (b[0] >= b[3].targetSize)
 		vb += 1000;
 
@@ -474,7 +517,9 @@ function siegeSize(config: Config, type: AttackType): number
 {
 	let targetSize;
 	if (config.difficulty < difficulty.MEDIUM)
-		targetSize = type === AttackPlan.TYPE_HUGE_ATTACK ? Math.max(config.difficulty, 1) : Math.max(config.difficulty - 1, 0);
+		targetSize = type === AttackPlan.TYPE_HUGE_ATTACK ?
+			Math.max(config.difficulty, 1) :
+			Math.max(config.difficulty - 1, 0);
 	else
 		targetSize = type === AttackPlan.TYPE_HUGE_ATTACK ? config.difficulty + 1 : config.difficulty - 1;
 	return Math.max(Math.round(config.popScaling * targetSize), type === AttackPlan.TYPE_HUGE_ATTACK ? 1 : 0);
@@ -484,8 +529,12 @@ function siegeSize(config: Config, type: AttackType): number
  * A new plan's army: attackComposition's, with a lower priority and smaller sizes for easier difficulty levels,
  * then the sizes changed according to max population
  */
-function planSizes(config: Config, type: AttackType, data: AttackPlanData | undefined, variation: number):
-	{ priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number }
+function planSizes(
+	config: Config,
+	type: AttackType,
+	data: AttackPlanData | undefined,
+	variation: number,
+): { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number }
 {
 	const composition = attackComposition(type, data);
 	let priority = composition.priority;
@@ -534,8 +583,9 @@ function planSizes(config: Config, type: AttackType, data: AttackPlanData | unde
  * Where an army may gather: the first base anchor of ours on the map (else any entity of ours), its land,
  * and a gathering point on each land with an anchor
  */
-function rallyPoints(gameState: CommonGameState):
-	{ rallyPoint: CommonPosition; rallyAccess: AccessIndex; allAccesses: Record<number, CommonPosition> } | undefined
+function rallyPoints(
+	gameState: CommonGameState,
+): { rallyPoint: CommonPosition; rallyAccess: AccessIndex; allAccesses: Record<number, CommonPosition> } | undefined
 {
 	let rallyPoint;
 	let rallyAccess;
@@ -573,6 +623,190 @@ function rallyPoints(gameState: CommonGameState):
 	return undefined;
 }
 
+/** An attack's unit categories and queues, and the ships needed before difficulty and population scaling. */
+type AttackComposition = { priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number };
+
+/** A rush's citizen infantry, its target size overridden by the plan's data. */
+function rushComposition(data: AttackPlanData | undefined): AttackComposition
+{
+	const infantry: AttackUnitStat = {
+		"priority": 1,
+		"minSize": 10,
+		"targetSize": 20,
+		"batchSize": 2,
+		"classes": ["Infantry"],
+		"interests": [["strength", 1], ["costsResource", 0.5, "stone"], ["costsResource", 0.6, "metal"]],
+	};
+	if (data && data.targetSize)
+		infantry.targetSize = data.targetSize;
+	return {
+		"priority": 250,
+		"unitStat": {
+			"Infantry": infantry,
+			"FastMoving": {
+				"priority": 1,
+				"minSize": 2,
+				"targetSize": 4,
+				"batchSize": 2,
+				"classes": ["FastMoving+CitizenSoldier"],
+				"interests": [["strength", 1]],
+			},
+		},
+		"neededShips": 1,
+	};
+}
+
+/** A raid's fast-moving citizen soldiers. */
+function raidComposition(): AttackComposition
+{
+	return {
+		"priority": 150,
+		"unitStat": {
+			"FastMoving": {
+				"priority": 1,
+				"minSize": 3,
+				"targetSize": 4,
+				"batchSize": 2,
+				"classes": ["FastMoving+CitizenSoldier"],
+				"interests": [["strength", 1]],
+			},
+		},
+		"neededShips": 1,
+	};
+}
+
+/** A huge attack's foot units: citizen soldiers for the barracks and champion units. */
+function hugeAttackInfantry(): Record<string, AttackUnitStat>
+{
+	return {
+		"RangedInfantry": {
+			"priority": 0.7,
+			"minSize": 5,
+			"targetSize": 20,
+			"batchSize": 5,
+			"classes": ["Infantry+Ranged+CitizenSoldier"],
+			"interests": [["strength", 3]],
+		},
+		"MeleeInfantry": {
+			"priority": 0.7,
+			"minSize": 5,
+			"targetSize": 20,
+			"batchSize": 5,
+			"classes": ["Infantry+Melee+CitizenSoldier"],
+			"interests": [["strength", 3]],
+		},
+		"ChampRangedInfantry": {
+			"priority": 1,
+			"minSize": 3,
+			"targetSize": 18,
+			"batchSize": 3,
+			"classes": ["Infantry+Ranged+Champion"],
+			"interests": [["strength", 3]],
+		},
+		"ChampMeleeInfantry": {
+			"priority": 1,
+			"minSize": 3,
+			"targetSize": 18,
+			"batchSize": 3,
+			"classes": ["Infantry+Melee+Champion"],
+			"interests": [["strength", 3]],
+		},
+	};
+}
+
+/** A huge attack's fast-moving units and its hero. */
+function hugeAttackFastMoving(): Record<string, AttackUnitStat>
+{
+	return {
+		"RangedFastMoving": {
+			"priority": 0.7,
+			"minSize": 4,
+			"targetSize": 20,
+			"batchSize": 4,
+			"classes": ["FastMoving+Ranged+CitizenSoldier"],
+			"interests": [["strength", 2]],
+		},
+		"MeleeFastMoving": {
+			"priority": 0.7,
+			"minSize": 4,
+			"targetSize": 20,
+			"batchSize": 4,
+			"classes": ["FastMoving+Melee+CitizenSoldier"],
+			"interests": [["strength", 2]],
+		},
+		"ChampRangedFastMoving": {
+			"priority": 1,
+			"minSize": 3,
+			"targetSize": 15,
+			"batchSize": 3,
+			"classes": ["FastMoving+Ranged+Champion"],
+			"interests": [["strength", 3]],
+		},
+		"ChampMeleeFastMoving": {
+			"priority": 1,
+			"minSize": 3,
+			"targetSize": 15,
+			"batchSize": 3,
+			"classes": ["FastMoving+Melee+Champion"],
+			"interests": [["strength", 2]],
+		},
+		"Hero": {
+			"priority": 1,
+			"minSize": 0,
+			"targetSize": 1,
+			"batchSize": 1,
+			"classes": ["Hero"],
+			"interests": [["strength", 2]],
+		},
+	};
+}
+
+/** A huge attack: foot units, fast-moving units and a hero. */
+function hugeAttackComposition(): AttackComposition
+{
+	return { "priority": 90, "unitStat": { ...hugeAttackInfantry(), ...hugeAttackFastMoving() }, "neededShips": 5 };
+}
+
+/** A standard attack: ranged and melee infantry that can gather, and fast-moving citizen soldiers. */
+function standardAttackComposition(): AttackComposition
+{
+	const interests: Array<[string, number, ...string[]]> = [["canGather", 1], ["strength", 1.6], [
+		"costsResource",
+		0.3,
+		"stone",
+	], ["costsResource", 0.3, "metal"]];
+	return {
+		"priority": 70,
+		"unitStat": {
+			"RangedInfantry": {
+				"priority": 1,
+				"minSize": 6,
+				"targetSize": 16,
+				"batchSize": 3,
+				"classes": ["Infantry+Ranged"],
+				interests,
+			},
+			"MeleeInfantry": {
+				"priority": 1,
+				"minSize": 6,
+				"targetSize": 16,
+				"batchSize": 3,
+				"classes": ["Infantry+Melee"],
+				interests,
+			},
+			"FastMoving": {
+				"priority": 1,
+				"minSize": 2,
+				"targetSize": 6,
+				"batchSize": 2,
+				"classes": ["FastMoving+CitizenSoldier"],
+				"interests": [["strength", 1]],
+			},
+		},
+		"neededShips": 3,
+	};
+}
+
 /**
  * The army an attack of this type aims at: per category its classes, sizes, batch and the unit
  * qualities wanted, the priority of its queues and the ships it needs (before difficulty and population scaling).
@@ -583,67 +817,15 @@ function rallyPoints(gameState: CommonGameState):
  * only once every other category is at least 50% of its target size.
  * note: siege build order is currently added by the military manager if a fortress is there.
  */
-function attackComposition(type: AttackType, data: AttackPlanData | undefined):
-	{ priority: number; unitStat: Record<string, AttackUnitStat>; neededShips: number }
+function attackComposition(type: AttackType, data: AttackPlanData | undefined): AttackComposition
 {
-	let priority;
-	let neededShips;
-	const unitStat: Record<string, AttackUnitStat> = {};
-	// neededShips is the minimal number of ships which should be available for transport
 	if (type === AttackPlan.TYPE_RUSH)
-	{
-		priority = 250;
-		unitStat.Infantry = { "priority": 1, "minSize": 10, "targetSize": 20, "batchSize": 2, "classes": ["Infantry"],
-			"interests": [["strength", 1], ["costsResource", 0.5, "stone"], ["costsResource", 0.6, "metal"]] };
-		unitStat.FastMoving = { "priority": 1, "minSize": 2, "targetSize": 4, "batchSize": 2, "classes": ["FastMoving+CitizenSoldier"],
-			"interests": [["strength", 1]] };
-		if (data && data.targetSize)
-			unitStat.Infantry.targetSize = data.targetSize;
-		neededShips = 1;
-	}
-	else if (type === AttackPlan.TYPE_RAID)
-	{
-		priority = 150;
-		unitStat.FastMoving = { "priority": 1, "minSize": 3, "targetSize": 4, "batchSize": 2, "classes": ["FastMoving+CitizenSoldier"],
-			"interests": [ ["strength", 1] ] };
-		neededShips = 1;
-	}
-	else if (type === AttackPlan.TYPE_HUGE_ATTACK)
-	{
-		priority = 90;
-		// basically we want a mix of citizen soldiers so our barracks have a purpose, and champion units.
-		unitStat.RangedInfantry = { "priority": 0.7, "minSize": 5, "targetSize": 20, "batchSize": 5, "classes": ["Infantry+Ranged+CitizenSoldier"],
-			"interests": [["strength", 3]] };
-		unitStat.MeleeInfantry = { "priority": 0.7, "minSize": 5, "targetSize": 20, "batchSize": 5, "classes": ["Infantry+Melee+CitizenSoldier"],
-			"interests": [["strength", 3]] };
-		unitStat.ChampRangedInfantry = { "priority": 1, "minSize": 3, "targetSize": 18, "batchSize": 3, "classes": ["Infantry+Ranged+Champion"],
-			"interests": [["strength", 3]] };
-		unitStat.ChampMeleeInfantry = { "priority": 1, "minSize": 3, "targetSize": 18, "batchSize": 3, "classes": ["Infantry+Melee+Champion"],
-			"interests": [["strength", 3]] };
-		unitStat.RangedFastMoving = { "priority": 0.7, "minSize": 4, "targetSize": 20, "batchSize": 4, "classes": ["FastMoving+Ranged+CitizenSoldier"],
-			"interests": [["strength", 2]] };
-		unitStat.MeleeFastMoving = { "priority": 0.7, "minSize": 4, "targetSize": 20, "batchSize": 4, "classes": ["FastMoving+Melee+CitizenSoldier"],
-			"interests": [["strength", 2]] };
-		unitStat.ChampRangedFastMoving = { "priority": 1, "minSize": 3, "targetSize": 15, "batchSize": 3, "classes": ["FastMoving+Ranged+Champion"],
-			"interests": [["strength", 3]] };
-		unitStat.ChampMeleeFastMoving = { "priority": 1, "minSize": 3, "targetSize": 15, "batchSize": 3, "classes": ["FastMoving+Melee+Champion"],
-			"interests": [["strength", 2]] };
-		unitStat.Hero = { "priority": 1, "minSize": 0, "targetSize": 1, "batchSize": 1, "classes": ["Hero"],
-			"interests": [["strength", 2]] };
-		neededShips = 5;
-	}
-	else
-	{
-		priority = 70;
-		unitStat.RangedInfantry = { "priority": 1, "minSize": 6, "targetSize": 16, "batchSize": 3, "classes": ["Infantry+Ranged"],
-			"interests": [["canGather", 1], ["strength", 1.6], ["costsResource", 0.3, "stone"], ["costsResource", 0.3, "metal"]] };
-		unitStat.MeleeInfantry = { "priority": 1, "minSize": 6, "targetSize": 16, "batchSize": 3, "classes": ["Infantry+Melee"],
-			"interests": [["canGather", 1], ["strength", 1.6], ["costsResource", 0.3, "stone"], ["costsResource", 0.3, "metal"]] };
-		unitStat.FastMoving = { "priority": 1, "minSize": 2, "targetSize": 6, "batchSize": 2, "classes": ["FastMoving+CitizenSoldier"],
-			"interests": [["strength", 1]] };
-		neededShips = 3;
-	}
-	return { priority, unitStat, neededShips };
+		return rushComposition(data);
+	if (type === AttackPlan.TYPE_RAID)
+		return raidComposition();
+	if (type === AttackPlan.TYPE_HUGE_ATTACK)
+		return hugeAttackComposition();
+	return standardAttackComposition();
 }
 
 /**
@@ -651,9 +833,12 @@ function attackComposition(type: AttackType, data: AttackPlanData | undefined):
  * starts and its size roll, or a save; and whether we can train units at all
  * (the headquarters' canBuildUnits: the plan then has build orders).
  */
-type AttackPlanSetup = { canBuildUnits: boolean } & (
-	| { kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number }
-	| { kind: "saved"; saved: SerializedAttackPlan });
+type AttackPlanSetup =
+	& { canBuildUnits: boolean }
+	& ({ kind: "new"; type: AttackType; data: AttackPlanData | undefined; start: AttackStart; variation: number } | {
+		kind: "saved";
+		saved: SerializedAttackPlan;
+	});
 
 /** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
 type AttackAim = { target: CommonEntity; pos: CommonPosition };
@@ -663,10 +848,10 @@ type AttackAim = { target: CommonEntity; pos: CommonPosition };
  * plan walks, made when it sets off (StartAttack); the other states hold
  * nothing more, so the path cannot be read outside walking.
  */
-type AttackStage =
-	| { state: "unexecuted" | "completing"; prep: AttackPreparation }
-	| { state: "walking"; path: CommonPosition[] }
-	| { state: "transporting" | "arrived" | "" };
+type AttackStage = { state: "unexecuted" | "completing"; prep: AttackPreparation } | {
+	state: "walking";
+	path: CommonPosition[];
+} | { state: "transporting" | "arrived" | "" };
 
 /**
  * What a preparing plan trains with: its three queues (removed from the
@@ -721,7 +906,9 @@ export class AttackPlan
 	preparation(): AttackPreparation | undefined
 	{
 		const stage = this.stage;
-		return stage.state === AttackPlan.STATE_UNEXECUTED || stage.state === AttackPlan.STATE_COMPLETING ? stage.prep : undefined;
+		return stage.state === AttackPlan.STATE_UNEXECUTED || stage.state === AttackPlan.STATE_COMPLETING ?
+			stage.prep :
+			undefined;
 	}
 
 	/** The stage of a state that holds no path: a preparing one takes the plan's preparation along */
@@ -749,8 +936,12 @@ export class AttackPlan
 	 * the sea between it and the target when that lies overseas; undefined when
 	 * no plan can be made: nowhere to gather, or a target out of reach.
 	 */
-	static findStart(gameState: CommonGameState, type: AttackType, name: AttackPlanId,
-		target: CommonEntity | undefined): AttackStart | undefined
+	static findStart(
+		gameState: CommonGameState,
+		type: AttackType,
+		name: AttackPlanId,
+		target: CommonEntity | undefined,
+	): AttackStart | undefined
 	{
 		// get a starting rallyPoint ... will be improved later
 		const rally = rallyPoints(gameState);
@@ -779,8 +970,10 @@ export class AttackPlan
 				{
 					if (target)
 					{
-						aiWarn("Petra: " + type + " " + name + " has an inaccessible target " +
-							    target.templateName() + " indices " + rallyAccess + " " + access);
+						aiWarn(
+							"Petra: " + type + " " + name + " has an inaccessible target " +
+								target.templateName() + " indices " + rallyAccess + " " + access,
+						);
 						return undefined;
 					}
 					continue;
@@ -793,17 +986,34 @@ export class AttackPlan
 	}
 
 	/** A new plan, or undefined when it has nowhere to start (findStart). */
-	static create(gameState: CommonGameState, config: Config, uniqueID: number,
-		type: AttackType = AttackPlan.TYPE_DEFAULT, data?: AttackPlanData): AttackPlan | undefined
+	static create(
+		gameState: CommonGameState,
+		config: Config,
+		uniqueID: number,
+		type: AttackType = AttackPlan.TYPE_DEFAULT,
+		data?: AttackPlanData,
+	): AttackPlan | undefined
 	{
 		const start = AttackPlan.findStart(gameState, type, attackPlanId(uniqueID), data?.target);
 		// some randomness on the attack's size
-		return start && new AttackPlan(gameState, config, uniqueID, { "kind": "new", type, data, start,
-			"variation": randFloat(0.8, 1.2), "canBuildUnits": hqOf(gameState).canBuildUnits });
+		return start &&
+			new AttackPlan(gameState, config, uniqueID, {
+				"kind": "new",
+				type,
+				data,
+				start,
+				"variation": randFloat(0.8, 1.2),
+				"canBuildUnits": hqOf(gameState).canBuildUnits,
+			});
 	}
 
 	/** A saved plan, as it was saved: its queues (restored with the queue manager) and units found again. */
-	static restore(gameState: CommonGameState, config: Config, saved: SerializedAttackPlan, canBuildUnits: boolean): AttackPlan
+	static restore(
+		gameState: CommonGameState,
+		config: Config,
+		saved: SerializedAttackPlan,
+		canBuildUnits: boolean,
+	): AttackPlan
 	{
 		return new AttackPlan(gameState, config, saved.properties.name, { "kind": "saved", saved, canBuildUnits });
 	}
@@ -843,7 +1053,7 @@ export class AttackPlan
 		{
 			const data = setup.data;
 			this.type = setup.type;
-			this.forced = false;  // true when this attacked has been forced to help an ally
+			this.forced = false; // true when this attacked has been forced to help an ally
 
 			this.target = data && data.target ? data.target : undefined;
 			this.targetPos = this.target ? this.target.position() : undefined;
@@ -866,13 +1076,12 @@ export class AttackPlan
 			this.position5TurnsAgo = worldPos(0, 0);
 			this.lastPosition = worldPos(0, 0);
 			this.position = worldPos(0, 0);
-			this.isBlocked = false;	     // true when this attack faces walls
+			this.isBlocked = false; // true when this attack faces walls
 		}
 
 		this.canBuildUnits = setup.canBuildUnits;
 
-		this.unitCollection = gameState.getOwnUnits().filter(
-			filters.byMetadata(PlayerID, "plan", this.name));
+		this.unitCollection = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", this.name));
 		this.unitCollection.registerUpdates();
 
 		this.unit = {};
@@ -902,35 +1111,46 @@ export class AttackPlan
 	private newStage(gameState: CommonGameState, priority: number): (buildOrders: AttackBuildOrder[]) => AttackStage
 	{
 		const queue = gameState.ai.queueManager.addQueue(`plan_${this.name}`, priority);
-		const queueChamp = gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority+1);
+		const queueChamp = gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority + 1);
 		const queueSiege = gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
-		return (buildOrders: AttackBuildOrder[]): AttackStage => ({ "state": AttackPlan.STATE_UNEXECUTED,
-			"prep": { queue, queueChamp, queueSiege, buildOrders, "siegeState": AttackPlan.SIEGE_NOT_TESTED } });
+		return (buildOrders: AttackBuildOrder[]): AttackStage => ({
+			"state": AttackPlan.STATE_UNEXECUTED,
+			"prep": { queue, queueChamp, queueSiege, buildOrders, "siegeState": AttackPlan.SIEGE_NOT_TESTED },
+		});
 	}
 
 	/**
 	 * A saved plan's stage: a preparing plan's queues were restored with the queue manager, a plan that set off
 	 * has none; a walking plan walks its saved path, one saved without (never written) attacks where it stands
 	 */
-	private savedStage(gameState: CommonGameState, saved: SerializedAttackPlan): (buildOrders: AttackBuildOrder[]) => AttackStage
+	private savedStage(
+		gameState: CommonGameState,
+		saved: SerializedAttackPlan,
+	): (buildOrders: AttackBuildOrder[]) => AttackStage
 	{
 		const state = saved.properties.state;
 		const savedPath = saved.properties.path;
 		const preparing = (prepState: "unexecuted" | "completing") =>
 		{
 			const queues = this.savedQueues(gameState);
-			return (buildOrders: AttackBuildOrder[]): AttackStage =>
-				({ "state": prepState, "prep": { ...queues, buildOrders, "siegeState": saved.properties.siegeState } });
+			return (buildOrders: AttackBuildOrder[]): AttackStage => ({
+				"state": prepState,
+				"prep": { ...queues, buildOrders, "siegeState": saved.properties.siegeState },
+			});
 		};
 		if (state === AttackPlan.STATE_WALKING)
 			return () => savedPath ? { state, "path": savedPath } : { "state": AttackPlan.STATE_ARRIVED };
 		if (state === AttackPlan.STATE_UNEXECUTED || state === AttackPlan.STATE_COMPLETING)
 			return preparing(state);
-		if (state === AttackPlan.STATE_TRANSPORTING || state === AttackPlan.STATE_ARRIVED ||
-			state === AttackPlan.STATE_ATTACKING)
+		if (
+			state === AttackPlan.STATE_TRANSPORTING || state === AttackPlan.STATE_ARRIVED ||
+			state === AttackPlan.STATE_ATTACKING
+		)
 			return () => ({ state });
-		aiWarn("Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
-			"\": it prepares again");
+		aiWarn(
+			"Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
+				"\": it prepares again",
+		);
 		return preparing(AttackPlan.STATE_UNEXECUTED);
 	}
 
@@ -940,7 +1160,7 @@ export class AttackPlan
 		return {
 			"queue": requireValue(gameState.ai.queues[`plan_${this.name}`]),
 			"queueChamp": requireValue(gameState.ai.queues[`plan_${this.name}_champ`]),
-			"queueSiege": requireValue(gameState.ai.queues[`plan_${this.name}_siege`])
+			"queueSiege": requireValue(gameState.ai.queues[`plan_${this.name}_siege`]),
 		};
 	}
 
@@ -1001,8 +1221,10 @@ export class AttackPlan
 	changeState<From extends AttackPlanState>(from: From, to: Exclude<AttackTransitions[From], "walking">): void
 	{
 		if (this.state !== from)
-			aiWarn("Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
-				"\", not from \"" + from + "\"");
+			aiWarn(
+				"Petra: attack plan " + this.name + " moved to \"" + to + "\" from \"" + this.state +
+					"\", not from \"" + from + "\"",
+			);
 		this.stage = this.stageFor(to);
 	}
 
@@ -1010,8 +1232,10 @@ export class AttackPlan
 	startWalking(path: CommonPosition[]): void
 	{
 		if (this.state !== AttackPlan.STATE_COMPLETING)
-			aiWarn("Petra: attack plan " + this.name + " moved to \"walking\" from \"" + this.state +
-				"\", not from \"completing\"");
+			aiWarn(
+				"Petra: attack plan " + this.name + " moved to \"walking\" from \"" + this.state +
+					"\", not from \"completing\"",
+			);
 		this.stage = { "state": AttackPlan.STATE_WALKING, path };
 	}
 
@@ -1146,8 +1370,14 @@ export class AttackPlan
 		if (!targetSize)
 			return true;
 		// no minsize as we don't want the plan to fail at the last minute though.
-		const stat: AttackUnitStat = { "priority": 1, "minSize": 0, "targetSize": targetSize, "batchSize": Math.min(targetSize, 2),
-			"classes": classes[i], "interests": [ ["siegeStrength", 3] ] };
+		const stat: AttackUnitStat = {
+			"priority": 1,
+			"minSize": 0,
+			"targetSize": targetSize,
+			"batchSize": Math.min(targetSize, 2),
+			"classes": classes[i],
+			"interests": [["siegeStrength", 3]],
+		};
 		this.addBuildOrder(gameState, "Siege", stat, true);
 		return true;
 	}
@@ -1221,7 +1451,7 @@ export class AttackPlan
 	/** The plan drafts its units and keeps them off disputed lands; false while it waits for its ships */
 	private prepareArmy(gameState: CommonGameState): boolean
 	{
-		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)    // Forced Raids have special purposes (as relic capture)
+		if (this.type !== AttackPlan.TYPE_RAID || !this.forced) // Forced Raids have special purposes (as relic capture)
 			this.assignUnits(gameState);
 
 		// if we need a transport, wait for some transport ships, the units
@@ -1231,8 +1461,11 @@ export class AttackPlan
 		// ship queue is raised meanwhile (NavalManager.shipPriority)
 		if (this.overseas && !hqOf(gameState).navalManager.fleet(this.overseas)?.transports.length)
 			return false;
-		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined)
-			this.reassignFastUnit(gameState);    // reassign some fast units (if any) to fasten raid preparations
+		if (
+			this.type !== AttackPlan.TYPE_RAID &&
+			hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined
+		)
+			this.reassignFastUnit(gameState); // reassign some fast units (if any) to fasten raid preparations
 		// while it prepares, the plan holds no soldier beside enemies away from its rally point
 		this.leaveDisputedLands(gameState, gameState.ai.accessibility.getAccessValue(this.rallyPoint));
 
@@ -1277,13 +1510,15 @@ export class AttackPlan
 		if (this.canBuildUnits)
 		{
 			// We still have time left to recruit units and do stuffs.
-			if (prep.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
-				prep.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0)
+			if (
+				prep.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
+				prep.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0
+			)
 				this.addSiegeUnits(gameState);
 			this.trainMoreUnits(gameState, prep);
 			// may happen if we have no more training facilities and build orders are canceled
 			if (!prep.buildOrders.length)
-				return AttackPlan.PREPARATION_FAILED;	// will abort the plan
+				return AttackPlan.PREPARATION_FAILED; // will abort the plan
 		}
 		return AttackPlan.PREPARATION_KEEP_GOING;
 	}
@@ -1359,7 +1594,10 @@ export class AttackPlan
 		for (const ent of this.unitCollection.values())
 		{
 			// For the time being, if occupied in a transport, remove the unit from this plan   TODO improve that
-			if (ent.getMetadata(PlayerID, "transport") !== undefined || ent.getMetadata(PlayerID, "transporter") !== undefined)
+			if (
+				ent.getMetadata(PlayerID, "transport") !== undefined ||
+				ent.getMetadata(PlayerID, "transporter") !== undefined
+			)
 			{
 				ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 				continue;
@@ -1389,7 +1627,7 @@ export class AttackPlan
 			order[0] = order[2].length + this.queuedFor(gameState, prep, order[4]).total;
 		prep.buildOrders.sort(byTrainingAdvancement);
 
-		if (this.Config.debug > 1 && gameState.ai.playedTurn%50 === 0)
+		if (this.Config.debug > 1 && gameState.ai.playedTurn % 50 === 0)
 			this.debugBuildOrders(gameState, prep);
 
 		const firstOrder = prep.buildOrders[0];
@@ -1398,8 +1636,11 @@ export class AttackPlan
 	}
 
 	/** The units of a build order in training and in the plan's three queues */
-	private queuedFor(gameState: CommonGameState, prep: AttackPreparation, name: string):
-		{ inTraining: number; queue1: number; queue2: number; queue3: number; total: number }
+	private queuedFor(
+		gameState: CommonGameState,
+		prep: AttackPreparation,
+		name: string,
+	): { inTraining: number; queue1: number; queue2: number; queue3: number; total: number }
 	{
 		const special = "Plan_" + this.name + "_" + name;
 		const inTraining = gameState.countOwnQueuedEntitiesWithMetadata("special", special);
@@ -1420,8 +1661,10 @@ export class AttackPlan
 		for (const order of prep.buildOrders)
 		{
 			const { inTraining, queue1, queue2, queue3 } = this.queuedFor(gameState, prep, order[4]);
-			aiWarn(" >>> " + order[4] + " done " + order[2].length + " training " + inTraining +
-				  " queue " + queue1 + " champ " + queue2 + " siege " + queue3 + " >> need " + order[3].targetSize);
+			aiWarn(
+				" >>> " + order[4] + " done " + order[2].length + " training " + inTraining +
+					" queue " + queue1 + " champ " + queue2 + " siege " + queue3 + " >> need " + order[3].targetSize,
+			);
 		}
 		aiWarn("====================================");
 	}
@@ -1445,13 +1688,13 @@ export class AttackPlan
 		if (queue.length() > 5)
 			return;
 		const interests = firstOrder[3].interests;
-		const template = interests === undefined
-			? undefined
-			: hqOf(gameState).findBestTrainableUnit(gameState, firstOrder[1], interests);
+		const template = interests === undefined ?
+			undefined :
+			hqOf(gameState).findBestTrainableUnit(gameState, firstOrder[1], interests);
 		if (template === undefined)
 		{
 			debugWarn(this.Config, 1, () => "attack no template found " + firstOrder[1]);
-			delete this.unitStat[firstOrder[4]];	// deleting the associated unitstat.
+			delete this.unitStat[firstOrder[4]]; // deleting the associated unitstat.
 			prep.buildOrders.splice(0, 1);
 			return;
 		}
@@ -1459,19 +1702,30 @@ export class AttackPlan
 		const max = firstOrder[3].batchSize;
 		const specialData = "Plan_" + this.name + "_" + firstOrder[4];
 		// trained on the rally point's land where it can be (queueplanTraining's trainer choice)
-		const data: PlanMetadata = { "plan": this.name, "special": specialData, "base": NO_BASE,
-			"index": gameState.ai.accessibility.getAccessValue(this.rallyPoint) };
+		const data: PlanMetadata = {
+			"plan": this.name,
+			"special": specialData,
+			"base": NO_BASE,
+			"index": gameState.ai.accessibility.getAccessValue(this.rallyPoint),
+		};
 		// findBestTrainableUnit names only templates that exist
 		const templateObj = requireTemplate(gameState, template);
 		// a mercenary is a citizen soldier that cannot gather: an attacker only
-		data.role = templateObj.hasClass("CitizenSoldier") &&
-			templateObj.resourceGatherRates() !== undefined ? Worker.ROLE_WORKER : Worker.ROLE_ATTACK;
+		data.role = templateObj.hasClass("CitizenSoldier") && templateObj.resourceGatherRates() !== undefined ?
+			Worker.ROLE_WORKER :
+			Worker.ROLE_ATTACK;
 		const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
 		if (trainingPlan.template)
 			queue.addPlan(trainingPlan);
-		else debugWarn(this.Config, 1, () => "training plan canceled because no template for " + template +
-			"   build1 " + uneval(firstOrder[1]) +
-			" build3 " + uneval(firstOrder[3].interests));
+		else
+			debugWarn(
+				this.Config,
+				1,
+				() =>
+					"training plan canceled because no template for " + template +
+					"   build1 " + uneval(firstOrder[1]) +
+					" build3 " + uneval(firstOrder[3].interests),
+			);
 	}
 
 	assignUnits(gameState: CommonGameState): boolean
@@ -1490,9 +1744,7 @@ export class AttackPlan
 		// Assign all units without specific role.
 		for (const ent of gameState.getOwnEntitiesByRole(undefined, true).values())
 		{
-			if (ent.hasClasses(["!Unit", "Ship", "Support"]) ||
-				!available(ent) ||
-				ent.attackTypes() === undefined)
+			if (ent.hasClasses(["!Unit", "Ship", "Support"]) || !available(ent) || ent.attackTypes() === undefined)
 				continue;
 			added = this.enlist(ent);
 		}
@@ -1551,7 +1803,8 @@ export class AttackPlan
 		let num = 0;
 		const numbase: Record<number, number> = {};
 		let keep = this.type !== AttackPlan.TYPE_RUSH ?
-			6 + 4 * gameState.getNumPlayerEnemies() + 8 * this.Config.personality.defensive : 8;
+			6 + 4 * gameState.getNumPlayerEnemies() + 8 * this.Config.personality.defensive :
+			8;
 		keep = Math.round(this.Config.popScaling * keep);
 		for (const ent of gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).values())
 		{
@@ -1579,8 +1832,11 @@ export class AttackPlan
 	{
 		if (!isPlaced(ent))
 			return false;
-		if (ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== PLAN_RESERVE ||
-		    ent.getMetadata(PlayerID, "transport") !== undefined || ent.getMetadata(PlayerID, "transporter") !== undefined)
+		if (
+			ent.getMetadata(PlayerID, "plan") !== undefined && ent.getMetadata(PlayerID, "plan") !== PLAN_RESERVE ||
+			ent.getMetadata(PlayerID, "transport") !== undefined ||
+			ent.getMetadata(PlayerID, "transporter") !== undefined
+		)
 			return false;
 		if (hqOf(gameState).victoryManager.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
 			return false;
@@ -1680,8 +1936,10 @@ export class AttackPlan
 		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
 		if (!sea)
 		{
-			aiWarn("Petra: " + this.type + " " + this.name + " has an inaccessible target" +
-				    " with indices " + rallyIndex + " " + targetIndex + " from " + this.target?.templateName());
+			aiWarn(
+				"Petra: " + this.type + " " + this.name + " has an inaccessible target" +
+					" with indices " + rallyIndex + " " + targetIndex + " from " + this.target?.templateName(),
+			);
 			return false;
 		}
 		this.overseas = sea;
@@ -1699,8 +1957,9 @@ export class AttackPlan
 	{
 		if (this.uniqueTargetId)
 			return undefined;
-		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? [])
-			.filter(enemy => enemy.hasClass("Structure"));
+		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? []).filter(enemy =>
+			enemy.hasClass("Structure")
+		);
 		if (!buildings.length)
 			return undefined;
 		const distance = (enemy: CommonPlacedEntity): number => SquareVectorDistance(enemy.position(), this.rallyPoint);
@@ -1751,12 +2010,17 @@ export class AttackPlan
 	{
 		const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
 		// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
-		return land !== undefined && land > 1 && land !== rallyLand && hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
+		return land !== undefined && land > 1 && land !== rallyLand &&
+			hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
 	}
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
 	 */
-	getNearestTarget(gameState: CommonGameState, position: CommonPosition, sameLand?: AccessIndex | false): CommonEntity | undefined
+	getNearestTarget(
+		gameState: CommonGameState,
+		position: CommonPosition,
+		sameLand?: AccessIndex | false,
+	): CommonEntity | undefined
 	{
 		const targetPlayer = this.targetPlayer;
 		if (targetPlayer === undefined)
@@ -1788,7 +2052,10 @@ export class AttackPlan
 
 		if (!target)
 			return undefined;
-		if (this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") && target.hasClass("Relic"))
+		if (
+			this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
+			target.hasClass("Relic")
+		)
 			hqOf(gameState).victoryManager.planRelicRaid(target.id(), this.name);
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target
@@ -1797,7 +2064,11 @@ export class AttackPlan
 	}
 
 	/** The targets the plan chooses from: its unique target, a raid's, a rush's (or the defended ones) or the default ones */
-	private targetCandidates(gameState: CommonGameState, targetPlayer: PlayerId, land: AccessIndex | false): CommonEntityCollection
+	private targetCandidates(
+		gameState: CommonGameState,
+		targetPlayer: PlayerId,
+		land: AccessIndex | false,
+	): CommonEntityCollection
 	{
 		if (this.uniqueTargetId)
 		{
@@ -1815,17 +2086,23 @@ export class AttackPlan
 		// with no undefended building, an attack takes on the defended ones; Petra
 		// waited for siege engines, and on islands its armies, finding nothing,
 		// were aborted and remade every few seconds for good (FINDINGS §35)
-		if (!targets.hasEntities() &&
-		    (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
+		if (!targets.hasEntities() && (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
 			return this.defaultTargetFinder(gameState, targetPlayer, land);
 		return targets;
 	}
 
 	/** How far a target counts from the position, or undefined for a pointless one */
-	private targetDistance(gameState: CommonGameState, ent: CommonEntity, position: CommonPosition, land: AccessIndex | false): number | undefined
+	private targetDistance(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		position: CommonPosition,
+		land: AccessIndex | false,
+	): number | undefined
 	{
-		if (this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-		   (!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id())))
+		if (
+			this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
+			(!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id()))
+		)
 			return undefined;
 		// Do not bother with some pointless targets
 		if (!this.isValidTarget(gameState, ent, land))
@@ -1841,8 +2118,10 @@ export class AttackPlan
 		// still being built counts as nearer: on islands what the enemy lives on
 		// is worth more than the hall of its home island, and Petra's attacks
 		// landed under the towers of civic centres for little (FINDINGS §42)
-		if (this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).geography.navalMap &&
-		    (ent.hasClass("Dock") || ent.foundationProgress() !== undefined))
+		if (
+			this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).geography.navalMap &&
+			(ent.hasClass("Dock") || ent.foundationProgress() !== undefined)
+		)
 			dist *= ECONOMIC_TARGET_WEIGHT;
 		return dist;
 	}
@@ -1851,29 +2130,34 @@ export class AttackPlan
 	 * Default target finder aims for conquest critical targets
 	 * We must apply the *same* selection (isValidTarget) as done in getNearestTarget
 	 */
-	defaultTargetFinder(gameState: CommonGameState, playerEnemy: PlayerId, sameLand: AccessIndex | false = false): CommonEntityCollection
+	defaultTargetFinder(
+		gameState: CommonGameState,
+		playerEnemy: PlayerId,
+		sameLand: AccessIndex | false = false,
+	): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		if (gameState.getVictoryConditions().has("wonder"))
 		{
-			for (const ent of
-				gameState.getEnemyStructures(playerEnemy).filter(filters.byClass("Wonder")).values())
+			for (const ent of gameState.getEnemyStructures(playerEnemy).filter(filters.byClass("Wonder")).values())
 			{
 				targets.addEnt(ent);
 			}
 		}
 		if (gameState.getVictoryConditions().has("regicide"))
 		{
-			for (const ent of gameState.getEnemyUnits(playerEnemy).filter(filters.byClass("Hero"))
-				.values())
+			for (const ent of gameState.getEnemyUnits(playerEnemy).filter(filters.byClass("Hero")).values())
 			{
 				targets.addEnt(ent);
 			}
 		}
 		if (gameState.getVictoryConditions().has("capture_the_relic"))
 		{
-			for (const ent of gameState.updatingGlobalCollection("allRelics",
-				filters.byClass("Relic")).filter((relic) => relic.owner() === playerEnemy).values())
+			for (
+				const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter(relic =>
+					relic.owner() === playerEnemy
+				).values()
+			)
 			{
 				targets.addEnt(ent);
 			}
@@ -1882,11 +2166,13 @@ export class AttackPlan
 		if (targets.hasEntities())
 			return targets;
 
-		const validTargets = gameState.getEnemyStructures(playerEnemy).filter(
-			(ent: CommonEntity): boolean => this.isValidTarget(gameState, ent, sameLand));
+		const validTargets = gameState.getEnemyStructures(playerEnemy).filter((ent: CommonEntity): boolean =>
+			this.isValidTarget(gameState, ent, sameLand)
+		);
 		// on a naval map the docks too, which the nearest pick favours (FINDINGS §42)
-		targets = validTargets.filter(filters.byClasses(
-			hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]));
+		targets = validTargets.filter(
+			filters.byClasses(hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]),
+		);
 		if (!targets.hasEntities())
 			targets = validTargets.filter(filters.byClass("ConquestCritical"));
 		// If there's nothing, attack anything else that's less critical
@@ -1898,8 +2184,9 @@ export class AttackPlan
 		// TODO Should add naval attacks against the last remaining ships.
 		if (!targets.hasEntities())
 		{
-			targets = gameState.getEntities(playerEnemy).filter(filters.byClass("ConquestCritical"))
-				.filter(filters.not(filters.byClass("Ship")));
+			targets = gameState.getEntities(playerEnemy).filter(filters.byClass("ConquestCritical")).filter(
+				filters.not(filters.byClass("Ship")),
+			);
 		}
 		return targets;
 	}
@@ -1911,11 +2198,16 @@ export class AttackPlan
 			return false;
 		if (sameLand && getLandAccess(gameState, ent) !== sameLand)
 			return false;
-		return !ent.decaying() || !!ent.getDefaultArrow() || ent.isGarrisonHolder() && (ent.garrisoned() || []).length > 0;
+		return !ent.decaying() || !!ent.getDefaultArrow() ||
+			ent.isGarrisonHolder() && (ent.garrisoned() || []).length > 0;
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
-	rushTargetFinder(gameState: CommonGameState, playerEnemy?: PlayerId, sameLand: AccessIndex | false = false): CommonEntityCollection
+	rushTargetFinder(
+		gameState: CommonGameState,
+		playerEnemy?: PlayerId,
+		sameLand: AccessIndex | false = false,
+	): CommonEntityCollection
 	{
 		let targets = new EntityCollection(gameState.sharedScript);
 		let buildings;
@@ -1979,7 +2271,11 @@ export class AttackPlan
 	 * otherwise we may be blocked by walls and try to react accordingly
 	 * This is done only when attacker and target are on the same land
 	 */
-	checkTargetObstruction(gameState: CommonGameState, target: CommonEntity, position: CommonPosition): CommonEntity | undefined
+	checkTargetObstruction(
+		gameState: CommonGameState,
+		target: CommonEntity,
+		position: CommonPosition,
+	): CommonEntity | undefined
 	{
 		if (getLandAccess(gameState, target) !== gameState.ai.accessibility.getAccessValue(position))
 			return target;
@@ -2064,15 +2360,15 @@ export class AttackPlan
 
 			if (i === 0)
 				this.rallyPoint = path[0];
-			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, path[i-1], 20))
+			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, path[i - 1], 20))
 			{
-				this.rallyPoint = path[i-2];
-				path.splice(0, i-2);
+				this.rallyPoint = path[i - 2];
+				path.splice(0, i - 2);
 			}
 			else
 			{
-				this.rallyPoint = path[i-1];
-				path.splice(0, i-1);
+				this.rallyPoint = path[i - 1];
+				path.splice(0, i - 1);
 			}
 			break;
 		}
@@ -2087,8 +2383,10 @@ export class AttackPlan
 		debugWarn(this.Config, 1, () => "start attack " + this.name + " with type " + this.type);
 
 		// if our target was destroyed during preparation, choose a new one
-		if ((this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
-		    !this.chooseTarget(gameState))
+		if (
+			(this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id())) &&
+			!this.chooseTarget(gameState)
+		)
 			return false;
 		this.leaveDisputedLands(gameState, this.targetLand(gameState));
 
@@ -2133,7 +2431,12 @@ export class AttackPlan
 	}
 
 	/** The plan's units are shipped to the target's land; false without a sea there */
-	private sailTo(gameState: CommonGameState, rallyAccess: AccessIndex, targetAccess: AccessIndex, targetPos: CommonPosition): boolean
+	private sailTo(
+		gameState: CommonGameState,
+		rallyAccess: AccessIndex,
+		targetAccess: AccessIndex,
+		targetPos: CommonPosition,
+	): boolean
 	{
 		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
 		if (sea === undefined)
@@ -2223,7 +2526,7 @@ export class AttackPlan
 	{
 		this.changeState(AttackPlan.STATE_ARRIVED, AttackPlan.STATE_ATTACKING);
 		this.startingAttack = true;
-		this.unitCollection.forEach((ent) =>
+		this.unitCollection.forEach(ent =>
 		{
 			ent.stopMoving();
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_ATTACKING);
@@ -2264,8 +2567,18 @@ export class AttackPlan
 
 		// Let's check a few units each time we update (currently 10) except when attack starts
 		const lgth = this.unitCollUpdateArray.length < 15 || this.startingAttack ? this.unitCollUpdateArray.length : 10;
-		const ctx: AttackerContext = { time, target, targetPos, veto, unitTargets, attackedByStructure, enemyUnits,
-			enemyStructures, targetClassesUnit, targetClassesSiege };
+		const ctx: AttackerContext = {
+			time,
+			target,
+			targetPos,
+			veto,
+			unitTargets,
+			attackedByStructure,
+			enemyUnits,
+			enemyStructures,
+			targetClassesUnit,
+			targetClassesSiege,
+		};
 		for (let check = 0; check < lgth; check++)
 		{
 			const ent = gameState.getEntityById(this.unitCollUpdateArray[check]);
@@ -2310,9 +2623,11 @@ export class AttackPlan
 				continue;
 			}
 			else if (isSiegeUnit(attacker))
-			{	// if our unit is attacked by a siege unit, we'll send some melee units to help it.
-				const collec = this.unitCollection.filter(filters.byClass("Melee"))
-					.filterNearest(ourUnit.position(), 5);
+			{ // if our unit is attacked by a siege unit, we'll send some melee units to help it.
+				const collec = this.unitCollection.filter(filters.byClass("Melee")).filterNearest(
+					ourUnit.position(),
+					5,
+				);
 				for (const ent of collec.values())
 					strike(gameState, ent, attacker, time);
 			}
@@ -2326,19 +2641,27 @@ export class AttackPlan
 	 * Our siege units attacked: we'll send some units to deal with enemies, and if this attacker is a non-ranged
 	 * siege unit and our unit also, attack it
 	 */
-	private defendSiege(gameState: CommonGameState, ourUnit: CommonPlacedEntity, attacker: CommonPlacedEntity, time: GameSeconds): void
+	private defendSiege(
+		gameState: CommonGameState,
+		ourUnit: CommonPlacedEntity,
+		attacker: CommonPlacedEntity,
+		time: GameSeconds,
+	): void
 	{
-		const collec = this.unitCollection.filter(filters.not(filters.byClass("Siege")))
-			.filterNearest(ourUnit.position(), 5);
+		const collec = this.unitCollection.filter(filters.not(filters.byClass("Siege"))).filterNearest(
+			ourUnit.position(),
+			5,
+		);
 		for (const ent of collec.values())
 		{
-			if (isSiegeUnit(ent))	// needed as mauryan elephants are not filtered out
+			if (isSiegeUnit(ent)) // needed as mauryan elephants are not filtered out
 				continue;
 			strike(gameState, ent, attacker, time);
 		}
-		if (isSiegeUnit(attacker) && attacker.hasClass("Melee") &&
-			ourUnit.hasClass("Melee") && ourUnit.canAttackTarget(attacker,
-			allowCapture(gameState, ourUnit, attacker)))
+		if (
+			isSiegeUnit(attacker) && attacker.hasClass("Melee") &&
+			ourUnit.hasClass("Melee") && ourUnit.canAttackTarget(attacker, allowCapture(gameState, ourUnit, attacker))
+		)
 		{
 			ourUnit.attack(attacker.id(), allowCapture(gameState, ourUnit, attacker));
 			ourUnit.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
@@ -2350,7 +2673,12 @@ export class AttackPlan
 	 * (if it was a structure or a support) and retaliate; also if our unit is attacking a range unit and the
 	 * attacker is a melee unit, retaliate
 	 */
-	private helpAndRetaliate(gameState: CommonGameState, ourUnit: CommonPlacedEntity, attacker: CommonPlacedEntity, time: GameSeconds): void
+	private helpAndRetaliate(
+		gameState: CommonGameState,
+		ourUnit: CommonPlacedEntity,
+		attacker: CommonPlacedEntity,
+		time: GameSeconds,
+	): void
 	{
 		const collec = this.unitCollection.filterNearest(ourUnit.position(), 2);
 		for (const ent of collec.values())
@@ -2369,40 +2697,69 @@ export class AttackPlan
 			if (orderData[0].target === attacker.id())
 				return;
 			const target = gameState.getEntityById(orderData[0].target);
-			if (target && !target.hasClasses(["Structure", "Support"]) &&
-				(!target.hasClass("Ranged") || !attacker.hasClass("Melee")))
+			if (
+				target && !target.hasClasses(["Structure", "Support"]) &&
+				(!target.hasClass("Ranged") || !attacker.hasClass("Melee"))
+			)
 				return;
 		}
 		strike(gameState, ourUnit, attacker, time);
 	}
 
 	/** What the attackers may go for this turn, and what they keep off, units and siege apart. */
-	attackerTargetClasses(target: CommonEntity, veto: Record<string, boolean>): Pick<AttackerContext, "targetClassesUnit" | "targetClassesSiege">
+	attackerTargetClasses(
+		target: CommonEntity,
+		veto: Record<string, boolean>,
+	): Pick<AttackerContext, "targetClassesUnit" | "targetClassesSiege">
 	{
-	let targetClassesUnit;
-	let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
-	if (this.type === AttackPlan.TYPE_RUSH)
-		targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Palisade", "Wall", "Tower", "Fortress"], "vetoEntities": veto };
-	else
-	{
-		if (target.hasClass("Fortress"))
-			targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Palisade", "Wall"], "vetoEntities": veto };
-		else if (target.hasClasses(["Palisade", "Wall"]))
-			targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Fortress"], "vetoEntities": veto };
+		let targetClassesUnit;
+		let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean> };
+		if (this.type === AttackPlan.TYPE_RUSH)
+			targetClassesUnit = {
+				"attack": ["Unit", "Structure"],
+				"avoid": ["Palisade", "Wall", "Tower", "Fortress"],
+				"vetoEntities": veto,
+			};
 		else
-			targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Palisade", "Wall", "Fortress"], "vetoEntities": veto };
-	}
-	if (target.hasClass("Structure"))
-		targetClassesSiege = { "attack": ["Structure"], "avoid": [], "vetoEntities": veto };
-	else
-		targetClassesSiege = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
+		{
+			if (target.hasClass("Fortress"))
+				targetClassesUnit = {
+					"attack": ["Unit", "Structure"],
+					"avoid": ["Palisade", "Wall"],
+					"vetoEntities": veto,
+				};
+			else if (target.hasClasses(["Palisade", "Wall"]))
+				targetClassesUnit = { "attack": ["Unit", "Structure"], "avoid": ["Fortress"], "vetoEntities": veto };
+			else
+				targetClassesUnit = {
+					"attack": ["Unit", "Structure"],
+					"avoid": ["Palisade", "Wall", "Fortress"],
+					"vetoEntities": veto,
+				};
+		}
+		if (target.hasClass("Structure"))
+			targetClassesSiege = { "attack": ["Structure"], "avoid": [], "vetoEntities": veto };
+		else
+			targetClassesSiege = { "attack": ["Unit", "Structure"], "avoid": [], "vetoEntities": veto };
 
-	// do not loose time destroying buildings which do not help enemy's defense and can be easily captured later
-	if (target.hasDefensiveFire())
-	{
-		targetClassesUnit.avoid = targetClassesUnit.avoid.concat("House", "Storehouse", "Farmstead", "Field", "Forge");
-		targetClassesSiege.avoid = targetClassesSiege.avoid.concat("House", "Storehouse", "Farmstead", "Field", "Forge");
-	}
+		// do not loose time destroying buildings which do not help enemy's defense and can be easily captured later
+		if (target.hasDefensiveFire())
+		{
+			targetClassesUnit.avoid = targetClassesUnit.avoid.concat(
+				"House",
+				"Storehouse",
+				"Farmstead",
+				"Field",
+				"Forge",
+			);
+			targetClassesSiege.avoid = targetClassesSiege.avoid.concat(
+				"House",
+				"Storehouse",
+				"Farmstead",
+				"Field",
+				"Forge",
+			);
+		}
 		return { targetClassesUnit, targetClassesSiege };
 	}
 
@@ -2416,7 +2773,11 @@ export class AttackPlan
 		const need = this.attackerNeedsOrder(gameState, ent, ctx);
 		if (need === undefined)
 			return;
-		const reach: AttackerReach = { "pos": entPos, "range": this.attackerReach(ent), "access": getLandAccess(gameState, ent) };
+		const reach: AttackerReach = {
+			"pos": entPos,
+			"range": this.attackerReach(ent),
+			"access": getLandAccess(gameState, ent),
+		};
 		if (isSiegeUnit(ent))
 			this.orderSiegeAttacker(gameState, ent, reach, ctx);
 		else
@@ -2428,8 +2789,11 @@ export class AttackPlan
 	 * as it should be, or looked at too recently), else whether it must have one
 	 * (idle, its target gone or too many on it) or only may.
 	 */
-	attackerNeedsOrder(gameState: CommonGameState, ent: CommonEntity, ctx: AttackerContext):
-		{ needsUpdate: boolean; maybeUpdate: boolean } | undefined
+	attackerNeedsOrder(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		ctx: AttackerContext,
+	): { needsUpdate: boolean; maybeUpdate: boolean } | undefined
 	{
 		const { time, unitTargets, attackedByStructure } = ctx;
 		// Do not reassign units which have reacted to an attack in that same turn
@@ -2475,14 +2839,14 @@ export class AttackPlan
 		if (this.isBlocked)
 		{
 			if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
-				range = (ent.attackRange("Ranged") || {max: 0}).max;
+				range = (ent.attackRange("Ranged") || { max: 0 }).max;
 			else if (attackTypes && attackTypes.indexOf("Melee") !== -1)
-				range = (ent.attackRange("Melee") || {max: 0}).max;
+				range = (ent.attackRange("Melee") || { max: 0 }).max;
 			else
 				range = 10;
 		}
 		else if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
-			range = 30 + (ent.attackRange("Ranged") || {max: 0}).max;
+			range = 30 + (ent.attackRange("Ranged") || { max: 0 }).max;
 		else if (ent.hasClass("FastMoving"))
 			range += 30;
 		range *= range;
@@ -2494,7 +2858,7 @@ export class AttackPlan
 	orderSiegeAttacker(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach, ctx: AttackerContext): void
 	{
 		const { targetPos, veto, enemyStructures, targetClassesSiege } = ctx;
-		const mStruct = enemyStructures.filter((enemy) =>
+		const mStruct = enemyStructures.filter(enemy =>
 		{
 			const enemyPos = enemy.position();
 			if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
@@ -2510,7 +2874,8 @@ export class AttackPlan
 		if (mStruct.length)
 		{
 			mStruct.sort((structa: CommonEntity, structb: CommonEntity): number =>
-				structureValue(structb, ent, 1000, 200) - structureValue(structa, ent, 1000, 200));
+				structureValue(structb, ent, 1000, 200) - structureValue(structa, ent, 1000, 200)
+			);
 			if (mStruct[0].hasClass("Gate"))
 				ent.attack(mStruct[0].id(), allowCapture(gameState, ent, mStruct[0]));
 			else
@@ -2521,7 +2886,11 @@ export class AttackPlan
 		}
 		else if (!ent.hasClass("Ranged"))
 		{
-			const targetClasses = { "attack": targetClassesSiege.attack, "avoid": targetClassesSiege.avoid.concat("Ship"), "vetoEntities": veto };
+			const targetClasses = {
+				"attack": targetClassesSiege.attack,
+				"avoid": targetClassesSiege.avoid.concat("Ship"),
+				"vetoEntities": veto,
+			};
 			ent.attackMove(targetPos[0], targetPos[1], targetClasses);
 		}
 		else
@@ -2529,8 +2898,13 @@ export class AttackPlan
 	}
 
 	/** Another attacker's next target: an enemy unit in reach, a structure, else help the nearest comrade. */
-	orderUnitAttacker(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach,
-		need: { needsUpdate: boolean; maybeUpdate: boolean }, ctx: AttackerContext): void
+	orderUnitAttacker(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		reach: AttackerReach,
+		need: { needsUpdate: boolean; maybeUpdate: boolean },
+		ctx: AttackerContext,
+	): void
 	{
 		const { target, targetPos, veto } = ctx;
 		const entPos = reach.pos;
@@ -2568,14 +2942,19 @@ export class AttackPlan
 		else if (SquareVectorDistance(targetPos, entPos) > 2500)
 			marchOn(ent, need.maybeUpdate, ctx);
 		else if (!this.attackStructureInReach(gameState, ent, reach, ctx) && need.needsUpdate)
-			this.helpNearestComrade(gameState, ent, entPos);  // really nothing   let's try to help our nearest unit
+			this.helpNearestComrade(gameState, ent, entPos); // really nothing   let's try to help our nearest unit
 	}
 
 	/** The attacker goes for a structure in reach (only the target when blocked), a gate first; whether there is one */
-	private attackStructureInReach(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach, ctx: AttackerContext): boolean
+	private attackStructureInReach(
+		gameState: CommonGameState,
+		ent: CommonEntity,
+		reach: AttackerReach,
+		ctx: AttackerContext,
+	): boolean
 	{
 		const { target, enemyStructures } = ctx;
-		const mStruct = enemyStructures.filter((enemy) =>
+		const mStruct = enemyStructures.filter(enemy =>
 		{
 			if (this.isBlocked && enemy.id() !== target.id())
 				return false;
@@ -2591,7 +2970,8 @@ export class AttackPlan
 		if (!mStruct.length)
 			return false;
 		mStruct.sort((structa: CommonEntity, structb: CommonEntity): number =>
-			structureValue(structb, ent, 0, 100) - structureValue(structa, ent, 0, 100));
+			structureValue(structb, ent, 0, 100) - structureValue(structa, ent, 0, 100)
+		);
 		if (mStruct[0].hasClass("Gate"))
 			ent.attack(mStruct[0].id(), false);
 		else
@@ -2607,14 +2987,13 @@ export class AttackPlan
 	{
 		let distmin = Math.min();
 		let attacker: CommonEntity | undefined;
-		this.unitCollection.forEach((unit) =>
+		this.unitCollection.forEach(unit =>
 		{
 			if (!isPlaced(unit))
 				return;
 			const unitPos = unit.position();
 			const orderData = ordersOf(unit);
-			if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length ||
-				!orderData[0].target)
+			if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length || !orderData[0].target)
 				return;
 			const target = gameState.getEntityById(orderData[0].target ?? -1);
 			if (!target)
@@ -2630,7 +3009,6 @@ export class AttackPlan
 		if (attacker)
 			ent.attack(attacker.id(), allowCapture(gameState, ent, attacker));
 	}
-
 
 	UpdateTransporting(gameState: CommonGameState, events: EngineAIEvents): void
 	{
@@ -2714,15 +3092,16 @@ export class AttackPlan
 		}
 
 		// basically haven't moved an inch: very likely stuck)
-		if (pos5TurnsAgo && SquareVectorDistance(pos, pos5TurnsAgo) < 10 &&
-			path.length > 0 && gameState.ai.playedTurn % 5 === 0)
+		if (
+			pos5TurnsAgo && SquareVectorDistance(pos, pos5TurnsAgo) < 10 &&
+			path.length > 0 && gameState.ai.playedTurn % 5 === 0
+		)
 			destroyFarthestSiege(this.unitCollection, pos);
 		if (gameState.ai.playedTurn % 5 === 0)
 			this.position5TurnsAgo = clone(pos);
 
 		const lastPos = this.lastPosition;
-		if (lastPos && SquareVectorDistance(pos, lastPos) < 16 &&
-			path.length > 0)
+		if (lastPos && SquareVectorDistance(pos, lastPos) < 16 && path.length > 0)
 		{
 			const walls = this.unstick(gameState, pos, path);
 			if (walls !== undefined)
@@ -2732,7 +3111,11 @@ export class AttackPlan
 		// check if our units are close enough from the next waypoint.
 		if (targetPos && SquareVectorDistance(pos, targetPos) < 10000 || this.walkedPath(path, pos))
 		{
-			debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name + " has arrived to destination.");
+			debugWarn(
+				this.Config,
+				1,
+				() => "Attack Plan " + this.type + " " + this.name + " has arrived to destination.",
+			);
 			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
 		}
 		return true;
@@ -2789,8 +3172,7 @@ export class AttackPlan
 	 */
 	private facesWalls(gameState: CommonGameState, pos: CommonPosition): boolean | undefined
 	{
-		for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"]))
-			.values())
+		for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"])).values())
 		{
 			const entPos = ent.position();
 			if (SquareVectorDistance(pos, entPos) > 800)
@@ -2799,13 +3181,19 @@ export class AttackPlan
 			// there are walls, so check if we can attack
 			if (this.unitCollection.filter(filters.byCanAttackClass(enemyClass)).hasEntities())
 			{
-				debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
-					" has met walls and is not happy.");
+				debugWarn(
+					this.Config,
+					1,
+					() => "Attack Plan " + this.type + " " + this.name + " has met walls and is not happy.",
+				);
 				return true;
 			}
 			// abort plan
-			debugWarn(this.Config, 1, () => "Attack Plan " + this.type + " " + this.name +
-				" has met walls and gives up.");
+			debugWarn(
+				this.Config,
+				1,
+				() => "Attack Plan " + this.type + " " + this.name + " has met walls and gives up.",
+			);
 			return false;
 		}
 		return undefined;
@@ -2841,13 +3229,16 @@ export class AttackPlan
 			if (this.target && this.target.owner() !== this.targetPlayer)
 				this.target = undefined;
 		}
-		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0)  // this enemy has resigned
+		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0) // this enemy has resigned
 			this.target = undefined;
 
 		if (!this.target || !gameState.getEntityById(this.target.id()))
 		{
-			debugWarn(this.Config, 1, () => "Seems like our target for plan " + this.name +
-				" has been destroyed or captured. Switching.");
+			debugWarn(
+				this.Config,
+				1,
+				() => "Seems like our target for plan " + this.name + " has been destroyed or captured. Switching.",
+			);
 			if (!this.switchTarget(gameState, pos))
 				return undefined;
 		}
@@ -2893,8 +3284,7 @@ export class AttackPlan
 				this.target = this.getNearestTarget(gameState, pos, accessIndex);
 			if (!this.target)
 			{
-				debugWarn(this.Config, 1, () => "No new target found. Remaining units " +
-					this.unitCollection.length);
+				debugWarn(this.Config, 1, () => "No new target found. Remaining units " + this.unitCollection.length);
 				return false;
 			}
 			debugWarn(this.Config, 1, () => "We will help one of our other attacks");
@@ -2911,12 +3301,14 @@ export class AttackPlan
 		{
 			if (attack.name === this.name)
 				continue;
-			if (!attack.target || !gameState.getEntityById(attack.target.id()) ||
-			    !gameState.isPlayerEnemy(attack.target.owner()))
+			if (
+				!attack.target || !gameState.getEntityById(attack.target.id()) ||
+				!gameState.isPlayerEnemy(attack.target.owner())
+			)
 				continue;
 			if (accessIndex !== getLandAccess(gameState, attack.target))
 				continue;
-			if (attack.target.owner() === 0 && attack.targetPlayer !== 0)	// looks like it has resigned
+			if (attack.target.owner() === 0 && attack.targetPlayer !== 0) // looks like it has resigned
 				continue;
 			if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
 				continue;
@@ -2938,7 +3330,8 @@ export class AttackPlan
 			// If the attack was started, look for a good rallyPoint to withdraw
 			// (an army with no position is aboard ships: it gets no rallyPoint)
 			const { rallyPoint, withdrawRange } = this.isStarted() && pos ?
-				this.withdrawPoint(gameState, pos) : { "rallyPoint": undefined, "withdrawRange": WITHDRAW_RANGE };
+				this.withdrawPoint(gameState, pos) :
+				{ "rallyPoint": undefined, "withdrawRange": WITHDRAW_RANGE };
 
 			for (const ent of this.unitCollection.values())
 			{
@@ -2961,8 +3354,10 @@ export class AttackPlan
 	 * case this attack has captured one); and how far from it the units may stop: an anchor's position is the
 	 * centre of its building, so the ring must reach out past the footprint or nobody can get there
 	 */
-	private withdrawPoint(gameState: CommonGameState, pos: CommonPosition):
-		{ rallyPoint: CommonPosition | undefined; withdrawRange: number }
+	private withdrawPoint(
+		gameState: CommonGameState,
+		pos: CommonPosition,
+	): { rallyPoint: CommonPosition | undefined; withdrawRange: number }
 	{
 		let rallyPoint;
 		let withdrawRange = WITHDRAW_RANGE;
@@ -3034,7 +3429,7 @@ export class AttackPlan
 	/** The target captured by an ally is no more ours; a defeated target player gives way to another */
 	private onTargetLost(gameState: CommonGameState, events: EngineAIEvents): void
 	{
-		for (const evt of events.OwnershipChanged)	// capture event
+		for (const evt of events.OwnershipChanged) // capture event
 			if (this.target && this.target.id() === evt.entity && gameState.isPlayerAlly(evt.to))
 				this.target = undefined;
 
@@ -3125,8 +3520,7 @@ export class AttackPlan
 		for (const unitCat in this.unitStat)
 		{
 			const Unit = this.unitStat[unitCat];
-			aiWarn(unitCat + " num=" + this.unit[unitCat].length + " min=" + Unit.minSize + " need=" +
-				Unit.targetSize);
+			aiWarn(unitCat + " num=" + this.unit[unitCat].length + " min=" + Unit.minSize + " need=" + Unit.targetSize);
 		}
 		aiWarn("------------------------------");
 	}
@@ -3154,10 +3548,9 @@ export class AttackPlan
 			"targetPos": this.targetPos !== undefined ? clone(this.targetPos) : undefined,
 			"uniqueTargetId": this.uniqueTargetId,
 			"path": this.path,
-			"unitCollUpdateArray": this.unitCollUpdateArray
+			"unitCollUpdateArray": this.unitCollUpdateArray,
 		};
 
 		return { "properties": properties };
 	}
-
 }
