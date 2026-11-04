@@ -19,6 +19,7 @@ import { baseId, entityId, landRegion, playerId, seaRegion } from "../adapter/br
 import type { Headquarters } from "../decision/headquarters.ts";
 import { type SerializedTradeManager, TradeManager, type TradeRoute } from "../decision/tradeManager.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { SeaFleet } from "../decision/navalManager.ts";
 
 const PlayerID = PLAYER;
 
@@ -81,12 +82,12 @@ function trader(world: HqWorld, id: number, position: [number, number] | undefin
 	return { ent, orders };
 }
 
-/** the transport ships the fleet keeps on one sea, as navalManager.seaTransportShips holds them */
-function fleetOn(world: HqWorld, sea: number, ships: CommonEntity[]): Array<CommonEntityCollection | undefined>
+/** the naval manager's answer for the fleet on each sea: on this one, these transport ships and no other kind */
+function fleetOn(world: HqWorld, sea: number, ships: CommonEntity[]): (at: number) => SeaFleet | undefined
 {
-	const seas: Array<CommonEntityCollection | undefined> = [];
-	seas[sea] = collectionOf(world, ships);
-	return seas;
+	const fleet: SeaFleet = { "ships": collectionOf(world, ships), "transports": collectionOf(world, ships),
+		"warShips": collectionOf(world, []), "fishers": collectionOf(world, []) };
+	return (at: number) => at === sea ? fleet : undefined;
 }
 
 describe("the trade office opening: init and traders", () =>
@@ -278,17 +279,17 @@ describe("traders trained: trainMoreTraders", () =>
 		const free = world.addEntity(makeHqEntity({ "id": 310, "owner": PLAYER, "position": [200, 200], "classes": ["Unit", "Ship", "Trader"] }));
 		const carrying = world.addEntity(makeHqEntity({ "id": 311, "owner": PLAYER, "position": [200, 220], "classes": ["Unit", "Ship", "Trader"] },
 			{}, { "transporter": 4 }));
-		hq.navalManager.seaTransportShips = fleetOn(world, 5, [free]);
+		hq.navalManager.fleet = fleetOn(world, 5, [free]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(free.getMetadata(PlayerID, "role"), "trader");
 
-		hq.navalManager.seaTransportShips = fleetOn(world, 5, [carrying]);
+		hq.navalManager.fleet = fleetOn(world, 5, [carrying]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(carrying.getMetadata(PlayerID, "role"), "switchToTrader", "after its passage");
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(queues.trader.plans.length, 0, "one already switching");
 
-		hq.navalManager.seaTransportShips = fleetOn(world, 5, []);	// no merchant ship among them
+		hq.navalManager.fleet = fleetOn(world, 5, []);	// no merchant ship among them
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.deepEqual(queues.trader.plans.map((p) => [p.type, p.metadata]),
 			[["units/athen/ship_merchant", { "role": "trader", "sea": 5 }]]);
@@ -314,7 +315,7 @@ describe("traders trained: trainMoreTraders", () =>
 		manager.tradeRoute = { "source": entityId(400), "target": entityId(401), "gain": 100, "sea": seaRegion(5) };
 		const warship = world.addEntity(makeHqEntity({ "id": 312, "owner": PLAYER, "position": [200, 200], "classes": ["Unit", "Ship", "Warship"] }));
 		const merchant = world.addEntity(makeHqEntity({ "id": 313, "owner": PLAYER, "position": [200, 210], "classes": ["Unit", "Ship", "Trader"] }));
-		hq.navalManager.seaTransportShips = fleetOn(world, 5, [warship, merchant]);
+		hq.navalManager.fleet = fleetOn(world, 5, [warship, merchant]);
 		manager.trainMoreTraders(world.gameState, queues);
 		assert.equal(warship.getMetadata(PlayerID, "role"), undefined);
 		assert.equal(merchant.getMetadata(PlayerID, "role"), "trader");

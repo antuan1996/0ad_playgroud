@@ -21,6 +21,7 @@ import type { Headquarters } from "../decision/headquarters.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 import { UnitWork, Worker } from "../execution/worker.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
 
 // the player id the common-api reads metadata under
 const PlayerID = PLAYER;
@@ -243,7 +244,7 @@ describe("a worker at the fields: gatherNearestField and buildAnyField", () =>
 		const ent = hand(world, base, 6063, { "gather-type": "food" });
 		const work = prime(worker, ent);
 
-		const picked = work.gatherNearestField(world.gameState, base.ID);
+		const picked = work.gatherNearestField(world.gameState, base.ID, requireValue(work.ent.resourceGatherRates()));
 
 		assert.ok(picked, "a field is found");
 		assert.equal(picked.id(), 6061, "the full field wins over the nearer, thinned one");
@@ -1864,7 +1865,7 @@ describe("a worker's smaller judgements", () =>
 		const ent = hand(world, base, 7333, { "gather-type": "food" });
 		const work = prime(worker, ent);
 
-		assert.equal(work.gatherNearestField(world.gameState, base.ID), false);
+		assert.equal(work.gatherNearestField(world.gameState, base.ID, requireValue(work.ent.resourceGatherRates())), false);
 	});
 
 	it("a dropsite-bearer does not follow gatherers who are idle or waiting for a boat", () =>
@@ -2481,7 +2482,7 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 		const ent = hand(world, base, 7803, { "gather-type": "food" });
 		const work = prime(worker, ent);
 
-		assert.equal((work.gatherNearestField(world.gameState, base.ID) as CommonEntity).id(), 7802);
+		assert.equal((work.gatherNearestField(world.gameState, base.ID, requireValue(work.ent.resourceGatherRates())) as CommonEntity).id(), 7802);
 	});
 
 	it("a fisher passes over a full shoal, a fished-out one and one in unsafe waters", () =>

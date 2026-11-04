@@ -1302,9 +1302,10 @@ describe("updatePreparation: unexecuted plans", () =>
 		assert.equal(world.units.filter((soldier) => soldier.getMetadata(PLAYER, "plan") != undefined).length, 1,
 			"the third fast soldier drafted while the plan waits");
 
-		world.ai.HQ.navalManager.seaTransportShips[4] = collectionOf(world, [world.addEntity(makeEntity({
-			id: 5000, owner: PLAYER, position: [5, 5], classes: ["Unit", "Ship"]
-		}))]);
+		world.ai.HQ.navalManager.fleets.set(4, { ...requireValue(world.ai.HQ.navalManager.fleet(4)),
+			"transports": collectionOf(world, [world.addEntity(makeEntity({
+				id: 5000, owner: PLAYER, position: [5, 5], classes: ["Unit", "Ship"]
+			}))]) });
 		assert.equal(plan.updatePreparation(world.gameState), 1, "with ships, the plan keeps preparing");
 		const assigned = world.units.filter((soldier) => soldier.getMetadata(PLAYER, "plan") != undefined);
 		assert.equal(assigned.length, 1, "only the third fast soldier joined");

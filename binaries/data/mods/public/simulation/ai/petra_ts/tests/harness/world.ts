@@ -299,8 +299,9 @@ export function makeWorld(options: WorldOptions = {}): World
 		hasPotentialBase: () => knobs.hasPotentialBase,
 		getSeaBetweenIndices: () => knobs.sea,
 		navalManager: {
-			// the transport ships per sea: none on sea 4
-			seaTransportShips: Object.assign([], { 4: collect() }),
+			// the fleet per sea: none on sea 4
+			fleets: new Map([[4, { "ships": collect(), "transports": collect(), "warShips": collect(), "fishers": collect() }]]),
+			fleet(this: { fleets: Map<number, unknown> }, sea: number) { return this.fleets.get(sea); },
 			setMinimalTransportShips: (_gs: CommonGameState, sea: number, needed: number) => minimalShipCalls.push([sea, needed]),
 			requireTransport: (_gs: CommonGameState, ent: CommonEntity, from: number, to: number, toPos: [number, number] | undefined) =>
 				transportCalls.push([ent, from, to, toPos]),

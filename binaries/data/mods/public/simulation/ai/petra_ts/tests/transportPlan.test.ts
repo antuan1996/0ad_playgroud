@@ -1081,6 +1081,7 @@ describe("a transport plan saved and loaded", () =>
 		const saved = JSON.parse(JSON.stringify(p.Serialize()));
 
 		const loaded = TransportPlan.restore(s.world.gameState, s.hq.navalManager, saved);
+		assert.ok(loaded, "its sea has a fleet");
 
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
 		assert.equal(loaded.units.length, 1, "it finds its unit again by its metadata");

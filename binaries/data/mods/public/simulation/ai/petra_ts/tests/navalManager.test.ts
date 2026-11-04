@@ -169,10 +169,10 @@ describe("the fleet counted at the start: init", () =>
 		assert.equal(s.naval.transportShips.length, 1, "the warship carries troops, the fishing boat does not");
 		assert.equal(s.naval.warShips.length, 1);
 		assert.equal(s.naval.fishShips.length, 1);
-		assert.equal(s.naval.seaShips[SEA]?.length, 2, "each ship knows its sea");
-		assert.equal(s.naval.seaTransportShips[SEA]?.length, 1);
-		assert.equal(s.naval.seaFishShips[SEA]?.length, 1);
-		assert.equal(s.naval.seaShips[WEST], undefined, "a land keeps no fleet");
+		assert.equal(s.naval.fleet(SEA)?.ships.length, 2, "each ship knows its sea");
+		assert.equal(s.naval.fleet(SEA)?.transports.length, 1);
+		assert.equal(s.naval.fleet(SEA)?.fishers.length, 1);
+		assert.equal(s.naval.fleet(WEST), undefined, "a land keeps no fleet");
 	});
 
 	it("maps where units can board and land: the shallows of each land on each sea", () =>

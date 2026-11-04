@@ -28,6 +28,7 @@ import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
 import { entityId, landRegion } from "../adapter/brands.ts";
 import { analyseMap } from "../world/geography.ts";
 import { BuildManager } from "../decision/buildManager.ts";
+import { isStructure } from "../adapter/placed.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
@@ -87,7 +88,7 @@ function freshHQ(world: HqWorld, config = makeHQConfig()): Headquarters
 	Reflect.deleteProperty(hq, "canBuildUnits");
 	Reflect.deleteProperty(hq, "canExpand");
 	// the naval manager's docks, as its init collects them
-	hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false);
+	hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false).filter(isStructure);
 	return hq;
 }
 
@@ -816,7 +817,7 @@ describe("buildFirstBase: founding a town from nothing", () =>
 			"templateName": "structures/athen/dock"
 		}));
 		villager(world, 301, [100, 100]);
-		hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false);
+		hq.navalManager.docks = world.gameState.getOwnEntitiesByClass("Dock", false).filter(isStructure);
 		initBuilders(world, hq);
 
 		buildFirstBase(hq, world.gameState);
