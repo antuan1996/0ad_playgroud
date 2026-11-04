@@ -37,7 +37,7 @@ function initNaval(s: ReturnType<typeof seat>): void
 /** a plan, initialised and handed to the naval manager, as requireTransport makes one */
 function plan(s: ReturnType<typeof seat>, units: CommonEntity[], end = worldPos(280, 160), start: AccessIndex = WEST, endIndex: AccessIndex = ISLAND): TransportPlan
 {
-	const p = TransportPlan.create(s.world.gameState, units, start, endIndex, end);
+	const p = TransportPlan.create(s.world.gameState, units, { "startIndex": start, endIndex, "endPos": end });
 	assert.ok(p, "a sea to cross");
 	s.hq.navalManager.transportPlans.push(p);
 	return p;
@@ -68,7 +68,7 @@ describe("a transport plan made: the sea between the two lands", () =>
 		initNaval(s);
 
 		const ids = s.world.gameState.ai.uniqueIDs.transports;
-		const p = TransportPlan.create(s.world.gameState, [a.ent], WEST, landRegion(7), worldPos(280, 160));
+		const p = TransportPlan.create(s.world.gameState, [a.ent], { "startIndex": WEST, "endIndex": landRegion(7), "endPos": worldPos(280, 160) });
 
 		assert.equal(p, undefined, "no sea between the lands: no plan");
 		assert.equal(s.world.gameState.ai.uniqueIDs.transports, ids + 1, "its ID is used up all the same, as before");
@@ -83,7 +83,7 @@ describe("a transport plan made: the sea between the two lands", () =>
 		board(a, carrier);
 		initNaval(s);
 
-		const p = TransportPlan.create(s.world.gameState, [a.ent], landRegion(1), ISLAND, worldPos(280, 160), carrier.ent);
+		const p = TransportPlan.create(s.world.gameState, [a.ent], { "startIndex": landRegion(1), "endIndex": ISLAND, "endPos": worldPos(280, 160) }, carrier.ent);
 
 		assert.ok(p);
 		assert.equal(p.sea, SEA, "the ship's sea, set when the fleet was counted");
@@ -997,8 +997,8 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, landRegion(9), SEA, worldPos(10, 10)), [10, 10]);
-		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, seaRegion(9), worldPos(10, 10)), [10, 10]);
+		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": landRegion(9), "sea": SEA }, worldPos(10, 10)), [10, 10]);
+		assert.deepEqual(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": seaRegion(9) }, worldPos(10, 10)), [10, 10]);
 	});
 
 	it("lands units outside enemy territory when it can", () =>
@@ -1013,7 +1013,7 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent], worldPos(280, 100));
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
 
 		assert.ok(bp[1] >= 200, `north of the enemy's ground, got ${bp}`);
 	});
@@ -1026,12 +1026,12 @@ describe("where a ship puts in: getBoardingPos", () =>
 		const a = soldier(s.world, 100, [140, 100]);
 		initNaval(s);
 		const p = plan(s, [a.ent], worldPos(280, 100));
-		const near = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
+		const near = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
 
 		// a band of swordsmen and an archer where the ship would put in
 		s.world.addEntity(makeHqEntity({ "id": 3100, "owner": ENEMY, "position": [near[0] + 4, near[1]], "classes": ["Unit", "Ranged"] },
 			{ "attackTypes": () => ["Ranged"], "attackRange": () => ({ "max": 40, "min": 0 }) }));
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(280, 100), true));
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(280, 100), true));
 
 		assert.ok(Math.hypot(bp[0] - near[0] - 4, bp[1] - near[1]) > 40, `out of the archer's reach: ${near} then ${bp}`);
 	});
@@ -1047,7 +1047,7 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(244, 160)));
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)));
 
 		assert.ok(Math.hypot(bp[0] - 244, bp[1] - 160) > 40, `away from the dock, got ${bp}`);
 	});
@@ -1063,7 +1063,7 @@ describe("where a ship puts in: getBoardingPos", () =>
 		initNaval(s);
 		const p = plan(s, [a.ent]);
 
-		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, ISLAND, SEA, worldPos(244, 160)));
+		const bp = requireValue(p.getBoardingPos(s.world.gameState, carrier.ent, { "land": ISLAND, "sea": SEA }, worldPos(244, 160)));
 		const d = Math.hypot(bp[0] - 244, bp[1] - 160);
 
 		assert.ok(d > 20 && d < 40, `30 m from a foundation rather than 70, got ${d}`);
