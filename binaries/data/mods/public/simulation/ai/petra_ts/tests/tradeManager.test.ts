@@ -46,9 +46,8 @@ function seat(options: Partial<HqWorldOptions> = {}, cards: { land?: boolean; se
 			world.templates["units/{civ}/" + name] = makeTemplate("units/{civ}/" + name, { "classes": [...classes] });
 			world.templates["units/athen/" + name] = makeTemplate("units/athen/" + name, { "classes": [...classes], "cost": { "food": 100 } });
 		}
-	const manager = new TradeManager(hq.Config);
+	const manager = new TradeManager(hq.Config, world.gameState, hq.geography);
 	hq.tradeManager = manager;
-	manager.init(world.gameState);
 	resetRecorder();
 	return { world, hq, manager, "queues": world.ai.queues };
 }
@@ -104,8 +103,7 @@ describe("the trade office opening: init and traders", () =>
 
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { "stubs": tradeDoors, "navalMap": true });
-		const naval = new TradeManager(hq.Config);
-		naval.init(world.gameState);
+		const naval = new TradeManager(hq.Config, world.gameState, hq.geography);
 		assert.equal(naval.minimalGain, 3);
 	});
 });
@@ -773,9 +771,10 @@ describe("the trade office saved and loaded", () =>
 {
 	it("a save from an older version keeps the defaults", () =>
 	{
-		const { world, manager } = seat();
+		const { world, hq, manager } = seat();
 		const defaults = manager.Serialize();
-		manager.Deserialize(world.gameState, fake<SerializedTradeManager>({ "tradeRoute": undefined, "potentialTradeRoute": undefined }));
-		assert.deepEqual(manager.Serialize(), defaults);
+		const loaded = TradeManager.restore(hq.Config, world.gameState, hq.geography,
+			fake<SerializedTradeManager>({ "tradeRoute": undefined, "potentialTradeRoute": undefined }));
+		assert.deepEqual(loaded.Serialize(), defaults);
 	});
 });

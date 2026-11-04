@@ -115,7 +115,6 @@ describe("the book over one turn's events", () =>
 		mgr.checkEvents(world.gameState, eventsWith({ "Create": [{ "entity": entityId(3001) }] }));
 
 		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
-		assert.equal(mgr.elapsedTime, 100, "the office named the turn's own time");
 	});
 
 	it("a unit created and destroyed the same turn is never booked", () =>

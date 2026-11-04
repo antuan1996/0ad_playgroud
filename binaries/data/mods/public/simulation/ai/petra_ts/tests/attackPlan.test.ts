@@ -42,9 +42,9 @@ interface PlanOptions
 {
 	name?: number;
 	type?: AttackType;
-	deserialized?: boolean;
 	data?: AttackPlanData;
-	init?: boolean;
+	/** the size roll AttackPlan.create draws; 1 by default, so the sizes are the table's */
+	variation?: number;
 }
 
 /** A plan as AttackPlan.create makes one, with its start searched; undefined when it has none. */
@@ -52,23 +52,15 @@ function tryPlan(world: World, options: PlanOptions = {}): AttackPlan | undefine
 {
 	const type = options.type ?? "Attack";
 	const start = AttackPlan.findStart(world.gameState, type, attackPlanId(options.name ?? 1), options.data?.target);
-	return start && new AttackPlan(world.gameState, world.ai.Config, options.name ?? 1, type, options.data,
-		options.deserialized ?? true, start);
+	return start && new AttackPlan(world.gameState, world.ai.Config, options.name ?? 1,
+		{ "kind": "new", type, "data": options.data, start, "variation": options.variation ?? 1,
+			"canBuildUnits": world.ai.HQ.canBuildUnits });
 }
 
 function makePlan(world: World, options: PlanOptions = {}): AttackPlan
 {
 	const plan = tryPlan(world, options);
 	assert.ok(plan, "the plan found where to start");
-	// headquarters registers the queues before the plan is initialized.
-	if (options.init)
-	{
-		const name = options.name ?? 1;
-		world.ai.queueManager.addQueue(`plan_${name}`, 70);
-		world.ai.queueManager.addQueue(`plan_${name}_champ`, 71);
-		world.ai.queueManager.addQueue(`plan_${name}_siege`, 70);
-		plan.init(world.gameState);
-	}
 	return plan;
 }
 
@@ -121,15 +113,15 @@ describe("construction", () =>
 		assert.equal(plan.neededShips, 3, "a plain attack needs three ships");
 		assert.equal(plan.siegeState, 0, "siege units are untested");
 		assert.equal(plan.isBlocked, false, "no walls are known");
-		assert.equal(plan.buildOrders.length, 0, "no build orders yet");
+		assert.equal(plan.buildOrders.length, 3, "a build order per category, ready from the start");
 		assert.equal(plan.canBuildUnits, true, "the HQ says the plan can build units");
 	});
 
-	it("registers its three queues with the right priorities, unless deserialized", () =>
+	it("registers its three queues with the right priorities", () =>
 	{
 		const world = makeWorld();
 		resetRecorder();
-		makePlan(world, { name: 2, deserialized: false });
+		makePlan(world, { name: 2 });
 
 		assert.deepEqual(Object.keys(world.ai.queues).filter((name) => name.startsWith("plan_")),
 			["plan_2", "plan_2_champ", "plan_2_siege"], "the plan queues exist");
@@ -296,7 +288,7 @@ describe("queues, queries and build orders", () =>
 			classes: ["Unit", "Infantry", "Melee", "CitizenSoldier"]
 		}, {}, { "plan": 2 }));
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		assert.equal(plan.unitCollection.length, 3, "the collection holds this plan's units");
 		assert.equal(plan.queue, world.ai.queues["plan_1"], "the main queue is linked");
@@ -313,7 +305,7 @@ describe("queues, queries and build orders", () =>
 	it("answers the easy questions", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.isStarted(), false, "unexecuted is not started");
 		assert.equal(plan.isPaused(), false, "not paused");
 		plan.setPaused(true);
@@ -338,7 +330,7 @@ describe("queues, queries and build orders", () =>
 				id: 1020 + i, owner: PLAYER, position: [11, 12],
 				classes: ["Unit", "FastMoving", "CitizenSoldier"]
 			}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.canStart(), true, "all categories at min size");
 		assert.equal(plan.mustStart(), false, "but not yet at target sizes");
 
@@ -352,14 +344,14 @@ describe("queues, queries and build orders", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Infantry"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.mustStart(), true, "without building, units in collection mean must start");
 	});
 
 	it("force-starts by emptying the wanted sizes", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.forceStart();
 		assert.equal(plan.forced, true, "the plan is forced");
 		for (const cat in plan.unitStat)
@@ -372,7 +364,7 @@ describe("queues, queries and build orders", () =>
 	it("empties and removes its own queues", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		const emptyCalls: string[] = [];
 		const countEmpty = (queue: Queue, name: string) => {
@@ -398,7 +390,7 @@ describe("queues, queries and build orders", () =>
 	it("skips building orders and refuses to add them while the attack is on", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		const stat = { "priority": 1, "minSize": 0, "targetSize": 5, "batchSize": 2, "classes": ["Siege"] };
 		plan.addBuildOrder(world.gameState, "Siege", stat, true);
@@ -428,7 +420,7 @@ describe("siege units", () =>
 	it("finds nothing when the player has no siege trainer", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "no trainer, no siege");
 		assert.equal(plan.siegeState, 1, "the plan remembers there is no trainer");
 		assert.equal(plan.buildOrders.length, 3, "no order was added");
@@ -449,7 +441,7 @@ describe("siege units", () =>
 		const gameState = world.gameState;
 		gameState["isTemplateDisabled"] = () => true;
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "no usable trainable");
 		assert.equal(plan.siegeState, 1, "remembered as no trainer");
 	});
@@ -466,7 +458,7 @@ describe("siege units", () =>
 		barracks.trainableEntities = () => [templateName("units/siege_ram")];
 		world.templates["units/siege_ram"] = makeTemplate("units/siege_ram", { classes: ["Siege", "Melee"] });
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), true, "the siege was added");
 		assert.equal(plan.siegeState, 2, "and marked as such");
 		const siegeOrder = plan.buildOrders[plan.buildOrders.length - 1];
@@ -488,7 +480,7 @@ describe("siege units", () =>
 		barracks.trainableEntities = () => [templateName("units/siege_balista")];
 		world.templates["units/siege_balista"] = makeTemplate("units/siege_cloud", { classes: ["Siege", "Ranged"] });
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), true, "still a yes");
 		assert.equal(plan.siegeState, 2, "marked");
 		assert.deepEqual(plan.buildOrders.map((order) => order[4]), ["RangedInfantry", "MeleeInfantry", "FastMoving"],
@@ -498,7 +490,7 @@ describe("siege units", () =>
 	it("stops when the plan is no longer unexecuted", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.siegeState = 2;
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "already added");
 		plan.siegeState = 0;
@@ -517,7 +509,7 @@ describe("choosing a target", () =>
 		}));
 		const target = makeTarget(world); // [30,40], also a civ centre
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "a target was chosen");
@@ -532,7 +524,7 @@ describe("choosing a target", () =>
 	it("fails when no enemy has anything to attack", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.chooseTarget(world.gameState), false, "nothing to attack");
 		assert.equal(plan.target, undefined, "and no target");
 	});
@@ -549,7 +541,7 @@ describe("choosing a target", () =>
 			id: 2100, owner: ENEMY, position: [55, 55], classes: ["Structure", "CivCentre"]
 		}));
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 55, "y": 55 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "the target was chosen");
@@ -566,7 +558,7 @@ describe("choosing a target", () =>
 			id: 2100, owner: ENEMY, position: [55, 55], classes: ["Structure", "CivCentre"]
 		}));
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 55, "y": 55 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "the target was chosen");
@@ -589,7 +581,7 @@ describe("choosing a target", () =>
 		}));
 		world.enemyLands.add(2);	// a third player's outpost on our island
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 30, "y": 30 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "the target was chosen");
@@ -611,7 +603,7 @@ describe("choosing a target", () =>
 				classes: ["Structure", "CivCentre"] }));
 			const dock = world.addEntity(makeEntity({ id: 2101, owner: ENEMY, position: [80, 80],
 				classes: ["Structure", "Dock"] }));
-			const plan = makePlan(world, { name: 1, type: "HugeAttack", init: true });
+			const plan = makePlan(world, { name: 1, type: "HugeAttack" });
 			plan.targetPlayer = playerId(ENEMY);
 			const expected = naval ? dock : centre;
 			const at = requireValue(expected.position());
@@ -631,7 +623,7 @@ describe("choosing a target", () =>
 		}));
 
 		resetRecorder();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		let result;
 		withPath([{ "x": 55, "y": 55 }], () =>
 		{
@@ -659,7 +651,7 @@ describe("choosing a target", () =>
 		world.addEntity(makeEntity({ id: 2203, owner: GAIA, position: [40, 40], classes: ["Unit", "Relic"] }));
 
 		// HugeAttack routes straight to the victory-condition finder.
-		const plan = makePlan(world, { name: 1, type: "HugeAttack", init: true });
+		const plan = makePlan(world, { name: 1, type: "HugeAttack" });
 		withPath([{ "x": 15, "y": 15 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "a relic was chosen");
@@ -684,7 +676,7 @@ describe("choosing a target", () =>
 			id: 2210, owner: GAIA, position: [25, 25], classes: ["Unit", "Relic"]
 		}));
 
-		const plan = makePlan(world, { name: 5, type: "HugeAttack", init: true });
+		const plan = makePlan(world, { name: 5, type: "HugeAttack" });
 		withPath([{ "x": 25, "y": 25 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "the relic was chosen");
@@ -702,7 +694,7 @@ describe("choosing a target", () =>
 		}));
 		world.ai.HQ.defenseManager.targetList.push(foundation.id());
 
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1, type: "Raid" });
 		withPath([{ "x": 35, "y": 40 }], () =>
 		{
 			assert.equal(plan.chooseTarget(world.gameState), true, "the raid found its purpose");
@@ -717,7 +709,7 @@ describe("choosing a target", () =>
 		const soldier = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 
 		// a tower and its defended hut: the hut is skipped, the barn is not
 		const defendedHut = world.addEntity(makeEntity({
@@ -749,14 +741,13 @@ describe("choosing a target", () =>
 		}));
 		world.accessAt.set("55,55", 3);
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.targetPlayer = ENEMY;
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
 			const target = plan.getNearestTarget(world.gameState, plan.rallyPoint, landRegion(2));
 			assert.equal(target, local, "the target stays on the plan's island");
 		});
-		assert.equal(plan.sameLand, 2, "the plan remembered its land");
 		assert.ok(far, "the far centre was there");
 	});
 
@@ -773,7 +764,7 @@ describe("choosing a target", () =>
 				id: 2501, owner: ENEMY, position: [34, 40], classes: ["Structure", "Tower"]
 			}, { hasDefensiveFire: () => true }));
 
-			const plan = makePlan(world, { name: 1, type, init: true });
+			const plan = makePlan(world, { name: 1, type });
 			plan.targetPlayer = ENEMY;
 			withPath([{ "x": 30, "y": 40 }], () =>
 			{
@@ -793,7 +784,7 @@ describe("choosing a target", () =>
 			id: 2401, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village", "House"]
 		}, { decaying: () => true, getDefaultArrow: () => 1 }));
 
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.targetPlayer = ENEMY;
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -811,7 +802,7 @@ describe("training units", () =>
 		const world = makeWorld();
 		registerSpearman(world);
 		world.knobs.bestTrainable = "units/athen_spearman";
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 
 		plan.trainMoreUnits(world.gameState);
 		assert.equal(plan.queue.length(), 1, "one plan queued");
@@ -837,7 +828,7 @@ describe("training units", () =>
 			cost: { "food": 50, "metal": 50 }
 		});
 		world.knobs.bestTrainable = "units/athen_mercenary";
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 
 		plan.trainMoreUnits(world.gameState);
 
@@ -849,7 +840,7 @@ describe("training units", () =>
 	{
 		const world = makeWorld();
 		registerSpearman(world);
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 		world.knobs.bestTrainable = "units/athen_spearman";
 
 		// inject a champion and a hero order directly, replacing the rush's
@@ -876,7 +867,7 @@ describe("training units", () =>
 	it("deletes a category when the world cannot train it", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1, type: "Raid" });
 		assert.equal(plan.buildOrders.length, 1, "the raid wants fast-movers");
 
 		world.knobs.bestTrainable = undefined;
@@ -889,7 +880,7 @@ describe("training units", () =>
 	{
 		const world = makeWorld();
 		registerSpearman(world);
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 
 		// a full queue: nothing is queued this turn (the filler carries an
 		// empty metadata so queues in every target can count it)
@@ -912,7 +903,7 @@ describe("assigning units", () =>
 	it("takes everything available when the plan cannot build more units", () =>
 	{
 		const world = makeWorld({ canBuildUnits: false });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		// a soldier already busy on another plan: skipped
 		world.addEntity(makeEntity({
@@ -936,7 +927,7 @@ describe("assigning units", () =>
 	it("leaves two fast soldiers for the hunt during raids", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1, type: "Raid" });
 		// three fast soldiers and two others
 		for (let i = 0; i < 3; ++i)
 			world.addEntity(makeEntity({
@@ -956,7 +947,7 @@ describe("assigning units", () =>
 	it("picks up role-free attackers and exiled units", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		const attacker = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
@@ -993,7 +984,7 @@ describe("assigning units", () =>
 		const islander = world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [40, 45], classes: ["Unit", "Infantry", "Melee", "CitizenSoldier"]
 		}, { attackTypes: () => ["Melee"] }, { "plan": 1, "role": "attack" }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.unitCollection.updateEnt(islander);
 		assert.equal(plan.unitCollection.length, 1);
 
@@ -1011,7 +1002,7 @@ describe("assigning units", () =>
 	it("drafts no soldier on another land than the rally point's while enemies stand there", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.accessAt.set("40,45", 3);
 		world.accessAt.set("60,65", 4);
 		const soldier = (id: number, position: [number, number]) => world.addEntity(makeEntity({
@@ -1039,7 +1030,7 @@ describe("assigning units", () =>
 	it("leaves enough defenders home and takes idle workers beyond them", () =>
 	{
 		const world = makeWorld({ defensive: 0, enemyPlayer: ENEMY });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		// one enemy on the map
 		world.addEntity(makeEntity({
 			id: 2000, owner: ENEMY, position: [40, 40], classes: ["Unit", "Melee"]
@@ -1061,7 +1052,7 @@ describe("assigning units", () =>
 	it("takes gathering workers too when rushing", () =>
 	{
 		const world = makeWorld({ defensive: 0 });
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 		world.addEntity(makeEntity({
 			id: 2000, owner: ENEMY, position: [40, 40], classes: ["Unit", "Melee"]
 		}));
@@ -1079,7 +1070,7 @@ describe("assigning units", () =>
 	it("warns about idle workers that have no base", () =>
 	{
 		const world = makeWorld({ defensive: 0 });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12],
 			classes: ["Unit", "Infantry", "CitizenSoldier"]
@@ -1137,7 +1128,7 @@ describe("availability and small queries", () =>
 	it("reports transport waiting, siege presence and forced orders", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.waitingForTransport(), false, "no transport metadata, no waiting");
 
 		const shipped = world.addEntity(makeEntity({
@@ -1184,7 +1175,7 @@ describe("updatePreparation: the completing step", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";
 		const shipped = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
@@ -1199,7 +1190,7 @@ describe("updatePreparation: the completing step", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";
 		plan.maxCompletingTime = seconds(150);
 		const blocked = world.addEntity(makeEntity({
@@ -1219,7 +1210,7 @@ describe("updatePreparation: the completing step", () =>
 		const world = makeWorld({ canBuildUnits: false, enemyPlayer: ENEMY });
 		const deadTarget = makeTarget(world);
 		const soldierMarches: unknown[][] = [];
-		const plan = makePlan(world, { name: 1, init: true, data: { target: deadTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: deadTarget } });
 		plan.state = "completing";
 		world.removeEntity(deadTarget.id());
 		world.addEntity(makeEntity({
@@ -1250,7 +1241,7 @@ describe("updatePreparation: the completing step", () =>
 			id: 1011, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
 		const target = makeTarget(world, {}, 2002);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -1273,7 +1264,7 @@ describe("updatePreparation: the completing step", () =>
 			id: 1011, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
 		const target = makeTarget(world, {}, 2003);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		// the bomber and one more unit sent against an enemy tower
 		const tower = entityId(2050);
 		const bombing = new Map([[tower, new Set([bomber.id(), entityId(9999)])]]);
@@ -1298,7 +1289,7 @@ describe("updatePreparation: unexecuted plans", () =>
 		registerSpearman(world);
 		world.knobs.bestTrainable = "units/athen_spearman";
 		const target = makeTarget(world, { foundationProgress: () => 60 }, 2004);
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 		plan.overseas = seaRegion(4);
 		// three fast soldiers: a raid leaves two for the hunt
 		for (let i = 0; i < 3; ++i)
@@ -1325,7 +1316,7 @@ describe("updatePreparation: unexecuted plans", () =>
 	it("waits when the population is full and the plan has nothing", () =>
 	{
 		const world = makeWorld({ population: 396, populationMax: 400 });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING, "the plan waits");
 		assert.equal(plan.state, "unexecuted", "still listed as unexecuted");
 	});
@@ -1339,7 +1330,7 @@ describe("updatePreparation: unexecuted plans", () =>
 			world.addEntity(makeEntity({
 				id: 1030 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
 			}, { moveToRange: () => undefined }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.unitCollection.length, 3);
 		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING, "the plan waits");
 		assert.equal(plan.unitCollection.length, 3, "and keeps its units");
@@ -1359,7 +1350,7 @@ describe("updatePreparation: unexecuted plans", () =>
 				}, { moveToRange: () => undefined }, { "plan": 1 }));
 			world.templates["structures/athen/house"] = makeTemplate("structures/athen/house", { classes: ["Structure", "House"] });
 			override(world.ai.HQ.buildManager, { "isUnbuildable": () => noRoom });
-			const plan = makePlan(world, { name: 1, init: true, data: { target } });
+			const plan = makePlan(world, { name: 1, data: { target } });
 			assert.equal(plan.cannotGrow(world.gameState), noRoom);
 			withPath([{ "x": 30, "y": 40 }], () =>
 			{
@@ -1381,7 +1372,7 @@ describe("updatePreparation: unexecuted plans", () =>
 				id: 1010 + i, owner: PLAYER, position: [11, 12],
 				classes: ["Unit", "FastMoving", "CitizenSoldier"]
 			}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -1397,7 +1388,7 @@ describe("updatePreparation: unexecuted plans", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.knobs.queuedInTraining = 2;
 
 		assert.equal(plan.mustStart(), true, "the units are here");
@@ -1409,7 +1400,7 @@ describe("updatePreparation: unexecuted plans", () =>
 	it("keeps training as long as there is time, and aborts when there is nothing left", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		assert.equal(plan.updatePreparation(world.gameState), 1, "the plan trains on");
 		assert.equal(plan.unitStat.RangedInfantry, undefined, "its first category was dropped for lack of a trainer");
@@ -1432,7 +1423,7 @@ describe("updatePreparation: unexecuted plans", () =>
 		world.addEntity(makeEntity({
 			id: 1100, owner: PLAYER, position: [11, 12], classes: ["Unit", "Siege"]
 		}, { attackTypes: () => undefined }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 
 		assert.equal(plan.unitCollection.length, 22, "the crowd is in");
 		withPath([{ "x": 30, "y": 40 }], () =>
@@ -1450,8 +1441,8 @@ describe("updatePreparation: unexecuted plans", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
 		}, { attackTypes: () => undefined }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
-		const raid = makePlan(world, { name: 42, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1 });
+		const raid = makePlan(world, { name: 42, type: "Raid" });
 		world.ai.HQ.attackManager.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
 
 		assert.equal(plan.unitCollection.length, 1, "the soldier is in the crowd");
@@ -1464,7 +1455,7 @@ describe("updatePreparation: unexecuted plans", () =>
 		const world = makeWorld();
 		registerSpearman(world);
 		world.knobs.bestTrainable = "units/athen_spearman";
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1, type: "Raid" });
 		plan.forced = true;
 		const fastSoldier = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
@@ -1485,7 +1476,7 @@ describe("updatePreparation: unexecuted plans", () =>
 				id: 1010 + i, owner: PLAYER, position: [11, 12],
 				classes: ["Unit", "FastMoving", "CitizenSoldier"]
 			}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -1508,7 +1499,7 @@ describe("updatePreparation: unexecuted plans", () =>
 				id: 1010 + i, owner: PLAYER, position: [11, 12],
 				classes: ["Unit", "FastMoving", "CitizenSoldier"]
 			}, { attackTypes: () => undefined }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
 		assert.equal(plan.updatePreparation(world.gameState), 1, "the raid waits");
 		assert.equal(plan.mustStart(), false, "the foundation is too fresh");
@@ -1529,7 +1520,7 @@ describe("obstructions along the path", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.accessAt.set("40,45", 3);
 
 		let pathCalls = 0;
@@ -1550,7 +1541,7 @@ describe("obstructions along the path", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		withPath([], () =>
 		{
@@ -1569,7 +1560,7 @@ describe("obstructions along the path", () =>
 		const wall = world.addEntity(makeObstacle(world, 2101, [12, 30],
 			{ "Obstruction": 1, "Obstruction/Static": 1, "Obstruction/Static/@width": "4", "Obstruction/Static/@depth": "4" }));
 		wall.angle = () => Math.PI / 2;
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		withPath([{ "x": 12, "y": 30 }, { "x": 30, "y": 40 }], () =>
 		{
@@ -1592,7 +1583,7 @@ describe("obstructions along the path", () =>
 				"Obstruction/Obstructions/Right/@width": "0", "Obstruction/Obstructions/Right/@depth": "0"
 			}, ["Structure", "Gate"]));
 		gate.angle = () => Math.PI / 2;
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		// the path runs from below the gate up to the target, crossing it
 		withPath([{ "x": 30, "y": 42 }, { "x": 10, "y": 10 }], () =>
@@ -1616,7 +1607,7 @@ describe("obstructions along the path", () =>
 				"Obstruction/Obstructions/Right/@width": "2", "Obstruction/Obstructions/Right/@depth": "4"
 			}, ["Structure", "Gate"]));
 		gate.angle = () => Math.PI / 2;
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		// the first waypoint already sits inside the gate's footprint once
 		// the extra clearance step towards the target is taken
@@ -1635,7 +1626,7 @@ describe("obstructions along the path", () =>
 		const target = makeTarget(world, {}, 2005);
 		const blocker = world.addEntity(makeObstacle(world, 2100, [12, 30],
 			{ "Obstruction": 1, "Obstruction/Unit": 1, "Obstruction/Unit/@radius": "5" }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		withPath([{ "x": 12, "y": 30 }, { "x": 30, "y": 40 }], () =>
 		{
@@ -1654,7 +1645,7 @@ describe("obstructions along the path", () =>
 			])
 		});
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		// a dangerous spot near the border: the rally retreats a waypoint
 		world.ai.HQ.isDangerousLocation = (gameState: CommonGameState, pos: [number, number], minDist: number) =>
 			minDist === 20 && Math.round(pos[0]) === 14;
@@ -1677,7 +1668,7 @@ describe("obstructions along the path", () =>
 			])
 		});
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 
 		withPath([{ "x": 24, "y": 26 }, { "x": 14, "y": 14 }, { "x": 12, "y": 12 }], () =>
 		{
@@ -1692,7 +1683,7 @@ describe("obstructions along the path", () =>
 		const world = makeWorld();
 		const islandTarget = makeTarget(world, {}, 2006);
 		world.accessAt.set("30,40", 3);
-		const plan = makePlan(world, { name: 1, init: true, data: { target: islandTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: islandTarget } });
 
 		assert.equal(plan.getPathToTarget(world.gameState), false, "no path across water");
 		assert.ok(plan.path === undefined || plan.path.length === 0, "nothing was built");
@@ -1709,7 +1700,7 @@ describe("starting the attack", () =>
 			world.addEntity(makeEntity({
 				id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 			}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		withPath([{ "x": 32, "y": 44 }], () =>
@@ -1736,7 +1727,7 @@ describe("starting the attack", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: islandTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: islandTarget } });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), true, "the attack began");
@@ -1753,7 +1744,7 @@ describe("starting the attack", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: islandTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: islandTarget } });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), false, "no sea, no attack");
@@ -1768,7 +1759,7 @@ describe("starting the attack", () =>
 		}, { isPackable: () => true, getStance: () => "passive" }, { "plan": 1 }));
 		const stances: string[] = [];
 		override(packable, { "setStance": (stance: string) => stances.push(stance) });
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		withPath([{ "x": 32, "y": 44 }], () =>
@@ -1786,7 +1777,7 @@ describe("starting the attack", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 		plan.target = undefined;
 		plan.targetPlayer = undefined;
@@ -1808,7 +1799,7 @@ describe("starting the attack", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 
 		assert.equal(plan.StartAttack(world.gameState), false, "nothing to attack");
@@ -1822,7 +1813,7 @@ describe("updating an executing plan", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		assert.equal(plan.update(world.gameState, emptyEvents()), 0, "nothing left to command");
 	});
 
@@ -1834,7 +1825,7 @@ describe("updating an executing plan", () =>
 			world.addEntity(makeEntity({
 				id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 			}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "arrived";
 
 		const result = plan.update(world.gameState, emptyEvents());
@@ -1854,7 +1845,7 @@ describe("updating an executing plan", () =>
 		const enemy = world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const me = world.ents.get(1010)!;
 		const strikes: unknown[][] = [];
@@ -1878,7 +1869,7 @@ describe("updating an executing plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [80, 60], classes: ["Unit", "Melee", "Infantry"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true, isIdle: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const me = world.ents.get(1010)!;
 		const marches: unknown[][] = [];
@@ -1912,7 +1903,7 @@ describe("updating an executing plan", () =>
 			canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(3001), "targetPos": [28, 28] })
 		}, { "plan": 1, "lastAttackPlanUpdateTime": 80 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const me = world.ents.get(1010)!;
 		const strikes: unknown[][] = [];
@@ -1941,7 +1932,7 @@ describe("updating an executing plan", () =>
 			attackTypes: () => ["Melee"],
 			canAttackTarget: () => true
 		}, { "plan": 1, "lastAttackPlanUpdateTime": 80 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const me = world.ents.get(1010)!;
 		const strikes: unknown[][] = [];
@@ -1974,7 +1965,7 @@ describe("walks and transports during execution", () =>
 		const hunter = world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "transporting";
 		const strikes: unknown[][] = [];
 		override(shooter, { "attack": (targetId: unknown, capture: unknown) => strikes.push([targetId, capture]) });
@@ -1995,7 +1986,7 @@ describe("walks and transports during execution", () =>
 			world.addEntity(makeEntity({
 				id: 1010 + i, owner: PLAYER, position: [11 + i, 12], classes: ["Unit", "Melee"]
 			}, {}, { "plan": 1, "transport": 7 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "transporting";
 		assert.equal(plan.update(world.gameState, emptyEvents()), 2, "still not landed");
 
@@ -2016,7 +2007,7 @@ describe("walks and transports during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.targetPos = worldPos(30, 120); // far enough to keep marching
 		plan.lastPosition = worldPos(50, 50);
@@ -2043,7 +2034,7 @@ describe("walks and transports during execution", () =>
 			id: 1011, owner: PLAYER, position: [11, 12], classes: ["Unit", "Siege"]
 		}, { destroy: () => destroyed.push(1011) }, { "plan": 1 }));
 		const destroyed: number[] = [];
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(11, 12);
 		plan.position5TurnsAgo = worldPos(11, 12);
@@ -2073,7 +2064,7 @@ describe("walks and transports during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: (cls: string) => cls === "Palisade" }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
@@ -2096,7 +2087,7 @@ describe("walks and transports during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: () => false }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
@@ -2116,9 +2107,11 @@ describe("walks and transports during execution", () =>
 		const hunter = world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.targetPos = worldPos(30, 120);
+		// walking, the plan has the way StartAttack made it
+		plan.path = [worldPos(30, 120)];
 		plan.lastPosition = worldPos(50, 50);
 		const events = emptyEvents();
 		for (let i = 0; i < 4; ++i)
@@ -2144,7 +2137,7 @@ describe("chasing a target during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: prey } });
+		const plan = makePlan(world, { name: 1, data: { target: prey } });
 		plan.position = worldPos(11, 12);
 		const moving = world.ents.get(3000)!;
 		moving.position = (() => [42, 42]) as never;
@@ -2161,7 +2154,7 @@ describe("chasing a target during execution", () =>
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
 		const next = makeTarget(world, {}, 2006);
-		const plan = makePlan(world, { name: 1, init: true, data: { target: deadTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: deadTarget } });
 		plan.position = worldPos(11, 12);
 		world.removeEntity(deadTarget.id());
 
@@ -2180,7 +2173,7 @@ describe("chasing a target during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: deadTarget } });
+		const plan = makePlan(world, { name: 1, data: { target: deadTarget } });
 		plan.position = worldPos(11, 12);
 		world.removeEntity(deadTarget.id());
 
@@ -2207,7 +2200,7 @@ describe("chasing a target during execution", () =>
 			id: 2011, owner: ENEMY, position: [24, 24],
 			classes: ["Structure", "Fortress", "ConquestCritical"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const strikes: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attack": (targetId: unknown, capture: unknown) =>
@@ -2225,7 +2218,7 @@ describe("chasing a target during execution", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 
 		const events = emptyEvents();
@@ -2240,7 +2233,7 @@ describe("chasing a target during execution", () =>
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		makeTarget(world, {}, 2501);
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
 		const events = emptyEvents();
 		events.EntityRenamed.push({ "entity": entityId(2005), "newentity": entityId(2501) });
@@ -2252,7 +2245,7 @@ describe("chasing a target during execution", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		(world.gameState.playerData).isAlly[PLAYER] = true;
 
 		const events = emptyEvents();
@@ -2265,7 +2258,7 @@ describe("chasing a target during execution", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		world.ai.HQ.attackManager.getEnemyPlayer = (gameState: CommonGameState, thisPlan: unknown) => playerId(3);
 
 		const events = emptyEvents();
@@ -2278,7 +2271,7 @@ describe("chasing a target during execution", () =>
 	it("sees when an opponent settles on the plan's island", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1, type: "Raid" });
 		plan.overseas = seaRegion(4);
 
 		const islander = world.addEntity(makeEntity({
@@ -2300,7 +2293,7 @@ describe("wrapping up a plan", () =>
 	it("releases an army aboard ships, with no place to withdraw to", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "transporting";
 		plan.position = undefined;
 		const sailor = world.addEntity(makeEntity({
@@ -2320,7 +2313,7 @@ describe("wrapping up a plan", () =>
 	it("withdraws the troops to the nearest anchor", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "walking";
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(5, 5);
@@ -2347,7 +2340,7 @@ describe("wrapping up a plan", () =>
 	it("a mercenary leaving the attack goes back to no role, not to work it cannot do", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		const mercenary = world.addEntity(makeEntity({
 			id: 1012, owner: PLAYER, position: [17, 17], classes: ["Unit", "Ranged", "CitizenSoldier", "Worker", "Mercenary"]
 		}, {}, { "plan": 1, "role": "attack", "subrole": "attacking" }));
@@ -2367,7 +2360,7 @@ describe("wrapping up a plan", () =>
 		// which no unit can reach, so the army would walk on for good
 		const world = makeWorld();
 		override(world.bases[0].anchor!, { "obstructionRadius": () => ({ "min": 15, "max": 21.2 }) });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "walking";
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
@@ -2391,7 +2384,7 @@ describe("wrapping up a plan", () =>
 	{
 		const world = makeWorld();
 		world.bases.length = 0;
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "walking";
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
@@ -2411,7 +2404,7 @@ describe("wrapping up a plan", () =>
 	it("clears the plans of a never-started attack", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		const soldier = world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [17, 17], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1, "role": "attack" }));
@@ -2429,7 +2422,7 @@ describe("wrapping up a plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [40, 45], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.accessAt.set("40,45", 3);
 		plan.position = worldPos(40, 45);
 
@@ -2442,7 +2435,7 @@ describe("wrapping up a plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1, "transport": 3 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = undefined;
 
 		assert.equal(plan.getAttackAccess(world.gameState), 0, "no unit ashore, no land");
@@ -2451,7 +2444,7 @@ describe("wrapping up a plan", () =>
 	it("reports the marching numbers for debugging", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.Config.debug = 4;
 		resetRecorder();
 		plan.debugAttack();
@@ -2466,7 +2459,7 @@ describe("wrapping up a plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.path = [worldPos(10, 10), worldPos(30, 40)];
 		plan.position = worldPos(11, 12);
@@ -2478,8 +2471,7 @@ describe("wrapping up a plan", () =>
 		assert.equal(data.properties.target, 2005, "the target id");
 		assert.deepEqual(data.properties.path, plan.path, "the path");
 
-		const revived = makePlan(world, { name: 42, type: "HugeAttack" });
-		revived.Deserialize(world.gameState, data);
+		const revived = AttackPlan.restore(world.gameState, world.ai.Config, data, world.ai.HQ.canBuildUnits);
 		assert.equal(revived.name, 1, "the name was restored");
 		assert.equal(revived.target, target, "the live target came back");
 		assert.deepEqual(revived.targetPos, [30, 40], "at its place");
@@ -2492,13 +2484,12 @@ describe("wrapping up a plan", () =>
 	it("prepares again when its save names no state it knows", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		const data = plan.Serialize();
 		data.properties.state = "charging";
 
-		const revived = makePlan(world, { name: 2 });
 		logs.length = 0;
-		revived.Deserialize(world.gameState, data);
+		const revived = AttackPlan.restore(world.gameState, world.ai.Config, data, world.ai.HQ.canBuildUnits);
 		assert.equal(revived.state, "unexecuted");
 		assert.ok(logs.some((entry) => entry.includes("unknown state \"charging\"")), "the save was refused aloud");
 	});
@@ -2534,7 +2525,7 @@ describe("rare target finders", () =>
 	{
 		const world = makeWorld({ debug: 2 });
 		const tower = makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true, data: { target: tower, uniqueTargetId: entityId(2000) } });
+		const plan = makePlan(world, { name: 1, data: { target: tower, uniqueTargetId: entityId(2000) } });
 		world.removeEntity(2000);
 		plan.position = worldPos(11, 12);
 		resetRecorder();
@@ -2590,7 +2581,7 @@ describe("rare target finders", () =>
 		const house = world.addEntity(makeEntity({
 			id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village", "House"]
 		}));
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 
 		const targets = plan.rushTargetFinder(world.gameState);
 		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [house.id()],
@@ -2621,19 +2612,19 @@ describe("difficulties, dumps and init corners", () =>
 	it("softens the queue priority at easy difficulty", () =>
 	{
 		const world = makeWorld({ difficulty: EASY });
-		makePlan(world, { name: 2, deserialized: false });
+		makePlan(world, { name: 2 });
 
 		assert.equal(world.ai.queueManager.getPriority("plan_2"), 56, "the main queue is softened to 56");
 		assert.equal(world.ai.queueManager.getPriority("plan_2_champ"), 57, "the champion queue trails one point");
 		assert.equal(world.ai.queueManager.getPriority("plan_2_siege"), 56, "the siege queue keeps up");
 	});
 
-	it("keeps a deserialized plan's easy scaling exact and stable", () =>
+	it("keeps an easy plan's scaling exact without a size roll", () =>
 	{
 		const world = makeWorld({ difficulty: EASY });
 		const plan = makePlan(world, { name: 2 });
 
-		// a deserialized plan has no variation roll, but easy attacks still
+		// with a size roll of 1, easy attacks still
 		// shrink stably by the 0.6 factor: 16*0.6 rounds up to 10, 6*0.6 stays 4
 		assert.equal(plan.unitStat.RangedInfantry.targetSize, 10, "the ranged infantry shrank predictably");
 		assert.equal(plan.unitStat.FastMoving.targetSize, 4, "the fast movers shrank too");
@@ -2646,7 +2637,7 @@ describe("difficulties, dumps and init corners", () =>
 		world.ai.playedTurn = 50;
 		registerSpearman(world);
 		world.knobs.bestTrainable = "units/athen_spearman";
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 		resetRecorder();
 		// two identical categories compare as a tie in the sort
 		plan.buildOrders = [
@@ -2678,7 +2669,7 @@ describe("difficulties, dumps and init corners", () =>
 			id: 1013, owner: PLAYER, position: [40, 45],
 			classes: ["Unit", "FastMoving", "CitizenSoldier"]
 		}, { moveToRange: recordMarches(marches) }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -2712,7 +2703,7 @@ describe("difficulties, dumps and init corners", () =>
 			id: 1014, owner: PLAYER, position: [60, 65], classes: ["Unit", "FastMoving", "CitizenSoldier"]
 		}, {}, { "plan": 1 }));
 		world.enemyLands.add(3);
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () =>
 		{
@@ -2732,7 +2723,7 @@ describe("attacking miscellany", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 
 		assert.ok(plan.unitCollection.hasEntities(), "the unitless plan did gather its unit");
 		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the census was returned untouched");
@@ -2744,7 +2735,7 @@ describe("attacking miscellany", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "";
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), false, "the update bailed out");
@@ -2760,7 +2751,7 @@ describe("attacking miscellany", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true, data: { target: centre } });
+		const plan = makePlan(world, { name: 1, type: "Rush", data: { target: centre } });
 		plan.state = "arrived";
 
 		withPath([{ "x": 25, "y": 25 }], () =>
@@ -2776,7 +2767,7 @@ describe("attacking miscellany", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const target = makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = worldPos(11, 12);
 
 		withPath([{ "x": 30, "y": 40 }], () =>
@@ -2791,7 +2782,7 @@ describe("attacking miscellany", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY, debug: 2 });
 		world.removeEntity(1000);   // nothing structurally left to attack
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = worldPos(11, 12);
 		resetRecorder();
 
@@ -2808,9 +2799,11 @@ describe("attacking miscellany", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.targetPos = worldPos(30, 40);
+		// walking, the plan has the way StartAttack made it
+		plan.path = [worldPos(30, 40)];
 		resetRecorder();
 
 		assert.ok(plan.update(world.gameState, emptyEvents()), "the plan marched on");
@@ -2825,7 +2818,7 @@ describe("attacking miscellany", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee", "CitizenSoldier"]
 		}, undefined, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.targetPos = worldPos(100, 100);
 		plan.path = [worldPos(30, 40)];
@@ -2838,7 +2831,7 @@ describe("attacking miscellany", () =>
 	it("answers a flat access when nobody marches", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = worldPos(11, 12);
 
 		assert.equal(plan.getAttackAccess(world.gameState), 0, "an empty army marches on flat ground");
@@ -2857,7 +2850,7 @@ describe("the retaliating crowd", () =>
 		world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Melee"]
@@ -2882,7 +2875,7 @@ describe("the retaliating crowd", () =>
 		const ally = world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege", "Melee"]
@@ -2908,7 +2901,7 @@ describe("the retaliating crowd", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		plan.isBlocked = true;
 		world.addEntity(makeEntity({
@@ -2934,7 +2927,7 @@ describe("the retaliating crowd", () =>
 		world.addEntity(makeEntity({
 			id: 1011, owner: PLAYER, position: [22, 22], classes: ["Unit", "Melee"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege"]
@@ -2965,7 +2958,7 @@ describe("the retaliating crowd", () =>
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
@@ -2995,7 +2988,7 @@ describe("the retaliating crowd", () =>
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(3001) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
@@ -3028,7 +3021,7 @@ describe("the retaliating crowd", () =>
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
@@ -3050,7 +3043,7 @@ describe("the retaliating crowd", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "Melee"]
 		}, { attackTypes: () => ["Melee"], canAttackTarget: () => true }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [30, 30], classes: ["Unit", "Siege", "Melee"]
@@ -3078,7 +3071,7 @@ describe("the retaliating crowd", () =>
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(2006) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		world.addEntity(makeEntity({
 			id: 3000, owner: ENEMY, position: [100, 100], classes: ["Unit", "Melee"]
@@ -3111,7 +3104,7 @@ describe("directing the swarm", () =>
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
 				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const strikes: unknown[][] = [];
 		for (let i = 0; i < 4; ++i)
@@ -3139,7 +3132,7 @@ describe("directing the swarm", () =>
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
 				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3172,7 +3165,7 @@ describe("directing the swarm", () =>
 				unitAIOrderData: () => orders({ "target": entityId(prey) })
 			}, { "plan": 1 }));
 		});
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3207,7 +3200,7 @@ describe("directing the swarm", () =>
 		const barracks = world.addEntity(makeEntity({
 			id: 2012, owner: ENEMY, position: [28, 24], classes: ["Structure", "Barracks"]
 		}, { costSum: () => 500 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const strikes: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attack": (aim: unknown, capture: unknown) =>
@@ -3227,7 +3220,7 @@ describe("directing the swarm", () =>
 		}, {
 			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3249,7 +3242,7 @@ describe("directing the swarm", () =>
 			isIdle: () => true, attackTypes: () => ["Ranged"],
 			attackRange: () => ({ "max": 60 }), canAttackTarget: () => true
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3272,7 +3265,7 @@ describe("directing the swarm", () =>
 		}, {
 			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3304,7 +3297,7 @@ describe("directing the swarm", () =>
 			attackTypes: () => ["Melee"], canAttackTarget: () => true,
 			unitAIOrderData: () => orders({ "target": entityId(9999) })   // long dead
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		for (const id of [1010, 1011])
@@ -3329,7 +3322,7 @@ describe("directing the swarm", () =>
 			isIdle: () => true, attackTypes: () => ["Melee"],
 			attackRange: () => ({ "max": 5 }), canAttackTarget: () => true
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		plan.isBlocked = true;
 		const strikes: unknown[][] = [];
@@ -3361,7 +3354,7 @@ describe("directing the swarm", () =>
 			isIdle: () => true, attackTypes: () => undefined,
 			canAttackTarget: () => true, counters: () => false
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		plan.isBlocked = true;
 		const strikes: unknown[][] = [];
@@ -3388,7 +3381,7 @@ describe("directing the swarm", () =>
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3415,7 +3408,7 @@ describe("directing the swarm", () =>
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3444,7 +3437,7 @@ describe("directing the swarm", () =>
 			unitAIState: () => "INDIVIDUAL.COMBAT.APPROACHING",
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3480,7 +3473,7 @@ describe("directing the swarm", () =>
 			unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
 			unitAIOrderData: () => orders({ "target": entityId(3000) })
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const strikes: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attack": (aim: unknown, capture: unknown) =>
@@ -3511,7 +3504,7 @@ describe("directing the swarm", () =>
 		}));
 		world.accessAt.set("55,66", 3);
 		const passedAway = makeTarget(world, {}, 2630);
-		const plan = makePlan(world, { name: 1, init: true, data: { target: cc } });
+		const plan = makePlan(world, { name: 1, data: { target: cc } });
 		world.removeEntity(2005);   // the plan's own target is gone
 		world.removeEntity(2630);   // a brother's prey recently died
 		world.ai.HQ.attackManager.startedAttacks.Raid = [
@@ -3548,7 +3541,7 @@ describe("directing the swarm", () =>
 				attackTypes: () => ["Melee"], canAttackTarget: () => true,
 				unitAIOrderData: () => orders({ "target": entityId(3000) })
 			}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		for (let i = 0; i < 4; ++i)
@@ -3569,7 +3562,7 @@ describe("directing the swarm", () =>
 		world.addEntity(makeEntity({
 			id: 2602, owner: ENEMY, classes: ["Unit", "Hero"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = worldPos(11, 12);
 		plan.target = world.ents.get(2602);
 		plan.targetPlayer = ENEMY;
@@ -3588,7 +3581,7 @@ describe("directing the swarm", () =>
 		world.addEntity(makeEntity({
 			id: 2602, owner: ENEMY, classes: ["Unit", "Hero"]
 		}));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.position = worldPos(11, 12);
 		plan.target = world.ents.get(2602)!;
 		plan.targetPlayer = ENEMY;
@@ -3615,7 +3608,7 @@ describe("when walls and orders scatter the plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: (cls: string) => cls === "Palisade" }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
@@ -3638,7 +3631,7 @@ describe("when walls and orders scatter the plan", () =>
 		world.addEntity(makeEntity({
 			id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"]
 		}, { canAttackClass: () => false }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
@@ -3661,7 +3654,7 @@ describe("when walls and orders scatter the plan", () =>
 		}, {
 			isIdle: () => true, attackTypes: () => ["Melee"], canAttackTarget: () => true
 		}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target: prey } });
+		const plan = makePlan(world, { name: 1, data: { target: prey } });
 		plan.state = "";
 		const sweeps: unknown[][] = [];
 		override(world.ents.get(1010)!, { "attackMove": (x: unknown, y: unknown, classes: unknown) =>
@@ -3684,7 +3677,7 @@ describe("second pass: preparing and choosing", () =>
 	it("a plan that cannot build units may start with what it has; a paused plan never must", () =>
 	{
 		const world = makeWorld({ canBuildUnits: false });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.canStart(), true);
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {}, { "plan": 1 }));
 		plan.setPaused(true);
@@ -3699,7 +3692,7 @@ describe("second pass: preparing and choosing", () =>
 		world.addEntity(makeEntity({ id: 901, owner: PLAYER, position: [16, 14], classes: ["Structure", "Arsenal"] },
 			{ trainingQueue: () => [], trainableEntities: () => ["units/siege_ram"] }));
 		world.templates["units/siege_ram"] = makeTemplate("units/siege_ram", { classes: ["Siege", "Melee"], available: false });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		assert.equal(plan.addSiegeUnits(world.gameState), false);
 		assert.equal(plan.siegeState, 1);
 	});
@@ -3715,7 +3708,7 @@ describe("second pass: preparing and choosing", () =>
 				world.addEntity(makeEntity({
 					id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"]
 				}, { moveToRange: () => undefined }, { "plan": 1 }));
-			const plan = makePlan(world, { name: 1, init: true, data: { target } });
+			const plan = makePlan(world, { name: 1, data: { target } });
 			withPath([{ "x": 30, "y": 40 }], () => { plan.updatePreparation(world.gameState); });
 			// a cap of 150 lowers the crowd needed from 16 to 12
 			assert.equal(plan.state === "completing", starts, `cap ${populationMax}`);
@@ -3739,7 +3732,7 @@ describe("second pass: preparing and choosing", () =>
 				resourceCarrying: () => i === 0 ? [{ "type": "wood", "amount": 10 }] : [],
 				returnResources: (dropsite: CommonEntity) => returned.push(dropsite.id())
 			}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 
 		withPath([{ "x": 30, "y": 40 }], () => { plan.updatePreparation(world.gameState); });
 
@@ -3751,7 +3744,7 @@ describe("second pass: preparing and choosing", () =>
 	it("in a game for easy difficulty or below, no worker is taken for the attack", () =>
 	{
 		const world = makeWorld({ defensive: 0, difficulty: EASY });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		for (let i = 0; i < 20; ++i)
 			world.addEntity(makeEntity({
 				id: 1010 + i, owner: PLAYER, position: [11, 12], classes: ["Unit", "Infantry", "CitizenSoldier"]
@@ -3762,7 +3755,7 @@ describe("second pass: preparing and choosing", () =>
 	it("beyond the defenders, only idle citizen soldiers go: not women, not busy gatherers", () =>
 	{
 		const world = makeWorld({ defensive: 0, enemyPlayer: ENEMY });
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		world.addEntity(makeEntity({ id: 2000, owner: ENEMY, position: [40, 40], classes: ["Unit", "Melee"] }));
 		for (let i = 0; i < 10; ++i)
 			world.addEntity(makeEntity({
@@ -3794,8 +3787,8 @@ describe("second pass: preparing and choosing", () =>
 			{}, { "plan": 1 }));
 		world.addEntity(makeEntity({ id: 1013, owner: PLAYER, position: [11, 12], classes: ["Unit", "FastMoving", "CitizenSoldier"] },
 			{}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
-		const raid = makePlan(world, { name: 42, type: "Raid", init: true });
+		const plan = makePlan(world, { name: 1 });
+		const raid = makePlan(world, { name: 42, type: "Raid" });
 		world.ai.HQ.attackManager.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
 		plan.reassignFastUnit(world.gameState);
 		assert.deepEqual(world.units.filter((u) => u.id() >= 1010).map((u) => u.getMetadata(PLAYER, "plan")), [1, 1, 1, 42]);
@@ -3805,11 +3798,11 @@ describe("second pass: preparing and choosing", () =>
 	{
 		const noEnemy = makeWorld({ enemyPlayer: undefined });
 		makeTarget(noEnemy);
-		assert.equal(makePlan(noEnemy, { name: 1, init: true }).chooseTarget(noEnemy.gameState), false);
+		assert.equal(makePlan(noEnemy, { name: 1 }).chooseTarget(noEnemy.gameState), false);
 
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true, data: { uniqueTargetId: entityId(2999) } });
+		const plan = makePlan(world, { name: 1, data: { uniqueTargetId: entityId(2999) } });
 		plan.targetPlayer = ENEMY;
 		assert.equal(plan.chooseTarget(world.gameState), false);
 	});
@@ -3828,7 +3821,7 @@ describe("second pass: preparing and choosing", () =>
 			world.bases.push({ "ID": id, anchor: world.addEntity(makeEntity({ id, owner: PLAYER, position: [...pos],
 				classes: ["Structure", "CivCentre"] })), accessIndex: 5 });
 		}
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.overseas = 0;
 
 		assert.equal(plan.chooseTarget(world.gameState), true);
@@ -3848,7 +3841,7 @@ describe("second pass: preparing and choosing", () =>
 			world.bases.push({ "ID": id, anchor: world.addEntity(makeEntity({ id, owner: PLAYER, position: [...pos],
 				classes: ["Structure", "CivCentre"] })), accessIndex: 3 });
 		}
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 200, "y": 200 }], () => assert.equal(plan.chooseTarget(world.gameState), true));
 		assert.deepEqual(plan.rallyPoint, [150, 160]);
 		assert.equal(plan.overseas, 0);
@@ -3862,7 +3855,7 @@ describe("second pass: preparing and choosing", () =>
 		world.addEntity(makeEntity({ id: 2010, owner: ENEMY, position: [40, 40], classes: ["Structure", "House"] }));
 		world.accessAt.set("200,200", 3);
 		const target = world.addEntity(makeEntity({ id: 2100, owner: ENEMY, position: [200, 200], classes: ["Structure", "CivCentre"] }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		assert.equal(plan.overseas, 4);
 	});
 
@@ -3870,7 +3863,7 @@ describe("second pass: preparing and choosing", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		makeTarget(world);
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.overseas = seaRegion(4);
 		withPath([{ "x": 30, "y": 40 }], () => assert.equal(plan.chooseTarget(world.gameState), true));
 		assert.equal(plan.overseas, 0);
@@ -3887,7 +3880,7 @@ describe("second pass: preparing and choosing", () =>
 				{ hasDefensiveFire: () => true }));
 			if (withSiege)
 				world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Siege"] }, {}, { "plan": 1 }));
-			const plan = makePlan(world, { name: 1, init: true });
+			const plan = makePlan(world, { name: 1 });
 			plan.targetPlayer = ENEMY;
 			let target: CommonEntity | undefined;
 			withPath([{ "x": 30, "y": 40 }], () => { target = plan.getNearestTarget(world.gameState, worldPos(10, 10)); });
@@ -3906,7 +3899,7 @@ describe("second pass: preparing and choosing", () =>
 		world.addEntity(makeEntity({ id: 2003, owner: GAIA, position: [12, 12], classes: ["Structure", "Ruins"] }));
 		world.addEntity(makeEntity({ id: 3001, owner: 3, position: [40, 40], classes: ["Structure", "House"] }));
 		world.addEntity(makeEntity({ id: 3002, owner: 3, position: [200, 200], classes: ["Structure", "House"] }));
-		const plan = makePlan(world, { name: 1, type: "Rush", init: true });
+		const plan = makePlan(world, { name: 1, type: "Rush" });
 		const targets = plan.rushTargetFinder(world.gameState, ENEMY);
 		assert.deepEqual([...targets.values()].map((e) => e.id()), [3001]);
 	});
@@ -3928,7 +3921,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		obstacle(world, 2101, [12, 30], wallQueries, Math.PI / 2);
 		world.addEntity(makeEntity({ id: 2102, owner: ENEMY, position: [20, 30], classes: ["Structure", "Decoration"] },
 			{ get: () => undefined }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 29, "y": 38 }, { "x": 10, "y": 10 }], () =>
 			assert.equal(plan.checkTargetObstruction(world.gameState, target, worldPos(10, 10)), target));
 		assert.equal(plan.isBlocked, false);
@@ -3941,7 +3934,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		const wall = obstacle(world, 2101, [12, 30], wallQueries, 0);
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		withPath([{ "x": 12, "y": 30 }, { "x": 10, "y": 10 }], () =>
 			assert.equal(plan.checkTargetObstruction(world.gameState, target, worldPos(10, 10)), wall));
 		assert.equal(plan.isBlocked, true);
@@ -3954,7 +3947,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 			"Obstruction/Obstructions/Left/@width": "2", "Obstruction/Obstructions/Left/@depth": "4",
 			"Obstruction/Obstructions/Right/@width": "2", "Obstruction/Obstructions/Right/@depth": "4"
 		}, 0, ["Structure", "Gate"]);
-		const gatePlan = makePlan(gated, { name: 1, init: true });
+		const gatePlan = makePlan(gated, { name: 1 });
 		withPath([{ "x": 21, "y": 25 }, { "x": 30, "y": 40 }], () =>
 			assert.equal(gatePlan.checkTargetObstruction(gated.gameState, gateTarget, worldPos(10, 10)), gate));
 		assert.equal(gatePlan.isBlocked, true);
@@ -3964,7 +3957,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 	{
 		const world = makeWorld({ territory: new Map([["24,26", ENEMY], ["30,40", ENEMY]]) });
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		world.territory.set("10,10", 0);
 		withPath([{ "x": 24, "y": 26 }], () => assert.equal(plan.getPathToTarget(world.gameState), true));
 		assert.deepEqual(plan.rallyPoint, [10, 10]);
@@ -3975,7 +3968,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const town = makeTarget(world);
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "completing";	// as updatePreparation leaves a plan it starts
 		// it was readied against an island: no path was laid, the crossing booked
 		plan.overseas = seaRegion(4);
@@ -3998,7 +3991,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] },
 			{ isIdle: () => false, canAttackTarget: () => true, attack: (aim: number) => strikes.push(aim) }, { "plan": 1, "transport": 7 }));
 		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"] }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "transporting";
 		const events = emptyEvents();
 		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
@@ -4025,7 +4018,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 		world.accessAt.set("12,10", 3);
 		unit(1014, [12, 10], { "transport": 7 });	// on another island
 		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Ranged"] }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";
 		const events = emptyEvents();
 		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
@@ -4043,7 +4036,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 			{ isIdle: () => false, canAttackTarget: () => true, attack: () => assert.fail("across the water") }, { "plan": 1, "transport": 7 }));
 		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [40, 40], classes: ["Unit", "Ranged"] }));
 		world.accessAt.set("40,40", 3);	// an archer on a boat or the next island
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "transporting";
 		const events = emptyEvents();
 		events.Attacked.push({ "target": entityId(1010), "attacker": entityId(3000) });
@@ -4064,7 +4057,7 @@ describe("second pass: obstructions, starting and shipping", () =>
 			{ isIdle: () => false, canAttackTarget: () => true, attack: () => assert.fail("busy elsewhere") }, { "plan": 1 }));
 		world.addEntity(makeEntity({ id: 1500, owner: PLAYER, position: [13, 14], classes: ["Unit", "Melee"] }));
 		world.addEntity(makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"] }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "transporting";
 		const events = emptyEvents();
 		events.Attacked.push({ "target": entityId(1500), "attacker": entityId(3000) }, { "target": entityId(1011), "attacker": entityId(3999) });
@@ -4099,7 +4092,7 @@ describe("second pass: the army at work", () =>
 	/** an attacking plan (state past walking) against the given target */
 	function attacking(world: World, target: CommonEntity): AttackPlan
 	{
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "";
 		return plan;
 	}
@@ -4354,7 +4347,7 @@ describe("second pass: the army at work", () =>
 		for (const [id, pos] of [[1011, [14, 12]], [1012, [11, 12]]] as const)
 			world.addEntity(makeEntity({ id, owner: PLAYER, position: [...pos], classes: ["Unit", "Siege"] },
 				{ destroy: () => destroyed.push(id) }, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "walking";
 		plan.lastPosition = worldPos(12, 12);
 		plan.position5TurnsAgo = worldPos(12, 12);
@@ -4373,7 +4366,7 @@ describe("second pass: targets, withdrawal and events", () =>
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
 		world.addEntity(makeEntity({ id: 1010, owner: PLAYER, position: [20, 20], classes: ["Unit", "Melee"] }, {}, { "plan": 1 }));
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.position = worldPos(20, 20);
 		world.gameState.playerData.isEnemy[ENEMY] = false;
 		world.ai.HQ.attackManager.getEnemyPlayer = () => playerId(3);
@@ -4386,7 +4379,7 @@ describe("second pass: targets, withdrawal and events", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.position = worldPos(20, 20);
 		target.owner = () => GAIA;
 		plan.UpdateTarget(world.gameState);
@@ -4396,7 +4389,7 @@ describe("second pass: targets, withdrawal and events", () =>
 	it("withdrawing troops go to the nearest centre on their own land, passing over centres being built and across the water", () =>
 	{
 		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, init: true });
+		const plan = makePlan(world, { name: 1 });
 		plan.state = "walking";
 		plan.position = worldPos(100, 100);
 		plan.rallyPoint = worldPos(5, 5);
@@ -4421,7 +4414,7 @@ describe("second pass: targets, withdrawal and events", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, {}, 2005);
-		const plan = makePlan(world, { name: 1, type: "Raid", init: true, data: { target } });
+		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 		plan.overseas = seaRegion(4);
 		world.addEntity(makeEntity({ id: 2020, owner: ENEMY, position: [30, 41], classes: ["Unit", "Melee"] }));
 		world.addEntity(makeEntity({ id: 1500, owner: PLAYER, position: [30, 42], classes: ["Structure", "House"] }));

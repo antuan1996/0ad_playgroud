@@ -33,6 +33,8 @@ import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
 import { Config } from "../../decision/config.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
+import { Geography } from "../../world/geography.ts";
+import { createBorderMap, createTerritoryMap } from "../../world/mapModule.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 
 /** re-exported so the suites draw every name from one place */
@@ -655,8 +657,6 @@ export interface HqSeatOptions
 {
 	/** the config the HQ is built with; default makeHQConfig() */
 	config?: Config;
-	/** build it as a deserialized HQ (the constructor takes the flag for its managers) */
-	deserialized?: boolean;
 	/** the sub-managers to swap for recorded doors */
 	stubs?: readonly string[];
 	/** seat the real BasesManager on the world's CC; default true (gameAnalysis does) */
@@ -683,10 +683,9 @@ const doorFields: Record<string, Record<string, unknown>> = {
 };
 
 /**
- * Build a real Headquarters over the world: construct it, run the module's
- * own init, seat the real BasesManager on the world's CC the way
- * regionAnalysis/gameAnalysis do, then fill what they would fill (the land
- * and naval regions) with test-shaped answers.
+ * Build a real Headquarters over the world, on a geography whose land and
+ * naval regions are test-shaped answers (what analyseMap would find), and
+ * seat the real BasesManager on the world's CC the way gameAnalysis does.
  */
 export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarters
 {
@@ -698,17 +697,17 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 	world.ai.queueManager = queueManager;
 	world.ai.Config = config;
 
-	const hq = new Headquarters(config, options.deserialized ?? false);
+	// what analyseMap finds before the first update of a game
+	const geography = new Geography(createTerritoryMap(world.gameState), createBorderMap(world.gameState), {
+		"landRegions": options.landRegions ?? { 2: true },
+		"navalMap": options.navalMap ?? false,
+		"navalRegions": options.navalRegions ?? {}
+	});
+	const hq = new Headquarters(config, world.gameState, geography);
 	world.ai.HQ = hq;
 
-	hq.init(world.gameState, queues);
 	if (options.seatBases ?? true)
-		hq.basesManager.init(world.gameState);
-
-	// what regionAnalysis fills before the first update of a game
-	hq.landRegions = options.landRegions ?? { 2: true };
-	hq.navalMap = options.navalMap ?? false;
-	hq.navalRegions = options.navalRegions ?? {};
+		hq.basesManager.createStartingBases(world.gameState);
 	// what gameAnalysis bookends the seat with: the AI explores and builds
 	// unless a test disables it
 	hq.canBuildUnits = true;

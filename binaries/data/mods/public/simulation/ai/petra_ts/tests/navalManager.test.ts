@@ -29,10 +29,19 @@ function seat(options: Parameters<typeof navalWorld>[0] = {})
 	const traders = s.world.gameState.getOwnUnits().filter((e: CommonEntity) => e.getMetadata(PlayerID, "role") === "trader");
 	traders.registerUpdates();
 	s.hq.tradeManager.traders = traders;
-	return { ...s, "naval": s.hq.navalManager };
+	return { ...s, get naval(): NavalManager { return s.hq.navalManager; } };
 }
 
-const init = (s: ReturnType<typeof seat>, deserializing = false) => s.naval.init(s.world.gameState, deserializing);
+/**
+ * The naval manager made as the headquarters makes it, on the world as the
+ * test laid it out (its fleet, the fish, the landing zones), with the sea of
+ * each dock and ship noted, as at the start of a game.
+ */
+const init = (s: ReturnType<typeof seat>) =>
+{
+	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography);
+	s.hq.navalManager.assignStartingSeas(s.world.gameState);
+};
 
 const queues = (world: HqWorld) => world.ai.queues;
 
@@ -208,8 +217,14 @@ describe("the fleet counted at the start: init", () =>
 	it("on a loaded game, keeps the landing spots it saved rather than mapping them anew", () =>
 	{
 		const s = seat();
-		init(s, true);
-		assert.deepEqual(s.naval.landingZones, {});
+		init(s);
+		const saved = s.naval.Serialize();
+		// a save from a game whose spots were mapped otherwise
+		saved.properties.landingZones = { [WEST]: { [SEA]: new Set([7]) } };
+
+		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved);
+
+		assert.deepEqual(loaded.landingZones, { [WEST]: { [SEA]: new Set([7]) } });
 	});
 });
 
@@ -1250,10 +1265,8 @@ describe("the fleet saved and loaded", () =>
 		s.naval.wantedTransportShips[SEA] = 2;
 		const saved = s.naval.Serialize();
 
-		const loaded = new NavalManager(s.hq.Config);
+		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved);
 		s.hq.navalManager = loaded;
-		loaded.init(s.world.gameState, true);
-		loaded.Deserialize(s.world.gameState, saved);
 
 		assert.equal(loaded.wantedTransportShips[SEA], 2);
 		assert.equal(loaded.landingZones, saved.properties.landingZones);

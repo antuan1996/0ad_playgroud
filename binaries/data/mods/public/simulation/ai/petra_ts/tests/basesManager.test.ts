@@ -124,13 +124,13 @@ function watchHandleNewBase(hq: Headquarters): number[]
 
 describe("a city's grounds: what the board starts with and how grounds are reused", () =>
 {
-	it("a town under construction is a founding ground, both fresh and read from a save", () =>
+	it("a town under construction is a founding ground at the start", () =>
 	{
 		const { world, hq } = seat();
-		// a mid-game save read back: one centre standing, one still rising
+		// one centre standing, one still rising
 		foundation(world, undefined, 4002, [250, 250], ["CivCentre"]);
-		const fresh = new BasesManager(hq.Config);
-		fresh.init(world.gameState, true);
+		const fresh = new BasesManager(hq.Config, world.gameState);
+		fresh.createStartingBases(world.gameState);
 
 		assert.equal(fresh.baseManagers.length, 2, "the board has two grounds");
 		assert.equal(fresh.baseManagers[0]?.anchor?.id(), 1000, "the standing centre anchors the first");
@@ -144,9 +144,9 @@ describe("a city's grounds: what the board starts with and how grounds are reuse
 		const store = storehouse(world, 4781, [40, 40]);
 		base.assignEntity(world.gameState, store);
 
-		bs.postinit(world.gameState);
+		const reloaded = new BasesManager(bs.Config, world.gameState, JSON.parse(JSON.stringify(bs.Serialize())));
 
-		assert.ok(bs.getBaseByID(base.ID), "the town still reads from the reloaded ground map");
+		assert.ok(reloaded.getBaseByID(base.ID), "the town still reads from the reloaded ground map");
 	});
 
 	it("a second dock on an island joins the island's ground instead of founding a new one", () =>

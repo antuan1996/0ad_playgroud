@@ -2,14 +2,15 @@
  * Save/reload checks.
  *
  * Petra holds its whole state in memory and has no storage of its own: on save
- * every manager returns a `Serialize()` blob, and on load a freshly constructed
- * manager is filled from that blob by `Deserialize()`. A field that one of the
+ * every manager returns a `Serialize()` blob, and on load the manager is made
+ * from that blob (a `restore` factory, `fromSave` here) or a freshly constructed
+ * one is filled from it by `Deserialize()`. A field that one of the
  * two forgets is invisible while a game runs — it only shows up after a reload,
  * mid-match, when the AI quietly loses its attack list or its trade route.
  *
  * So the check is a round trip: put non-default values into a manager, save it,
  * restore a *different* instance from that data, and require the second instance
- * to save to exactly the same data. A field `Deserialize` ignores then shows up
+ * to save to exactly the same data. A field the restore ignores then shows up
  * as a key missing from the second save; a field `Serialize` forgets shows up as
  * a key that only appears after a reload.
  *
@@ -32,8 +33,14 @@ export interface RoundTrip<T>
 	label: string;
 	/** A fresh instance holding the state that will be saved. */
 	original(): T;
-	/** A fresh instance of the same class, to restore the save into. */
-	restored(): T;
+	/** A fresh instance of the same class, to restore the save into with `Deserialize`. */
+	restored?(): T;
+	/**
+	 * For a class made whole from its save (a `restore` factory, or a
+	 * constructor taking the save) rather than filled in afterwards: the
+	 * restored instance, made from the save.
+	 */
+	fromSave?: (data: unknown, gameState: CommonGameState) => T;
 	/** Fields left at their constructed value (see `populate`). */
 	keep?: readonly string[];
 	/**
@@ -224,13 +231,21 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 			`. Add them to Serialize, or to notSaved with a reason`
 	);
 
-	const restored = rt.restored();
-	if (rt.prepare)
-		rt.prepare(restored);
-	if (rt.restore)
-		rt.restore(restored, saved, gameState);
+	let restored: T;
+	if (rt.fromSave)
+		restored = rt.fromSave(saved, gameState);
 	else
-		callDeserialize(restored, saved, gameState, rt.label);
+	{
+		if (!rt.restored)
+			throw new Error(`${rt.label}: neither restored nor fromSave given`);
+		restored = rt.restored();
+		if (rt.prepare)
+			rt.prepare(restored);
+		if (rt.restore)
+			rt.restore(restored, saved, gameState);
+		else
+			callDeserialize(restored, saved, gameState, rt.label);
+	}
 
 	const reloaded = callSerialize(restored, `${rt.label} (after reload)`);
 

@@ -39,6 +39,7 @@ function fakeEntityList(items: readonly unknown[] = []): object
 {
 	return {
 		hasEntities: () => items.length > 0,
+		toEntityArray: () => [...items],
 		values: () => items[Symbol.iterator](),
 		[Symbol.iterator]: () => items[Symbol.iterator](),
 		filter: () => fakeEntityList(items),
@@ -60,10 +61,12 @@ export interface FakeGameStateOptions
 	 */
 	templates?: Record<string, FakeTemplateOptions>;
 	/**
-	 * A map, so code that builds an `InfoMap` has dimensions to copy. Nothing
-	 * here is a real terrain: the default is a handful of cells, which is right
-	 * for code that only reads `width`/`cellSize` and wrong for anything that
-	 * navigates, so a test that navigates has to say so in its own fake.
+	 * A map, so code that builds an `InfoMap` has dimensions to copy, and the
+	 * territory and border maps a headquarters makes have grids to read: all
+	 * unowned, all passable, square. Nothing here is a real terrain: the
+	 * default is a handful of cells, which is right for code that only reads
+	 * `width`/`cellSize` and wrong for anything that navigates, so a test that
+	 * navigates has to say so in its own fake.
 	 */
 	map?: { width?: number; height?: number; cellSize?: number };
 	/**
@@ -142,6 +145,10 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 		// InfoMap copies the dimensions off the shared script and allocates its
 		// own array, so one object serves both map types.
 		state["sharedScript"] = { territoryMap: dimensions, passabilityMap: dimensions };
+		ai["territoryMap"] = { ...dimensions, "data": new Uint8Array(width * height) };
+		state["getPassabilityMap"] = () => ({ ...dimensions, "data": new Uint16Array(width * height) });
+		state["getPassabilityClassMask"] = () => 0;
+		state["circularMap"] = false;
 	}
 
 	if (options.ownStructures)
@@ -153,9 +160,16 @@ export function makeFakeGameState(options: FakeGameStateOptions = {}): FakeGameS
 	{
 		state["getFishableSupplies"] = () => fakeEntityList();
 		state["getEntityById"] = () => undefined;
+		// no treasure on the map, still in the first phase, nobody yet
+		state["getEntities"] = () => fakeEntityList();
+		state["currentPhase"] = () => 1;
+		state["getPopulation"] = () => 0;
 		// Petra's own region analysis, from accessibility.js. "No regions" is
 		// what an unanalysed map looks like to the code that iterates it.
-		ai["accessibility"] = { regionSize: [], regionType: [], numRegions: 0 };
+		// Every cell of a declared map is impassable to land units and ships alike.
+		const cells = options.map ? (options.map.width ?? 8) * (options.map.height ?? 8) : 0;
+		ai["accessibility"] = { regionSize: [], regionType: [], numRegions: 0,
+			landPassMap: new Uint8Array(cells), navalPassMap: new Uint8Array(cells) };
 	}
 
 	return { "gameState": fake<CommonGameState>(state), priorityChanges };

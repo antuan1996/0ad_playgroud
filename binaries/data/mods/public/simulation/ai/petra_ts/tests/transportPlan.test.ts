@@ -17,6 +17,7 @@ import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
 import { ROUTE_RESEND_MIN, SHIP_STUCK, TransportPlan } from "../execution/transportPlan.ts";
+import { NavalManager } from "../decision/navalManager.ts";
 
 const PlayerID = PLAYER;
 
@@ -29,7 +30,8 @@ function seat()
 
 function initNaval(s: ReturnType<typeof seat>): void
 {
-	s.hq.navalManager.init(s.world.gameState);
+	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography);
+	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 }
 
 /** a plan, initialised and handed to the naval manager, as requireTransport makes one */
@@ -37,7 +39,6 @@ function plan(s: ReturnType<typeof seat>, units: CommonEntity[], end = worldPos(
 {
 	const p = TransportPlan.create(s.world.gameState, units, start, endIndex, end);
 	assert.ok(p, "a sea to cross");
-	p.init(s.world.gameState);
 	s.hq.navalManager.transportPlans.push(p);
 	return p;
 }
@@ -1079,9 +1080,7 @@ describe("a transport plan saved and loaded", () =>
 		p.update(s.world.gameState);
 		const saved = JSON.parse(JSON.stringify(p.Serialize()));
 
-		const loaded = TransportPlan.restore(s.world.gameState, saved.startIndex, saved.endIndex, saved.endPos);
-		loaded.Deserialize(saved);
-		loaded.init(s.world.gameState);
+		const loaded = TransportPlan.restore(s.world.gameState, s.hq.navalManager, saved);
 
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);
 		assert.equal(loaded.units.length, 1, "it finds its unit again by its metadata");

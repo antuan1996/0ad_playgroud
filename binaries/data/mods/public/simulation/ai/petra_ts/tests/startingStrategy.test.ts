@@ -26,6 +26,7 @@ import {
 import type { Headquarters } from "../decision/headquarters.ts";
 import { buildFirstBase, gameAnalysis } from "../decision/startingStrategy.ts";
 import { entityId, landRegion } from "../adapter/brands.ts";
+import { analyseMap } from "../world/geography.ts";
 
 const PASS_WIDTH = MAP_CELLS * PASS_RATIO;
 const ALLY = 3;
@@ -77,10 +78,10 @@ function startWorld(options: StartOptions = {}): HqWorld
 /** Seat a fresh HQ the way the bot holds it before its first turn: no region known yet. */
 function freshHQ(world: HqWorld, config = makeHQConfig()): Headquarters
 {
-	const hq = seatHQ(world, { "stubs": doorManagers, "seatBases": false, config });
-	hq.landRegions = {};
-	hq.navalRegions = {};
-	hq.navalMap = false;
+	// the regions the bot finds on this map before it makes its headquarters
+	const found = analyseMap(world.gameState, config.debug);
+	const hq = seatHQ(world, { "stubs": doorManagers, "seatBases": false, config,
+		"landRegions": found?.landRegions ?? {}, "navalRegions": found?.navalRegions ?? {}, "navalMap": found?.navalMap ?? false });
 	// as constructed: gameAnalysis decides whether the AI builds and expands
 	Reflect.deleteProperty(hq, "canBuildUnits");
 	Reflect.deleteProperty(hq, "canExpand");
@@ -151,7 +152,7 @@ function moverAnswers(moves: Array<[number, unknown[]]>, id: number): Record<str
 // reading the map
 //
 
-describe("game start: which regions of the map Petra plays on", () =>
+describe("game start: which regions of the map Petra plays on (analyseMap)", () =>
 {
 	it("a civil centre on the main land makes that land home; a big coast across a strait joins it", () =>
 	{
@@ -163,9 +164,8 @@ describe("game start: which regions of the map Petra plays on", () =>
 			},
 			"trajectories": { "2,4": [2, 3, 4] }
 		});
-		const hq = freshHQ(world);
-
-		assert.equal(gameAnalysis(hq, world.gameState), true);
+		const hq = analyseMap(world.gameState, 0);
+		assert.ok(hq, "the map was read");
 
 		assert.deepEqual(hq.landRegions, { 2: true, 4: true });
 		// the strait is the sea the fleet must hold to reach the other coast
@@ -188,9 +188,8 @@ describe("game start: which regions of the map Petra plays on", () =>
 			},
 			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 6, 5] }
 		});
-		const hq = freshHQ(world);
-
-		gameAnalysis(hq, world.gameState);
+		const hq = analyseMap(world.gameState, 0);
+		assert.ok(hq, "the map was read");
 
 		assert.deepEqual(hq.landRegions, { 2: true });
 		assert.deepEqual(hq.navalRegions, { 3: true });
@@ -211,9 +210,8 @@ describe("game start: which regions of the map Petra plays on", () =>
 			},
 			"trajectories": { "2,4": [2, 3, 4], "2,5": [2, 3, 4, 7, 5] }
 		});
-		const hq = freshHQ(world);
-
-		gameAnalysis(hq, world.gameState);
+		const hq = analyseMap(world.gameState, 0);
+		assert.ok(hq, "the map was read");
 
 		assert.deepEqual(hq.landRegions, { 2: true, 4: true });
 		assert.deepEqual(hq.navalRegions, { 3: true });
@@ -241,9 +239,8 @@ describe("game start: which regions of the map Petra plays on", () =>
 			"resourceDropsiteTypes": () => undefined, "decaying": () => false }));
 		villager(world, 31, [100, 100]);
 		villager(world, 32, [102, 100]);
-		const hq = freshHQ(world);
-
-		assert.equal(gameAnalysis(hq, world.gameState), true);
+		const hq = analyseMap(world.gameState, 0);
+		assert.ok(hq, "the map was read");
 
 		assert.deepEqual(hq.landRegions, { 3: true, 4: true });
 		assert.deepEqual(hq.navalRegions, { 5: true });
@@ -272,9 +269,8 @@ describe("game start: which regions of the map Petra plays on", () =>
 			"templateName": "units/athen/ship_trireme"
 		}, { ...unitAnswers, "isGarrisonHolder": () => true, "garrisoned": () => [41, 42],
 			"canGather": () => false, "isGatherer": () => false, "isBuilder": () => false }));
-		const hq = freshHQ(world);
-
-		assert.equal(gameAnalysis(hq, world.gameState), true);
+		const hq = analyseMap(world.gameState, 0);
+		assert.ok(hq, "the map was read");
 
 		assert.deepEqual(hq.landRegions, { 2: true });
 		assert.deepEqual(hq.navalRegions, { 5: true });
@@ -283,7 +279,7 @@ describe("game start: which regions of the map Petra plays on", () =>
 		// they land when a construction needs them (createTransportIfNeeded)
 	});
 
-	it("a map with nothing it can stand on: the bot gives up before touching any manager", () =>
+	it("a map with nothing it can stand on: the bot gives up before making its headquarters", () =>
 	{
 		resetRecorder();
 		const world = startWorld({
@@ -294,15 +290,9 @@ describe("game start: which regions of the map Petra plays on", () =>
 			"regions": {}
 		});
 		villager(world, 51, [100, 100]);
-		const hq = freshHQ(world);
-
-		assert.equal(gameAnalysis(hq, world.gameState), false);
+		assert.equal(analyseMap(world.gameState, 0), undefined, "no geography, so no headquarters is made");
 
 		assert.ok(logs.some((line) => line.includes("it does not know how to interpret this map")));
-		// gameAnalysis stopped before initialising the staff: nothing was assigned
-		assert.notEqual(hq.firstBaseConfig, true);
-		assert.equal(hq.canBuildUnits, undefined);
-		assert.deepEqual(doorCalls(hq.tradeManager), []);
 	});
 });
 

@@ -6,25 +6,28 @@
  * save to exactly the same data. See harness/persistence.ts for why that shape
  * is what catches a field dropped on either side.
  */
+import { Geography } from "../world/geography.ts";
+import { createBorderMap, createTerritoryMap } from "../world/mapModule.ts";
+import { fake } from "./harness/fakes.ts";
 import { describe, it } from "node:test";
 
 import { makeFakeGameState } from "./harness/bareState.ts";
 import { assertRoundTrip } from "./harness/persistence.ts";
 import { techName } from "../adapter/brands.ts";
 
-import { AttackManager } from "../decision/attackManager.ts";
-import { BaseManager } from "../decision/baseManager.ts";
-import { BasesManager } from "../decision/basesManager.ts";
+import { AttackManager, type SerializedAttackManager } from "../decision/attackManager.ts";
+import { BaseManager, type SerializedBaseManager } from "../decision/baseManager.ts";
+import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
 import { BuildManager } from "../decision/buildManager.ts";
 import { Config } from "../decision/config.ts";
 import { DefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager } from "../decision/emergencyManager.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
-import { Headquarters } from "../decision/headquarters.ts";
+import { type HeadquartersSerializedData, Headquarters } from "../decision/headquarters.ts";
 import { NavalManager } from "../decision/navalManager.ts";
 import { ResearchManager } from "../decision/researchManager.ts";
-import { TradeManager } from "../decision/tradeManager.ts";
+import { type SerializedTradeManager, TradeManager } from "../decision/tradeManager.ts";
 import { VictoryManager } from "../decision/victoryManager.ts";
 import { Queue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues } from "../execution/queueManager.ts";
@@ -43,6 +46,13 @@ function makeConfig(): Config
  * a headquarters rebuilds the entity collections it holds, so it needs a world
  * to look at — this one says "empty" to every question it is asked.
  */
+/** A geography with no regions, on the world's own maps: what analyseMap makes of a map it found nothing on */
+function bareGeography(world: CommonGameState): Geography
+{
+	return new Geography(createTerritoryMap(world), createBorderMap(world),
+		{ "landRegions": {}, "navalRegions": {}, "navalMap": false });
+}
+
 function emptyWorldWithMap(): CommonGameState
 {
 	return makeFakeGameState({
@@ -154,53 +164,60 @@ describe("save and reload", () =>
 
 	it("keeps a trade manager", () =>
 	{
+		const world = emptyWorldWithMap();
 		assertRoundTrip(
 			{
 				label: "TradeManager",
-				original: () => new TradeManager(makeConfig()),
-				restored: () => new TradeManager(makeConfig())
+				original: () => new TradeManager(makeConfig(), world, bareGeography(world)),
+				fromSave: (data, gameState) => TradeManager.restore(makeConfig(), gameState, bareGeography(gameState),
+					fake<SerializedTradeManager>(data)),
+				notSaved: { "minimalGain": "derived from the map at construction, which a reload reads again" }
 			},
-			makeFakeGameState().gameState
+			world
 		);
 	});
 
 	it("keeps a defense manager", () =>
 	{
+		const world = emptyWorldWithMap();
 		assertRoundTrip(
 			{
 				label: "DefenseManager",
-				original: () => new DefenseManager(makeConfig()),
-				restored: () => new DefenseManager(makeConfig())
+				original: () => new DefenseManager(makeConfig(), bareGeography(world)),
+				restored: () => new DefenseManager(makeConfig(), bareGeography(world))
 			},
-			makeFakeGameState().gameState
+			world
 		);
 	});
 
 	it("keeps an attack manager", () =>
 	{
+		const world = emptyWorldWithMap();
 		assertRoundTrip(
 			{
 				label: "AttackManager",
-				original: () => new AttackManager(makeConfig()),
-				restored: () => new AttackManager(makeConfig()),
+				original: () => new AttackManager(makeConfig(), world),
+				fromSave: (data, gameState) => AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), true),
 				notSaved: {
 					"enemyLandsTurn": "a cache of enemiesByLand, counted again on the turn it is asked",
 					"enemyLands": "a cache of enemiesByLand, counted again on the turn it is asked"
 				}
 			},
-			makeFakeGameState().gameState
+			world
 		);
 	});
 
 	it("keeps a naval manager", () =>
 	{
+		const world = emptyWorldWithMap();
 		assertRoundTrip(
 			{
 				label: "NavalManager",
-				original: () => new NavalManager(makeConfig()),
-				restored: () => new NavalManager(makeConfig())
+				original: () => new NavalManager(makeConfig(), world, bareGeography(world)),
+				fromSave: (data, gameState) => NavalManager.restore(makeConfig(), gameState, bareGeography(gameState),
+					fake<ReturnType<NavalManager["Serialize"]>>(data))
 			},
-			makeFakeGameState().gameState
+			world
 		);
 	});
 
@@ -222,13 +239,13 @@ describe("save and reload", () =>
 		// The base manager is not saved as a standalone object: its anchor and
 		// resource lists live on the entity it is attached to. Only its own
 		// fields are compared here.
-		const basesManager = () => new BasesManager(makeConfig());
-		const world = makeFakeGameState().gameState;
+		const world = emptyWorldWithMap();
+		const basesManager = () => new BasesManager(makeConfig(), world);
 		assertRoundTrip(
 			{
 				label: "BaseManager",
-				original: () => new BaseManager(world, basesManager()),
-				restored: () => new BaseManager(world, basesManager()),
+				original: () => new BaseManager(world, basesManager(), BaseManager.STATE_WITH_ANCHOR),
+				fromSave: (data, gameState) => BaseManager.restore(gameState, basesManager(), fake<SerializedBaseManager>(data)),
 				keep: ["anchor", "anchorId", "territoryIndices"]
 			},
 			world
@@ -238,28 +255,17 @@ describe("save and reload", () =>
 	it("keeps a bases manager holding one base", () =>
 	{
 		const world = emptyWorldWithMap();
-		const states = BaseManager;
 		const build = () =>
 		{
-			const bases = new BasesManager(makeConfig());
-			// The game always runs init() on a bases manager (fresh game and
-			// restore alike) before using or saving it, which is what creates
-			// its baseless base, so build this one the same way.
-			bases
-				.init(world, false);
-			// A base only holds its entity collections after init, and
-			// restoring runs init as well, so a base that skipped it would
-			// differ for a reason that has nothing to do with the save.
-			const base = new BaseManager(world, bases);
-			base.init(world, states.STATE_WITH_ANCHOR);
-			bases["baseManagers"] = [base];
+			const bases = new BasesManager(makeConfig(), world);
+			bases["baseManagers"] = [new BaseManager(world, bases, BaseManager.STATE_WITH_ANCHOR)];
 			return bases;
 		};
 		assertRoundTrip(
 			{
 				label: "BasesManager",
 				original: build,
-				restored: build
+				fromSave: (data, gameState) => new BasesManager(makeConfig(), gameState, fake<SerializedBasesManager>(data))
 			},
 			world
 		);
@@ -273,18 +279,8 @@ describe("save and reload", () =>
 		assertRoundTrip(
 			{
 				label: "Headquarters",
-				// A headquarters only holds bases once the bot has initialised
-				// its base manager, and restoring does that as part of loading.
-				// So the saved side starts from a live one, the restored side
-				// from a bare one.
-				original: () =>
-				{
-					const hq = new Headquarters(makeConfig(), false);
-					hq["basesManager"]
-						.init(world, false);
-					return hq;
-				},
-				restored: () => new Headquarters(makeConfig(), false),
+				original: () => new Headquarters(makeConfig(), world, bareGeography(world)),
+				fromSave: (data, gameState) => Headquarters.restore(makeConfig(), gameState, fake<HeadquartersSerializedData>(data)),
 				// Not saved, in the original as in the port: the constructor
 				// derives all four from Config, which is saved, so a reload
 				// recomputes the same numbers.
@@ -293,10 +289,10 @@ describe("save and reload", () =>
 					"fortressLapseTime": "derived from Config.Military at construction",
 					"extraTowers": "derived from Config difficulty and personality at construction",
 					"extraFortresses": "derived from Config difficulty and personality at construction",
-					"canBarter": "read from the built markets at the start of each update"
+					"canBarter": "read from the built markets at the start of each update",
+					"currentPhase": "read from the game when the headquarters is made, a reload's too"
 				},
-				// Rebuilding the managers reaches back for the headquarters they
-				// belong to, so the world has to be holding the one being restored.
+				// the managers' new plans reach back for the headquarters they belong to
 				prepare: hq => { world.ai["HQ"] = hq; }
 			},
 			world
@@ -311,20 +307,15 @@ describe("save and reload", () =>
 		assertRoundTrip(
 			{
 				label: "Headquarters with learnt state",
-				original: () =>
-				{
-					const hq = new Headquarters(makeConfig(), false);
-					hq["basesManager"]
-						.init(world, false);
-					return hq;
-				},
-				restored: () => new Headquarters(makeConfig(), false),
+				original: () => new Headquarters(makeConfig(), world, bareGeography(world)),
+				fromSave: (data, gameState) => Headquarters.restore(makeConfig(), gameState, fake<HeadquartersSerializedData>(data)),
 				notSaved: {
 					"towerLapseTime": "derived from Config.Military at construction",
 					"fortressLapseTime": "derived from Config.Military at construction",
 					"extraTowers": "derived from Config difficulty and personality at construction",
 					"extraFortresses": "derived from Config difficulty and personality at construction",
-					"canBarter": "read from the built markets at the start of each update"
+					"canBarter": "read from the built markets at the start of each update",
+					"currentPhase": "read from the game when the headquarters is made, a reload's too"
 				},
 				// Regions the map reports as land and sea, a structure that
 				// decayed to gaia, a capture target with garrisoned defenders,

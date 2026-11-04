@@ -163,15 +163,18 @@ behaviour the original happened to have.
 ## Save and reload
 
 `persistence.test.ts` checks the managers that survive a save game. Petra has no
-storage: each manager returns a blob from `Serialize()`, and on load a freshly
-constructed manager is filled by `Deserialize()`. A field either side forgets is
+storage: each manager returns a blob from `Serialize()`, and on load the
+manager is made from it: by its `restore` factory or a constructor taking the
+save (the headquarters, its bases, naval, trade and attack managers and their
+plans; the round trip's `fromSave`), or, for the simpler managers, a freshly
+constructed one filled by `Deserialize()`. A field either side forgets is
 invisible until someone reloads a match, so `harness/persistence.ts` checks two
 things per class, without naming a single field:
 
 - **The save comes back unchanged.** Fill the instance's fields with values no
   default has, save it, restore a *different* instance from that data, and
-  require the second instance to save to exactly the same data. A field
-  `Deserialize` ignores shows up as a key lost on reload; one it invents as a key
+  require the second instance to save to exactly the same data. A field the
+  restore ignores shows up as a key lost on reload; one it invents as a key
   that only appears after a reload.
 - **The save covers the state.** Every field that was filled must appear in the
   save somewhere. Without this, a field `Serialize` stopped writing is invisible:

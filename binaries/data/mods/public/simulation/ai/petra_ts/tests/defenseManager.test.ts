@@ -71,7 +71,7 @@ function makeDefender(id: number, position: [number, number] | undefined,
 /** A manager wired to one world as headquarters owns it. */
 function makeDefenseManager(world: World): DefenseManager
 {
-	return new DefenseManager(world.ai.Config);
+	return new DefenseManager(world.ai.Config, world.ai.HQ.geography);
 }
 
 /** A manager that has run one quiet startup tick on an empty world, so it

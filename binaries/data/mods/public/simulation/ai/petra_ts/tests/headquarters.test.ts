@@ -31,6 +31,7 @@ import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
+import { BasesManager } from "../decision/basesManager.ts";
 import { border, largeFrontier, narrowFrontier, outside } from "../world/mapMask.ts";
 
 /** an office seated on the plain, with its doors recorded (unless a suite seats its own) */
@@ -5141,13 +5142,10 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 	{
 		const { world, hq } = seat();
 		const base = hq.baseManagers()[0];
-		// the map is what a reloaded game starts from: its entries carry no base yet
-		hq.basesManager.basesMap.map.fill(0);
-
-		hq.postinit(world.gameState);
+		const reloaded = new BasesManager(hq.Config, world.gameState, hq.basesManager.Serialize());
 
 		for (const j of base.territoryIndices)
-			assert.equal(hq.basesManager.basesMap.map[j], base.ID,
+			assert.equal(reloaded.basesMap.map[j], base.ID,
 				"every cell of the base's ground answers its base again");
 	});
 
