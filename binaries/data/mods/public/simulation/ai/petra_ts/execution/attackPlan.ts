@@ -2845,9 +2845,11 @@ export class AttackPlan
 			this.target = undefined;
 		}
 
-		this.unitCollection = gameState.getOwnUnits().filter(
-			filters.byMetadata(PlayerID, "plan", this.name));
-		this.unitCollection.registerUpdates();
+		// The original made and registered a new unit collection here every
+		// turn, never unregistering the last: each one stayed in the shared
+		// script's lists, updated on every plan or owner change of any entity,
+		// thousands by minute 30 and the main cost of a late turn (FINDINGS §48).
+		// The constructor's collection is kept up to date by its registration.
 
 		if (!this.overseas || this.state !== AttackPlan.STATE_UNEXECUTED)
 			return;
