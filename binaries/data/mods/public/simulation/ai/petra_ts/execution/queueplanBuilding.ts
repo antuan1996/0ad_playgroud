@@ -21,6 +21,197 @@ export type BuildingPosition = {
 	zz?: number;
 } | false;
 
+/** res is a measure of the amount of resources around a dock, and MAX_RES the max value taken into account */
+const MAX_RES = 10;
+/** water is a measure of the water space around a dock, and MAX_WATER the max value checkDockPlacement returns */
+const MAX_WATER = 16;
+
+/** The best dock spot so far: its value (the lower the better), cells, angle, land and water */
+type DockSpot = { val: number; idx: number; jdx: CellIndex<"territory">; angle: number; land: AccessIndex; water: number };
+
+/** What the dock search reads, the same for every cell */
+type DockSearch = {
+	dockProximity: CommonPosition | undefined;
+	obstructions: ReturnType<typeof createObstructionMap>;
+	width: number;
+	cellSize: number;
+	wantedLand: Record<number, boolean> | undefined;
+	wantedSea: SeaIndex | undefined;
+	proxyAccess: number | null;
+	oversea: boolean | null;
+	dropsiteTypes: string[] | undefined;
+	radius: number;
+	halves: ReturnType<typeof footprintHalves>;
+	ccEnts: CommonEntityCollection | null;
+	docks: CommonEntityCollection<CommonPlacedEntity> | null;
+	factor: number;
+};
+
+/** Not much farther to one of our cc than to enemy ones: whether the enemy's nearest is under half as far */
+function overseaFromEnemy(gameState: CommonGameState, pos: CommonPosition, ccEnts: CommonEntityCollection): boolean
+{
+	let enemyDist;
+	let ownDist;
+	for (const cc of ccEnts.values())
+	{
+		const owner = cc.owner();
+		if (owner !== PlayerID && !gameState.isPlayerEnemy(owner) || !isPlaced(cc))
+			continue;
+		const dist = SquareVectorDistance(pos, cc.position());
+		if (owner === PlayerID && (!ownDist || dist < ownDist))
+			ownDist = dist;
+		if (gameState.isPlayerEnemy(owner) && (!enemyDist || dist < enemyDist))
+			enemyDist = dist;
+	}
+	return !!ownDist && !!enemyDist && enemyDist < 0.5 * ownDist;
+}
+
+/** Whether land i is an oversea dock's: no dock of ours, no civic centre of ours or an enemy's, and a sea to one of ours */
+function isOverseaLand(gameState: CommonGameState, i: AccessIndex, docks: CommonEntityCollection, ccEnts: CommonEntityCollection): boolean
+{
+	for (const dock of docks.values())
+		if (getLandAccess(gameState, dock) === i)
+			return false;
+	let sea;
+	for (const cc of ccEnts.values())
+	{
+		const ccAccess = getLandAccess(gameState, cc);
+		if (ccAccess !== undefined && ccAccess !== i)
+		{
+			if (cc.owner() === PlayerID && !sea)
+				sea = hqOf(gameState).getSeaBetweenIndices(gameState, ccAccess, i);
+			continue;
+		}
+		// Docks on island where we have a cc are already done elsewhere
+		if (cc.owner() === PlayerID || gameState.isPlayerEnemy(cc.owner()))
+			return false;
+	}
+	return !!sea;
+}
+
+/** Whether a naval cell is on the wanted sea, or on any sea when none is wanted */
+function isWantedSea(naval: number, wantedSea: SeaIndex | undefined): boolean
+{
+	return !(wantedSea && naval !== wantedSea || !wantedSea && naval < 2);
+}
+
+/** A market's cell on our border gains, and with the town phase another cell inside it, unless it shoots */
+function borderBonus(placement: InfoMap<"territory">, j: CellIndex<"territory">, border: number,
+	rule: { favorBorder: boolean | undefined; disfavorBorder: boolean }): void
+{
+	if (rule.favorBorder && border & mapMask.border)
+		placement.set(j, placement.map[j] + 50);
+	else if (rule.disfavorBorder && !(border & mapMask.fullBorder))
+		placement.set(j, placement.map[j] + 10);
+}
+
+/** The accessibility cell at a game position, or undefined off the map */
+function cellOnMap(accessibility: CommonGameState["ai"]["accessibility"], x: number, z: number): number | undefined
+{
+	const pos = accessibility.gamePosToMapPos(worldPos(x, z));
+	if (pos[0] < 0 || pos[0] >= accessibility.width)
+		return undefined;
+	if (pos[1] < 0 || pos[1] >= accessibility.height)
+		return undefined;
+	return pos[0] + pos[1]*accessibility.width;
+}
+
+/** Whether a game position is on the map and on open water */
+function onOpenWater(accessibility: CommonGameState["ai"]["accessibility"], x: number, z: number): boolean
+{
+	const j = cellOnMap(accessibility, x, z);
+	return j !== undefined && !(accessibility.landPassMap[j] > 1 || accessibility.navalPassMap[j] < 2);
+}
+
+/** Adds row ky's resources within dxmax of ix to the sum, weighted by their distance */
+function addRow(sum: { total: number; nbcell: number },
+	row: { map: ArrayLike<number>; w: number; ix: number; size: number; weigh0: number }, ky: number, dxmax: number): void
+{
+	const { map, w, ix, size, weigh0 } = row;
+	if (ky < 0 || ky >= w)
+		return;
+	for (let dx = -dxmax; dx <= dxmax; ++dx)
+	{
+		const kx = ix + dx;
+		if (kx < 0 || kx >= w)
+			continue;
+		const ddx = dx > 0 ? dx : -dx;
+		const weight = weigh0 * (dxmax - ddx) / size;
+		sum.total += weight * map[kx + w * ky];
+		sum.nbcell += weight;
+	}
+}
+
+/** A dock laid at its spot, and at spots shifted a little along its angle in case that one fails */
+function constructOnShore(gameState: CommonGameState, builder: CommonEntity, type: TemplateName,
+	pos: Exclude<BuildingPosition, false>, metadata: PlanMetadata): void
+{
+	// adjust a bit the position if needed
+	const cosa = Math.cos(pos.angle);
+	const sina = Math.sin(pos.angle);
+	const shiftMax = hqOf(gameState).geography.territoryMap.cellSize;
+	for (let shift = 0; shift <= shiftMax; shift += 2)
+	{
+		builder.construct(type, pos.x-shift*sina, pos.z-shift*cosa, pos.angle, metadata);
+		if (shift > 0)
+			builder.construct(type, pos.x+shift*sina, pos.z+shift*cosa, pos.angle, metadata);
+	}
+}
+
+/** What one of our structures adds to the placement map of a new building; returns whether it is a house near a house */
+function influenceOf(gameState: CommonGameState, template: CommonStructureTemplate, placement: InfoMap<"territory">,
+	ent: CommonStructureEntity): boolean
+{
+	const cellSize = placement.cellSize;
+	const pos = ent.position();
+	const x = Math.round(pos[0] / cellSize);
+	const z = Math.round(pos[1] / cellSize);
+
+	const struct = getBuiltEntity(gameState, ent);
+	const structDropsiteTypes = struct.resourceDropsiteTypes();
+	if (structDropsiteTypes && structDropsiteTypes.indexOf("food") !== -1)
+	{
+		if (template.hasClasses(["Field", "Corral"]))
+			placement.addInfluence(x, z, 80 / cellSize, 50);
+		else // If this is not a field add a negative influence because we want to leave this area for fields
+			placement.addInfluence(x, z, 80 / cellSize, -20);
+	}
+	else if (template.hasClass("House"))
+	{
+		if (ent.hasClass("House"))
+		{
+			placement.addInfluence(x, z, 60 / cellSize, 40);    // houses are close to other houses
+			return true;
+		}
+		else if (ent.hasClasses(["Gate", "!Wall"]))
+			placement.addInfluence(x, z, 60 / cellSize, -40);   // and further away from other stuffs
+	}
+	else if (template.hasClass("Farmstead") && !ent.hasClasses(["Field", "Corral"]) &&
+		ent.hasClasses(["Gate", "!Wall"]))
+		placement.addInfluence(x, z, 100 / cellSize, -25);       // move farmsteads away to make room (Wall test needed for iber)
+	else if (template.hasClass("GarrisonFortress") && ent.hasClass("House"))
+		placement.addInfluence(x, z, 120 / cellSize, -50);
+	else if (template.hasClass("Military"))
+		placement.addInfluence(x, z, 40 / cellSize, -40);
+	else if (template.genericName() === "Rotary Mill" && ent.hasClass("Field"))
+		placement.addInfluence(x, z, 60 / cellSize, 40);
+	return false;
+}
+
+/** A farmstead goes away from the wood, and from the map border: we need space around it */
+function awayFromWood(gameState: CommonGameState, placement: InfoMap<"territory">): void
+{
+	const borderMap = hqOf(gameState).geography.borderMap;
+	for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
+	{
+		const j = cellIndex(placement, jIndex);
+		let value = placement.map[j] - gameState.sharedScript.resourceMaps.wood.map[j]/3;
+		if (borderMap.map[j] & mapMask.fullBorder)
+			value /= 2;	// we need space around farmstead, so disfavor map border
+		placement.set(j, value);
+	}
+}
+
 /**
  * Defines a construction plan, ie a building.
  * We'll try to fing a good position if non has been provided
@@ -63,7 +254,17 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	start(gameState: CommonGameState): void
 	{
 		Engine.ProfileStart("Building construction start");
+		const laid = this.layFoundation(gameState);
+		Engine.ProfileStop();
 
+		if (laid && this.metadata && this.metadata.proximity)
+			hqOf(gameState).navalManager.createTransportIfNeeded(gameState, this.metadata.proximity, worldPos(laid.pos.x, laid.pos.z),
+				laid.access);
+	}
+
+	/** The foundation laid at the best spot: its spot and land, or undefined when it was not */
+	private layFoundation(gameState: CommonGameState): { pos: Exclude<BuildingPosition, false>; access: AccessIndex } | undefined
+	{
 		// We don't care which builder we assign, since they won't actually do
 		// the building themselves - all we care about is that there is at least
 		// one unit that can start the foundation (should always be the case here).
@@ -71,30 +272,18 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		if (!builder)
 		{
 			aiWarn("petra error: builder not found when starting construction.");
-			Engine.ProfileStop();
-			return;
+			return undefined;
 		}
 
 		const pos = this.findGoodPosition(gameState);
 		if (!pos)
 		{
 			hqOf(gameState).buildManager.setUnbuildable(gameState, this.type, 90, "room");
-			Engine.ProfileStop();
-			return;
+			return undefined;
 		}
 
-		if (this.metadata && this.metadata.expectedGain && (!this.template.hasClass("Market") ||
-		    gameState.getOwnEntitiesByClass("Market", true).hasEntities()))
-		{
-			// Check if this Market is still worth building (others may have been built making it useless).
-			const tradeManager = hqOf(gameState).tradeManager;
-			tradeManager.checkRoutes(gameState);
-			if (!tradeManager.isNewMarketWorth(this.metadata.expectedGain))
-			{
-				Engine.ProfileStop();
-				return;
-			}
-		}
+		if (!this.stillWorthBuilding(gameState))
+			return undefined;
 		hqOf(gameState).markBuildingStarted();
 
 		if (this.metadata === undefined)
@@ -107,18 +296,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		this.metadata.access = access;
 
 		if (this.template.buildPlacementType() === "shore")
-		{
-			// adjust a bit the position if needed
-			const cosa = Math.cos(pos.angle);
-			const sina = Math.sin(pos.angle);
-			const shiftMax = hqOf(gameState).geography.territoryMap.cellSize;
-			for (let shift = 0; shift <= shiftMax; shift += 2)
-			{
-				builder.construct(this.type, pos.x-shift*sina, pos.z-shift*cosa, pos.angle, this.metadata);
-				if (shift > 0)
-					builder.construct(this.type, pos.x+shift*sina, pos.z+shift*cosa, pos.angle, this.metadata);
-			}
-		}
+			constructOnShore(gameState, builder, this.type, pos, this.metadata);
 		else if (pos.xx === undefined || pos.x === pos.xx && pos.z === pos.zz)
 		{
 			builder.construct(this.type, pos.x, pos.z, pos.angle, this.metadata);
@@ -133,10 +311,18 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 					pos.angle, this.metadata);
 		}
 		this.onStart(gameState);
-		Engine.ProfileStop();
+		return { pos, access };
+	}
 
-		if (this.metadata && this.metadata.proximity)
-			hqOf(gameState).navalManager.createTransportIfNeeded(gameState, this.metadata.proximity, worldPos(pos.x, pos.z), access);
+	/** Check if this Market is still worth building (others may have been built making it useless). */
+	private stillWorthBuilding(gameState: CommonGameState): boolean
+	{
+		if (!this.metadata || !this.metadata.expectedGain || this.template.hasClass("Market") &&
+		    !gameState.getOwnEntitiesByClass("Market", true).hasEntities())
+			return true;
+		const tradeManager = hqOf(gameState).tradeManager;
+		tradeManager.checkRoutes(gameState);
+		return tradeManager.isNewMarketWorth(this.metadata.expectedGain);
 	}
 
 	findGoodPosition(gameState: CommonGameState): BuildingPosition
@@ -149,15 +335,9 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const HQ = hqOf(gameState);
 		if (template.hasClass("Storehouse") && this.metadata && this.metadata.base)
 		{
-			// recompute the best dropsite location in case some conditions have changed
-			const base = requireValue(HQ.getBaseByID(this.metadata.base));
-			const type = this.metadata.type ? this.metadata.type : "wood";
-			const newpos = base.findBestDropsiteLocation(gameState, type, template.templateName());
-			if (newpos && newpos.quality > 0)
-			{
-				const pos = newpos.pos;
-				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": this.metadata.base };
-			}
+			const storehouse = this.storehouseSpot(gameState, this.metadata.base);
+			if (storehouse)
+				return storehouse;
 		}
 
 		if (!this.position)
@@ -181,15 +361,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const obstructions = createObstructionMap(gameState, NO_LAND, template);
 		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
 
-		const obstructionRadius = template.obstructionRadius();
-		let radius;
-		if (template.hasClasses(["Fortress", "Arsenal"]) ||
-			this.type === gameState.applyCiv("structures/{civ}/elephant_stable"))
-			radius = Math.floor((obstructionRadius.max + 8) / obstructions.cellSize);
-		else if (template.resourceDropsiteTypes() === undefined && !template.hasClasses(["House", "Field", "Market"]))
-			radius = Math.ceil((obstructionRadius.max + 4) / obstructions.cellSize);
-		else
-			radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
+		const radius = this.placementRadius(gameState, obstructions.cellSize);
 
 		let bestTile;
 		if (template.hasClass("House") && !alreadyHasHouses)
@@ -217,6 +389,34 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		return { "x": x, "z": z, "angle": 3*Math.PI/4, "base": HQ.baseAtIndex(territoryIndex) };
 	}
 
+	/** recompute the best dropsite location in case some conditions have changed */
+	private storehouseSpot(gameState: CommonGameState, baseId: BaseId): BuildingPosition | undefined
+	{
+		const base = requireValue(hqOf(gameState).getBaseByID(baseId));
+		const type = this.metadata && this.metadata.type ? this.metadata.type : "wood";
+		const newpos = base.findBestDropsiteLocation(gameState, type, this.template.templateName());
+		if (!newpos || !(newpos.quality > 0))
+			return undefined;
+		const pos = newpos.pos;
+		return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": baseId };
+	}
+
+	/**
+	 * The room kept around the building, in cells: more for a fortress, an arsenal or an elephant stable,
+	 * less for houses, dropsites, fields and markets
+	 */
+	private placementRadius(gameState: CommonGameState, cellSize: number): number
+	{
+		const template = this.template;
+		const obstructionRadius = template.obstructionRadius();
+		if (template.hasClasses(["Fortress", "Arsenal"]) ||
+			this.type === gameState.applyCiv("structures/{civ}/elephant_stable"))
+			return Math.floor((obstructionRadius.max + 8) / cellSize);
+		if (template.resourceDropsiteTypes() === undefined && !template.hasClasses(["House", "Field", "Market"]))
+			return Math.ceil((obstructionRadius.max + 4) / cellSize);
+		return Math.ceil(obstructionRadius.max / cellSize);
+	}
+
 	/**
 	 * The placement of a building with a rule of its own (a civic centre, a tower or
 	 * fortress, a market): a position, false for none, or undefined to search as for any.
@@ -225,34 +425,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	{
 		const HQ = hqOf(gameState);
 		if (template.hasClass("CivCentre"))
-		{
-			let pos;
-			if (this.metadata && this.metadata.room)
-				pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
-			else if (this.metadata && this.metadata.resource)
-			{
-				const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
-				pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);
-			}
-			else
-				pos = HQ.findStrategicCCLocation(gameState, template);
-
-			if (pos)
-				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": NO_BASE };
-			// No possible location, try to build instead a dock in a not-enemy island
-			const templateName = gameState.applyCiv("structures/{civ}/dock");
-			if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
-			{
-				// canBuild() above already verified that the template exists; a dock is a structure
-				const dockTemplate = requireTemplate(gameState, templateName);
-				if (isStructureTemplate(dockTemplate) && gameState.getResources().canAfford(
-					new ResourcesManager(dockTemplate.cost())))
-				{
-					this.buildOverseaDock(gameState, dockTemplate);
-				}
-			}
-			return false;
-		}
+			return this.civCentreSpot(gameState, template);
 		else if (template.hasClasses(["Tower", "Fortress", "ArmyCamp"]))
 		{
 			const pos = HQ.findDefensiveLocation(gameState, template);
@@ -263,20 +436,57 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 				return false;
 		}
 		else if (template.hasClass("Market")) // Docks are done before.
+			return this.marketSpot(gameState, template);
+		return undefined;
+	}
+
+	/** A civic centre where the plan wants it; with none, a dock in a not-enemy island is tried instead */
+	private civCentreSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition
+	{
+		const HQ = hqOf(gameState);
+		let pos;
+		if (this.metadata && this.metadata.room)
+			pos = HQ.findEconomicCCLocation(gameState, template, "wood", undefined, true, true);
+		else if (this.metadata && this.metadata.resource)
 		{
-			const pos = HQ.findMarketLocation(gameState, template);
-			const base = pos ? pos[2] : -1;
-			// a base of its own (not -1, nor a cell no base claims): there
-			if (pos && base !== -1 && base !== NO_BASE)
-			{
-				if (!this.metadata)
-					this.metadata = {};
-				this.metadata.expectedGain = pos[3];
-				return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": base };
-			}
-			else if (!pos)
-				return false;
+			const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
+			pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, proximity);
 		}
+		else
+			pos = HQ.findStrategicCCLocation(gameState, template);
+
+		if (pos)
+			return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": NO_BASE };
+		// No possible location, try to build instead a dock in a not-enemy island
+		const templateName = gameState.applyCiv("structures/{civ}/dock");
+		if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
+		{
+			// canBuild() above already verified that the template exists; a dock is a structure
+			const dockTemplate = requireTemplate(gameState, templateName);
+			if (isStructureTemplate(dockTemplate) && gameState.getResources().canAfford(
+				new ResourcesManager(dockTemplate.cost())))
+			{
+				this.buildOverseaDock(gameState, dockTemplate);
+			}
+		}
+		return false;
+	}
+
+	/** A market in a base of its own, with the gain expected; undefined to search as for any, false for none */
+	private marketSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
+	{
+		const pos = hqOf(gameState).findMarketLocation(gameState, template);
+		const base = pos ? pos[2] : -1;
+		// a base of its own (not -1, nor a cell no base claims): there
+		if (pos && base !== -1 && base !== NO_BASE)
+		{
+			if (!this.metadata)
+				this.metadata = {};
+			this.metadata.expectedGain = pos[3];
+			return { "x": pos[0], "z": pos[1], "angle": 3*Math.PI/4, "base": base };
+		}
+		else if (!pos)
+			return false;
 		return undefined;
 	}
 
@@ -297,75 +507,24 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		{
 			// give a small > 0 level as the result of addInfluence is constrained to be > 0
 			// if we really need houses (i.e. Phasing without enough village building), do not apply these constraints
-			if (this.metadata && this.metadata.base !== undefined)
+			const base = this.metadata ? this.metadata.base : undefined;
+			for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 			{
-				const base = this.metadata.base;
-				for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
-				{
-					const j = cellIndex(placement, jIndex);
-					if (HQ.baseAtIndex(j) === base)
-						placement.set(j, 45);
-				}
-			}
-			else
-			{
-				for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
-				{
-					const j = cellIndex(placement, jIndex);
-					if (HQ.baseAtIndex(j) !== 0)
-						placement.set(j, 45);
-				}
+				const j = cellIndex(placement, jIndex);
+				if (base !== undefined ? HQ.baseAtIndex(j) === base : HQ.baseAtIndex(j) !== 0)
+					placement.set(j, 45);
 			}
 
 			if (!HQ.requireHouses || !template.hasClass("House"))
 			{
 				gameState.getOwnStructures().forEach((ent) =>
 				{
-					const pos = ent.position();
-					const x = Math.round(pos[0] / cellSize);
-					const z = Math.round(pos[1] / cellSize);
-
-					const struct = getBuiltEntity(gameState, ent);
-					const structDropsiteTypes = struct.resourceDropsiteTypes();
-					if (structDropsiteTypes && structDropsiteTypes.indexOf("food") !== -1)
-					{
-						if (template.hasClasses(["Field", "Corral"]))
-							placement.addInfluence(x, z, 80 / cellSize, 50);
-						else // If this is not a field add a negative influence because we want to leave this area for fields
-							placement.addInfluence(x, z, 80 / cellSize, -20);
-					}
-					else if (template.hasClass("House"))
-					{
-						if (ent.hasClass("House"))
-						{
-							placement.addInfluence(x, z, 60 / cellSize, 40);    // houses are close to other houses
-							alreadyHasHouses = true;
-						}
-						else if (ent.hasClasses(["Gate", "!Wall"]))
-							placement.addInfluence(x, z, 60 / cellSize, -40);   // and further away from other stuffs
-					}
-					else if (template.hasClass("Farmstead") && !ent.hasClasses(["Field", "Corral"]) &&
-						ent.hasClasses(["Gate", "!Wall"]))
-						placement.addInfluence(x, z, 100 / cellSize, -25);       // move farmsteads away to make room (Wall test needed for iber)
-					else if (template.hasClass("GarrisonFortress") && ent.hasClass("House"))
-						placement.addInfluence(x, z, 120 / cellSize, -50);
-					else if (template.hasClass("Military"))
-						placement.addInfluence(x, z, 40 / cellSize, -40);
-					else if (template.genericName() === "Rotary Mill" && ent.hasClass("Field"))
-						placement.addInfluence(x, z, 60 / cellSize, 40);
+					if (influenceOf(gameState, template, placement, ent))
+						alreadyHasHouses = true;
 				});
 			}
 			if (template.hasClass("Farmstead"))
-			{
-				for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
-				{
-					const j = cellIndex(placement, jIndex);
-					let value = placement.map[j] - gameState.sharedScript.resourceMaps.wood.map[j]/3;
-					if (HQ.geography.borderMap.map[j] & mapMask.fullBorder)
-						value /= 2;	// we need space around farmstead, so disfavor map border
-					placement.set(j, value);
-				}
-			}
+				awayFromWood(gameState, placement);
 		}
 
 		return alreadyHasHouses;
@@ -382,54 +541,27 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const disfavorBorder = gameState.currentPhase() > 1 && !template.hasDefensiveFire();
 		const favoredBase = this.metadata && (this.metadata.favoredBase ||
 				   (this.metadata.militaryBase ? HQ.findBestBaseForMilitary(gameState) : undefined));
-		if (this.metadata && this.metadata.base !== undefined)
+		const base = this.metadata ? this.metadata.base : undefined;
+		for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 		{
-			const base = this.metadata.base;
-			for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
+			const j = cellIndex(placement, jIndex);
+			if (base !== undefined ? HQ.baseAtIndex(j) !== base : HQ.baseAtIndex(j) === 0)
 			{
-				const j = cellIndex(placement, jIndex);
-				if (HQ.baseAtIndex(j) !== base)
-					placement.map[j] = 0;
-				else if (placement.map[j] > 0)
-				{
-					if (favorBorder && HQ.geography.borderMap.map[j] & mapMask.border)
-						placement.set(j, placement.map[j] + 50);
-					else if (disfavorBorder && !(HQ.geography.borderMap.map[j] & mapMask.fullBorder))
-						placement.set(j, placement.map[j] + 10);
-
-					const x = (j % placement.width + 0.5) * cellSize;
-					const z = (Math.floor(j / placement.width) + 0.5) * cellSize;
-					if (HQ.isNearInvadingArmy(worldPos(x, z)))
-						placement.map[j] = 0;
-				}
+				placement.map[j] = 0;
+				continue;
 			}
-		}
-		else
-		{
-			for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
-			{
-				const j = cellIndex(placement, jIndex);
-				if (HQ.baseAtIndex(j) === 0)
-					placement.map[j] = 0;
-				else if (placement.map[j] > 0)
-				{
-					if (favorBorder && HQ.geography.borderMap.map[j] & mapMask.border)
-						placement.set(j, placement.map[j] + 50);
-					else if (disfavorBorder && !(HQ.geography.borderMap.map[j] & mapMask.fullBorder))
-						placement.set(j, placement.map[j] + 10);
+			if (!(placement.map[j] > 0))
+				continue;
+			borderBonus(placement, j, HQ.geography.borderMap.map[j], { favorBorder, disfavorBorder });
 
-					const x = (j % placement.width + 0.5) * cellSize;
-					const z = (Math.floor(j / placement.width) + 0.5) * cellSize;
-					if (HQ.isNearInvadingArmy(worldPos(x, z)))
-						placement.map[j] = 0;
-					else if (favoredBase && HQ.baseAtIndex(j) === favoredBase)
-						placement.set(j, placement.map[j] + 100);
-				}
-			}
+			const x = (j % placement.width + 0.5) * cellSize;
+			const z = (Math.floor(j / placement.width) + 0.5) * cellSize;
+			if (HQ.isNearInvadingArmy(worldPos(x, z)))
+				placement.map[j] = 0;
+			else if (base === undefined && favoredBase && HQ.baseAtIndex(j) === favoredBase)
+				placement.set(j, placement.map[j] + 100);
 		}
-
 	}
-
 
 	/**
 	 * Placement of buildings with Dock build category
@@ -443,118 +575,23 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	 */
 	findDockPosition(gameState: CommonGameState): BuildingPosition
 	{
-		const template = this.template;
-		const dockProximity = this.metadata ? this.metadata.proximity : undefined;
+		const search = this.dockSearch(gameState);
 		const territoryMap = hqOf(gameState).geography.territoryMap;
-
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
-
-		// the best spot so far: its value (the lower the better), cells, angle, land and water
-		let best: { val: number; idx: number; jdx: CellIndex<"territory">; angle: number; land: AccessIndex; water: number } | undefined;
-		const navalPassMap = gameState.ai.accessibility.navalPassMap;
-
-		const width = hqOf(gameState).geography.territoryMap.width;
-		const cellSize = hqOf(gameState).geography.territoryMap.cellSize;
-
-		const nbShips = hqOf(gameState).navalManager.transportShips.length;
-		let wantedLand = this.metadata && this.metadata.land ? this.metadata.land : undefined;
-		const wantedSea = this.metadata && this.metadata.sea ? this.metadata.sea : undefined;
-		const proxyAccess = this.metadata && this.metadata.proximity ? gameState.ai.accessibility.getAccessValue(this.metadata.proximity) : null;
-		const oversea = this.metadata && this.metadata.oversea ? this.metadata.oversea : null;
-		if (nbShips === 0 && proxyAccess && proxyAccess > 1)
-		{
-			wantedLand = {};
-			wantedLand[proxyAccess] = true;
-		}
-		const dropsiteTypes = template.resourceDropsiteTypes();
-		const obstructionRadius = template.obstructionRadius();
-		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
-
-		// halfSize for the dock angle, halfDepth and halfWidth for checkPlacement
-		const { halfSize, halfDepth, halfWidth } = footprintHalves(template);
-
-		// res is a measure of the amount of resources around, and maxRes is the max value taken into account
-		// water is a measure of the water space around, and maxWater is the max value that can be returned by checkDockPlacement
-		const maxRes = 10;
-		const maxWater = 16;
-		const ccEnts = oversea ? gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")) :
-			null;
-		const docks = oversea ? gameState.getOwnStructures().filter(filters.byClass("Dock")) : null;
-		// Normalisation factors (only guessed, no attempt to optimize them)
-		const factor = proxyAccess ? 1 : oversea ? 0.2 : 40;
+		let best: DockSpot | undefined;
 		for (let jIndex = 0; jIndex < territoryMap.length; ++jIndex)
 		{
-			const j = cellIndex(territoryMap, jIndex);
-			if (!this.isDockLocation(gameState, j, halfDepth, wantedLand, wantedSea))
-				continue;
-			let score = 0;
-			if (!proxyAccess && !oversea)
-			{
-				// if not in our (or allied) territory, we do not want it too far to be able to defend it
-				score = this.getFrontierProximity(gameState, j);
-				if (score > 4)
-					continue;
-				score *= factor;
-			}
-			const i = territoryMap.getNonObstructedTile(j, radius, obstructions);
-			if (i < 0)
-				continue;
-			if (wantedSea && navalPassMap[i] !== wantedSea)
-				continue;
-
-			const res = dropsiteTypes ? Math.min(maxRes, this.getResourcesAround(gameState, dropsiteTypes, j, 80)) : maxRes;
-			const pos: CommonPosition = worldPos(cellSize * (j%width+0.5), cellSize * (Math.floor(j/width)+0.5));
-
-			// If proximity is given, we look for the nearest point
-			if (proxyAccess && dockProximity)
-				score = VectorDistance(dockProximity, pos);
-
-			// Bonus for resources
-			score += 20 * (maxRes - res);
-
-			if (oversea)
-			{
-				const overseaScore = this.overseaDockScore(gameState, pos, navalPassMap[i], ccEnts, docks, width, cellSize, factor);
-				if (overseaScore === undefined)
-					continue;
-				score += overseaScore;
-			}
-
-			// Add a penalty if on the map border as ship movement will be difficult
-			if (hqOf(gameState).geography.borderMap.map[j] & mapMask.fullBorder)
-				score += 20;
-
-			// Do a pre-selection, supposing we will have the best possible water
-			if (best !== undefined && score > best.val + 5 * maxWater)
-				continue;
-
-			const x = (i % obstructions.width + 0.5) * obstructions.cellSize;
-			const z = (Math.floor(i / obstructions.width) + 0.5) * obstructions.cellSize;
-			const angle = this.getDockAngle(gameState, x, z, halfSize);
-			// as the original's `angle == false`: an angle of exactly 0 counts as none (FINDINGS §4)
-			if (angle === false || angle === 0)
-				continue;
-			const ret = this.checkDockPlacement(gameState, x, z, halfDepth, halfWidth, angle);
-			if (!ret || !hqOf(gameState).geography.landRegions[ret.land] || wantedLand && !wantedLand[ret.land])
-				continue;
-			// Final selection now that the checkDockPlacement water is known
-			if (best !== undefined && score + 5 * (maxWater - ret.water) > best.val)
-				continue;
-			if (dockProximity && gameState.ai.accessibility.regionSize[ret.land] < 4000)
-				continue;
-			if (hqOf(gameState).isDangerousLocation(gameState, pos, halfSize))
-				continue;
-
-			best = { "val": score + maxWater - ret.water, "idx": i, "jdx": j, angle, "land": ret.land, "water": ret.water };
+			const spot = this.dockSpotAt(gameState, search, cellIndex(territoryMap, jIndex), best);
+			if (spot)
+				best = spot;
 		}
 		if (!best || best.val < 0)
 			return false;
 
 		// if no good place with enough water around and still in first phase, wait for expansion at the next phase
-		if (!dockProximity && best.water < 10 && gameState.currentPhase() === 1)
+		if (!search.dockProximity && best.water < 10 && gameState.currentPhase() === 1)
 			return false;
 
+		const obstructions = search.obstructions;
 		const x = (best.idx % obstructions.width + 0.5) * obstructions.cellSize;
 		const z = (Math.floor(best.idx / obstructions.width) + 0.5) * obstructions.cellSize;
 
@@ -566,42 +603,157 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		return { "x": x, "z": z, "angle": best.angle, "base": baseIndex, "access": best.land };
 	}
 
+	/** What the dock search reads, the same for every cell */
+	private dockSearch(gameState: CommonGameState): DockSearch
+	{
+		const template = this.template;
+		const obstructions = createObstructionMap(gameState, NO_LAND, template);
+		// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
+		const nbShips = hqOf(gameState).navalManager.transportShips.length;
+		const metadata: PlanMetadata = this.metadata ?? {};
+		let wantedLand = metadata.land ? metadata.land : undefined;
+		const wantedSea = metadata.sea ? metadata.sea : undefined;
+		const proxyAccess = metadata.proximity ? gameState.ai.accessibility.getAccessValue(metadata.proximity) : null;
+		const oversea = metadata.oversea ? metadata.oversea : null;
+		if (nbShips === 0 && proxyAccess && proxyAccess > 1)
+		{
+			wantedLand = {};
+			wantedLand[proxyAccess] = true;
+		}
+		return {
+			"dockProximity": metadata.proximity,
+			obstructions,
+			"width": hqOf(gameState).geography.territoryMap.width,
+			"cellSize": hqOf(gameState).geography.territoryMap.cellSize,
+			wantedLand,
+			wantedSea,
+			proxyAccess,
+			oversea,
+			"dropsiteTypes": template.resourceDropsiteTypes(),
+			"radius": Math.ceil(template.obstructionRadius().max / obstructions.cellSize),
+			// halfSize for the dock angle, halfDepth and halfWidth for checkPlacement
+			"halves": footprintHalves(template),
+			"ccEnts": oversea ? gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")) : null,
+			"docks": oversea ? gameState.getOwnStructures().filter(filters.byClass("Dock")) : null,
+			// Normalisation factors (only guessed, no attempt to optimize them)
+			"factor": proxyAccess ? 1 : oversea ? 0.2 : 40
+		};
+	}
+
+	/** The dock spot at cell j if it is one and beats best (the lower the better), else undefined */
+	private dockSpotAt(gameState: CommonGameState, search: DockSearch, j: CellIndex<"territory">, best: DockSpot | undefined):
+		DockSpot | undefined
+	{
+		if (!this.isDockLocation(gameState, j, search.halves.halfDepth, search.wantedLand, search.wantedSea))
+			return undefined;
+		let score = 0;
+		if (!search.proxyAccess && !search.oversea)
+		{
+			// if not in our (or allied) territory, we do not want it too far to be able to defend it
+			score = this.getFrontierProximity(gameState, j);
+			if (score > 4)
+				return undefined;
+			score *= search.factor;
+		}
+		const territoryMap = hqOf(gameState).geography.territoryMap;
+		const i = territoryMap.getNonObstructedTile(j, search.radius, search.obstructions);
+		if (i < 0)
+			return undefined;
+		const navalPassMap = gameState.ai.accessibility.navalPassMap;
+		if (search.wantedSea && navalPassMap[i] !== search.wantedSea)
+			return undefined;
+
+		const pos: CommonPosition = worldPos(search.cellSize * (j%search.width+0.5), search.cellSize * (Math.floor(j/search.width)+0.5));
+		const scored = this.dockCellScore(gameState, search, { j, i, pos }, score);
+		if (scored === undefined)
+			return undefined;
+		return this.placeDock(gameState, search, { j, i, pos }, scored, best);
+	}
+
+	/** The dock spot at a cell scored so: if it beats best with the water there, has a shore angle and room, and is safe */
+	private placeDock(gameState: CommonGameState, search: DockSearch, cell: { j: CellIndex<"territory">; i: number; pos: CommonPosition },
+		score: number, best: DockSpot | undefined): DockSpot | undefined
+	{
+		const { j, i, pos } = cell;
+		const { halfSize, halfDepth, halfWidth } = search.halves;
+		// Do a pre-selection, supposing we will have the best possible water
+		if (best !== undefined && score > best.val + 5 * MAX_WATER)
+			return undefined;
+
+		const obstructions = search.obstructions;
+		const x = (i % obstructions.width + 0.5) * obstructions.cellSize;
+		const z = (Math.floor(i / obstructions.width) + 0.5) * obstructions.cellSize;
+		const angle = this.getDockAngle(gameState, x, z, halfSize);
+		// as the original's `angle == false`: an angle of exactly 0 counts as none (FINDINGS §4)
+		if (angle === false || angle === 0)
+			return undefined;
+		const ret = this.checkDockPlacement(gameState, { x, z, angle }, { halfDepth, halfWidth });
+		if (!ret || !hqOf(gameState).geography.landRegions[ret.land] || search.wantedLand && !search.wantedLand[ret.land])
+			return undefined;
+		// Final selection now that the checkDockPlacement water is known
+		if (best !== undefined && score + 5 * (MAX_WATER - ret.water) > best.val)
+			return undefined;
+		if (search.dockProximity && gameState.ai.accessibility.regionSize[ret.land] < 4000)
+			return undefined;
+		if (hqOf(gameState).isDangerousLocation(gameState, pos, halfSize))
+			return undefined;
+
+		return { "val": score + MAX_WATER - ret.water, "idx": i, "jdx": j, angle, "land": ret.land, "water": ret.water };
+	}
+
+	/**
+	 * A dock cell's score from the frontier's: plus the distance to the proximity point when given, a bonus for
+	 * resources, the oversea score (undefined when not oversea material) and a penalty on the map border
+	 */
+	private dockCellScore(gameState: CommonGameState, search: DockSearch, cell: { j: number; i: number; pos: CommonPosition },
+		score: number): number | undefined
+	{
+		const res = search.dropsiteTypes ?
+			Math.min(MAX_RES, this.getResourcesAround(gameState, search.dropsiteTypes, cell.j, 80)) : MAX_RES;
+
+		// If proximity is given, we look for the nearest point
+		if (search.proxyAccess && search.dockProximity)
+			score = VectorDistance(search.dockProximity, cell.pos);
+
+		// Bonus for resources
+		score += 20 * (MAX_RES - res);
+
+		if (search.oversea)
+		{
+			const overseaScore = this.overseaDockScore(gameState, cell.pos, gameState.ai.accessibility.navalPassMap[cell.i], search);
+			if (overseaScore === undefined)
+				return undefined;
+			score += overseaScore;
+		}
+
+		// Add a penalty if on the map border as ship movement will be difficult
+		if (hqOf(gameState).geography.borderMap.map[cell.j] & mapMask.fullBorder)
+			score += 20;
+		return score;
+	}
+
 	/**
 	 * An oversea dock's spot: not much farther from our civic centres than from the enemy's (else undefined),
 	 * and far from our docks on its sea, for trade: its added score
 	 */
-	overseaDockScore(gameState: CommonGameState, pos: CommonPosition, sea: number, ccEnts: CommonEntityCollection | null,
-		docks: CommonEntityCollection<CommonPlacedEntity> | null, width: number, cellSize: number, factor: number): number | undefined
+	overseaDockScore(gameState: CommonGameState, pos: CommonPosition, sea: number,
+		search: Pick<DockSearch, "ccEnts" | "docks" | "width" | "cellSize" | "factor">): number | undefined
 	{
-		// Not much farther to one of our cc than to enemy ones
-		let enemyDist;
-		let ownDist;
-		if (ccEnts)
-			for (const cc of ccEnts.values())
-		{
-			const owner = cc.owner();
-			if (owner !== PlayerID && !gameState.isPlayerEnemy(owner) || !isPlaced(cc))
-				continue;
-			const dist = SquareVectorDistance(pos, cc.position());
-			if (owner === PlayerID && (!ownDist || dist < ownDist))
-				ownDist = dist;
-			if (gameState.isPlayerEnemy(owner) && (!enemyDist || dist < enemyDist))
-				enemyDist = dist;
-		}
-		if (ownDist && enemyDist && enemyDist < 0.5 * ownDist)
+		const { ccEnts, docks, width, cellSize, factor } = search;
+		if (ccEnts && overseaFromEnemy(gameState, pos, ccEnts))
 			return undefined;
 
 		// And maximize distance for trade.
 		let dockDist = 0;
 		if (docks)
 			for (const dock of docks.values())
-		{
-			if (getSeaAccess(gameState, dock) !== sea)
-				continue;
-			const dist = SquareVectorDistance(pos, dock.position());
-			if (dist > dockDist)
-				dockDist = dist;
-		}
+			{
+				if (getSeaAccess(gameState, dock) !== sea)
+					continue;
+				const dist = SquareVectorDistance(pos, dock.position());
+				if (dist > dockDist)
+					dockDist = dist;
+			}
 		if (dockDist > 0)
 		{
 			dockDist = Math.sqrt(dockDist);
@@ -632,34 +784,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			if (gameState.ai.accessibility.regionType[i] !== "land" ||
 			    cellArea * gameState.ai.accessibility.regionSize[i] < 3600)
 				continue;
-			let keep = true;
-			for (const dock of docks.values())
-			{
-				if (getLandAccess(gameState, dock) !== i)
-					continue;
-				keep = false;
-				break;
-			}
-			if (!keep)
-				continue;
-			let sea;
-			for (const cc of ccEnts.values())
-			{
-				const ccAccess = getLandAccess(gameState, cc);
-				if (ccAccess !== undefined && ccAccess !== i)
-				{
-					if (cc.owner() === PlayerID && !sea)
-						sea = hqOf(gameState).getSeaBetweenIndices(gameState, ccAccess, landRegion(i));
-					continue;
-				}
-				// Docks on island where we have a cc are already done elsewhere
-				if (cc.owner() === PlayerID || gameState.isPlayerEnemy(cc.owner()))
-				{
-					keep = false;
-					break;
-				}
-			}
-			if (!keep || !sea)
+			if (!isOverseaLand(gameState, landRegion(i), docks, ccEnts))
 				continue;
 			land[i] = true;
 			found = true;
@@ -680,16 +805,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		if (pos && builder)
 		{
 			this.metadata.base = pos.base;
-			// Adjust a bit the position if needed
-			const cosa = Math.cos(pos.angle);
-			const sina = Math.sin(pos.angle);
-			const shiftMax = hqOf(gameState).geography.territoryMap.cellSize;
-			for (let shift = 0; shift <= shiftMax; shift += 2)
-			{
-				builder.construct(type, pos.x-shift*sina, pos.z-shift*cosa, pos.angle, this.metadata);
-				if (shift > 0)
-					builder.construct(type, pos.x+shift*sina, pos.z+shift*cosa, pos.angle, this.metadata);
-			}
+			constructOnShore(gameState, builder, type, pos, this.metadata);
 		}
 		this.template = oldTemplate;
 		this.metadata = oldMetadata;
@@ -759,58 +875,43 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	 * to determine the special dock requirements
 	 * returns {"land": land index for this dock, "water": amount of water around this spot}
 	 */
-	checkDockPlacement(gameState: CommonGameState, x: number, z: number, halfDepth: number, halfWidth: number,
-		angle: number): { land: AccessIndex; water: number } | undefined
+	checkDockPlacement(gameState: CommonGameState, spot: { x: number; z: number; angle: number },
+		half: { halfDepth: number; halfWidth: number }): { land: AccessIndex; water: number } | undefined
 	{
-		const sz = halfDepth * Math.sin(angle);
-		const cz = halfDepth * Math.cos(angle);
+		const { x, z, angle } = spot;
+		const accessibility = gameState.ai.accessibility;
+		const sz = half.halfDepth * Math.sin(angle);
+		const cz = half.halfDepth * Math.cos(angle);
 		// center back position
-		let pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x - sz, z - cz));
-		let j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-		const land = gameState.ai.accessibility.landPassMap[j];
+		let pos = accessibility.gamePosToMapPos(worldPos(x - sz, z - cz));
+		let j = pos[0] + pos[1]*accessibility.width;
+		const land = accessibility.landPassMap[j];
 		if (land < 2)
 			return undefined;
 		// center front position
-		pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x + sz, z + cz));
-		j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-		if (gameState.ai.accessibility.landPassMap[j] > 1 || gameState.ai.accessibility.navalPassMap[j] < 2)
+		pos = accessibility.gamePosToMapPos(worldPos(x + sz, z + cz));
+		j = pos[0] + pos[1]*accessibility.width;
+		if (accessibility.landPassMap[j] > 1 || accessibility.navalPassMap[j] < 2)
 			return undefined;
 		// additional constraints compared to BuildRestriction.js to assure we have enough place to build
-		const sw = halfWidth * Math.cos(angle) * 3 / 4;
-		const cw = halfWidth * Math.sin(angle) * 3 / 4;
-		pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x - sz + sw, z - cz - cw));
-		j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-		if (gameState.ai.accessibility.landPassMap[j] !== land)
+		const sw = half.halfWidth * Math.cos(angle) * 3 / 4;
+		const cw = half.halfWidth * Math.sin(angle) * 3 / 4;
+		pos = accessibility.gamePosToMapPos(worldPos(x - sz + sw, z - cz - cw));
+		j = pos[0] + pos[1]*accessibility.width;
+		if (accessibility.landPassMap[j] !== land)
 			return undefined;
-		pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x - sz - sw, z - cz + cw));
-		j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-		if (gameState.ai.accessibility.landPassMap[j] !== land)
+		pos = accessibility.gamePosToMapPos(worldPos(x - sz - sw, z - cz + cw));
+		j = pos[0] + pos[1]*accessibility.width;
+		if (accessibility.landPassMap[j] !== land)
 			return undefined;
 		let water = 0;
 		const sp = 15 * Math.sin(angle);
 		const cp = 15 * Math.cos(angle);
 		for (let i = 1; i < 5; ++i)
 		{
-			pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x + sz + i*(sp+sw), z + cz + i*(cp-cw)));
-			if (pos[0] < 0 || pos[0] >= gameState.ai.accessibility.width ||
-			    pos[1] < 0 || pos[1] >= gameState.ai.accessibility.height)
-				break;
-			j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-			if (gameState.ai.accessibility.landPassMap[j] > 1 || gameState.ai.accessibility.navalPassMap[j] < 2)
-				break;
-			pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x + sz + i*sp, z + cz + i*cp));
-			if (pos[0] < 0 || pos[0] >= gameState.ai.accessibility.width ||
-			    pos[1] < 0 || pos[1] >= gameState.ai.accessibility.height)
-				break;
-			j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-			if (gameState.ai.accessibility.landPassMap[j] > 1 || gameState.ai.accessibility.navalPassMap[j] < 2)
-				break;
-			pos = gameState.ai.accessibility.gamePosToMapPos(worldPos(x + sz + i*(sp-sw), z + cz + i*(cp+cw)));
-			if (pos[0] < 0 || pos[0] >= gameState.ai.accessibility.width ||
-			    pos[1] < 0 || pos[1] >= gameState.ai.accessibility.height)
-				break;
-			j = pos[0] + pos[1]*gameState.ai.accessibility.width;
-			if (gameState.ai.accessibility.landPassMap[j] > 1 || gameState.ai.accessibility.navalPassMap[j] < 2)
+			if (!onOpenWater(accessibility, x + sz + i*(sp+sw), z + cz + i*(cp-cw)) ||
+			    !onOpenWater(accessibility, x + sz + i*sp, z + cz + i*cp) ||
+			    !onOpenWater(accessibility, x + sz + i*(sp-sw), z + cz + i*(cp+cw)))
 				break;
 			water += 4;
 		}
@@ -836,8 +937,8 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const accessibility = gameState.ai.accessibility;
 		const x = (j%width + 0.5) * cellSize;
 		const z = (Math.floor(j/width) + 0.5) * cellSize;
-		let pos = accessibility.gamePosToMapPos(worldPos(x, z));
-		let k = pos[0] + pos[1]*accessibility.width;
+		const pos = accessibility.gamePosToMapPos(worldPos(x, z));
+		const k = pos[0] + pos[1]*accessibility.width;
 		let landPass = accessibility.landPassMap[k];
 		if (landPass > 1 && wantedLand && !wantedLand[landPass] ||
 		    landPass < 2 && accessibility.navalPassMap[k] < 2)
@@ -845,25 +946,15 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 
 		for (const a of ConstructionPlan.around)
 		{
-			pos = accessibility.gamePosToMapPos(worldPos(x + dimLand*a[0], z + dimLand*a[1]));
-			if (pos[0] < 0 || pos[0] >= accessibility.width)
+			const landCell = cellOnMap(accessibility, x + dimLand*a[0], z + dimLand*a[1]);
+			if (landCell === undefined)
 				continue;
-			if (pos[1] < 0 || pos[1] >= accessibility.height)
-				continue;
-			k = pos[0] + pos[1]*accessibility.width;
-			landPass = accessibility.landPassMap[k];
+			landPass = accessibility.landPassMap[landCell];
 			if (landPass < 2 || wantedLand && !wantedLand[landPass])
 				continue;
-			pos = accessibility.gamePosToMapPos(worldPos(x - dimSea*a[0], z - dimSea*a[1]));
-			if (pos[0] < 0 || pos[0] >= accessibility.width)
-				continue;
-			if (pos[1] < 0 || pos[1] >= accessibility.height)
-				continue;
-			k = pos[0] + pos[1]*accessibility.width;
-			if (wantedSea && accessibility.navalPassMap[k] !== wantedSea ||
-			   !wantedSea && accessibility.navalPassMap[k] < 2)
-				continue;
-			return true;
+			const seaCell = cellOnMap(accessibility, x - dimSea*a[0], z - dimSea*a[1]);
+			if (seaCell !== undefined && isWantedSea(accessibility.navalPassMap[seaCell], wantedSea))
+				return true;
 		}
 
 		return false;
@@ -925,49 +1016,20 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const size = Math.floor(radius / cellSize);
 		const ix = i % w;
 		const iy = Math.floor(i / w);
-		let total = 0;
-		let nbcell = 0;
+		const sum = { "total": 0, "nbcell": 0 };
 		for (const k of types)
 		{
 			if (k === "food" || !resourceMaps[k])
 				continue;
-			const weigh0 = k === "wood" ? 2 : 1;
+			const row = { "map": resourceMaps[k].map, w, ix, size, "weigh0": k === "wood" ? 2 : 1 };
 			for (let dy = 0; dy <= size; ++dy)
 			{
-				const dxmax = size - dy;
-				let ky = iy + dy;
-				if (ky >= 0 && ky < w)
-				{
-					for (let dx = -dxmax; dx <= dxmax; ++dx)
-					{
-						const kx = ix + dx;
-						if (kx < 0 || kx >= w)
-							continue;
-						const ddx = dx > 0 ? dx : -dx;
-						const weight = weigh0 * (dxmax - ddx) / size;
-						total += weight * resourceMaps[k].map[kx + w * ky];
-						nbcell += weight;
-					}
-				}
-				if (dy === 0)
-					continue;
-				ky = iy - dy;
-				if (ky >= 0 && ky < w)
-				{
-					for (let dx = -dxmax; dx <= dxmax; ++dx)
-					{
-						const kx = ix + dx;
-						if (kx < 0 || kx >= w)
-							continue;
-						const ddx = dx > 0 ? dx : -dx;
-						const weight = weigh0 * (dxmax - ddx) / size;
-						total += weight * resourceMaps[k].map[kx + w * ky];
-						nbcell += weight;
-					}
-				}
+				addRow(sum, row, iy + dy, size - dy);
+				if (dy !== 0)
+					addRow(sum, row, iy - dy, size - dy);
 			}
 		}
-		return nbcell ? total / nbcell : 0;
+		return sum.nbcell ? sum.total / sum.nbcell : 0;
 	}
 
 	isGo(gameState: CommonGameState): boolean

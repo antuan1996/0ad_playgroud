@@ -578,7 +578,7 @@ export class NavalManager
 			return true;
 		}
 
-		const plan = TransportPlan.create(gameState, [ent], startIndex, endIndex, endPos);
+		const plan = TransportPlan.create(gameState, [ent], { startIndex, endIndex, endPos });
 		if (!plan)
 		{
 			debugWarn(this.Config, 1, () => ">>>> transport plan aborted <<<<");
@@ -592,7 +592,7 @@ export class NavalManager
 	splitTransport(gameState: CommonGameState, plan: TransportPlan, needSplit: CommonEntity[]): boolean
 	{
 		debugWarn(this.Config, 1, () => ">>>> split of transport plan started <<<<");
-		const newplan = TransportPlan.create(gameState, [], plan.startIndex, plan.endIndex, plan.endPos);
+		const newplan = TransportPlan.create(gameState, [], plan);
 		if (!newplan)
 		{
 			debugWarn(this.Config, 1, () => ">>>> split of transport plan aborted <<<<");
@@ -633,7 +633,8 @@ export class NavalManager
 				continue;
 			const units = ship.garrisoned().map((entId: EntityId): CommonEntity => requireValue(gameState.getEntityById(entId)));
 			// TODO check that the garrisoned units have not another purpose
-			const plan = TransportPlan.create(gameState, units, fromAccess, toAccess, toPos, ship);
+			const plan = TransportPlan.create(gameState, units,
+				{ "startIndex": fromAccess, "endIndex": toAccess, "endPos": toPos }, ship);
 			if (!plan)
 				continue;
 			this.transportPlans.push(plan);
