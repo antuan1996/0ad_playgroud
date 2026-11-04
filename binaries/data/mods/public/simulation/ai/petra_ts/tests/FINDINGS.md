@@ -1988,3 +1988,49 @@ the map at its peak against 50%, lost 12 buildings against 19; ships lost
 and sunk even (97 a side). Draws 17 of 40, against 22 in the two batches
 before on the same pool: ships that keep their course carry expansions and
 attacks across, and some games end.
+
+## 46. Stage 5: the workers' target by payback, and what decides a mainland game (2026-11-04)
+
+Petra stops training workers at a fixed target: at difficulty 5 the
+configured `min(120, maxPop/3)` raised to the town phase's population, 150.
+In 20 mainland games with the state dump (`stage5-siege3-mainland`) the
+median side had 104 workers at minute 9 and 137 at minute 11, and 40% of
+the sides stood at the target from minute 11 on: a cap that binds, so a
+place for a score (PLAN.md §6.1, the economy module's thresholds).
+
+Tried and reverted: past the target, workers kept coming while the next one
+paid back its cost within `PAYBACK_HORIZON` (240 s) at the income a
+gatherer brings in now (the measured rates of `world/gatherEconomy.ts`,
+averaged over the gatherers, the walk included), up to the population room
+the armies leave (the population we may have, less what is not a worker
+and what the attack plans in preparation still want to train). A worker
+pays back in 60-125 s, so past minute 11 the cap was the room alone.
+Against petra_prev (21a3a192eb), 150 fresh mainland pairs from both slots
+(pool 20261104, `stage5-workers-mainland`, with `-t`): 150 won, 149 lost, 1
+drawn, 50.2% (CI 44.5-55.8%), the SPRT against 55% undecided (LLR -1.40).
+It gathered 15% more (113125 against 98114) and trained 4% more units (610
+against 587), but lost a little more (468 units against 458), the same
+buildings (23), the same peak of the map (54% against 53%): the extra hands
+did not turn into fighting strength. The rule only acts past 150 workers,
+after minute 11, and the games are mostly settled by then (below).
+
+What decides the game, from the same 300 games' timelines (each player
+every two game minutes; 598 sides of decided games):
+
+- Phasing is not it. Both bots reach the town phase at a median minute 11
+  and the city phase at 15. Every winner had the town phase; sides with it
+  at minute 11 won 50.9% (458 sides), at 13 or later 75% (88 sides: a town
+  phase put back for soldiers, or simply a side that lived through the
+  first fight; the timeline cannot tell), at minute 9 or before none of 6,
+  never none of 46 (sides wiped out first).
+- The armies are citizen infantry: a median 1-2 cavalry and no siege
+  before minute 17 (the timeline does not count champions).
+- The gap opens between minutes 9 and 13. Winner against loser (medians):
+  minute 9, population 122 against 120, soldiers 56 against 55; minute 11,
+  164 against 156, 95 against 90; minute 13, 181 against 161, 111 against
+  92; minute 17, 203 against 96, 122 against 39. The two sides are the same
+  at minute 9, the winner has some 20 soldiers more at 13, and the loser
+  has collapsed by 17.
+
+So the lever is the first big army and when to fight it (stage 6's fight
+estimator), not the workforce cap, the phases or the late army's mix.
