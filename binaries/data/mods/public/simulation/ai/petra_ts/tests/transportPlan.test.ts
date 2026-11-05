@@ -17,7 +17,7 @@ import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { NavalManager } from "../decision/navalManager.ts";
 import type { AttackPlan } from "../execution/attackPlan.ts";
-import { ROUTE_RESEND_MIN, SHIP_STUCK, TransportPlan } from "../execution/transportPlan.ts";
+import { ROUTE_RESEND_MIN, SHIP_STUCK, TransportPlan, resetUnit } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
 
@@ -408,9 +408,9 @@ describe("a transport plan letting units and ships go", () =>
 		});
 		const a = soldier(s.world, 100, [140, 160], { plan: 4, PartOfArmy: 6 });
 		initNaval(s);
-		const p = plan(s, [a.ent]);
+		plan(s, [a.ent]);
 
-		p.resetUnit(s.world.gameState, a.ent);
+		resetUnit(s.world.gameState, a.ent);
 
 		assert.deepEqual(left, ["attack", "army"]);
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);

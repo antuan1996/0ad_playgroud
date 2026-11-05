@@ -21,6 +21,7 @@ import {
 	HUNTERS_PER_SEA,
 	NavalManager,
 	STUCK_SECONDS,
+	getBestShip,
 } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
@@ -774,11 +775,7 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		yard(s, [siege, small, archers, raft]);
 		init(s);
 
-		assert.equal(
-			s.naval.getBestShip(s.world.gameState, SEA, "transport"),
-			siege,
-			"10 + 50 for siege beats 10 + 20",
-		);
+		assert.equal(getBestShip(s.world.gameState, SEA, "transport"), siege, "10 + 50 for siege beats 10 + 20");
 	});
 
 	it("a warship is the one with most arrows, a fishing boat a FishingBoat", () =>
@@ -791,8 +788,8 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		yard(s, [two, five, one, boat]);
 		init(s);
 
-		assert.equal(s.naval.getBestShip(s.world.gameState, SEA, "attack"), five);
-		assert.equal(s.naval.getBestShip(s.world.gameState, SEA, "fishing"), boat);
+		assert.equal(getBestShip(s.world.gameState, SEA, "attack"), five);
+		assert.equal(getBestShip(s.world.gameState, SEA, "fishing"), boat);
 	});
 
 	it("leaves out ships the civ cannot train now, those disabled, those at their limit, and other units", () =>
@@ -813,7 +810,7 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		yard(s, [locked, disabled, hero, soldierCard, plain]);
 		init(s);
 
-		assert.equal(s.naval.getBestShip(s.world.gameState, SEA, "transport"), plain);
+		assert.equal(getBestShip(s.world.gameState, SEA, "transport"), plain);
 	});
 
 	it("hands free ships to the passages waiting for one", () =>

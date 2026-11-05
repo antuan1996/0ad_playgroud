@@ -20,7 +20,7 @@ import { emptyEvents, eventsWith, makeEntity, orders, placed, type Methods } fro
 import { ENEMY, GAIA, PLAYER, makeWorld, type World } from "./harness/world.ts";
 
 import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
-import { DefenseManager } from "../decision/defenseManager.ts";
+import { DefenseManager, garrisonSiegeUnit } from "../decision/defenseManager.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
 
 /** reads the diplomacy row the engine keeps, to name an ally per test */
@@ -1821,7 +1821,7 @@ describe("garrisoning by hand", () =>
 
 	it("walks the wounded ramm into the nearest fortress that takes it", () =>
 	{
-		const { world, manager } = assembledWorld();
+		const { world } = assembledWorld();
 		const ram = makeEntity({
 			id: 3000,
 			owner: PLAYER,
@@ -1844,7 +1844,7 @@ describe("garrisoning by hand", () =>
 		near.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(near);
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(ram)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, placed(ram)), true);
 		assert.deepEqual(
 			world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]),
 			[[3000, 5001]],
@@ -1854,7 +1854,7 @@ describe("garrisoning by hand", () =>
 
 	it("refuses a full fortress", () =>
 	{
-		const { world, manager } = assembledWorld();
+		const { world } = assembledWorld();
 		const ram = makeEntity({
 			id: 3000,
 			owner: PLAYER,
@@ -1871,7 +1871,7 @@ describe("garrisoning by hand", () =>
 		world.addEntity(fortress);
 		world.garrisonCounts.set(5000, 4);
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(ram)), false, "the fortress is full");
+		assert.equal(garrisonSiegeUnit(world.gameState, placed(ram)), false, "the fortress is full");
 		assert.equal(world.garrisonCalls.length, 0);
 	});
 
@@ -2324,7 +2324,7 @@ describe("rarer turns of the defence", () =>
 
 	it("a stone thrower under fire goes to the nearest fortress that can take it", () =>
 	{
-		const { world, manager } = assembledWorld();
+		const { world } = assembledWorld();
 		world.accessAt.set("60,60", 4);
 		const fort = (id: number, position: [number, number], methods: Methods) =>
 			world.addEntity(
@@ -2346,7 +2346,7 @@ describe("rarer turns of the defence", () =>
 			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "StoneThrower"] }),
 		);
 
-		assert.equal(manager.garrisonSiegeUnit(world.gameState, placed(catapult)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, placed(catapult)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
 	});
 
