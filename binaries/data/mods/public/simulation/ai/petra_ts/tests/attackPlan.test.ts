@@ -47,11 +47,14 @@ import { requireValue } from "../adapter/entityExtend.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
 import {
 	AttackPlan,
+	cannotGrow,
+	emptyQueues,
 	type AttackPlanData,
 	type AttackPreparation,
 	type AttackType,
 	type AttackUnitStat,
 } from "../execution/attackPlan.ts";
+import { defaultTargetFinder } from "../execution/attackTargets.ts";
 import type { Queue } from "../execution/queue.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../world/difficultyLevel.ts";
 
@@ -513,7 +516,7 @@ describe("queues, queries and build orders", () =>
 		countEmpty(prepOf(plan).queue, "main");
 		countEmpty(prepOf(plan).queueChamp, "champ");
 		countEmpty(prepOf(plan).queueSiege, "siege");
-		plan.emptyQueues(prepOf(plan));
+		emptyQueues(prepOf(plan));
 		assert.deepEqual(emptyCalls, ["main", "champ", "siege"], "all three queues emptied");
 
 		const removed: string[] = [];
@@ -1640,7 +1643,7 @@ describe("updatePreparation: unexecuted plans", () =>
 			});
 			override(world.ai.HQ.buildManager, { isUnbuildable: () => noRoom });
 			const plan = makePlan(world, { name: 1, data: { target } });
-			assert.equal(plan.cannotGrow(world.gameState), noRoom);
+			assert.equal(cannotGrow(world.gameState), noRoom);
 			withPath([{ x: 30, y: 40 }], () =>
 			{
 				plan.updatePreparation(world.gameState);
@@ -3082,9 +3085,8 @@ describe("rare target finders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeEntity({ id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Town"] }));
-		const plan = makePlan(world, { name: 1 });
 
-		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		const targets = defaultTargetFinder(world.gameState, ENEMY);
 		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [2001], "the town building was the last resort");
 	});
 
@@ -3092,9 +3094,8 @@ describe("rare target finders", () =>
 	{
 		const world = makeWorld();
 		world.addEntity(makeEntity({ id: 2001, owner: ENEMY, position: [30, 40], classes: ["Structure", "Village"] }));
-		const plan = makePlan(world, { name: 1 });
 
-		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		const targets = defaultTargetFinder(world.gameState, ENEMY);
 		assert.deepEqual(
 			[...targets.values()].map((ent) => ent.id()),
 			[2001],
@@ -3108,9 +3109,8 @@ describe("rare target finders", () =>
 		const hero = world.addEntity(
 			makeEntity({ id: 2001, owner: ENEMY, position: [30, 40], classes: ["Unit", "Hero", "ConquestCritical"] }),
 		);
-		const plan = makePlan(world, { name: 1 });
 
-		const targets = plan.defaultTargetFinder(world.gameState, ENEMY);
+		const targets = defaultTargetFinder(world.gameState, ENEMY);
 		assert.deepEqual([...targets.values()].map((ent) => ent.id()), [hero.id()], "the hero was the last resort");
 	});
 

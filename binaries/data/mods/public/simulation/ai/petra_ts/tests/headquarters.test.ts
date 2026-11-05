@@ -63,10 +63,10 @@ import {
 	CC_ORDER_WAIT,
 	CC_SPOT_MEMORY,
 	DRY_WOOD,
-	SHORE_TOWER_TRAFFIC,
 	STALLED_IDLE,
 	type Headquarters,
 } from "../decision/headquarters.ts";
+import { SHORE_TOWER_TRAFFIC } from "../decision/placement.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
