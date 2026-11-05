@@ -6,6 +6,7 @@ import { requireValue } from "../adapter/entityExtend.ts";
 import type { Config } from "../world/config.ts";
 import { hqOf } from "./hq.ts";
 import { Queue, type SerializedQueue } from "./queue.ts";
+import { gatherDemand as queueGatherDemand, wantedGatherRates as queueWantedGatherRates } from "./queueDemand.ts";
 import { Worker } from "./worker.ts";
 
 /**
@@ -134,6 +135,58 @@ const WAIT_WITH_FEW_WORKERS: ReadonlySet<string> = new Set([
 /** The queues (besides champions and siege) that wait short of the workers wanted. */
 const WAIT_SHORT_OF_WORKERS: ReadonlySet<string> = new Set(["civilCentre", "defenseBuilding", "majorTech"]);
 
+/** Whether queue q waits while we are short of workers: the fewer, the more queues wait. */
+function pausedForWorkers(
+	gameState: CommonGameState,
+	q: PetraRuntime.QueueName,
+	numWorkers: number,
+	workersMin: number,
+): boolean
+{
+	if (!hqOf(gameState).hasPotentialBase())
+	{
+		return !RUN_WITHOUT_BASE.has(q);
+	}
+	if (numWorkers < workersMin / 3)
+	{
+		return !RUN_WITH_VERY_FEW_WORKERS.has(q);
+	}
+	if (numWorkers < workersMin * 2 / 3)
+	{
+		return WAIT_WITH_FEW_WORKERS.has(q) || q.indexOf("plan_") !== -1;
+	}
+	if (numWorkers < workersMin)
+	{
+		return WAIT_SHORT_OF_WORKERS.has(q) || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
+	}
+	return false;
+}
+
+/** The first field, corral, dock or fishing boat of a town that needs it never waits. */
+function feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): boolean
+{
+	const hq = hqOf(gameState);
+	const hasNone = (className: string): boolean =>
+		!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
+	if (q === "field")
+	{
+		return hq.needFarm && hasNone("Field");
+	}
+	if (q === "corral")
+	{
+		return hq.needCorral && hasNone("Field");
+	}
+	if (q === "dock")
+	{
+		return hq.needFish && hasNone("Dock");
+	}
+	if (q === "ships")
+	{
+		return hq.needFish && !hq.navalManager.ships.filter(filters.byClass("FishingBoat")).hasEntities();
+	}
+	return false;
+}
+
 export class QueueManager
 {
 	Config: Config;
@@ -214,61 +267,6 @@ export class QueueManager
 	}
 
 	/**
-	 * Adds the costs of the first items of the unpaused queues to the totals of
-	 * their horizon: the first item ready to go in 30 s (short), the second in
-	 * 60 s (medium), one not yet ready in 300 s (long).
-	 */
-	addQueuedCosts(
-		gameState: CommonGameState,
-		totalShort: Record<string, number>,
-		totalMedium: Record<string, number>,
-		totalLong: Record<string, number>,
-	): void
-	{
-		let total;
-		// queueArrays because it's faster.
-		for (const q of this.queueArrays)
-		{
-			const queue = q[1];
-			if (queue.paused)
-			{
-				continue;
-			}
-			for (let j = 0; j < queue.length(); ++j)
-			{
-				if (j > 1)
-				{
-					break;
-				}
-				const cost = queue.plans[j].getCost();
-				if (queue.plans[j].isGo(gameState))
-				{
-					if (j === 0)
-					{
-						total = totalShort;
-					}
-					else
-					{
-						total = totalMedium;
-					}
-				}
-				else
-				{
-					total = totalLong;
-				}
-				for (const type in total)
-				{
-					total[type] += cost[type];
-				}
-				if (!queue.plans[j].isGo(gameState))
-				{
-					break;
-				}
-			}
-		}
-	}
-
-	/**
 	 * What the gatherers are wanted for, in two parts (decision/gatherSplit.ts):
 	 * `costs`, the rates that pay for what is queued over the horizons of
 	 * wantedGatherRates, the stock spent on them first; and `floors`, the rate
@@ -280,107 +278,14 @@ export class QueueManager
 	 */
 	gatherDemand(gameState: CommonGameState): { costs: Record<string, number>; floors: Record<string, number>; }
 	{
-		const costs: Record<string, number> = {};
-		const floors: Record<string, number> = {};
-		if (gameState.ai.playedTurn === 0)
-		{
-			for (const res of Resources.GetCodes())
-			{
-				costs[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
-				floors[res] = 0;
-			}
-			return { costs, floors };
-		}
-		const stock = gameState.getResources();
-		const { totalShort, totalMedium, totalLong } = this.queuedTotals(gameState, () => [0, 0, 0]);
-		for (const res of Resources.GetCodes())
-		{
-			let left = Math.max(0, stock[res]);
-			const short = Math.max(0, totalShort[res] - left);
-			left = Math.max(0, left - totalShort[res]);
-			const medium = Math.max(0, totalMedium[res] - left);
-			left = Math.max(0, left - totalMedium[res]);
-			const long = Math.max(0, totalLong[res] - left);
-			left = Math.max(0, left - totalLong[res]);
-			costs[res] = short / 30 + medium / 60 + long / 300;
-			const reserve = this.Config.queues.short[res] || this.Config.queues.short.default;
-			floors[res] = Math.max(0, reserve - left) / 30;
-		}
-		return { costs, floors };
-	}
-
-	/** What the queues hold, by horizon (short, medium, long), on top of `initial`'s amounts per resource. */
-	private queuedTotals(
-		gameState: CommonGameState,
-		initial: (res: string) => [number, number, number],
-	): { totalShort: Record<string, number>; totalMedium: Record<string, number>; totalLong: Record<string, number>; }
-	{
-		const totalShort: Record<string, number> = {};
-		const totalMedium: Record<string, number> = {};
-		const totalLong: Record<string, number> = {};
-		for (const res of Resources.GetCodes())
-		{
-			[totalShort[res], totalMedium[res], totalLong[res]] = initial(res);
-		}
-		this.addQueuedCosts(gameState, totalShort, totalMedium, totalLong);
-		return { totalShort, totalMedium, totalLong };
+		return queueGatherDemand(gameState, this.Config, this.queueArrays);
 	}
 
 	// calculate the gather rates we'd want to be able to start all elements in our queues
 	// TODO: many things.
 	wantedGatherRates(gameState: CommonGameState): PetraRuntime.Dict<number>
 	{
-		// default values for first turn when we have not yet set our queues.
-		if (gameState.ai.playedTurn === 0)
-		{
-			const ret: Record<string, number> = {};
-			for (const res of Resources.GetCodes())
-			{
-				ret[res] = this.Config.queues.firstTurn[res] || this.Config.queues.firstTurn.default;
-			}
-			return ret;
-		}
-
-		// get out current resources, not removing accounts.
-		const current = gameState.getResources();
-		// short queue is the first item of a queue, assumed to be ready in 30s
-		// medium queue is the second item of a queue, assumed to be ready in 60s
-		// long queue contains the isGo=false items, assumed to be ready in 300s
-		const { totalShort, totalMedium, totalLong } = this.queuedTotals(
-			gameState,
-			(
-				res,
-			) => [
-				this.Config.queues.short[res] || this.Config.queues.short.default,
-				this.Config.queues.medium[res] || this.Config.queues.medium.default,
-				this.Config.queues.long[res] || this.Config.queues.long.default,
-			],
-		);
-		// global rates
-		const rates: Record<string, number> = {};
-		let diff;
-		for (const res of Resources.GetCodes())
-		{
-			if (current[res] > 0)
-			{
-				diff = Math.min(current[res], totalShort[res]);
-				totalShort[res] -= diff;
-				current[res] -= diff;
-				if (current[res] > 0)
-				{
-					diff = Math.min(current[res], totalMedium[res]);
-					totalMedium[res] -= diff;
-					current[res] -= diff;
-					if (current[res] > 0)
-					{
-						totalLong[res] -= Math.min(current[res], totalLong[res]);
-					}
-				}
-			}
-			rates[res] = totalShort[res] / 30 + totalMedium[res] / 60 + totalLong[res] / 300;
-		}
-
-		return rates;
+		return queueWantedGatherRates(gameState, this.Config, this.queueArrays);
 	}
 
 	printQueues(gameState: CommonGameState): void
@@ -787,8 +692,7 @@ export class QueueManager
 		const workersMin = Math.min(Math.max(12, 24 * this.Config.popScaling), this.Config.Economy.popPhase2);
 		for (const [q, queue] of queueEntries(this.queues))
 		{
-			const toBePaused = this.pausedForWorkers(gameState, q, numWorkers, workersMin) &&
-				!this.feedsTheTown(gameState, q);
+			const toBePaused = pausedForWorkers(gameState, q, numWorkers, workersMin) && !feedsTheTown(gameState, q);
 			if (!queue.paused && toBePaused)
 			{
 				queue.paused = true;
@@ -809,58 +713,6 @@ export class QueueManager
 				}
 			}
 		}
-	}
-
-	/** Whether queue q waits while we are short of workers: the fewer, the more queues wait. */
-	private pausedForWorkers(
-		gameState: CommonGameState,
-		q: PetraRuntime.QueueName,
-		numWorkers: number,
-		workersMin: number,
-	): boolean
-	{
-		if (!hqOf(gameState).hasPotentialBase())
-		{
-			return !RUN_WITHOUT_BASE.has(q);
-		}
-		if (numWorkers < workersMin / 3)
-		{
-			return !RUN_WITH_VERY_FEW_WORKERS.has(q);
-		}
-		if (numWorkers < workersMin * 2 / 3)
-		{
-			return WAIT_WITH_FEW_WORKERS.has(q) || q.indexOf("plan_") !== -1;
-		}
-		if (numWorkers < workersMin)
-		{
-			return WAIT_SHORT_OF_WORKERS.has(q) || q.indexOf("_siege") !== -1 || q.indexOf("_champ") !== -1;
-		}
-		return false;
-	}
-
-	/** The first field, corral, dock or fishing boat of a town that needs it never waits. */
-	private feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): boolean
-	{
-		const hq = hqOf(gameState);
-		const hasNone = (className: string): boolean =>
-			!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
-		if (q === "field")
-		{
-			return hq.needFarm && hasNone("Field");
-		}
-		if (q === "corral")
-		{
-			return hq.needCorral && hasNone("Field");
-		}
-		if (q === "dock")
-		{
-			return hq.needFish && hasNone("Dock");
-		}
-		if (q === "ships")
-		{
-			return hq.needFish && !hq.navalManager.ships.filter(filters.byClass("FishingBoat")).hasEntities();
-		}
-		return false;
 	}
 
 	canAfford(queue: PetraRuntime.QueueName, cost: ResourcesManager | Record<string, number>): boolean

@@ -304,6 +304,93 @@ function attacksAlly(gameState: CommonGameState, ent: CommonEntity): boolean
 	return !!target && gameState.isPlayerAlly(target.owner());
 }
 
+/**
+ * Whether an attacked soldier keeps on with its task: fighting the attacker or a unit, or repairing a
+ * defensive building; one capturing a structure calls the nearest fellow capturer to help.
+ */
+function keepsTask(
+	gameState: CommonGameState,
+	target: CommonPlacedEntity,
+	attacker: CommonPlacedEntity,
+	task: { ent: CommonEntity; id: EntityId; },
+	allAttacked: Record<number, number>,
+): boolean
+{
+	const currentTarget = task.ent;
+	const orderId = task.id;
+	const unitAIStateOrder = activityOf(unitState(target));
+	if (
+		unitAIStateOrder === "COMBAT" &&
+		(currentTarget.id() === attacker.id() || !currentTarget.hasClasses(["Structure", "Support"]))
+	)
+	{
+		return true;
+	}
+	if (unitAIStateOrder === "REPAIR" && currentTarget.hasDefensiveFire())
+	{
+		return true;
+	}
+	const capturableTarget = gameState.ai.HQ.capturableTargets.get(orderId);
+	if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
+	{
+		// Take the nearest unit also attacking this structure to help us.
+		capturableTarget.ents.delete(target.id());
+		const minEnt = nearestFellowCapturer(gameState, capturableTarget.ents, attacker, orderId, allAttacked);
+		if (minEnt)
+		{
+			capturableTarget.ents.delete(minEnt.id());
+			minEnt.attack(attacker.id(), allowCapture(gameState, minEnt, attacker));
+		}
+	}
+	return false;
+}
+
+/** Garrison an attacked siege ranged unit inside the nearest fortress. */
+export function garrisonSiegeUnit(gameState: CommonGameState, unit: CommonPlacedEntity): boolean
+{
+	const garrisonManager = gameState.ai.HQ.garrisonManager;
+	const nearest = nearestHolder(
+		gameState,
+		unit,
+		(ent) => garrisonManager.numberOfGarrisonedSlots(ent) < ent.garrisonMax(),
+	);
+	if (nearest)
+	{
+		garrisonManager.garrison(gameState, unit, nearest, GarrisonManager.TYPE_PROTECTION);
+	}
+	return nearest !== undefined;
+}
+
+/** One of our soldiers was attacked by a unit: retaliate, or keep on with its task, calling a capturer to help */
+function retaliate(
+	gameState: CommonGameState,
+	target: CommonPlacedEntity,
+	attacker: CommonPlacedEntity,
+	allAttacked: Record<number, number>,
+): void
+{
+	// Consider whether we should retaliate or continue our task.
+	if (target.hasClass("Support") || target.attackTypes() === undefined)
+	{
+		return;
+	}
+	const orderData = ordersOf(target);
+	const orderId = orderData.length ? orderData[0].target : undefined;
+	const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
+	if (
+		currentTarget && orderId !== undefined &&
+		keepsTask(gameState, target, attacker, { ent: currentTarget, id: orderId }, allAttacked)
+	)
+	{
+		return;
+	}
+	const shouldCapture = allowCapture(gameState, target, attacker);
+	if (target.canAttackTarget(attacker, shouldCapture))
+	{
+		target.attack(attacker.id(), shouldCapture);
+	}
+}
+
 export class DefenseManager
 {
 	Config: Config;
@@ -1180,7 +1267,7 @@ export class DefenseManager
 
 		if (target.hasClass("Unit") && attacker.hasClass("Unit"))
 		{
-			this.retaliate(gameState, target, attacker, allAttacked);
+			retaliate(gameState, target, attacker, allAttacked);
 		}
 	}
 
@@ -1212,7 +1299,7 @@ export class DefenseManager
 		}
 		if (target.hasClass("StoneThrower"))
 		{
-			this.garrisonSiegeUnit(gameState, target);
+			garrisonSiegeUnit(gameState, target);
 			return true;
 		}
 		return false;
@@ -1226,77 +1313,6 @@ export class DefenseManager
 		{
 			this.abortArmy(gameState, army);
 		}
-	}
-
-	/** One of our soldiers was attacked by a unit: retaliate, or keep on with its task, calling a capturer to help */
-	retaliate(
-		gameState: CommonGameState,
-		target: CommonPlacedEntity,
-		attacker: CommonPlacedEntity,
-		allAttacked: Record<number, number>,
-	): void
-	{
-		// Consider whether we should retaliate or continue our task.
-		if (target.hasClass("Support") || target.attackTypes() === undefined)
-		{
-			return;
-		}
-		const orderData = ordersOf(target);
-		const orderId = orderData.length ? orderData[0].target : undefined;
-		const currentTarget = orderId ? gameState.getEntityById(orderId) : undefined;
-		if (
-			currentTarget && orderId !== undefined &&
-			this.keepsTask(gameState, target, attacker, { ent: currentTarget, id: orderId }, allAttacked)
-		)
-		{
-			return;
-		}
-		const shouldCapture = allowCapture(gameState, target, attacker);
-		if (target.canAttackTarget(attacker, shouldCapture))
-		{
-			target.attack(attacker.id(), shouldCapture);
-		}
-	}
-
-	/**
-	 * Whether an attacked soldier keeps on with its task: fighting the attacker or a unit, or repairing a
-	 * defensive building; one capturing a structure calls the nearest fellow capturer to help.
-	 */
-	private keepsTask(
-		gameState: CommonGameState,
-		target: CommonPlacedEntity,
-		attacker: CommonPlacedEntity,
-		task: { ent: CommonEntity; id: EntityId; },
-		allAttacked: Record<number, number>,
-	): boolean
-	{
-		const currentTarget = task.ent;
-		const orderId = task.id;
-		const unitAIStateOrder = activityOf(unitState(target));
-		if (
-			unitAIStateOrder === "COMBAT" &&
-			(currentTarget.id() === attacker.id() || !currentTarget.hasClasses(["Structure", "Support"]))
-		)
-		{
-			return true;
-		}
-		if (unitAIStateOrder === "REPAIR" && currentTarget.hasDefensiveFire())
-		{
-			return true;
-		}
-		const capturableTarget = gameState.ai.HQ.capturableTargets.get(orderId);
-		if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
-		{
-			// Take the nearest unit also attacking this structure to help us.
-			capturableTarget.ents.delete(target.id());
-			const minEnt = nearestFellowCapturer(gameState, capturableTarget.ents, attacker, orderId, allAttacked);
-			if (minEnt)
-			{
-				capturableTarget.ents.delete(minEnt.id());
-				minEnt.attack(attacker.id(), allowCapture(gameState, minEnt, attacker));
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -1456,22 +1472,6 @@ export class DefenseManager
 		{
 			army.removeOwn(gameState, ent.id());
 		}
-	}
-
-	/** Garrison a attacked siege ranged unit inside the nearest fortress. */
-	garrisonSiegeUnit(gameState: CommonGameState, unit: CommonPlacedEntity): boolean
-	{
-		const garrisonManager = gameState.ai.HQ.garrisonManager;
-		const nearest = nearestHolder(
-			gameState,
-			unit,
-			(ent) => garrisonManager.numberOfGarrisonedSlots(ent) < ent.garrisonMax(),
-		);
-		if (nearest)
-		{
-			garrisonManager.garrison(gameState, unit, nearest, GarrisonManager.TYPE_PROTECTION);
-		}
-		return nearest !== undefined;
 	}
 
 	/**

@@ -531,6 +531,68 @@ function lostToEnemy(gameState: CommonGameState, ent: CommonEntity, events: Head
 	return !(captureRatio > ratioMax);
 }
 
+/** A plan for the next phase goes first in its queue, raised meanwhile (the major techs' for a wonder) */
+function queuePhasePlan(gameState: CommonGameState, queues: HeadquartersQueues, phasePlan: PhasePlan): void
+{
+	const { plan, queue } = phasePlan;
+	if (queue === "wonder")
+	{
+		gameState.ai.queueManager.changePriority("majorTech", 400);
+		plan.queueToReset = "majorTech";
+	}
+	else
+	{
+		gameState.ai.queueManager.changePriority(queue, 1000);
+		plan.queueToReset = queue;
+	}
+	queues[queue].addPlan(plan);
+}
+
+/** Find the base nearest to an enemy civic centre, for military buildings. */
+function bestBaseForMilitary(gameState: CommonGameState): number | undefined
+{
+	const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")).toEntityArray();
+	let bestBase;
+	let enemyFound = false;
+	let distMin = Math.min();
+	for (const cce of ccEnts)
+	{
+		if (!isPlaced(cce) || gameState.isPlayerAlly(cce.owner()))
+		{
+			continue;
+		}
+		if (enemyFound && !gameState.isPlayerEnemy(cce.owner()))
+		{
+			continue;
+		}
+		const access = getLandAccess(gameState, cce);
+		const isEnemy = gameState.isPlayerEnemy(cce.owner());
+		for (const cc of ccEnts)
+		{
+			if (cc.owner() !== PlayerID || !isPlaced(cc))
+			{
+				continue;
+			}
+			if (getLandAccess(gameState, cc) !== access)
+			{
+				continue;
+			}
+			const dist = SquareVectorDistance(cc.position(), cce.position());
+			if (!enemyFound && isEnemy)
+			{
+				enemyFound = true;
+			}
+			else if (dist > distMin)
+			{
+				continue;
+			}
+			bestBase = cc.getMetadata(PlayerID, "base");
+			distMin = dist;
+		}
+	}
+	return bestBase;
+}
+
 export class Headquarters
 {
 	Config: Config;
@@ -981,7 +1043,7 @@ export class Headquarters
 				this.phasePlanWithClass(gameState, queues, entityReq.class);
 			if (phasePlan)
 			{
-				this.queuePhasePlan(gameState, queues, phasePlan);
+				queuePhasePlan(gameState, queues, phasePlan);
 				return;
 			}
 		}
@@ -1033,23 +1095,6 @@ export class Headquarters
 			return { plan: new ConstructionPlan(gameState, structure, { phaseUp: true }), queue };
 		}
 		return undefined;
-	}
-
-	/** A plan for the next phase goes first in its queue, raised meanwhile (the major techs' for a wonder) */
-	private queuePhasePlan(gameState: CommonGameState, queues: HeadquartersQueues, phasePlan: PhasePlan): void
-	{
-		const { plan, queue } = phasePlan;
-		if (queue === "wonder")
-		{
-			gameState.ai.queueManager.changePriority("majorTech", 400);
-			plan.queueToReset = "majorTech";
-		}
-		else
-		{
-			gameState.ai.queueManager.changePriority(queue, 1000);
-			plan.queueToReset = queue;
-		}
-		queues[queue].addPlan(plan);
 	}
 
 	/** A phase research started: we no longer phase towards it, and we are in it. */
@@ -2541,46 +2586,7 @@ export class Headquarters
 	 */
 	findBestBaseForMilitary(gameState: CommonGameState): number | undefined
 	{
-		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")).toEntityArray();
-		let bestBase;
-		let enemyFound = false;
-		let distMin = Math.min();
-		for (const cce of ccEnts)
-		{
-			if (!isPlaced(cce) || gameState.isPlayerAlly(cce.owner()))
-			{
-				continue;
-			}
-			if (enemyFound && !gameState.isPlayerEnemy(cce.owner()))
-			{
-				continue;
-			}
-			const access = getLandAccess(gameState, cce);
-			const isEnemy = gameState.isPlayerEnemy(cce.owner());
-			for (const cc of ccEnts)
-			{
-				if (cc.owner() !== PlayerID || !isPlaced(cc))
-				{
-					continue;
-				}
-				if (getLandAccess(gameState, cc) !== access)
-				{
-					continue;
-				}
-				const dist = SquareVectorDistance(cc.position(), cce.position());
-				if (!enemyFound && isEnemy)
-				{
-					enemyFound = true;
-				}
-				else if (dist > distMin)
-				{
-					continue;
-				}
-				bestBase = cc.getMetadata(PlayerID, "base");
-				distMin = dist;
-			}
-		}
-		return bestBase;
+		return bestBaseForMilitary(gameState);
 	}
 
 	/**

@@ -278,6 +278,176 @@ function everyFishRay(
 	});
 }
 
+/** Get the sea a fish is in, cache it, and check whether it lies in open sea */
+function fishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
+{
+	let sea = fish.getMetadata(PlayerID, "sea");
+	if (sea)
+	{
+		return sea;
+	}
+	const access = gameState.ai.accessibility;
+	const pos = access.gamePosToMapPos(fish.position());
+	const k = pos[0] + pos[1] * access.width;
+	sea = access.navalPassMap[k];
+	fish.setMetadata(PlayerID, "sea", sea);
+	if (
+		everyFishRay(access, fish.position(), 4, (cell) =>
+		{
+			if (access.landPassMap[cell] !== 1)
+			{
+				return "fail";
+			}
+			const navalPass = access.navalPassMap[cell];
+			return navalPass === sea ? "pass" : navalPass === 1 ? "next" : "fail";
+		})
+	)
+	{
+		fish.setMetadata(PlayerID, "opensea", true);
+	}
+	return sea;
+}
+
+/** Whether no enemy territory lies near a fish */
+function fishIsSafe(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
+{
+	if (fish.getMetadata(PlayerID, "opensea"))
+	{
+		return true;
+	}
+	const territoryMap = gameState.ai.HQ.geography.territoryMap;
+	return everyFishRay(territoryMap, fish.position(), 2, (cell) =>
+	{
+		const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
+		return owner !== 0 && gameState.isPlayerEnemy(owner) ? "fail" : "next";
+	});
+}
+
+/**
+ * Whether a ship under way is blocked: neither moved nor turned for
+ * STUCK_SECONDS (then counted again from now). Petra took a ship unmoved
+ * for two turns, and a ship turns slowly in place: sent 30 m aside as it
+ * turned, it turned again, and wandered round one spot (FINDINGS §45).
+ */
+function isShipBlocked(gameState: CommonGameState, ship: CommonEntity, shipPosition: CommonPosition): boolean
+{
+	const now = gameState.ai.elapsedTime;
+	const angle = ship.angle();
+	const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
+	if (
+		!previousPosition || previousPosition[0] !== shipPosition[0] ||
+		previousPosition[1] !== shipPosition[1] || ship.getMetadata(PlayerID, "previousAngle") !== angle
+	)
+	{
+		ship.setMetadata(PlayerID, "previousPosition", shipPosition);
+		ship.setMetadata(PlayerID, "previousAngle", angle);
+		ship.setMetadata(PlayerID, "stillSince", now);
+		return false;
+	}
+	if (now - requireMetadata(ship, "stillSince") < STUCK_SECONDS)
+	{
+		return false;
+	}
+	ship.setMetadata(PlayerID, "stillSince", now);
+	return true;
+}
+
+/** A ship idle where it was last turn: it gathers treasure nearby, or leaves the docks' waters to other ships */
+function moveIdleShipApart(gameState: CommonGameState, ship: CommonPlacedEntity, shipPosition: CommonPosition): void
+{
+	const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
+	if (
+		!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
+		previousIdlePosition[1] !== shipPosition[1]
+	)
+	{
+		ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
+		ship.setMetadata(PlayerID, "stationnary", undefined);
+		return;
+	}
+	if (ship.getMetadata(PlayerID, "stationnary"))
+	{
+		return;
+	}
+	ship.setMetadata(PlayerID, "stationnary", true);
+	// Check if there are some treasure around
+	if (gatherTreasure(gameState, ship, true))
+	{
+		return;
+	}
+	// Do not stay idle near a dock to not disturb other ships
+	// our transport and trader ships always have their sea set (see init and checkEvents)
+	const sea = getSeaAccess(gameState, ship);
+	for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
+	{
+		if (getSeaAccess(gameState, dock) !== sea)
+		{
+			continue;
+		}
+		if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
+		{
+			continue;
+		}
+		ship.moveToRange(dock.position()[0], dock.position()[1], 70, 75);
+	}
+}
+
+/** The ship a sea should be trained for: the best attacker, carrier or fisher among those its docks can train */
+export function getBestShip(
+	gameState: CommonGameState,
+	sea: SeaIndex,
+	goal: "attack" | "transport" | "fishing",
+): string | undefined
+{
+	const civ = gameState.getPlayerCiv();
+	const trainableShips = new Map<string, CommonTemplate>();
+	gameState.getOwnTrainingFacilities().filter(filters.byMetadata(PlayerID, "sea", sea)).forEach(
+		function(ent: CommonEntity): void
+		{
+			// the facilities with a sea are our docks and shipyards, which all train ships
+			for (const trainable of requireValue(ent.trainableEntities(civ)))
+			{
+				if (gameState.isTemplateDisabled(trainable))
+				{
+					continue;
+				}
+				const template = gameState.getTemplate(trainable);
+				if (template && template.hasClass("Ship") && !trainableShips.has(trainable))
+				{
+					trainableShips.set(trainable, template);
+				}
+			}
+		},
+	);
+
+	let best = 0;
+	let bestShip;
+	const limits = gameState.getEntityLimits();
+	const current = gameState.getEntityCounts();
+	for (const [trainable, template] of trainableShips)
+	{
+		if (!template.available(gameState))
+		{
+			continue;
+		}
+
+		const category = template.trainingCategory();
+		if (category && limits[category] && current[category] >= limits[category])
+		{
+			continue;
+		}
+
+		const score = shipScore(template, goal);
+		if (score === undefined || best > score)
+		{
+			continue;
+		}
+		best = score;
+		bestShip = trainable;
+	}
+	return bestShip;
+}
+
 export class NavalManager
 {
 	Config: Config;
@@ -513,46 +683,13 @@ export class NavalManager
 	/** Get the sea, cache it if not yet done and check if in opensea */
 	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
 	{
-		let sea = fish.getMetadata(PlayerID, "sea");
-		if (sea)
-		{
-			return sea;
-		}
-		const access = gameState.ai.accessibility;
-		const pos = access.gamePosToMapPos(fish.position());
-		const k = pos[0] + pos[1] * access.width;
-		sea = access.navalPassMap[k];
-		fish.setMetadata(PlayerID, "sea", sea);
-		if (
-			everyFishRay(access, fish.position(), 4, (cell) =>
-			{
-				if (access.landPassMap[cell] !== 1)
-				{
-					return "fail";
-				}
-				const navalPass = access.navalPassMap[cell];
-				return navalPass === sea ? "pass" : navalPass === 1 ? "next" : "fail";
-			})
-		)
-		{
-			fish.setMetadata(PlayerID, "opensea", true);
-		}
-		return sea;
+		return fishSea(gameState, fish);
 	}
 
 	/** check if we can safely fish at the fish position */
 	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
 	{
-		if (fish.getMetadata(PlayerID, "opensea"))
-		{
-			return true;
-		}
-		const territoryMap = gameState.ai.HQ.geography.territoryMap;
-		return everyFishRay(territoryMap, fish.position(), 2, (cell) =>
-		{
-			const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
-			return owner !== 0 && gameState.isPlayerEnemy(owner) ? "fail" : "next";
-		});
+		return fishIsSafe(gameState, fish);
 	}
 
 	/** get the list of seas (or lands) around this region not connected by a dock */
@@ -917,7 +1054,7 @@ export class NavalManager
 
 			if (transports.length < this.wantedTransportShips[sea])
 			{
-				const template = this.getBestShip(gameState, sea, "transport");
+				const template = getBestShip(gameState, sea, "transport");
 				if (template)
 				{
 					queues.ships.addPlan(new TrainingPlan(gameState, template, { sea: sea }, 1, 1));
@@ -927,7 +1064,7 @@ export class NavalManager
 
 			if (fishers.length < this.wantedFishShips[sea])
 			{
-				const template = this.getBestShip(gameState, sea, "fishing");
+				const template = getBestShip(gameState, sea, "fishing");
 				if (template)
 				{
 					queues.ships.addPlan(
@@ -946,7 +1083,7 @@ export class NavalManager
 			const warShips = fleet.warShips;
 			if (warShips.length < this.wantedWarShips[sea])
 			{
-				const template = this.getBestShip(gameState, sea, "attack");
+				const template = getBestShip(gameState, sea, "attack");
 				if (template)
 				{
 					queues.ships.addPlan(new TrainingPlan(gameState, template, { sea: sea }, 1, 1));
@@ -1037,42 +1174,13 @@ export class NavalManager
 	 * TODO Ships entity collections are currently in two parts as the trader ships are dealt with
 	 * in the tradeManager. That should be modified to avoid dupplicating all the code here.
 	 */
-	/**
-	 * Whether a ship under way is blocked: neither moved nor turned for
-	 * STUCK_SECONDS (then counted again from now). Petra took a ship unmoved
-	 * for two turns, and a ship turns slowly in place: sent 30 m aside as it
-	 * turned, it turned again, and wandered round one spot (FINDINGS §45).
-	 */
-	isBlocked(gameState: CommonGameState, ship: CommonEntity, shipPosition: CommonPosition): boolean
-	{
-		const now = gameState.ai.elapsedTime;
-		const angle = ship.angle();
-		const previousPosition = ship.getMetadata(PlayerID, "previousPosition");
-		if (
-			!previousPosition || previousPosition[0] !== shipPosition[0] ||
-			previousPosition[1] !== shipPosition[1] || ship.getMetadata(PlayerID, "previousAngle") !== angle
-		)
-		{
-			ship.setMetadata(PlayerID, "previousPosition", shipPosition);
-			ship.setMetadata(PlayerID, "previousAngle", angle);
-			ship.setMetadata(PlayerID, "stillSince", now);
-			return false;
-		}
-		if (now - requireMetadata(ship, "stillSince") < STUCK_SECONDS)
-		{
-			return false;
-		}
-		ship.setMetadata(PlayerID, "stillSince", now);
-		return true;
-	}
-
 	moveApart(gameState: CommonGameState): void
 	{
 		const blockedShips: CommonPlacedEntity[] = [];
 		const blockedIds: EntityId[] = [];
 		const nudgeIfBlocked = (ship: CommonPlacedEntity, shipPosition: CommonPosition): void =>
 		{
-			if (!this.isBlocked(gameState, ship, shipPosition))
+			if (!isShipBlocked(gameState, ship, shipPosition))
 			{
 				return;
 			}
@@ -1106,7 +1214,7 @@ export class NavalManager
 			}
 			else if (ship.isIdle())
 			{
-				this.moveIdleShipApart(gameState, ship, shipPosition);
+				moveIdleShipApart(gameState, ship, shipPosition);
 			}
 		}
 
@@ -1123,7 +1231,7 @@ export class NavalManager
 			}
 			else if (ship.isIdle())
 			{
-				this.moveIdleShipApart(gameState, ship, shipPosition);
+				moveIdleShipApart(gameState, ship, shipPosition);
 			}
 		}
 
@@ -1167,46 +1275,6 @@ export class NavalManager
 				continue;
 			}
 			makeWay(blockingShip, shipPosition, isInState(blockingShip, "INDIVIDUAL.TRADE.APPROACHINGMARKET"));
-		}
-	}
-
-	/** A ship idle where it was last turn: it gathers treasure nearby, or leaves the docks' waters to other ships */
-	moveIdleShipApart(gameState: CommonGameState, ship: CommonPlacedEntity, shipPosition: CommonPosition): void
-	{
-		const previousIdlePosition = ship.getMetadata(PlayerID, "previousIdlePosition");
-		if (
-			!previousIdlePosition || previousIdlePosition[0] !== shipPosition[0] ||
-			previousIdlePosition[1] !== shipPosition[1]
-		)
-		{
-			ship.setMetadata(PlayerID, "previousIdlePosition", shipPosition);
-			ship.setMetadata(PlayerID, "stationnary", undefined);
-			return;
-		}
-		if (ship.getMetadata(PlayerID, "stationnary"))
-		{
-			return;
-		}
-		ship.setMetadata(PlayerID, "stationnary", true);
-		// Check if there are some treasure around
-		if (gatherTreasure(gameState, ship, true))
-		{
-			return;
-		}
-		// Do not stay idle near a dock to not disturb other ships
-		// our transport and trader ships always have their sea set (see init and checkEvents)
-		const sea = getSeaAccess(gameState, ship);
-		for (const dock of gameState.getAllyStructures().filter(filters.byClass("Dock")).values())
-		{
-			if (getSeaAccess(gameState, dock) !== sea)
-			{
-				continue;
-			}
-			if (SquareVectorDistance(shipPosition, dock.position()) > 4900)
-			{
-				continue;
-			}
-			ship.moveToRange(dock.position()[0], dock.position()[1], 70, 75);
 		}
 	}
 
@@ -1307,58 +1375,6 @@ export class NavalManager
 			);
 			return;
 		}
-	}
-
-	/** goal can be either attack (choose ship with best arrowCount) or transport (choose ship with best capacity) */
-	getBestShip(gameState: CommonGameState, sea: SeaIndex, goal: "attack" | "transport" | "fishing"): string | undefined
-	{
-		const civ = gameState.getPlayerCiv();
-		const trainableShips = new Map<string, CommonTemplate>();
-		gameState.getOwnTrainingFacilities().filter(filters.byMetadata(PlayerID, "sea", sea)).forEach(
-			function(ent: CommonEntity): void
-			{
-				// the facilities with a sea are our docks and shipyards, which all train ships
-				for (const trainable of requireValue(ent.trainableEntities(civ)))
-				{
-					if (gameState.isTemplateDisabled(trainable))
-					{
-						continue;
-					}
-					const template = gameState.getTemplate(trainable);
-					if (template && template.hasClass("Ship") && !trainableShips.has(trainable))
-					{
-						trainableShips.set(trainable, template);
-					}
-				}
-			},
-		);
-
-		let best = 0;
-		let bestShip;
-		const limits = gameState.getEntityLimits();
-		const current = gameState.getEntityCounts();
-		for (const [trainable, template] of trainableShips)
-		{
-			if (!template.available(gameState))
-			{
-				continue;
-			}
-
-			const category = template.trainingCategory();
-			if (category && limits[category] && current[category] >= limits[category])
-			{
-				continue;
-			}
-
-			const score = shipScore(template, goal);
-			if (score === undefined || best > score)
-			{
-				continue;
-			}
-			best = score;
-			bestShip = trainable;
-		}
-		return bestShip;
 	}
 
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void

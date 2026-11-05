@@ -67,6 +67,61 @@ interface SerializedTransportPlan
 /** A transport's way: from a land to another, to a position there */
 type TransportRoute = { startIndex: AccessIndex; endIndex: AccessIndex; endPos: CommonPosition; };
 
+/** The ship a unit was sent to (its onBoard metadata holds the ship id until on board) */
+function shipOf(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined
+{
+	const onBoard = ent.getMetadata(PlayerID, "onBoard");
+	return onBoard === "onBoard" ? undefined : gameState.getEntityById(onBoard);
+}
+
+/** A unit no longer belongs to a transport: it leaves its attack and defense army too */
+export function resetUnit(gameState: CommonGameState, ent: CommonEntity): void
+{
+	ent.setMetadata(PlayerID, "transport", undefined);
+	ent.setMetadata(PlayerID, "onBoard", undefined);
+	ent.setMetadata(PlayerID, "endPos", undefined);
+	// if from an army or attack, remove it
+	const plan = ent.getMetadata(PlayerID, "plan");
+	if (plan !== undefined && plan >= 0)
+	{
+		const attackPlan = hqOf(gameState).attackManager.getPlan(plan);
+		if (attackPlan)
+		{
+			attackPlan.removeUnit(ent, true);
+		}
+	}
+	const partOfArmy = ent.getMetadata(PlayerID, "PartOfArmy");
+	if (partOfArmy)
+	{
+		const army = hqOf(gameState).defenseManager.getArmy(partOfArmy);
+		if (army)
+		{
+			army.removeOwn(gameState, ent.id());
+		}
+	}
+}
+
+/** A unit not on the map after its unloading: still on its ship, or lost and destroyed */
+function onUnloadFailed(gameState: CommonGameState, ent: CommonEntity): void
+{
+	const ship = shipOf(gameState, ent);
+	if (ship && ship.garrisoned().indexOf(ent.id()) !== -1)
+	{
+		ent.setMetadata(PlayerID, "onBoard", "onBoard");
+		return;
+	}
+	if (ship)
+	{
+		aiWarn("Petra transportPlan problem: unit not on ship without position ???");
+	}
+	else
+	{
+		aiWarn("Petra transportPlan problem: unit on ship, but no ship ???");
+	}
+	resetUnit(gameState, ent);
+	ent.destroy();
+}
+
 /** What a new transport plan is: its id, its way and sea, and the ship already holding its units, if any */
 type TransportCrossing = TransportRoute & { id: TransportPlanId; sea: SeaIndex; ship?: CommonEntity; };
 
@@ -791,7 +846,7 @@ export class TransportPlan
 				if (boarding.nTry[ent.id()] > 5)
 				{
 					debugWarn(this, 1, () => "unit blocked, but no ways out of the trap ... " + "destroy it");
-					this.resetUnit(gameState, ent);
+					resetUnit(gameState, ent);
 					ent.destroy();
 					return;
 				}
@@ -1025,40 +1080,18 @@ export class TransportPlan
 			if (hqOf(gameState).geography.landRegions[index])
 			{
 				debugWarn(this, 1, () => " recovered entity kept " + ent.id());
-				this.resetUnit(gameState, ent);
+				resetUnit(gameState, ent);
 				// Cancel its garrison order, so it is not reloaded on the next turn without a plan
 				ent.stopMoving();
 			}
 			else
 			{
 				debugWarn(this, 1, () => "recovered entity destroyed " + ent.id());
-				this.resetUnit(gameState, ent);
+				resetUnit(gameState, ent);
 				ent.destroy();
 			}
 		}
 		sailing.recovered = [];
-	}
-
-	/** Were the units unloaded last turn really unloaded, and in the right region? */
-	/** A unit not on the map after its unloading: still on its ship, or lost and destroyed */
-	private onUnloadFailed(gameState: CommonGameState, ent: CommonEntity): void
-	{
-		const ship = this.shipOf(gameState, ent);
-		if (ship && ship.garrisoned().indexOf(ent.id()) !== -1)
-		{
-			ent.setMetadata(PlayerID, "onBoard", "onBoard");
-			return;
-		}
-		if (ship)
-		{
-			aiWarn("Petra transportPlan problem: unit not on ship without position ???");
-		}
-		else
-		{
-			aiWarn("Petra transportPlan problem: unit on ship, but no ship ???");
-		}
-		this.resetUnit(gameState, ent);
-		ent.destroy();
 	}
 
 	checkUnloaded(gameState: CommonGameState, sailing: Sailing): void
@@ -1074,13 +1107,13 @@ export class TransportPlan
 			}
 			else if (!isPlaced(ent))
 			{ // unloading failed
-				this.onUnloadFailed(gameState, ent);
+				onUnloadFailed(gameState, ent);
 			}
 			else if (getLandAccess(gameState, ent) !== this.endIndex)
 			{
 				// unit unloaded on a wrong region - try to regarrison it and move a bit the ship
 				debugWarn(this, 1, () => ">>> unit unloaded on a wrong region ! try to garrison it again <<<");
-				const ship = this.shipOf(gameState, ent);
+				const ship = shipOf(gameState, ent);
 				if (ship && !sailing.canceled)
 				{
 					shipsToMove[ship.id()] = ship;
@@ -1091,7 +1124,7 @@ export class TransportPlan
 				else
 				{
 					debugWarn(this, 1, () => "no way ... we destroy it");
-					this.resetUnit(gameState, ent);
+					resetUnit(gameState, ent);
 					ent.destroy();
 				}
 			}
@@ -1270,39 +1303,6 @@ export class TransportPlan
 				}
 			}
 			route.threats = threats;
-		}
-	}
-
-	/** the ship a unit of this plan was sent to (its onBoard metadata holds the ship id until on board) */
-	shipOf(gameState: CommonGameState, ent: CommonEntity): CommonEntity | undefined
-	{
-		const onBoard = ent.getMetadata(PlayerID, "onBoard");
-		return onBoard === "onBoard" ? undefined : gameState.getEntityById(onBoard);
-	}
-
-	resetUnit(gameState: CommonGameState, ent: CommonEntity): void
-	{
-		ent.setMetadata(PlayerID, "transport", undefined);
-		ent.setMetadata(PlayerID, "onBoard", undefined);
-		ent.setMetadata(PlayerID, "endPos", undefined);
-		// if from an army or attack, remove it
-		const plan = ent.getMetadata(PlayerID, "plan");
-		if (plan !== undefined && plan >= 0)
-		{
-			const attackPlan = hqOf(gameState).attackManager.getPlan(plan);
-			if (attackPlan)
-			{
-				attackPlan.removeUnit(ent, true);
-			}
-		}
-		const partOfArmy = ent.getMetadata(PlayerID, "PartOfArmy");
-		if (partOfArmy)
-		{
-			const army = hqOf(gameState).defenseManager.getArmy(partOfArmy);
-			if (army)
-			{
-				army.removeOwn(gameState, ent.id());
-			}
 		}
 	}
 

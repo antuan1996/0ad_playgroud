@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, playerId, worldPos } from "../adapter/brands.ts";
+import { GAIA, worldPos } from "../adapter/brands.ts";
 import * as chat from "../adapter/chatHelper.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
@@ -19,6 +19,10 @@ import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
+import {
+	getEnemyPlayer as getEnemyPlayerFor,
+	getRelicEnemyPlayer as getRelicEnemyPlayerFor,
+} from "./enemySelection.ts";
 
 export type SerializedAttackManager = {
 	properties: {
@@ -106,86 +110,6 @@ function enlistArmy(
 			attackPlan.unitCollection.updateEnt(unit);
 		}
 	}
-}
-
-/** The enemy civic centre nearest to one of ours on its land, of a player not vetoed */
-function nearestEnemyCivCentre(gameState: CommonGameState, veto: Record<number, boolean>): CommonEntity | undefined
-{
-	let distmin;
-	let ccmin;
-	const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
-	for (const ourcc of ccEnts.values())
-	{
-		if (ourcc.owner() !== PlayerID || !isPlaced(ourcc))
-		{
-			continue;
-		}
-		const ourPos = ourcc.position();
-		const access = getLandAccess(gameState, ourcc);
-		for (const enemycc of ccEnts.values())
-		{
-			if (veto[enemycc.owner()])
-			{
-				continue;
-			}
-			if (!gameState.isPlayerEnemy(enemycc.owner()))
-			{
-				continue;
-			}
-			if (!isPlaced(enemycc) || access !== getLandAccess(gameState, enemycc))
-			{
-				continue;
-			}
-			const dist = SquareVectorDistance(ourPos, enemycc.position());
-			if (distmin && dist > distmin)
-			{
-				continue;
-			}
-			ccmin = enemycc;
-			distmin = dist;
-		}
-	}
-	return ccmin;
-}
-
-/** The enemy not vetoed with the most entities, one with a civic centre first */
-function strongestEnemy(gameState: CommonGameState, veto: Record<number, boolean>): PlayerId | undefined
-{
-	let enemyPlayer;
-	let max = 0;
-	for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
-	{
-		const i = playerId(iIndex);
-		if (veto[i])
-		{
-			continue;
-		}
-		if (!gameState.isPlayerEnemy(i))
-		{
-			continue;
-		}
-		let enemyCount = 0;
-		let enemyCivCentre = false;
-		for (const ent of gameState.getEntities(i).values())
-		{
-			enemyCount++;
-			if (ent.hasClass("CivCentre"))
-			{
-				enemyCivCentre = true;
-			}
-		}
-		if (enemyCivCentre)
-		{
-			enemyCount += 500;
-		}
-		if (!enemyCount || enemyCount < max)
-		{
-			continue;
-		}
-		max = enemyCount;
-		enemyPlayer = i;
-	}
-	return enemyPlayer;
 }
 
 /** Whether a bomber still has the target as its last order and is lent to nothing */
@@ -905,147 +829,7 @@ export class AttackManager
 	 */
 	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
-		let enemyPlayer;
-
-		// First check if there is a preferred enemy based on our victory conditions.
-		// If both wonder and relic, choose randomly between them TODO should combine decisions
-
-		if (gameState.getVictoryConditions().has("wonder"))
-		{
-			enemyPlayer = this.getWonderEnemyPlayer(gameState, attack);
-		}
-
-		if (gameState.getVictoryConditions().has("capture_the_relic"))
-		{
-			if (!enemyPlayer || randBool())
-			{
-				enemyPlayer = this.getRelicEnemyPlayer(gameState, attack) || enemyPlayer;
-			}
-		}
-
-		if (enemyPlayer)
-		{
-			return enemyPlayer;
-		}
-
-		const veto = this.vetoedPlayers(gameState, attack);
-
-		// then if not a huge attack, continue attacking our previous target as long as it has some entities,
-		// otherwise target the most accessible one
-		if (attack.type !== AttackPlan.TYPE_HUGE_ATTACK)
-		{
-			if (
-				attack.targetPlayer === undefined && this.currentEnemyPlayer !== undefined &&
-				this.stillToFight(gameState, this.currentEnemyPlayer)
-			)
-			{
-				return this.currentEnemyPlayer;
-			}
-
-			const ccmin = nearestEnemyCivCentre(gameState, veto);
-			if (ccmin)
-			{
-				enemyPlayer = ccmin.owner();
-				if (attack.targetPlayer === undefined)
-				{
-					this.currentEnemyPlayer = enemyPlayer;
-				}
-				return enemyPlayer;
-			}
-		}
-
-		// then let's target our strongest enemy (basically counting enemies units)
-		// with priority to enemies with civ center
-		enemyPlayer = strongestEnemy(gameState, veto);
-		if (attack.targetPlayer === undefined)
-		{
-			this.currentEnemyPlayer = enemyPlayer;
-		}
-		return enemyPlayer;
-	}
-
-	/** Whether a player is still an enemy, not defeated, with entities left */
-	private stillToFight(gameState: CommonGameState, player: PlayerId): boolean
-	{
-		return !this.defeated[player] && gameState.isPlayerEnemy(player) && gameState.getEntities(player).hasEntities();
-	}
-
-	/** The players not to attack: the defeated, and for a rush those too well defended (i.e. iberians) */
-	private vetoedPlayers(gameState: CommonGameState, attack: AttackPlan): Record<number, boolean>
-	{
-		const veto: Record<number, boolean> = {};
-		for (const i in this.defeated)
-		{
-			veto[i] = true;
-		}
-		if (attack.type !== AttackPlan.TYPE_RUSH)
-		{
-			return veto;
-		}
-		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
-		{
-			const i = playerId(iIndex);
-			if (!gameState.isPlayerEnemy(i) || veto[i])
-			{
-				continue;
-			}
-			if (this.defeated[i])
-			{
-				continue;
-			}
-			let enemyDefense = 0;
-			for (const ent of gameState.getEnemyStructures(i).values())
-			{
-				if (ent.hasClasses(["Tower", "WallTower", "Fortress"]))
-				{
-					enemyDefense++;
-				}
-			}
-			if (enemyDefense > 6)
-			{
-				veto[i] = true;
-			}
-		}
-		return veto;
-	}
-
-	/**
-	 * Target the player with the most advanced wonder.
-	 * TODO currently the first built wonder is kept, should chek on the minimum wonderDuration left instead.
-	 */
-	getWonderEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
-	{
-		let enemyPlayer;
-		let enemyWonder;
-		let moreAdvanced;
-		for (const wonder of gameState.getEnemyStructures().filter(filters.byClass("Wonder")).values())
-		{
-			if (wonder.owner() === 0)
-			{
-				continue;
-			}
-			const progress = wonder.foundationProgress();
-			if (progress === undefined)
-			{
-				enemyWonder = wonder;
-				break;
-			}
-			// only remember this wonder if it is the most advanced one so far
-			if (moreAdvanced === undefined || progress >= moreAdvanced)
-			{
-				enemyWonder = wonder;
-				moreAdvanced = progress;
-			}
-		}
-		if (enemyWonder)
-		{
-			enemyPlayer = enemyWonder.owner();
-			if (attack.targetPlayer === undefined)
-			{
-				this.currentEnemyPlayer = enemyPlayer;
-			}
-		}
-		return enemyPlayer;
+		return getEnemyPlayerFor(gameState, attack, this);
 	}
 
 	/**
@@ -1053,40 +837,7 @@ export class AttackManager
 	 */
 	getRelicEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
-		let enemyPlayer;
-		const allRelics = gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic"));
-		let maxRelicsOwned = 0;
-		for (let iIndex = 0; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
-		{
-			const i = playerId(iIndex);
-			if (
-				!gameState.isPlayerEnemy(i) || this.defeated[i] ||
-				i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic
-			)
-			{
-				continue;
-			}
-
-			const relicsCount = allRelics.filter((relic) => relic.owner() === i).length;
-			if (relicsCount <= maxRelicsOwned)
-			{
-				continue;
-			}
-			maxRelicsOwned = relicsCount;
-			enemyPlayer = i;
-		}
-		if (enemyPlayer !== undefined)
-		{
-			if (attack.targetPlayer === undefined)
-			{
-				this.currentEnemyPlayer = enemyPlayer;
-			}
-			if (enemyPlayer === 0)
-			{
-				gameState.ai.HQ.victoryManager.resetCaptureGaiaRelic(gameState);
-			}
-		}
-		return enemyPlayer;
+		return getRelicEnemyPlayerFor(gameState, attack, this);
 	}
 
 	/** f.e. if we have changed diplomacy with another player. */
