@@ -49,6 +49,28 @@ type BuilderCrew = {
 	builderTot: number;
 };
 
+/** Adds the travel-discounted gather rate of each placed working entity in the collection to currentRates[res] */
+function addCollectionGatherRates(
+	gameState: CommonGameState,
+	entities: CommonEntityCollection,
+	currentRates: Record<string, number>,
+	res: string,
+): void
+{
+	entities.forEach((ent) =>
+	{
+		if (ent.isIdle() || !isPlaced(ent))
+		{
+			return;
+		}
+		const gRate = gatherRate(gameState, ent);
+		if (gRate)
+		{
+			currentRates[res] += Math.log(1 + gRate) / 1.1;
+		}
+	});
+}
+
 export type SerializedBaseManager = {
 	ID: BaseId;
 	anchorId: EntityId | undefined;
@@ -910,44 +932,21 @@ export class BaseManager
 			// I use some logarithms.
 			// TODO: this should take into account for unit speed and/or distance to target
 
-			this.gatherersByType(gameState, res).forEach((ent) =>
-			{
-				if (ent.isIdle() || !isPlaced(ent))
-				{
-					return;
-				}
-				const gRate = gatherRate(gameState, ent);
-				if (gRate)
-				{
-					currentRates[res] += Math.log(1 + gRate) / 1.1;
-				}
-			});
+			addCollectionGatherRates(gameState, this.gatherersByType(gameState, res), currentRates, res);
 			if (res === "food")
 			{
-				this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER).forEach((ent) =>
-				{
-					if (ent.isIdle() || !isPlaced(ent))
-					{
-						return;
-					}
-					const gRate = gatherRate(gameState, ent);
-					if (gRate)
-					{
-						currentRates[res] += Math.log(1 + gRate) / 1.1;
-					}
-				});
-				this.workersBySubrole(gameState, Worker.SUBROLE_FISHER).forEach((ent) =>
-				{
-					if (ent.isIdle() || !isPlaced(ent))
-					{
-						return;
-					}
-					const gRate = gatherRate(gameState, ent);
-					if (gRate)
-					{
-						currentRates[res] += Math.log(1 + gRate) / 1.1;
-					}
-				});
+				addCollectionGatherRates(
+					gameState,
+					this.workersBySubrole(gameState, Worker.SUBROLE_HUNTER),
+					currentRates,
+					res,
+				);
+				addCollectionGatherRates(
+					gameState,
+					this.workersBySubrole(gameState, Worker.SUBROLE_FISHER),
+					currentRates,
+					res,
+				);
 			}
 		}
 	}

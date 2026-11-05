@@ -80,13 +80,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 
 	onStart(gameState: CommonGameState): void
 	{
-		if (this.queueToReset)
-		{
-			gameState.ai.queueManager.changePriority(
-				this.queueToReset,
-				gameState.ai.Config.priorities[this.queueToReset],
-			);
-		}
+		super.onStart(gameState);
 
 		for (let i = gameState.getNumberOfPhases(); i > 0; --i)
 		{
@@ -110,16 +104,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 		queueToReset: PetraRuntime.ConfiguredQueueName | undefined;
 	}
 	{
-		return {
-			category: "technology",
-			type: this.type,
-			ID: this.ID,
-			metadata: this.metadata,
-			cost: this.cost.Serialize(),
-			number: this.number,
-			rush: this.rush,
-			queueToReset: this.queueToReset || undefined,
-		};
+		return { ...this.serializeBase("technology"), rush: this.rush, queueToReset: this.queueToReset || undefined };
 	}
 
 	/** A saved plan: its id, metadata and cost from the save */
@@ -132,14 +117,8 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 
 	private resume(data: ReturnType<ResearchPlan["Serialize"]>): void
 	{
-		this.type = data.type;
-		this.ID = data.ID;
-		this.metadata = data.metadata;
-		this.number = data.number;
+		this.resumeBase(data);
 		this.rush = data.rush;
 		this.queueToReset = data.queueToReset;
-
-		this.cost = new ResourcesManager();
-		this.cost.Deserialize(data.cost);
 	}
 }

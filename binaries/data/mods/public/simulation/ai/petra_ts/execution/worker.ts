@@ -1134,19 +1134,13 @@ export class UnitWork
 		return false;
 	}
 
-	/** Whether game is worth one more hunter: reachable lately, one we can hunt, not full, not nearly shared out */
-	private worthHunting(
+	/** Whether our unit can gather the supply and it has enough left for one more gatherer */
+	private worthOneMoreGatherer(
 		gameState: CommonGameState,
 		supply: CommonSupplyEntity,
 		gatherRates: Readonly<Record<string, number>>,
 	): boolean
 	{
-		const inaccessibleTime = supply.getMetadata(PlayerID, "inaccessibleTime");
-		if (inaccessibleTime && gameState.ai.elapsedTime < inaccessibleTime)
-		{
-			return false;
-		}
-
 		const supplyType = supply.get("ResourceSupply/Type") ?? "";
 		if (!gatherRates[supplyType])
 		{
@@ -1160,6 +1154,21 @@ export class UnitWork
 		// Check if available resource is worth one additionnal gatherer (except for farms).
 		const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supply.id());
 		return !(nbGatherers > 0 && supply.resourceSupplyAmount() / (1 + nbGatherers) < 30);
+	}
+
+	/** Whether game is worth one more hunter: reachable lately, one we can hunt, not full, not nearly shared out */
+	private worthHunting(
+		gameState: CommonGameState,
+		supply: CommonSupplyEntity,
+		gatherRates: Readonly<Record<string, number>>,
+	): boolean
+	{
+		const inaccessibleTime = supply.getMetadata(PlayerID, "inaccessibleTime");
+		if (inaccessibleTime && gameState.ai.elapsedTime < inaccessibleTime)
+		{
+			return false;
+		}
+		return this.worthOneMoreGatherer(gameState, supply, gatherRates);
 	}
 
 	/** The square distance to a prey worth hunting and nearer than nearest, or undefined */
@@ -1295,19 +1304,7 @@ export class UnitWork
 		gatherRates: Readonly<Record<string, number>>,
 	): boolean
 	{
-		const supplyType = supply.get("ResourceSupply/Type") ?? "";
-		if (!gatherRates[supplyType])
-		{
-			return false;
-		}
-
-		if (isSupplyFull(gameState, supply))
-		{
-			return false;
-		}
-		// check if available resource is worth one additionnal gatherer (except for farms)
-		const nbGatherers = supply.resourceSupplyNumGatherers() + this.base.GetTCGatherer(supply.id());
-		if (nbGatherers > 0 && supply.resourceSupplyAmount() / (1 + nbGatherers) < 30)
+		if (!this.worthOneMoreGatherer(gameState, supply, gatherRates))
 		{
 			return false;
 		}
@@ -1603,6 +1600,18 @@ function huntableThere(
 	return !(slowAfterFleeing && territoryOwner === 0);
 }
 
+/** Whether we may drop resources at the dropsite: placed, and ours or a mutual ally's shared one */
+function isUsableDropsite(gameState: CommonGameState, dropsite: CommonEntity): dropsite is CommonPlacedEntity
+{
+	if (!isPlaced(dropsite))
+	{
+		return false;
+	}
+	const owner = dropsite.owner();
+	// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
+	return owner === PlayerID || (dropsite.isSharedDropsite() && gameState.isPlayerMutualAlly(owner));
+}
+
 /** The square distance from the position to our nearest dock on the sea (1000000 at most) */
 function nearestDock(
 	gameState: CommonGameState,
@@ -1614,22 +1623,11 @@ function nearestDock(
 	let distMin = 1000000;
 	for (const dropsite of fishDropsites)
 	{
-		if (!isPlaced(dropsite))
+		if (!isUsableDropsite(gameState, dropsite) || fisherSea !== getSeaAccess(gameState, dropsite))
 		{
 			continue;
 		}
-		const dropsitePos = dropsite.position();
-		const owner = dropsite.owner();
-		// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
-		if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
-		{
-			continue;
-		}
-		if (fisherSea !== getSeaAccess(gameState, dropsite))
-		{
-			continue;
-		}
-		distMin = Math.min(distMin, SquareVectorDistance(pos, dropsitePos));
+		distMin = Math.min(distMin, SquareVectorDistance(pos, dropsite.position()));
 	}
 	return distMin;
 }
@@ -1683,22 +1681,11 @@ function hasFoodDropsiteNear(
 {
 	for (const dropsite of foodDropsites.values())
 	{
-		if (!isPlaced(dropsite))
+		if (!isUsableDropsite(gameState, dropsite) || access !== getLandAccess(gameState, dropsite))
 		{
 			continue;
 		}
-		const dropsitePos = dropsite.position();
-		const owner = dropsite.owner();
-		// owner != PlayerID can only happen when hasSharedDropsites == true, so no need to test it again
-		if (owner !== PlayerID && (!dropsite.isSharedDropsite() || !gameState.isPlayerMutualAlly(owner)))
-		{
-			continue;
-		}
-		if (access !== getLandAccess(gameState, dropsite))
-		{
-			continue;
-		}
-		if (SquareVectorDistance(position, dropsitePos) < distSquare)
+		if (SquareVectorDistance(position, dropsite.position()) < distSquare)
 		{
 			return true;
 		}

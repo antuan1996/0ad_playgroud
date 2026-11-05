@@ -199,15 +199,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		maxMerge: number;
 	}
 	{
-		return {
-			category: "unit",
-			type: this.type,
-			ID: this.ID,
-			metadata: this.metadata,
-			cost: this.cost.Serialize(),
-			number: this.number,
-			maxMerge: this.maxMerge,
-		};
+		return { ...this.serializeBase("unit"), maxMerge: this.maxMerge };
 	}
 
 	/** A saved plan: its id, metadata and cost from the save */
@@ -220,13 +212,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 
 	private resume(data: ReturnType<TrainingPlan["Serialize"]>): void
 	{
-		this.type = data.type;
-		this.ID = data.ID;
-		this.metadata = data.metadata;
-		this.number = data.number;
+		this.resumeBase(data);
 		this.maxMerge = data.maxMerge;
-
-		this.cost = new ResourcesManager();
-		this.cost.Deserialize(data.cost);
 	}
 }

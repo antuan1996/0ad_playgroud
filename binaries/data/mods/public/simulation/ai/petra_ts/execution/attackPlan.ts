@@ -1,6 +1,6 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import {
 	INVALID_PLAYER,
 	NO_BASE,
@@ -26,11 +26,27 @@ import {
 import { ordersOf } from "../adapter/orders.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { obstructionShape } from "../adapter/templateData.ts";
-import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
 import { basesOf } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
+import {
+	answerAttackers,
+	answersBlow,
+	attackerTargetClasses,
+	countUnitTargets,
+	destroyFarthestSiege,
+	orderAttacker,
+	type AttackerContext,
+} from "./attackOrders.ts";
+import {
+	defaultTargetFinder,
+	findRushTarget,
+	findTargetObstruction,
+	nearestBaseAnchors,
+	raidTargetFinder,
+	rallyPoints,
+	targetDistance,
+} from "./attackTargets.ts";
 import { hqOf } from "./hq.ts";
 import type { Queue } from "./queue.ts";
 import { type PlanMetadata } from "./queueplan.ts";
@@ -98,26 +114,6 @@ type AttackTransitions = {
 type AttackPlanState = keyof AttackTransitions;
 /** How near its rally point a withdrawing army stops, past the anchor's footprint when it is a base. */
 const WITHDRAW_RANGE = 15;
-/** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
-const ECONOMIC_TARGET_WEIGHT = 0.25;
-
-/** What an attacker's orders are chosen from, worked out once a turn (AttackPlan.updateAttacking). */
-type AttackerContext = {
-	time: GameSeconds;
-	/** the plan's target and where it stands */
-	target: CommonEntity;
-	targetPos: CommonPosition;
-	/** the enemy units enough of our attackers already aim at */
-	veto: Record<string, boolean>;
-	/** how many of our attackers aim at each enemy unit, less what it is worth */
-	unitTargets: Record<number, number>;
-	/** our units a structure hit this turn */
-	attackedByStructure: Record<number, boolean>;
-	enemyUnits: CommonEntityCollection;
-	enemyStructures: CommonEntityCollection;
-	targetClassesUnit: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
-	targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
-};
 
 /** The four kinds of attack plan, in the order the attack manager keeps them. */
 export type AttackType = "Rush" | "Raid" | "Attack" | "HugeAttack";
@@ -151,398 +147,40 @@ export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId;
 /** Where a plan gathers its army, and the sea to cross to its target (0: none). */
 type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0; };
 
-/**
- * Whether one of the plan's units answers a blow: while completing, one bound for a ship, on the attacker's land
- * within ANSWER_RANGE of the unit hit; otherwise one bound for a ship still ashore on the attacker's land, or an idle one
- */
-function answersBlow(
-	gameState: CommonGameState,
-	ent: CommonEntity,
-	completing: boolean,
-	attackerLand: AccessIndex | undefined,
-	near: CommonPosition | undefined,
-): boolean
+/** Empties a preparing plan's three queues. */
+export function emptyQueues(prep: AttackPreparation): void
 {
-	const pos = ent.position();
-	if (completing)
-	{
-		return !(ent.getMetadata(PlayerID, "transport") === undefined || !pos || !near ||
-			getLandAccess(gameState, ent) !== attackerLand ||
-			SquareVectorDistance(pos, near) > AttackPlan.ANSWER_RANGE * AttackPlan.ANSWER_RANGE);
-	}
-	if (ent.getMetadata(PlayerID, "transport") !== undefined)
-	{
-		return !(!pos || getLandAccess(gameState, ent) !== attackerLand);
-	}
-	return !!ent.isIdle();
+	prep.queue.empty();
+	prep.queueChamp.empty();
+	prep.queueSiege.empty();
 }
 
-/** check for stuck siege units: the one farthest from the army is destroyed */
-function destroyFarthestSiege(units: CommonEntityCollection, pos: CommonPosition): void
+/** At our population limit, with no room left for a house (the house template marked unbuildable). */
+export function cannotGrow(gameState: CommonGameState): boolean
 {
-	let farthest = 0;
-	let farthestEnt;
-	for (const ent of units.filter(filters.byClass("Siege")).values())
-	{
-		if (!isPlaced(ent))
-		{
-			continue;
-		}
-		const entPos = ent.position();
-		const dist = SquareVectorDistance(entPos, pos);
-		if (dist < farthest)
-		{
-			continue;
-		}
-		farthest = dist;
-		farthestEnt = ent;
-	}
-	if (farthestEnt)
-	{
-		farthestEnt.destroy();
-	}
-}
-
-/** Where an attacker stands, how far it looks for its next target (squared), and its land */
-type AttackerReach = { pos: CommonPosition; range: number; access: AccessIndex | undefined; };
-
-/** The unit strikes back at the attacker if it can (capturing if worth it): whether it did */
-function strike(gameState: CommonGameState, ent: CommonEntity, attacker: CommonEntity, time: GameSeconds): boolean
-{
-	const shouldCapture = allowCapture(gameState, ent, attacker);
-	if (!ent.canAttackTarget(attacker, shouldCapture))
+	if (gameState.getPopulationLimit() - gameState.getPopulation() >= 5)
 	{
 		return false;
 	}
-	ent.attack(attacker.id(), shouldCapture);
-	ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
-	return true;
-}
-
-/** Whether a unit already fights the attacker, or another unit that is neither a structure nor a support */
-function busyFighting(gameState: CommonGameState, ent: CommonEntity, attacker: CommonEntity): boolean
-{
-	const orderData = ordersOf(ent);
-	if (!orderData || !orderData.length || !orderData[0].target)
+	const buildManager = hqOf(gameState).buildManager;
+	return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
 	{
-		return false;
-	}
-	if (orderData[0].target === attacker.id())
-	{
-		return true;
-	}
-	const target = gameState.getEntityById(orderData[0].target);
-	return !!target && !target.hasClasses(["Structure", "Support"]);
+		const name = gameState.applyCiv(house);
+		return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
+	});
 }
 
 /**
- * Whether an attacker must change its target ("needs": gone, an ally's, or too many of ours on it), may
- * ("maybe": a siege engine on a unit; a land unit on a ship, on a field while a structure hits it, or a slow one
- * after a fleeing civilian), or keeps it
+ * Whether a unit stands on another land than the rally point's with enemies
+ * on it: it is not drafted, nor shipped to the rally point, while they are
+ * there (FINDINGS §34).
  */
-function targetVerdict(
-	gameState: CommonGameState,
-	ent: CommonEntity,
-	targetId: EntityId,
-	unitTargets: Record<number, number>,
-	attackedByStructure: Record<number, boolean>,
-): "needs" | "maybe" | "keeps"
+function besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
 {
-	const target = gameState.getEntityById(targetId);
-	if (!target || gameState.isPlayerAlly(target.owner()))
-	{
-		return "needs";
-	}
-	if (unitTargets[targetId] && unitTargets[targetId] > 0)
-	{
-		--unitTargets[targetId];
-		return "needs";
-	}
-	if (isSiegeUnit(ent))
-	{
-		return !target.hasClass("Structure") ? "maybe" : "keeps";
-	}
-	if (target.hasClass("Ship") && !ent.hasClass("Ship"))
-	{
-		return "maybe";
-	}
-	if (attackedByStructure[ent.id()] && target.hasClass("Field"))
-	{
-		return "maybe";
-	}
-	if (
-		!ent.hasClass("FastMoving") && !ent.hasClass("Ranged") &&
-		target.hasClass("Civilian") && requiredActivityIs(target, "FLEEING")
-	)
-	{
-		return "maybe";
-	}
-	return "keeps";
-}
-
-/** A structure's worth as a target: its cost, a gate for wall breakers most, then defenses and conquest critical ones */
-function structureValue(struct: CommonEntity, ent: CommonEntity, defensiveBonus: number, criticalBonus: number): number
-{
-	let val = struct.costSum();
-	if (struct.hasClass("Gate") && ent.canAttackClass("Wall"))
-	{
-		val += 10000;
-	}
-	else if (defensiveBonus && struct.hasDefensiveFire())
-	{
-		val += defensiveBonus;
-	}
-	else if (struct.hasClass("ConquestCritical"))
-	{
-		val += criticalBonus;
-	}
-	return val;
-}
-
-/**
- * The enemy units in the attacker's reach on its land, but animals, fleeing civilians for a slow one, and those
- * too many of ours aim at while the target is far; each marked with its distance
- */
-function enemyUnitsInReach(
-	gameState: CommonGameState,
-	ent: CommonEntity,
-	reach: AttackerReach,
-	ctx: AttackerContext,
-): CommonEntity[]
-{
-	const { targetPos, veto, enemyUnits } = ctx;
-	const nearby = !ent.hasClasses(["FastMoving", "Ranged"]);
-	return enemyUnits.filter((enemy) =>
-	{
-		const enemyPos = enemy.position();
-		if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
-		{
-			return false;
-		}
-		if (enemy.hasClass("Animal"))
-		{
-			return false;
-		}
-		if (nearby && enemy.hasClass("Civilian") && requiredActivityIs(enemy, "FLEEING"))
-		{
-			return false;
-		}
-		const dist = SquareVectorDistance(enemyPos, reach.pos);
-		if (dist > reach.range)
-		{
-			return false;
-		}
-		if (getLandAccess(gameState, enemy) !== reach.access)
-		{
-			return false;
-		}
-		// if already too much units targeting this enemy, let's continue towards our main target
-		if (veto[enemy.id()] && SquareVectorDistance(targetPos, reach.pos) > 2500)
-		{
-			return false;
-		}
-		enemy.setMetadata(PlayerID, "distance", Math.sqrt(dist));
-		return true;
-	}).toEntityArray();
-}
-
-/** An attacker far from the target attack-moves on to it, against everything when it may be blocked by walls */
-function marchOn(ent: CommonEntity, maybeUpdate: boolean, ctx: AttackerContext): void
-{
-	const { targetPos, veto, targetClassesUnit } = ctx;
-	let targetClasses = targetClassesUnit;
-	if (maybeUpdate && isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING"))
-	{ // we may be blocked by walls, attack everything
-		if (!ent.hasClasses(["Ranged", "Ship"]))
-		{
-			targetClasses = { attack: ["Unit", "Structure"], avoid: ["Ship"], vetoEntities: veto };
-		}
-		else
-		{
-			targetClasses = { attack: ["Unit", "Structure"], avoid: [], vetoEntities: veto };
-		}
-	}
-	else if (!ent.hasClasses(["Ranged", "Ship"]))
-	{
-		targetClasses = {
-			attack: targetClassesUnit.attack,
-			avoid: targetClassesUnit.avoid.concat("Ship"),
-			vetoEntities: veto,
-		};
-	}
-	ent.attackMove(targetPos[0], targetPos[1], targetClasses);
-}
-
-/** How often each enemy unit is targeted by ours, counted from -8 (siege, heroes), -5 (champions, ships) or -3 */
-function countUnitTargets(gameState: CommonGameState, units: CommonEntityCollection): Record<number, number>
-{
-	const unitTargets: Record<number, number> = {};
-	for (const ent of units.values())
-	{
-		if (ent.hasClass("Ship"))
-		{ // TODO What to do with ships
-			continue;
-		}
-		const orderData = ordersOf(ent);
-		if (!orderData || !orderData.length || !orderData[0].target)
-		{
-			continue;
-		}
-		const targetId = orderData[0].target;
-		const target = gameState.getEntityById(targetId);
-		if (!target || target.hasClass("Structure"))
-		{
-			continue;
-		}
-		if (!(targetId in unitTargets))
-		{
-			if (isSiegeUnit(target) || target.hasClass("Hero"))
-			{
-				unitTargets[targetId] = -8;
-			}
-			else if (target.hasClasses(["Champion", "Ship"]))
-			{
-				unitTargets[targetId] = -5;
-			}
-			else
-			{
-				unitTargets[targetId] = -3;
-			}
-		}
-		++unitTargets[targetId];
-	}
-	return unitTargets;
-}
-
-/**
- * The nearest base anchors to the target position: on its land, and elsewhere (the distance weighted by the
- * size of the island)
- */
-function nearestBaseAnchors(
-	gameState: CommonGameState,
-	targetIndex: AccessIndex,
-	targetPos: CommonPosition,
-): { rallySame: CommonPosition | undefined; rallyDiff: CommonPosition | undefined; }
-{
-	let distminSame = Math.min();
-	let rallySame;
-	let distminDiff = Math.min();
-	let rallyDiff;
-	for (const base of basesOf(gameState))
-	{
-		const anchor = base.anchor;
-		const anchorPos = anchor ? anchor.position() : undefined;
-		if (!anchorPos)
-		{
-			continue;
-		}
-		const accessIndex = base.accessIndex;
-		let dist = SquareVectorDistance(anchorPos, targetPos);
-		if (accessIndex === targetIndex)
-		{
-			if (dist >= distminSame)
-			{
-				continue;
-			}
-			distminSame = dist;
-			rallySame = anchorPos;
-		}
-		else
-		{
-			if (accessIndex === undefined)
-			{
-				continue;
-			}
-			dist /= Math.sqrt(gameState.ai.accessibility.regionSize[accessIndex]);
-			if (dist >= distminDiff)
-			{
-				continue;
-			}
-			distminDiff = dist;
-			rallyDiff = anchorPos;
-		}
-	}
-	return { rallySame, rallyDiff };
-}
-
-/** Whether a defensive building stands within 80 of the position (TODO check on defense range rather than this fixed 80*80) */
-function isDefended(pos: CommonPosition, buildings: CommonStructureEntity[]): boolean
-{
-	for (const defense of buildings)
-	{
-		if (!defense.hasDefensiveFire())
-		{
-			continue;
-		}
-		const defPos = defense.position();
-		if (SquareVectorDistance(pos, defPos) < 6400)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-/**
- * Whether a structure blocks the way: the point (x, y), relative to it, a step ahead on the path, is inside its
- * obstruction, or the path crosses a gate (that could happen if not locked) out of its door
- */
-function blocksWay(
-	struct: CommonEntity,
-	shape: NonNullable<ReturnType<typeof obstructionShape>>,
-	at: { x: number; y: number; },
-	path: Array<{ x: number; y: number; }>,
-): boolean
-{
-	const { x, y } = at;
-	if (shape.kind !== "static" && shape.kind !== "gate")
-	{
-		return x * x + y * y < shape.radius * shape.radius;
-	}
-	const angle = struct.angle();
-	if (angle === undefined)
-	{
-		return false;
-	}
-	const { width, depth } = shape;
-	const cosa = Math.cos(angle);
-	const sina = Math.sin(angle);
-	const u = x * cosa - y * sina;
-	const v = x * sina + y * cosa;
-	if (Math.abs(u) < width / 2 && Math.abs(v) < depth / 2)
-	{
-		return true;
-	}
-	return shape.kind === "gate" && crossesGate(struct, shape.doorHalfWidth, cosa, sina, path);
-}
-
-/** Whether the path crosses the gate's line out of its door */
-function crossesGate(
-	struct: CommonEntity,
-	doorHalfWidth: number,
-	cosa: number,
-	sina: number,
-	path: Array<{ x: number; y: number; }>,
-): boolean
-{
-	const structPos = requireValue(struct.position());
-	for (let i = 1; i < path.length; ++i)
-	{
-		const u1 = (path[i - 1].x - structPos[0]) * cosa - (path[i - 1].y - structPos[1]) * sina;
-		const v1 = (path[i - 1].x - structPos[0]) * sina + (path[i - 1].y - structPos[1]) * cosa;
-		const u2 = (path[i].x - structPos[0]) * cosa - (path[i].y - structPos[1]) * sina;
-		const v2 = (path[i].x - structPos[0]) * sina + (path[i].y - structPos[1]) * cosa;
-		if (v1 * v2 < 0)
-		{
-			const u0 = (u1 * v2 - u2 * v1) / (v2 - v1);
-			if (Math.abs(u0) > doorHalfWidth)
-			{
-				continue;
-			}
-			return true;
-		}
-	}
-	return false;
+	const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
+	// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
+	return land !== undefined && land > 1 && land !== rallyLand &&
+		hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
 }
 
 /**
@@ -683,62 +321,6 @@ function planSizes(
 		unitStat[cat].minSize = Math.ceil(config.popScaling * unitStat[cat].minSize);
 	}
 	return { priority, unitStat, neededShips };
-}
-
-/**
- * Where an army may gather: the first base anchor of ours on the map (else any entity of ours), its land,
- * and a gathering point on each land with an anchor
- */
-function rallyPoints(
-	gameState: CommonGameState,
-): { rallyPoint: CommonPosition; rallyAccess: AccessIndex; allAccesses: Record<number, CommonPosition>; } | undefined
-{
-	let rallyPoint;
-	let rallyAccess;
-	const allAccesses: Record<number, CommonPosition> = {};
-	for (const base of basesOf(gameState))
-	{
-		if (!base.anchor || !isPlaced(base.anchor))
-		{
-			continue;
-		}
-		const anchorPos = base.anchor.position();
-		const access = getLandAccess(gameState, base.anchor);
-		if (access === undefined)
-		{
-			continue;
-		}
-		if (!rallyPoint)
-		{
-			rallyPoint = anchorPos;
-			rallyAccess = access;
-		}
-		if (!allAccesses[access])
-		{
-			allAccesses[access] = anchorPos;
-		}
-	}
-	if (rallyPoint && rallyAccess !== undefined)
-	{
-		return { rallyPoint, rallyAccess, allAccesses };
-	}
-	// no base ?  take the position of any of our entities
-	for (const ent of gameState.getOwnEntities().values())
-	{
-		if (!isPlaced(ent))
-		{
-			continue;
-		}
-		const access = getLandAccess(gameState, ent);
-		if (access === undefined)
-		{
-			continue;
-		}
-		const entPos = ent.position();
-		allAccesses[access] = entPos;
-		return { rallyPoint: entPos, rallyAccess: access, allAccesses };
-	}
-	return undefined;
 }
 
 /** An attack's unit categories and queues, and the ships needed before difficulty and population scaling. */
@@ -1470,13 +1052,6 @@ export class AttackPlan
 		this.forced = true;
 	}
 
-	emptyQueues(prep: AttackPreparation): void
-	{
-		prep.queue.empty();
-		prep.queueChamp.empty();
-		prep.queueSiege.empty();
-	}
-
 	removeQueues(gameState: CommonGameState): void
 	{
 		gameState.ai.queueManager.removeQueue(`plan_${this.name}`);
@@ -1499,7 +1074,7 @@ export class AttackPlan
 			prep.buildOrders.push([0, Unit.classes, this.unit[name], Unit, name]);
 			if (resetQueue)
 			{
-				this.emptyQueues(prep);
+				emptyQueues(prep);
 			}
 		}
 	}
@@ -1547,21 +1122,6 @@ export class AttackPlan
 		};
 		this.addBuildOrder(gameState, "Siege", stat, true);
 		return true;
-	}
-
-	/** At our population limit, with no room left for a house (the house template marked unbuildable). */
-	cannotGrow(gameState: CommonGameState): boolean
-	{
-		if (gameState.getPopulationLimit() - gameState.getPopulation() >= 5)
-		{
-			return false;
-		}
-		const buildManager = hqOf(gameState).buildManager;
-		return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
-		{
-			const name = gameState.applyCiv(house);
-			return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
-		});
 	}
 
 	/** Three returns possible: 1 is "keep going", 0 is "failed plan", 2 is "start". */
@@ -1672,7 +1232,7 @@ export class AttackPlan
 		// special case: if we've reached max pop, and we can start the plan, start it;
 		// so too at our population limit with no room for a house: it cannot grow
 		// (FINDINGS §40: a huge attack of 136 waited for good on a full island)
-		if (gameState.getPopulationMax() - gameState.getPopulation() < 5 || this.cannotGrow(gameState))
+		if (gameState.getPopulationMax() - gameState.getPopulation() < 5 || cannotGrow(gameState))
 		{
 			let lengthMin = 16;
 			if (gameState.getPopulationMax() < 300)
@@ -1681,7 +1241,7 @@ export class AttackPlan
 			}
 			if (this.canStart() || this.unitCollection.length > lengthMin)
 			{
-				this.emptyQueues(prep);
+				emptyQueues(prep);
 				return undefined;
 			}
 			// Short of men at the cap: wait, gathering the reserve as below it. The
@@ -1695,7 +1255,7 @@ export class AttackPlan
 			if (gameState.countOwnQueuedEntitiesWithMetadata("plan", +this.name) > 0)
 			{
 				// keep on while the units finish being trained, then we'll start
-				this.emptyQueues(prep);
+				emptyQueues(prep);
 				return AttackPlan.PREPARATION_KEEP_GOING;
 			}
 			return undefined;
@@ -1974,7 +1534,7 @@ export class AttackPlan
 		let added = false;
 		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		const available = (ent: CommonEntity): boolean =>
-			this.isAvailableUnit(gameState, ent) && !this.besideEnemies(gameState, ent, rallyLand);
+			this.isAvailableUnit(gameState, ent) && !besideEnemies(gameState, ent, rallyLand);
 		// If we can not build units, assign all available except those affected to allied defense to the current attack.
 		if (!this.canBuildUnits)
 		{
@@ -2303,25 +1863,13 @@ export class AttackPlan
 		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		for (const ent of this.unitCollection.values())
 		{
-			if (this.besideEnemies(gameState, ent, rallyLand))
+			if (besideEnemies(gameState, ent, rallyLand))
 			{
 				this.removeUnit(ent, true);
 			}
 		}
 	}
 
-	/**
-	 * Whether a unit stands on another land than the rally point's with enemies
-	 * on it: it is not drafted, nor shipped to the rally point, while they are
-	 * there (FINDINGS §34).
-	 */
-	besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
-	{
-		const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
-		// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
-		return land !== undefined && land > 1 && land !== rallyLand &&
-			hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
-	}
 	/**
 	 * sameLand true means that we look for a target for which we do not need to take a transport
 	 */
@@ -2350,7 +1898,7 @@ export class AttackPlan
 		let minDist = Math.min();
 		for (const ent of targets.values())
 		{
-			const dist = this.targetDistance(gameState, ent, position, land);
+			const dist = targetDistance(gameState, ent, position, { land, targetPlayer, type: this.type });
 			if (dist !== undefined && dist < minDist)
 			{
 				minDist = dist;
@@ -2401,11 +1949,11 @@ export class AttackPlan
 		}
 		if (this.type === AttackPlan.TYPE_RAID)
 		{
-			return this.raidTargetFinder(gameState);
+			return raidTargetFinder(gameState);
 		}
 		if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_DEFAULT)
 		{
-			return this.defaultTargetFinder(gameState, targetPlayer, land);
+			return defaultTargetFinder(gameState, targetPlayer, land);
 		}
 		const targets = this.rushTargetFinder(gameState, targetPlayer, land);
 		// with no undefended building, an attack takes on the defended ones; Petra
@@ -2413,142 +1961,9 @@ export class AttackPlan
 		// were aborted and remade every few seconds for good (FINDINGS §35)
 		if (!targets.hasEntities() && (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
 		{
-			return this.defaultTargetFinder(gameState, targetPlayer, land);
+			return defaultTargetFinder(gameState, targetPlayer, land);
 		}
 		return targets;
-	}
-
-	/** How far a target counts from the position, or undefined for a pointless one */
-	private targetDistance(
-		gameState: CommonGameState,
-		ent: CommonEntity,
-		position: CommonPosition,
-		land: AccessIndex | false,
-	): number | undefined
-	{
-		if (
-			this.targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-			(!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id()))
-		)
-		{
-			return undefined;
-		}
-		// Do not bother with some pointless targets
-		if (!this.isValidTarget(gameState, ent, land))
-		{
-			return undefined;
-		}
-		if (!isPlaced(ent))
-		{
-			return undefined;
-		}
-		const entPos = ent.position();
-		let dist = SquareVectorDistance(entPos, position);
-		// In normal attacks, disfavor fields
-		if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_RAID && ent.hasClass("Field"))
-		{
-			dist += 100000;
-		}
-		// On a naval map, a dock (the enemy's fishing and transport) or a base
-		// still being built counts as nearer: on islands what the enemy lives on
-		// is worth more than the hall of its home island, and Petra's attacks
-		// landed under the towers of civic centres for little (FINDINGS §42)
-		if (
-			this.type !== AttackPlan.TYPE_RAID && hqOf(gameState).geography.navalMap &&
-			(ent.hasClass("Dock") || ent.foundationProgress() !== undefined)
-		)
-		{
-			dist *= ECONOMIC_TARGET_WEIGHT;
-		}
-		return dist;
-	}
-
-	/**
-	 * Default target finder aims for conquest critical targets
-	 * We must apply the *same* selection (isValidTarget) as done in getNearestTarget
-	 */
-	defaultTargetFinder(
-		gameState: CommonGameState,
-		playerEnemy: PlayerId,
-		sameLand: AccessIndex | false = false,
-	): CommonEntityCollection
-	{
-		let targets = new EntityCollection(gameState.sharedScript);
-		if (gameState.getVictoryConditions().has("wonder"))
-		{
-			for (const ent of gameState.getEnemyStructures(playerEnemy).filter(filters.byClass("Wonder")).values())
-			{
-				targets.addEnt(ent);
-			}
-		}
-		if (gameState.getVictoryConditions().has("regicide"))
-		{
-			for (const ent of gameState.getEnemyUnits(playerEnemy).filter(filters.byClass("Hero")).values())
-			{
-				targets.addEnt(ent);
-			}
-		}
-		if (gameState.getVictoryConditions().has("capture_the_relic"))
-		{
-			for (
-				const ent of gameState.updatingGlobalCollection("allRelics", filters.byClass("Relic")).filter((relic) =>
-					relic.owner() === playerEnemy
-				).values()
-			)
-			{
-				targets.addEnt(ent);
-			}
-		}
-		targets = targets.filter((ent: CommonEntity): boolean => this.isValidTarget(gameState, ent, sameLand));
-		if (targets.hasEntities())
-		{
-			return targets;
-		}
-
-		const validTargets = gameState.getEnemyStructures(playerEnemy).filter((ent: CommonEntity): boolean =>
-			this.isValidTarget(gameState, ent, sameLand)
-		);
-		// on a naval map the docks too, which the nearest pick favours (FINDINGS §42)
-		targets = validTargets.filter(
-			filters.byClasses(hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]),
-		);
-		if (!targets.hasEntities())
-		{
-			targets = validTargets.filter(filters.byClass("ConquestCritical"));
-		}
-		// If there's nothing, attack anything else that's less critical
-		if (!targets.hasEntities())
-		{
-			targets = validTargets.filter(filters.byClass("Town"));
-		}
-		if (!targets.hasEntities())
-		{
-			targets = validTargets.filter(filters.byClass("Village"));
-		}
-		// No buildings, attack anything conquest critical, units included.
-		// TODO Should add naval attacks against the last remaining ships.
-		if (!targets.hasEntities())
-		{
-			targets = gameState.getEntities(playerEnemy).filter(filters.byClass("ConquestCritical")).filter(
-				filters.not(filters.byClass("Ship")),
-			);
-		}
-		return targets;
-	}
-
-	/** Whether a target is worth attacking: on the given land, when one is given, and not a decaying empty building */
-	isValidTarget(gameState: CommonGameState, ent: CommonEntity, sameLand: AccessIndex | false): boolean
-	{
-		if (!isPlaced(ent))
-		{
-			return false;
-		}
-		if (sameLand && getLandAccess(gameState, ent) !== sameLand)
-		{
-			return false;
-		}
-		return !ent.decaying() || !!ent.getDefaultArrow() ||
-			ent.isGarrisonHolder() && (ent.garrisoned() || []).length > 0;
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
@@ -2558,87 +1973,12 @@ export class AttackPlan
 		sameLand: AccessIndex | false = false,
 	): CommonEntityCollection
 	{
-		let targets = new EntityCollection(gameState.sharedScript);
-		let buildings;
-		if (playerEnemy !== undefined)
-		{
-			buildings = gameState.getEnemyStructures(playerEnemy).toEntityArray();
-		}
-		else
-		{
-			buildings = gameState.getEnemyStructures().toEntityArray();
-		}
-		if (!buildings.length)
-		{
-			return targets;
-		}
-
 		this.position = this.unitCollection.getCentrePosition();
 		if (!this.position)
 		{
 			this.position = this.rallyPoint;
 		}
-		const myPos = this.position;
-		if (!myPos)
-		{
-			return targets;
-		}
-
-		let target;
-		let minDist = Math.min();
-		for (const building of buildings)
-		{
-			if (building.owner() === 0)
-			{
-				continue;
-			}
-			if (building.hasDefensiveFire())
-			{
-				continue;
-			}
-			if (!this.isValidTarget(gameState, building, sameLand))
-			{
-				continue;
-			}
-			const pos = building.position();
-			if (isDefended(pos, buildings))
-			{
-				continue;
-			}
-			const dist = SquareVectorDistance(pos, myPos);
-			if (dist > minDist)
-			{
-				continue;
-			}
-			minDist = dist;
-			target = building;
-		}
-		if (target)
-		{
-			targets.addEnt(target);
-		}
-
-		if (!targets.hasEntities() && this.type === AttackPlan.TYPE_RUSH && playerEnemy)
-		{
-			targets = this.rushTargetFinder(gameState, undefined, sameLand);
-		}
-
-		return targets;
-	}
-
-	/** Raid target finder aims at destructing foundations from which our defenseManager has attacked the builders */
-	raidTargetFinder(gameState: CommonGameState): CommonEntityCollection
-	{
-		const targets = new EntityCollection(gameState.sharedScript);
-		for (const targetId of hqOf(gameState).defenseManager.targetList)
-		{
-			const target = gameState.getEntityById(targetId);
-			if (target && isPlaced(target))
-			{
-				targets.addEnt(target);
-			}
-		}
-		return targets;
+		return findRushTarget(gameState, this.position, playerEnemy, sameLand, this.type === AttackPlan.TYPE_RUSH);
 	}
 
 	/**
@@ -2652,60 +1992,12 @@ export class AttackPlan
 		position: CommonPosition,
 	): CommonEntity | undefined
 	{
-		if (getLandAccess(gameState, target) !== gameState.ai.accessibility.getAccessValue(position))
-		{
-			return target;
-		}
-
-		if (!isPlaced(target))
-		{
-			return undefined;
-		}
-		const targetPos = target.position();
-		const startPos = { x: position[0], y: position[1] };
-		const endPos = { x: targetPos[0], y: targetPos[1] };
-		let blocker;
-		const path = computePath(startPos, endPos, gameState.getPassabilityClassMask("default"));
-		if (!path.length)
-		{
-			return undefined;
-		}
-
-		const pathPos: CommonPosition = worldPos(path[0].x, path[0].y);
-		const dist = VectorDistance(pathPos, targetPos);
-		// targets (units or structures) always have an obstruction
-		const radius = requireValue(target.obstructionRadius()).max;
-		for (const struct of gameState.getEnemyStructures().values())
-		{
-			const structPos = struct.position();
-			const shape = obstructionShape(struct);
-			if (!structPos || !shape || struct.hasClass("Field"))
-			{
-				continue;
-			}
-			// we consider that we can reach the target, but nonetheless check that we did not cross any enemy gate
-			if (dist < radius + 10 && !struct.hasClass("Gate"))
-			{
-				continue;
-			}
-			// Check that we are really blocked by this structure, i.e. advancing by 1+0.8(clearance)m
-			// in the target direction would bring us inside its obstruction.
-			const x = pathPos[0] - structPos[0] + 1.8 * (targetPos[0] - pathPos[0]) / dist;
-			const y = pathPos[1] - structPos[1] + 1.8 * (targetPos[1] - pathPos[1]) / dist;
-			if (blocksWay(struct, shape, { x, y }, path))
-			{
-				blocker = struct;
-				break;
-			}
-		}
-
-		if (blocker)
+		const res = findTargetObstruction(gameState, target, position);
+		if (res.blocked)
 		{
 			this.isBlocked = true;
-			return blocker;
 		}
-
-		return target;
+		return res.target;
 	}
 
 	getPathToTarget(gameState: CommonGameState, aim: AttackAim, fixedRallyPoint: boolean = false): boolean
@@ -2985,7 +2277,7 @@ export class AttackPlan
 		const targetPos = aim.pos;
 
 		const time = gameState.ai.elapsedTime;
-		const attackedByStructure = this.answerAttackers(gameState, events, time);
+		const attackedByStructure = answerAttackers(gameState, events, time, this.unitCollection, this.isBlocked);
 
 		const enemyUnits = gameState.getEnemyUnits(this.targetPlayer);
 		const enemyStructures = gameState.getEnemyStructures(this.targetPlayer);
@@ -3001,7 +2293,7 @@ export class AttackPlan
 			}
 		}
 
-		const { targetClassesUnit, targetClassesSiege } = this.attackerTargetClasses(target, veto);
+		const { targetClassesUnit, targetClassesSiege } = attackerTargetClasses(this.type, target, veto);
 
 		if (this.unitCollUpdateArray === undefined || !this.unitCollUpdateArray.length)
 		{
@@ -3021,6 +2313,8 @@ export class AttackPlan
 			enemyStructures,
 			targetClassesUnit,
 			targetClassesSiege,
+			unitCollection: this.unitCollection,
+			isBlocked: this.isBlocked,
 		};
 		for (let check = 0; check < lgth; check++)
 		{
@@ -3029,7 +2323,7 @@ export class AttackPlan
 			{
 				continue;
 			}
-			this.orderAttacker(gameState, ent, ctx);
+			orderAttacker(gameState, ent, ctx);
 		}
 		this.unitCollUpdateArray.splice(0, lgth);
 		this.startingAttack = false;
@@ -3038,528 +2332,6 @@ export class AttackPlan
 		if (this.target && this.target.owner() === 0 && this.targetPlayer !== 0)
 		{
 			this.target = undefined;
-		}
-	}
-
-	/**
-	 * Answers the blows of the turn on our attackers (a unit hit by a structure, or
-	 * by an enemy it can fight back), and returns the units a structure hit.
-	 */
-	answerAttackers(gameState: CommonGameState, events: EngineAIEvents, time: GameSeconds): Record<number, boolean>
-	{
-		const attackedByStructure: Record<number, boolean> = {};
-		for (const evt of events.Attacked)
-		{
-			if (!this.unitCollection.hasEntId(evt.target))
-			{
-				continue;
-			}
-			const attacker = gameState.getEntityById(evt.attacker);
-			const ourUnit = gameState.getEntityById(evt.target);
-			if (!ourUnit || !isPlaced(ourUnit) || !attacker || !isPlaced(attacker))
-			{
-				continue;
-			}
-			if (!attacker.hasClass("Unit"))
-			{
-				attackedByStructure[evt.target] = true;
-				continue;
-			}
-			if (isSiegeUnit(ourUnit))
-			{
-				this.defendSiege(gameState, ourUnit, attacker, time);
-			}
-			else if (this.isBlocked && !ourUnit.hasClass("Ranged") && attacker.hasClass("Ranged"))
-			{
-				// do not react if our melee units are attacked by ranged one and we are blocked by walls
-				// TODO check that the attacker is from behind the wall
-				continue;
-			}
-			else if (isSiegeUnit(attacker))
-			{ // if our unit is attacked by a siege unit, we'll send some melee units to help it.
-				const collec = this.unitCollection.filter(filters.byClass("Melee")).filterNearest(
-					ourUnit.position(),
-					5,
-				);
-				for (const ent of collec.values())
-				{
-					strike(gameState, ent, attacker, time);
-				}
-			}
-			else
-			{
-				this.helpAndRetaliate(gameState, ourUnit, attacker, time);
-			}
-		}
-		return attackedByStructure;
-	}
-
-	/**
-	 * Our siege units attacked: we'll send some units to deal with enemies, and if this attacker is a non-ranged
-	 * siege unit and our unit also, attack it
-	 */
-	private defendSiege(
-		gameState: CommonGameState,
-		ourUnit: CommonPlacedEntity,
-		attacker: CommonPlacedEntity,
-		time: GameSeconds,
-	): void
-	{
-		const collec = this.unitCollection.filter(filters.not(filters.byClass("Siege"))).filterNearest(
-			ourUnit.position(),
-			5,
-		);
-		for (const ent of collec.values())
-		{
-			if (isSiegeUnit(ent))
-			{ // needed as mauryan elephants are not filtered out
-				continue;
-			}
-			strike(gameState, ent, attacker, time);
-		}
-		if (
-			isSiegeUnit(attacker) && attacker.hasClass("Melee") &&
-			ourUnit.hasClass("Melee") && ourUnit.canAttackTarget(attacker, allowCapture(gameState, ourUnit, attacker))
-		)
-		{
-			ourUnit.attack(attacker.id(), allowCapture(gameState, ourUnit, attacker));
-			ourUnit.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
-		}
-	}
-
-	/**
-	 * Look first for nearby units to help us if possible; then the unit under attack: abandon its target
-	 * (if it was a structure or a support) and retaliate; also if our unit is attacking a range unit and the
-	 * attacker is a melee unit, retaliate
-	 */
-	private helpAndRetaliate(
-		gameState: CommonGameState,
-		ourUnit: CommonPlacedEntity,
-		attacker: CommonPlacedEntity,
-		time: GameSeconds,
-	): void
-	{
-		const collec = this.unitCollection.filterNearest(ourUnit.position(), 2);
-		for (const ent of collec.values())
-		{
-			const shouldCapture = allowCapture(gameState, ent, attacker);
-			if (isSiegeUnit(ent) || !ent.canAttackTarget(attacker, shouldCapture))
-			{
-				continue;
-			}
-			if (busyFighting(gameState, ent, attacker))
-			{
-				continue;
-			}
-			ent.attack(attacker.id(), shouldCapture);
-			ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
-		}
-		const orderData = ordersOf(ourUnit);
-		if (orderData && orderData.length && orderData[0].target)
-		{
-			if (orderData[0].target === attacker.id())
-			{
-				return;
-			}
-			const target = gameState.getEntityById(orderData[0].target);
-			if (
-				target && !target.hasClasses(["Structure", "Support"]) &&
-				(!target.hasClass("Ranged") || !attacker.hasClass("Melee"))
-			)
-			{
-				return;
-			}
-		}
-		strike(gameState, ourUnit, attacker, time);
-	}
-
-	/** What the attackers may go for this turn, and what they keep off, units and siege apart. */
-	attackerTargetClasses(
-		target: CommonEntity,
-		veto: Record<string, boolean>,
-	): Pick<AttackerContext, "targetClassesUnit" | "targetClassesSiege">
-	{
-		let targetClassesUnit;
-		let targetClassesSiege: { attack: string[]; avoid: string[]; vetoEntities: Record<string, boolean>; };
-		if (this.type === AttackPlan.TYPE_RUSH)
-		{
-			targetClassesUnit = {
-				attack: ["Unit", "Structure"],
-				avoid: ["Palisade", "Wall", "Tower", "Fortress"],
-				vetoEntities: veto,
-			};
-		}
-		else
-		{
-			if (target.hasClass("Fortress"))
-			{
-				targetClassesUnit = { attack: ["Unit", "Structure"], avoid: ["Palisade", "Wall"], vetoEntities: veto };
-			}
-			else if (target.hasClasses(["Palisade", "Wall"]))
-			{
-				targetClassesUnit = { attack: ["Unit", "Structure"], avoid: ["Fortress"], vetoEntities: veto };
-			}
-			else
-			{
-				targetClassesUnit = {
-					attack: ["Unit", "Structure"],
-					avoid: ["Palisade", "Wall", "Fortress"],
-					vetoEntities: veto,
-				};
-			}
-		}
-		if (target.hasClass("Structure"))
-		{
-			targetClassesSiege = { attack: ["Structure"], avoid: [], vetoEntities: veto };
-		}
-		else
-		{
-			targetClassesSiege = { attack: ["Unit", "Structure"], avoid: [], vetoEntities: veto };
-		}
-
-		// do not loose time destroying buildings which do not help enemy's defense and can be easily captured later
-		if (target.hasDefensiveFire())
-		{
-			targetClassesUnit.avoid = targetClassesUnit.avoid.concat(
-				"House",
-				"Storehouse",
-				"Farmstead",
-				"Field",
-				"Forge",
-			);
-			targetClassesSiege.avoid = targetClassesSiege.avoid.concat(
-				"House",
-				"Storehouse",
-				"Farmstead",
-				"Field",
-				"Forge",
-			);
-		}
-		return { targetClassesUnit, targetClassesSiege };
-	}
-
-	/** One attacker's orders, the turn it is looked at (updateAttacking): left, or given a new target. */
-	orderAttacker(gameState: CommonGameState, ent: CommonEntity, ctx: AttackerContext): void
-	{
-		if (!isPlaced(ent))
-		{
-			return;
-		}
-		const entPosRaw = ent.position();
-		const entPos: CommonPosition = entPosRaw;
-		const need = this.attackerNeedsOrder(gameState, ent, ctx);
-		if (need === undefined)
-		{
-			return;
-		}
-		const reach: AttackerReach = {
-			pos: entPos,
-			range: this.attackerReach(ent),
-			access: getLandAccess(gameState, ent),
-		};
-		if (isSiegeUnit(ent))
-		{
-			this.orderSiegeAttacker(gameState, ent, reach, ctx);
-		}
-		else
-		{
-			this.orderUnitAttacker(gameState, ent, reach, need, ctx);
-		}
-	}
-
-	/**
-	 * Whether an attacker gets a new order this turn: undefined to leave it (busy
-	 * as it should be, or looked at too recently), else whether it must have one
-	 * (idle, its target gone or too many on it) or only may.
-	 */
-	attackerNeedsOrder(
-		gameState: CommonGameState,
-		ent: CommonEntity,
-		ctx: AttackerContext,
-	): { needsUpdate: boolean; maybeUpdate: boolean; } | undefined
-	{
-		const { time, unitTargets, attackedByStructure } = ctx;
-		// Do not reassign units which have reacted to an attack in that same turn
-		if (ent.getMetadata(PlayerID, "lastAttackPlanUpdateTime") === time)
-		{
-			return undefined;
-		}
-
-		let targetId;
-		const orderData = ordersOf(ent);
-		if (orderData && orderData.length && orderData[0].target)
-		{
-			targetId = orderData[0].target;
-		}
-
-		// update the order if needed
-		let needsUpdate = false;
-		let maybeUpdate = false;
-		if (ent.isIdle())
-		{
-			needsUpdate = true;
-		}
-		else if (targetId)
-		{
-			const verdict = targetVerdict(gameState, ent, targetId, unitTargets, attackedByStructure);
-			needsUpdate = verdict === "needs";
-			maybeUpdate = verdict === "maybe";
-		}
-
-		// don't update too soon if not necessary
-		if (!needsUpdate)
-		{
-			if (!maybeUpdate)
-			{
-				return undefined;
-			}
-			const deltat = isInState(ent, "INDIVIDUAL.COMBAT.APPROACHING") ? 10 : 5;
-			const lastAttackPlanUpdateTime = ent.getMetadata(PlayerID, "lastAttackPlanUpdateTime");
-			if (lastAttackPlanUpdateTime && time - lastAttackPlanUpdateTime < deltat)
-			{
-				return undefined;
-			}
-		}
-		ent.setMetadata(PlayerID, "lastAttackPlanUpdateTime", time);
-		return { needsUpdate, maybeUpdate };
-	}
-
-	/** How far an attacker looks for its next target, squared. */
-	attackerReach(ent: CommonEntity): number
-	{
-		let range = 60;
-		const attackTypes = ent.attackTypes();
-		if (this.isBlocked)
-		{
-			if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
-			{
-				range = (ent.attackRange("Ranged") || { max: 0 }).max;
-			}
-			else if (attackTypes && attackTypes.indexOf("Melee") !== -1)
-			{
-				range = (ent.attackRange("Melee") || { max: 0 }).max;
-			}
-			else
-			{
-				range = 10;
-			}
-		}
-		else if (attackTypes && attackTypes.indexOf("Ranged") !== -1)
-		{
-			range = 30 + (ent.attackRange("Ranged") || { max: 0 }).max;
-		}
-		else if (ent.hasClass("FastMoving"))
-		{
-			range += 30;
-		}
-		range *= range;
-		// Checking for gates if we're a siege unit.
-		return range;
-	}
-
-	/** A siege engine's next target: a gate, a defensive building, else what the siege classes allow. */
-	orderSiegeAttacker(gameState: CommonGameState, ent: CommonEntity, reach: AttackerReach, ctx: AttackerContext): void
-	{
-		const { targetPos, veto, enemyStructures, targetClassesSiege } = ctx;
-		const mStruct = enemyStructures.filter((enemy) =>
-		{
-			const enemyPos = enemy.position();
-			if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
-			{
-				return false;
-			}
-			if (SquareVectorDistance(enemyPos, reach.pos) > reach.range)
-			{
-				return false;
-			}
-			if (enemy.foundationProgress() === 0)
-			{
-				return false;
-			}
-			if (getLandAccess(gameState, enemy) !== reach.access)
-			{
-				return false;
-			}
-			return true;
-		}).toEntityArray();
-		if (mStruct.length)
-		{
-			mStruct.sort((structa: CommonEntity, structb: CommonEntity): number =>
-				structureValue(structb, ent, 1000, 200) - structureValue(structa, ent, 1000, 200)
-			);
-			if (mStruct[0].hasClass("Gate"))
-			{
-				ent.attack(mStruct[0].id(), allowCapture(gameState, ent, mStruct[0]));
-			}
-			else
-			{
-				const rand = randIntExclusive(0, mStruct.length * 0.2);
-				ent.attack(mStruct[rand].id(), allowCapture(gameState, ent, mStruct[rand]));
-			}
-		}
-		else if (!ent.hasClass("Ranged"))
-		{
-			const targetClasses = {
-				attack: targetClassesSiege.attack,
-				avoid: targetClassesSiege.avoid.concat("Ship"),
-				vetoEntities: veto,
-			};
-			ent.attackMove(targetPos[0], targetPos[1], targetClasses);
-		}
-		else
-		{
-			ent.attackMove(targetPos[0], targetPos[1], targetClassesSiege);
-		}
-	}
-
-	/** Another attacker's next target: an enemy unit in reach, a structure, else help the nearest comrade. */
-	orderUnitAttacker(
-		gameState: CommonGameState,
-		ent: CommonEntity,
-		reach: AttackerReach,
-		need: { needsUpdate: boolean; maybeUpdate: boolean; },
-		ctx: AttackerContext,
-	): void
-	{
-		const { target, targetPos, veto } = ctx;
-		const entPos = reach.pos;
-		const mUnit = enemyUnitsInReach(gameState, ent, reach, ctx);
-		if (mUnit.length)
-		{
-			mUnit.sort((unitA: CommonEntity, unitB: CommonEntity): number =>
-			{
-				let vala = unitA.hasClass("Support") ? 50 : 0;
-				if (ent.counters(unitA))
-				{
-					vala += 100;
-				}
-				let valb = unitB.hasClass("Support") ? 50 : 0;
-				if (ent.counters(unitB))
-				{
-					valb += 100;
-				}
-				const distA = unitA.getMetadata(PlayerID, "distance");
-				const distB = unitB.getMetadata(PlayerID, "distance");
-				if (distA && distB)
-				{
-					vala -= distA;
-					valb -= distB;
-				}
-				if (veto[unitA.id()])
-				{
-					vala -= 20000;
-				}
-				if (veto[unitB.id()])
-				{
-					valb -= 20000;
-				}
-				return valb - vala;
-			});
-			const rand = randIntExclusive(0, mUnit.length * 0.1);
-			ent.attack(mUnit[rand].id(), allowCapture(gameState, ent, mUnit[rand]));
-		}
-		// This may prove dangerous as we may be blocked by something we
-		// cannot attack. See similar behaviour at #5741.
-		else if (this.isBlocked && ent.canAttackTarget(target, false))
-		{
-			ent.attack(target.id(), false);
-		}
-		else if (SquareVectorDistance(targetPos, entPos) > 2500)
-		{
-			marchOn(ent, need.maybeUpdate, ctx);
-		}
-		else if (!this.attackStructureInReach(gameState, ent, reach, ctx) && need.needsUpdate)
-		{
-			this.helpNearestComrade(gameState, ent, entPos); // really nothing   let's try to help our nearest unit
-		}
-	}
-
-	/** The attacker goes for a structure in reach (only the target when blocked), a gate first; whether there is one */
-	private attackStructureInReach(
-		gameState: CommonGameState,
-		ent: CommonEntity,
-		reach: AttackerReach,
-		ctx: AttackerContext,
-	): boolean
-	{
-		const { target, enemyStructures } = ctx;
-		const mStruct = enemyStructures.filter((enemy) =>
-		{
-			if (this.isBlocked && enemy.id() !== target.id())
-			{
-				return false;
-			}
-			const enemyPos = enemy.position();
-			if (!enemyPos || !ent.canAttackTarget(enemy, allowCapture(gameState, ent, enemy)))
-			{
-				return false;
-			}
-			if (SquareVectorDistance(enemyPos, reach.pos) > reach.range)
-			{
-				return false;
-			}
-			if (getLandAccess(gameState, enemy) !== reach.access)
-			{
-				return false;
-			}
-			return true;
-		}, this).toEntityArray();
-		if (!mStruct.length)
-		{
-			return false;
-		}
-		mStruct.sort((structa: CommonEntity, structb: CommonEntity): number =>
-			structureValue(structb, ent, 0, 100) - structureValue(structa, ent, 0, 100)
-		);
-		if (mStruct[0].hasClass("Gate"))
-		{
-			ent.attack(mStruct[0].id(), false);
-		}
-		else
-		{
-			const rand = randIntExclusive(0, mStruct.length * 0.2);
-			ent.attack(mStruct[rand].id(), allowCapture(gameState, ent, mStruct[rand]));
-		}
-		return true;
-	}
-
-	/** The attacker joins the fight of the nearest of our units fighting, if it can attack its target */
-	private helpNearestComrade(gameState: CommonGameState, ent: CommonEntity, entPos: CommonPosition): void
-	{
-		let distmin = Math.min();
-		let attacker: CommonEntity | undefined;
-		this.unitCollection.forEach((unit) =>
-		{
-			if (!isPlaced(unit))
-			{
-				return;
-			}
-			const unitPos = unit.position();
-			const orderData = ordersOf(unit);
-			if (!requiredActivityIs(unit, "COMBAT") || !orderData || !orderData.length || !orderData[0].target)
-			{
-				return;
-			}
-			const target = gameState.getEntityById(orderData[0].target ?? -1);
-			if (!target)
-			{
-				return;
-			}
-			const dist = SquareVectorDistance(unitPos, entPos);
-			if (dist > distmin)
-			{
-				return;
-			}
-			distmin = dist;
-			if (!ent.canAttackTarget(target, allowCapture(gameState, ent, target)))
-			{
-				return;
-			}
-			attacker = target;
-		});
-		if (attacker)
-		{
-			ent.attack(attacker.id(), allowCapture(gameState, ent, attacker));
 		}
 	}
 
@@ -3629,7 +2401,12 @@ export class AttackPlan
 			const near = victim.position() ?? attacker.position();
 			for (const ent of this.unitCollection.values())
 			{
-				if (!answersBlow(gameState, ent, completing, attackerLand, near))
+				if (
+					!answersBlow(gameState, ent, completing, attackerLand, {
+						pos: near,
+						range: AttackPlan.ANSWER_RANGE,
+					})
+				)
 				{
 					continue;
 				}

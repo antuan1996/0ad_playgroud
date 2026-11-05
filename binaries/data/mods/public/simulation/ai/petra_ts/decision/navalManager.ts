@@ -229,6 +229,8 @@ function keepRoomyCells(landing: Set<number>, width: number): void
 	}
 }
 
+const FISH_RAYS = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
+
 /** The cell index of the t-th of ntry steps towards pos from radius*ntry cells in direction a, or undefined off the map */
 function ringCell(
 	ring: { pos: number[]; radius: number; ntry: number; width: number; },
@@ -244,6 +246,36 @@ function ringCell(
 		return undefined;
 	}
 	return i + j * width;
+}
+
+/** Whether every ray of ntry steps from 120 m out towards fishPos satisfies checkCell */
+function everyFishRay(
+	map: { cellSize: number; width: number; gamePosToMapPos(pos: CommonPosition): MapPos; },
+	fishPos: CommonPosition,
+	ntry: number,
+	checkCell: (cell: number) => "pass" | "next" | "fail",
+): boolean
+{
+	const pos = map.gamePosToMapPos(fishPos);
+	const width = map.width;
+	const radius = 120 / map.cellSize / ntry;
+	return FISH_RAYS.every((a) =>
+	{
+		for (let t = 0; t < ntry; ++t)
+		{
+			const cell = ringCell({ pos, radius, ntry, width }, a, t);
+			if (cell === undefined)
+			{
+				continue;
+			}
+			const step = checkCell(cell);
+			if (step !== "next")
+			{
+				return step === "pass";
+			}
+		}
+		return true;
+	});
 }
 
 export class NavalManager
@@ -486,39 +518,20 @@ export class NavalManager
 		{
 			return sea;
 		}
-		const ntry = 4;
-		const around = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
-		const pos = gameState.ai.accessibility.gamePosToMapPos(fish.position());
-		const width = gameState.ai.accessibility.width;
-		const k = pos[0] + pos[1] * width;
-		sea = gameState.ai.accessibility.navalPassMap[k];
+		const access = gameState.ai.accessibility;
+		const pos = access.gamePosToMapPos(fish.position());
+		const k = pos[0] + pos[1] * access.width;
+		sea = access.navalPassMap[k];
 		fish.setMetadata(PlayerID, "sea", sea);
-		const radius = 120 / gameState.ai.accessibility.cellSize / ntry;
 		if (
-			around.every((a: number[]): boolean =>
+			everyFishRay(access, fish.position(), 4, (cell) =>
 			{
-				for (let t = 0; t < ntry; ++t)
+				if (access.landPassMap[cell] !== 1)
 				{
-					const cell = ringCell({ pos, radius, ntry, width }, a, t);
-					if (cell === undefined)
-					{
-						continue;
-					}
-					if (gameState.ai.accessibility.landPassMap[cell] === 1)
-					{
-						const navalPass = gameState.ai.accessibility.navalPassMap[cell];
-						if (navalPass === sea)
-						{
-							return true;
-						}
-						else if (navalPass === 1)
-						{ // we could be outside the map
-							continue;
-						}
-					}
-					return false;
+					return "fail";
 				}
-				return true;
+				const navalPass = access.navalPassMap[cell];
+				return navalPass === sea ? "pass" : navalPass === 1 ? "next" : "fail";
 			})
 		)
 		{
@@ -534,28 +547,11 @@ export class NavalManager
 		{
 			return true;
 		}
-		const ntry = 2;
-		const around = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
 		const territoryMap = gameState.ai.HQ.geography.territoryMap;
-		const width = territoryMap.width;
-		const radius = 120 / territoryMap.cellSize / ntry;
-		const pos = territoryMap.gamePosToMapPos(fish.position());
-		return around.every((a: number[]): boolean =>
+		return everyFishRay(territoryMap, fish.position(), 2, (cell) =>
 		{
-			for (let t = 0; t < ntry; ++t)
-			{
-				const cell = ringCell({ pos, radius, ntry, width }, a, t);
-				if (cell === undefined)
-				{
-					continue;
-				}
-				const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
-				if (owner !== 0 && gameState.isPlayerEnemy(owner))
-				{
-					return false;
-				}
-			}
-			return true;
+			const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
+			return owner !== 0 && gameState.isPlayerEnemy(owner) ? "fail" : "next";
 		});
 	}
 

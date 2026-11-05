@@ -2,21 +2,19 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, NEW_BASE, NO_BASE, NO_LAND, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { GAIA, NEW_BASE, NO_BASE, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import {
 	allowCapture,
 	getAttackBonus,
 	getLandAccess,
 	getMaxStrength,
-	getSeaAccess,
-	isLineInsideEnemyTerritory,
 	requireTemplate,
 	setSeaAccess,
 } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { footprintHalves, isStructureTemplate } from "../adapter/templateData.ts";
+import { isStructureTemplate } from "../adapter/templateData.ts";
 import { hasActivity } from "../adapter/unitState.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
@@ -30,7 +28,7 @@ import * as difficulty from "../world/difficultyLevel.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { restoreGeography, seaBetween, type Geography } from "../world/geography.ts";
 import * as mapMask from "../world/mapMask.ts";
-import { createObstructionMap, createTerritoryMap, type TerritoryMap } from "../world/mapModule.ts";
+import { createTerritoryMap, type TerritoryMap } from "../world/mapModule.ts";
 import { ProductionLoad } from "../world/production.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
 import { AttackManager } from "./attackManager.ts";
@@ -43,6 +41,14 @@ import { EmergencyManager } from "./emergencyManager.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
 import { NavalManager } from "./navalManager.ts";
+import {
+	findDefensiveSpot,
+	findEconomicCCTile,
+	findMarketSpot,
+	findShoreTowerSpot,
+	findStrategicCCTile,
+	type EconomicCCOptions,
+} from "./placement.ts";
 import { ResearchManager } from "./researchManager.ts";
 import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
@@ -131,8 +137,6 @@ const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
 
-/** What any free land is worth to a base sought for its room (findEconomicCCLocation's forRoom). */
-const ROOM_VALUE = 10;
 /** Idle workers from which a dry town stops training more (workforceStalled). */
 export const STALLED_IDLE = 10;
 
@@ -143,39 +147,6 @@ export const CC_SPOT_MEMORY = 600;
 /** Metres around such a spot avoided, and around enemy soldiers. */
 const CC_SPOT_AVOID = 80;
 export const CC_ENEMY_AVOID = 150;
-
-/** The ship-seconds of enemy traffic, fading, a shore tower must reach (findShoreTowerLocation). */
-export const SHORE_TOWER_TRAFFIC = 30;
-/** A tower's reach when its template names none. */
-const DEFAULT_TOWER_RANGE = 60;
-
-/** A civic centre a new civic centre's spot is weighed against */
-type CCSpotCivCentre = { ent: CommonEntity; pos: CommonPosition; ally: boolean; };
-/** One of our dropsites a new civic centre's spot is weighed against */
-type CCSpotDropsite = { ent: CommonEntity; pos: CommonPosition; };
-/** The squared distances that reject or disfavour a new civic centre's spot */
-type CCSpotLimits = {
-	nearbyRejected: number;
-	nearbyAllyRejected: number;
-	nearbyAllyDisfavored: number;
-	maxAccessRejected: number;
-	maxAccessDisfavored: number;
-	maxNoAccessDisfavored: number;
-};
-
-/** What a civic centre at cell j would reach: twice the resource and once the others but food (plus ROOM_VALUE for room) */
-function ccResourceValue(gameState: CommonGameState, resource: string, j: number, forRoom: boolean): number
-{
-	let val = (forRoom ? ROOM_VALUE : 0) + 2 * gameState.sharedScript.ccResourceMaps[resource].map[j];
-	for (const res in gameState.sharedScript.resourceMaps)
-	{
-		if (res !== "food")
-		{
-			val += gameState.sharedScript.ccResourceMaps[res].map[j];
-		}
-	}
-	return val;
-}
 
 /** Whether an entity is a market of ours */
 function isOwnMarket(gameState: CommonGameState, id: EntityId): boolean
@@ -369,359 +340,6 @@ function corralAnimal(
 		return trainable;
 	}
 	return undefined;
-}
-
-/**
- * The structures our defenses face: the enemy's civic centres, fortresses and towers; in cease fire mode the
- * neutrals', else our allies' when no allied victory; undefined when there are none
- */
-function structuresToFace(gameState: CommonGameState): CommonStructureEntity[] | undefined
-{
-	const classes = filters.byClasses(["CivCentre", "Fortress", "Tower"]);
-	let enemyStructures = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(GAIA))).filter(classes)
-		.toEntityArray();
-	if (enemyStructures.length)
-	{
-		return enemyStructures;
-	}
-	enemyStructures = gameState.getNeutralStructures().filter(filters.not(filters.byOwner(GAIA))).filter(classes)
-		.toEntityArray();
-	if (!enemyStructures.length && !gameState.getAlliedVictory())
-	{
-		enemyStructures = gameState.getAllyStructures().filter(filters.not(filters.byOwner(PlayerID))).filter(classes)
-			.toEntityArray();
-	}
-	return enemyStructures.length ? enemyStructures : undefined;
-}
-
-/** In a wonder game with a wonder of ours: it, and how near our defenses may stand to it (squared) */
-function wonderToGuard(gameState: CommonGameState): { ent: CommonStructureEntity; distmin: number; } | undefined
-{
-	if (!gameState.getVictoryConditions().has("wonder"))
-	{
-		return undefined;
-	}
-	const wonders = gameState.getOwnStructures().filter(filters.byClass("Wonder")).toEntityArray();
-	if (wonders.length === 0)
-	{
-		return undefined;
-	}
-	// wonders always have a footprint
-	const wonderRadius = wonders[0].footprintRadius();
-	return { ent: wonders[0], distmin: (50 + wonderRadius) * (50 + wonderRadius) };
-}
-
-/**
- * A defensive spot's value, the lower the better: its distance to the nearest enemy civic centre, plus 200 times
- * its distance to our wonder; undefined in range of an enemy defense, too near ours or our wonder, or with no cc
- */
-function defenseSpotValue(
-	pos: CommonPosition,
-	wonder: { ent: CommonStructureEntity; distmin: number; } | undefined,
-	enemyStructures: CommonStructureEntity[],
-	ownStructures: CommonStructureEntity[],
-): number | undefined
-{
-	let minDist = Math.min();
-	let dista = 0;
-	if (wonder)
-	{
-		const wonderPos = wonder.ent.position();
-		if (wonderPos)
-		{
-			dista = SquareVectorDistance(wonderPos, pos);
-		}
-		if (wonder.distmin !== Infinity && dista < wonder.distmin)
-		{
-			return undefined;
-		}
-		dista *= 200; // empirical factor (TODO should depend on map size) to stay near the wonder
-	}
-
-	for (const str of enemyStructures)
-	{
-		if (str.foundationProgress() !== undefined)
-		{
-			continue;
-		}
-		const strPos = str.position();
-		const dist = SquareVectorDistance(strPos, pos);
-		if (dist < 6400)
-		{ // TODO check on true attack range instead of this 80×80
-			return undefined;
-		}
-		if (str.hasClass("CivCentre") && dist + dista < minDist)
-		{
-			minDist = dist + dista;
-		}
-	}
-
-	const cutDist = 900; // 30×30 TODO maybe increase it
-	for (const str of ownStructures)
-	{
-		if (SquareVectorDistance(str.position(), pos) < cutDist)
-		{
-			return undefined;
-		}
-	}
-	if (minDist === Math.min())
-	{
-		return undefined;
-	}
-	return minDist;
-}
-
-/** How the economic search for a civic centre spot is made: near a position (our first base), for a strategic one, or for room */
-export type EconomicCCOptions = { proximity?: CommonPosition; fromStrategic?: boolean; forRoom?: boolean; };
-
-/** What a civic centre spot's spread is weighed against: the civic centres, our dropsites, and the distance limits */
-type CCSpotSpread = { ccList: CCSpotCivCentre[]; dpList: CCSpotDropsite[]; limits: CCSpotLimits; };
-
-/** What the economic search for a civic centre spot reads, the same for every cell */
-type EconomicCCSearch = {
-	obstructions: ReturnType<typeof createObstructionMap>;
-	radius: number;
-	scale: number;
-	proxyAccess: number | undefined;
-	nbShips: number;
-	spread: CCSpotSpread;
-	cut: number;
-};
-
-/**
- * A spot's value factor from the civic centres: rejected (undefined) too near any, or an ally's, or too far from
- * an accessible ally's; lowered quite near an ally's or quite far from all; and whether one is on its land
- */
-function ccSpread(
-	gameState: CommonGameState,
-	pos: CommonPosition,
-	index: number,
-	normIn: number,
-	spread: CCSpotSpread,
-): { norm: number; accessible: boolean; } | undefined
-{
-	const { ccList, limits } = spread;
-	let norm = normIn;
-	let minDist = Math.min();
-	let accessible = false;
-
-	for (const cc of ccList)
-	{
-		const dist = SquareVectorDistance(cc.pos, pos);
-		if (dist < limits.nearbyRejected)
-		{
-			return undefined;
-		}
-		if (!cc.ally)
-		{
-			continue;
-		}
-		if (dist < limits.nearbyAllyRejected)
-		{
-			return undefined;
-		}
-		if (dist < limits.nearbyAllyDisfavored)
-		{
-			norm *= 0.5;
-		}
-
-		if (dist < minDist)
-		{
-			minDist = dist;
-		}
-		accessible = accessible || index === getLandAccess(gameState, cc.ent);
-	}
-	if (norm === 0)
-	{
-		return undefined;
-	}
-
-	if (accessible && minDist > limits.maxAccessRejected)
-	{
-		return undefined;
-	}
-
-	if (minDist > limits.maxAccessDisfavored)
-	{ // Disfavor if quite far from any allied cc
-		if (!accessible)
-		{
-			if (minDist > limits.maxNoAccessDisfavored)
-			{
-				norm *= 0.5;
-			}
-			else
-			{
-				norm *= 0.8;
-			}
-		}
-		else
-		{
-			norm *= 0.5;
-		}
-	}
-	return { norm, accessible };
-}
-
-/** Every civic centre on the map, and how many of them are allied. */
-function alliedCivCentres(
-	gameState: CommonGameState,
-): { ccList: Array<{ pos: CommonPosition; ally: boolean; }>; numAllyCC: number; }
-{
-	const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
-	const ccList: Array<{ pos: CommonPosition; ally: boolean; }> = [];
-	let numAllyCC = 0;
-	for (const cc of ccEnts.values())
-	{
-		const ally = gameState.isPlayerAlly(cc.owner());
-		const pos = cc.position();
-		if (pos)
-		{
-			ccList.push({ pos: pos, ally: ally });
-		}
-		if (ally)
-		{
-			++numAllyCC;
-		}
-	}
-	return { ccList, numAllyCC };
-}
-
-/**
- * The distance to the nearest allied civic centre (0 when the spot is too near one, or near any), the three
- * nearest kept in nearest (d0 counted again for this spot, d1 and d2 not: as in Petra)
- */
-function rankAllyCCs(
-	ccList: Array<{ pos: CommonPosition; ally: boolean; }>,
-	pos: CommonPosition,
-	nearest: { d0: number; d1: number; d2: number; },
-): number
-{
-	let minDist = Math.min();
-	nearest.d0 = Infinity;
-	for (const cc of ccList)
-	{
-		const dist = SquareVectorDistance(cc.pos, pos);
-		if (dist < 14000)
-		{ // Reject if too near from any cc
-			return 0;
-		}
-		if (!cc.ally)
-		{
-			continue;
-		}
-		if (dist < 62000)
-		{ // Reject if quite near from ally cc
-			return 0;
-		}
-		if (dist < minDist)
-		{
-			minDist = dist;
-		}
-
-		if (dist < nearest.d0)
-		{
-			nearest.d2 = nearest.d1;
-			nearest.d1 = nearest.d0;
-			nearest.d0 = dist;
-		}
-		else if (dist < nearest.d1)
-		{
-			nearest.d2 = nearest.d1;
-			nearest.d1 = dist;
-		}
-		else if (dist < nearest.d2)
-		{
-			nearest.d2 = dist;
-		}
-	}
-	return minDist;
-}
-
-/** The sum of the squared gaps between the favored distance and the (up to three) nearest allied civic centres */
-function strategicValue(nearest: { d0: number; d1: number; d2: number; }, favoredDistance: number): number
-{
-	let delta = Math.sqrt(nearest.d0) - favoredDistance;
-	let currentVal = delta * delta;
-	delta = Math.sqrt(nearest.d1) - favoredDistance;
-	currentVal += delta * delta;
-	if (nearest.d2 !== Infinity)
-	{
-		delta = Math.sqrt(nearest.d2) - favoredDistance;
-		currentVal += delta * delta;
-	}
-	return currentVal;
-}
-
-/** The allied markets, or our own when allies have none. */
-function tradeMarkets(gameState: CommonGameState): CommonEntity[]
-{
-	let markets = gameState.updatingCollection(
-		"diplo-ExclusiveAllyMarkets",
-		filters.byClass("Trade"),
-		gameState.getExclusiveAllyEntities(),
-	).toEntityArray();
-	if (!markets.length)
-	{
-		markets = gameState.updatingCollection("OwnMarkets", filters.byClass("Trade"), gameState.getOwnStructures())
-			.toEntityArray();
-	}
-	return markets;
-}
-
-/** The market farthest from the spot by its gain (the distance weighted by the trader's gain) on its land or sea */
-function farthestMarket(
-	gameState: CommonGameState,
-	pos: CommonPosition,
-	index: number,
-	trade: {
-		markets: CommonEntity[];
-		naval: boolean;
-		gains: { landGainMultiplier?: number; navalGainMultiplier?: number; };
-	},
-): { val: number; distSq: number; gainMult: number; }
-{
-	let maxVal = 0;
-	let maxDistSq = 0;
-	let maxGainMult = 0;
-	for (const market of trade.markets)
-	{
-		// a market: on the map
-		if (!isPlaced(market))
-		{
-			continue;
-		}
-		let gainMultiplier;
-		if (trade.naval)
-		{
-			if (getSeaAccess(gameState, market) !== gameState.ai.accessibility.getAccessValue(pos, true))
-			{
-				continue;
-			}
-			gainMultiplier = trade.gains.navalGainMultiplier;
-		}
-		else if (
-			getLandAccess(gameState, market) === index && !isLineInsideEnemyTerritory(gameState, market.position(), pos)
-		)
-		{
-			gainMultiplier = trade.gains.landGainMultiplier;
-		}
-		else
-		{
-			continue;
-		}
-		if (!gainMultiplier)
-		{
-			continue;
-		}
-		const distSq = SquareVectorDistance(market.position(), pos);
-		if (gainMultiplier * distSq > maxVal)
-		{
-			maxVal = gainMultiplier * distSq;
-			maxDistSq = distSq;
-			maxGainMult = gainMultiplier;
-		}
-	}
-	return { val: maxVal, distSq: maxDistSq, gainMult: maxGainMult };
 }
 
 /** A plan for the next phase and its queue */
@@ -1089,20 +707,6 @@ export class Headquarters
 		this.garrisonManager = new GarrisonManager(this.Config);
 		this.victoryManager = new VictoryManager(this.Config);
 		this.emergencyManager = EmergencyManager.start(this.Config, gameState);
-	}
-
-	/**
-	 * Whether a cell may hold a defense: one of a base of ours, and on our frontier (do not try if well inside or
-	 * outside territory; a tower not on the large frontier) unless we guard a wonder
-	 */
-	private defensiveCell(j: CellIndex<"territory">, guardingWonder: boolean, isTower: boolean): boolean
-	{
-		const border = this.geography.borderMap.map[j];
-		if (!guardingWonder && (!(border & mapMask.fullFrontier) || border & mapMask.largeFrontier && isTower))
-		{
-			return false;
-		}
-		return this.baseAtIndex(j) !== NO_BASE; // inaccessible cell
 	}
 
 	/** A saved headquarters' own state, as it was saved */
@@ -1758,226 +1362,18 @@ export class Headquarters
 		options: EconomicCCOptions = {},
 	): false | CommonPosition
 	{
-		const spot = this.searchEconomicCCLocation(gameState, template, resource, options, false);
-		// a base for room takes a contested spot when no other is left: in a
-		// 4-player Dodecanese match every free island had an enemy's soldiers or
-		// buildings, and full towns never expanded (FINDINGS §40)
-		if (spot !== false || !options.forRoom)
-		{
-			return spot;
-		}
-		return this.searchEconomicCCLocation(gameState, template, resource, options, true);
-	}
-
-	/** findEconomicCCLocation's search, contested spots allowed or not (spots remembered as failed never). */
-	searchEconomicCCLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-		resource: string,
-		options: EconomicCCOptions,
-		allowContested: boolean,
-	): false | CommonPosition
-	{
-		// This builds a map. The procedure is fairly simple. It adds the resource maps
-		// 	(which are dynamically updated and are made so that they will facilitate DP placement)
-		// Then look for a good spot.
-
-		Engine.ProfileStart("findEconomicCCLocation");
-
-		const search = this.economicCCSearch(gameState, template, options);
-		const halfSize = footprintHalves(template).halfSize;
-		const { cut } = search;
-		const forRoom = !!options.forRoom;
-
-		let bestIdx = -1;
-		let bestVal = -Infinity;
-		for (const { j, i, index } of this.freeTiles(gameState, search.radius, search.obstructions))
-		{
-			if (search.proxyAccess && search.nbShips === 0 && search.proxyAccess !== index)
-			{
-				continue;
-			}
-
-			const pos = this.cellCentre(j);
-			const norm = this.economicNorm(gameState, search, pos, index, options.proximity);
-			if (norm === undefined)
-			{
-				continue;
-			}
-
-			let val = ccResourceValue(gameState, resource, j, forRoom);
-			val *= this.geography.borderMap.map[j] & mapMask.fullBorder ? norm.value * 0.5 : norm.value; // disfavor the borders of the map
-
-			// If oversea, be just above threshold to be accepted if nothing else
-			if (norm.oversea)
-			{
-				val = Math.max(val, cut + 0.1);
-			}
-
-			if (val < bestVal)
-			{
-				continue;
-			}
-			if (
-				(allowContested ? this.isAvoidedCCSpot(pos) : this.isContestedCCSpot(gameState, pos, index)) ||
-				this.isDangerousLocation(gameState, pos, halfSize)
-			)
-			{
-				continue;
-			}
-			bestVal = val;
-			bestIdx = i;
-		}
-
-		Engine.ProfileStop();
-
-		debugWarn(
-			this.Config,
-			1,
-			() => "we have found a base for " + resource + " with best (cut=" + cut + ") = " + bestVal,
-		);
-		// not good enough.
-		if (bestVal < cut)
-		{
-			return false;
-		}
-		return this.newBaseAt(gameState, bestIdx, search.obstructions);
-	}
-
-	/** What the economic search for a civic centre spot reads, the same for every cell */
-	private economicCCSearch(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-		options: EconomicCCOptions,
-	): EconomicCCSearch
-	{
-		const { proximity, fromStrategic, forRoom } = options;
-		// obstruction map
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		const neighbours = this.ccSpotNeighbours(gameState);
-		const obstructionRadius = template.obstructionRadius();
-		let radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
-		let scale = 250 * 250;
-		let proxyAccess;
-		const nbShips = this.navalManager.transportShips.length;
-		if (proximity)
-		{ // this is our first base
-			// if our first base, ensure room around
-			radius = Math.ceil((obstructionRadius.max + 8) / obstructions.cellSize);
-			// scale is the typical scale at which we want to find a location for our first base
-			// look for bigger scale if we start from a ship (access < 2) or from a small island
-			const cellArea = gameState.getPassabilityMap().cellSize * gameState.getPassabilityMap().cellSize;
-			proxyAccess = gameState.ai.accessibility.getAccessValue(proximity);
-			if (proxyAccess < 2 || cellArea * gameState.ai.accessibility.regionSize[proxyAccess] < 24000)
-			{
-				scale = 400 * 400;
-			}
-		}
-
-		// DistanceSquare cuts to other ccs (bigger or no cuts on inaccessible ccs to allow colonizing other islands).
-		const reduce = (template.hasClass("Colony") ? 30 : 0) + 30 * this.Config.personality.defensive;
-		const limits: CCSpotLimits = {
-			nearbyRejected: Math.square(120), // Reject if too near from any cc
-			nearbyAllyRejected: Math.square(200), // Reject if too near from an allied cc
-			nearbyAllyDisfavored: Math.square(250), // Disfavor if quite near an allied cc
-			maxAccessRejected: Math.square(410), // Reject if too far from an accessible ally cc
-			maxAccessDisfavored: Math.square(360 - reduce), // Disfavor if quite far from an accessible ally cc
-			maxNoAccessDisfavored: Math.square(500), // Disfavor if quite far from an inaccessible ally cc
-		};
-
-		let cut = 60;
-		if (fromStrategic || proximity)
-		{ // be less restrictive
-			cut = 30;
-		}
-		// a base for room (FINDINGS §40): any free land we can reach is worth it,
-		// its resources a bonus; Dodecanese's free islands scored under the cut
-		if (forRoom)
-		{
-			cut = 1;
-		}
-		return { obstructions, radius, scale, proxyAccess, nbShips, spread: { ...neighbours, limits }, cut };
-	}
-
-	/**
-	 * A spot's value factor: for our first cc, nearer our units the better; otherwise its spread from the other
-	 * civic centres and our dropsites, and whether it is oversea (undefined when rejected)
-	 */
-	private economicNorm(
-		gameState: CommonGameState,
-		search: EconomicCCSearch,
-		pos: CommonPosition,
-		index: number,
-		proximity: CommonPosition | undefined,
-	): { value: number; oversea: boolean; } | undefined
-	{
-		const norm = 0.5; // TODO adjust it, knowing that we will sum 5 maps
-		if (proximity)
-		{ // This is our first cc, let's do it near our units
-			return { value: norm / (1 + SquareVectorDistance(proximity, pos) / search.scale), oversea: false };
-		}
-		// We will be more tolerant for cc around our oversea docks
-		const spread = this.ccSpotSpread(gameState, pos, index, norm, search.spread);
-		return spread && { value: spread.norm, oversea: spread.oversea };
-	}
-
-	/** The cells no one owns with a tile with room around (roomyTile) */
-	private *freeTiles(
-		gameState: CommonGameState,
-		radius: number,
-		obstructions: ReturnType<typeof createObstructionMap>,
-	): Generator<{ j: CellIndex<"territory">; i: number; index: AccessIndex; }>
-	{
-		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
-		{
-			const j = cellIndex(this.geography.territoryMap, jIndex);
-			if (this.geography.territoryMap.getOwnerIndex(j) !== 0)
-			{
-				continue;
-			}
-			const tile = this.roomyTile(gameState, j, radius, obstructions);
-			if (tile)
-			{
-				yield { j, ...tile };
-			}
-		}
-	}
-
-	/** The tile with room around a cell, of the size given, on a land we know; undefined if none */
-	private roomyTile(
-		gameState: CommonGameState,
-		j: CellIndex<"territory">,
-		radius: number,
-		obstructions: ReturnType<typeof createObstructionMap>,
-	): { i: number; index: AccessIndex; } | undefined
-	{
-		const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
-		if (i < 0)
-		{
-			return undefined;
-		}
-		// We require that it is accessible
-		const index = gameState.ai.accessibility.landPassMap[i];
-		if (!this.geography.landRegions[index])
-		{
-			return undefined;
-		}
-		return { i, index };
-	}
-
-	/** The centre of a territory cell */
-	private cellCentre(j: number): CommonPosition
-	{
-		const width = this.geography.territoryMap.width;
-		const cellSize = this.geography.territoryMap.cellSize;
-		return worldPos(cellSize * (j % width + 0.5), cellSize * (Math.floor(j / width) + 0.5));
+		const spot = findEconomicCCTile(this, gameState, template, { resource, options, allowContested: false }) ||
+			(options.forRoom ?
+				findEconomicCCTile(this, gameState, template, { resource, options, allowContested: true }) :
+				false);
+		return spot ? this.newBaseAt(gameState, spot.bestIdx, spot.obstructions) : false;
 	}
 
 	/** A new base's position at an obstruction tile; a minimal number of wanted ships in the seas reaching it */
 	private newBaseAt(
 		gameState: CommonGameState,
 		bestIdx: number,
-		obstructions: ReturnType<typeof createObstructionMap>,
+		obstructions: { width: number; cellSize: number; },
 	): CommonPosition
 	{
 		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
@@ -2000,78 +1396,6 @@ export class Headquarters
 		return worldPos(x, z);
 	}
 
-	/** The civic centres and our dropsites a new civic centre's spot is weighed against */
-	ccSpotNeighbours(gameState: CommonGameState): { ccList: CCSpotCivCentre[]; dpList: CCSpotDropsite[]; }
-	{
-		const ccEnts = gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre"));
-		const dpEnts = gameState.getOwnDropsites().filter(filters.not(filters.byClasses(["CivCentre", "Unit"])));
-		const ccList: CCSpotCivCentre[] = [];
-		for (const cc of ccEnts.values())
-		{
-			const pos = cc.position();
-			if (pos)
-			{
-				ccList.push({ ent: cc, pos: pos, ally: gameState.isPlayerAlly(cc.owner()) });
-			}
-		}
-		const dpList: CCSpotDropsite[] = [];
-		for (const dp of dpEnts.values())
-		{
-			const pos = dp.position();
-			if (pos)
-			{
-				dpList.push({ ent: dp, pos: pos });
-			}
-		}
-		return { ccList, dpList };
-	}
-
-	/**
-	 * How far a spot for a later civic centre lies from the other civic centres and our dropsites:
-	 * norm, the spot's value factor, lowered by them, and whether it is oversea; undefined when it is rejected.
-	 */
-	ccSpotSpread(
-		gameState: CommonGameState,
-		pos: CommonPosition,
-		index: number,
-		normIn: number,
-		spread: CCSpotSpread,
-	): { norm: number; oversea: boolean; } | undefined
-	{
-		const { dpList } = spread;
-		const fromCCs = ccSpread(gameState, pos, index, normIn, spread);
-		if (!fromCCs)
-		{
-			return undefined;
-		}
-		const { accessible } = fromCCs;
-		let norm = fromCCs.norm;
-
-		// Not near any of our dropsite, except for oversea docks
-		const oversea = !accessible && dpList.some((dp) => getLandAccess(gameState, dp.ent) === index);
-		if (!oversea)
-		{
-			for (const dp of dpList)
-			{
-				const dist = SquareVectorDistance(dp.pos, pos);
-				if (dist < 3600)
-				{
-					norm = 0;
-					break;
-				}
-				else if (dist < 6400)
-				{
-					norm *= 0.5;
-				}
-			}
-		}
-		if (norm === 0)
-		{
-			return undefined;
-		}
-		return { norm, oversea };
-	}
-
 	/**
 	 * Returns the best position to build a new Civil Center
 	 * Whose primary function would be to assure territorial continuity with our allies
@@ -2081,75 +1405,12 @@ export class Headquarters
 		template: CommonStructureTemplate,
 	): false | CommonPosition | undefined
 	{
-		// This builds a map. The procedure is fairly simple.
-		// We minimize the Sum((dist - 300)^2) where the sum is on the three nearest allied CC
-		// with the constraints that all CC have dist > 200 and at least one have dist < 400
-		// This needs at least 2 CC. Otherwise, go back to economic CC.
-
-		const { ccList, numAllyCC } = alliedCivCentres(gameState);
-		if (numAllyCC < 2)
+		const spot = findStrategicCCTile(this, gameState, template);
+		if (spot === "economic")
 		{
 			return this.findEconomicCCLocation(gameState, template, "wood", { fromStrategic: true });
 		}
-
-		Engine.ProfileStart("findStrategicCCLocation");
-
-		// obstruction map
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		const halfSize = footprintHalves(template).halfSize;
-
-		let bestIdx = -1;
-		let bestVal = Infinity;
-		const obstructionRadius = template.obstructionRadius();
-		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
-
-		// the distances to the three nearest allied civic centres (the second and third kept from the last cell, as Petra did)
-		const nearest = { d0: Infinity, d1: Infinity, d2: Infinity };
-		const favoredDistance = (template.hasClass("Colony") ? 220 : 280) - 40 * this.Config.personality.defensive;
-
-		// with enough room around to build the cc, accessible
-		for (const { j, i, index } of this.freeTiles(gameState, radius, obstructions))
-		{
-			// checking distances to other cc
-			const pos = this.cellCentre(j);
-			const minDist = rankAllyCCs(ccList, pos, nearest);
-			if (minDist < 1 || minDist > 170000 && !this.geography.navalMap)
-			{
-				continue;
-			}
-
-			let currentVal = strategicValue(nearest, favoredDistance);
-			// disfavor border of the map
-			if (this.geography.borderMap.map[j] & mapMask.fullBorder)
-			{
-				currentVal += 10000;
-			}
-
-			if (currentVal > bestVal)
-			{
-				continue;
-			}
-			if (this.isContestedCCSpot(gameState, pos, index) || this.isDangerousLocation(gameState, pos, halfSize))
-			{
-				continue;
-			}
-			bestVal = currentVal;
-			bestIdx = i;
-		}
-
-		debugWarn(this.Config, 1, () => "We've found a strategic base with bestVal = " + bestVal);
-
-		Engine.ProfileStop();
-
-		// Empty search: report it like the ref (petra/headquarters.js returns
-		// undefined), so the caller's truthiness check (queueplanBuilding.ts:165)
-		// falls through to the oversea-dock fallback instead of booking a civ
-		// centre at (-1, -1), outside the map.
-		if (bestIdx === -1)
-		{
-			return undefined;
-		}
-		return this.newBaseAt(gameState, bestIdx, obstructions);
+		return spot && this.newBaseAt(gameState, spot.bestIdx, spot.obstructions);
 	}
 
 	/**
@@ -2165,165 +1426,7 @@ export class Headquarters
 		template: CommonStructureTemplate,
 	): false | [number, number, BaseId | -1, number]
 	{
-		const markets = tradeMarkets(gameState);
-		if (!markets.length)
-		{ // this is the first market. For the time being, place it arbitrarily by the ConstructionPlan
-			return [-1, -1, -1, 0];
-		}
-
-		// No need for more than one market when we cannot trade.
-		if (!Resources.GetTradableCodes().length)
-		{
-			return false;
-		}
-
-		// obstruction map
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		const halfSize = footprintHalves(template).halfSize;
-
-		const { bestIdx, bestJdx, bestVal, bestDistSq, bestGainMult } = this.bestMarketSpot(
-			gameState,
-			template,
-			markets,
-			obstructions,
-			halfSize,
-		);
-		return this.marketResult({
-			gameState,
-			template,
-			obstructions,
-			bestIdx,
-			bestJdx,
-			bestVal,
-			bestDistSq,
-			bestGainMult,
-		});
-	}
-
-	/** The best market spot in our territory: its tile and the gain data of the farthest market from it. */
-	private bestMarketSpot(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-		markets: CommonEntity[],
-		obstructions: ReturnType<typeof createObstructionMap>,
-		halfSize: number,
-	): { bestIdx: number; bestJdx: CellIndex<"territory">; bestVal: number; bestDistSq: number; bestGainMult: number; }
-	{
-		let bestIdx = -1;
-		let bestJdx = cellIndex(this.geography.territoryMap, -1);
-		let bestVal = -Infinity;
-		let bestDistSq = 0;
-		let bestGainMult = 0;
-		const obstructionRadius = template.obstructionRadius();
-		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
-		const trade = {
-			markets,
-			naval: !!template.hasClasses(["Naval+Trade"]),
-			gains: gameState.getTraderTemplatesGains(),
-		};
-
-		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
-		{
-			const j = cellIndex(this.geography.territoryMap, jIndex);
-			// do not try on the narrow border of our territory
-			if (this.geography.borderMap.map[j] & mapMask.narrowFrontier)
-			{
-				continue;
-			}
-			if (this.baseAtIndex(j) === NO_BASE)
-			{ // only in our territory
-				continue;
-			}
-			// with enough room around to build the market
-			const tile = this.roomyTile(gameState, j, radius, obstructions);
-			if (!tile)
-			{
-				continue;
-			}
-			const pos = this.cellCentre(j);
-			// checking distances to other markets
-			const best = farthestMarket(gameState, pos, tile.index, trade);
-			if (best.val === 0)
-			{
-				continue;
-			}
-			if (best.val < bestVal)
-			{
-				continue;
-			}
-			if (this.isDangerousLocation(gameState, pos, halfSize))
-			{
-				continue;
-			}
-			bestVal = best.val;
-			bestDistSq = best.distSq;
-			bestGainMult = best.gainMult;
-			bestIdx = tile.i;
-			bestJdx = j;
-		}
-		return { bestIdx, bestJdx, bestVal, bestDistSq, bestGainMult };
-	}
-
-	/** The chosen market position and gain, or false when the gain is too small to build one. */
-	private marketResult(
-		choice: {
-			gameState: CommonGameState;
-			template: CommonStructureTemplate;
-			obstructions: ReturnType<typeof createObstructionMap>;
-			bestIdx: number;
-			bestJdx: CellIndex<"territory">;
-			bestVal: number;
-			bestDistSq: number;
-			bestGainMult: number;
-		},
-	): false | [number, number, BaseId | -1, number]
-	{
-		const { gameState, template, obstructions, bestIdx, bestJdx, bestVal, bestDistSq, bestGainMult } = choice;
-		debugWarn(this.Config, 1, () => "We found a market position with bestVal = " + bestVal);
-		if (bestVal === -Infinity)
-		{ // no constraints. For the time being, place it arbitrarily by the ConstructionPlan
-			return [-1, -1, -1, 0];
-		}
-		const expectedGain = Math.round(bestGainMult * TradeGain(bestDistSq, gameState.sharedScript.mapSize));
-		debugWarn(this.Config, 1, () => "this would give a trading gain of " + expectedGain);
-		// Do not keep it if gain is too small, except if this is our first Market.
-		let idx: BaseId | -1;
-		if (expectedGain < this.tradeManager.minimalGain)
-		{
-			if (template.hasClass("Market") && !gameState.getOwnEntitiesByClass("Market", true).hasEntities())
-			{
-				idx = -1; // Needed by queueplanBuilding manager to keep that Market.
-			}
-			else
-			{
-				return false;
-			}
-		}
-		else
-		{
-			idx = this.baseAtIndex(bestJdx);
-		}
-
-		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
-		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
-		return [x, z, idx, expectedGain];
-	}
-
-	/**
-	 * A tower's shore spot when it goes there first, on naval maps, and only there when every enemy is
-	 * overseas (FINDINGS §38); false to search elsewhere.
-	 */
-	private shoreTowerLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-	): false | [number, number, BaseId] | undefined
-	{
-		if (!template.hasClass("Tower"))
-		{
-			return false;
-		}
-		const shore = this.findShoreTowerLocation(gameState, template);
-		return shore || this.towersByTrafficOnly(gameState) ? shore : false;
+		return this.tradeManager.minimalGain >= 0 ? findMarketSpot(this, gameState, template) : false;
 	}
 
 	/**
@@ -2335,80 +1438,15 @@ export class Headquarters
 		template: CommonStructureTemplate,
 	): [number, number, BaseId] | undefined
 	{
-		const shore = this.shoreTowerLocation(gameState, template);
-		if (shore !== false)
+		if (template.hasClass("Tower"))
 		{
-			return shore;
+			const shore = this.findShoreTowerLocation(gameState, template);
+			if (shore || this.towersByTrafficOnly(gameState))
+			{
+				return shore;
+			}
 		}
-		// We take the point in our territory which is the nearest to any enemy cc
-		// but requiring a minimal distance with our other defensive structures
-		// and not in range of any enemy defensive structure to avoid building under fire.
-
-		const ownStructures = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"]))
-			.toEntityArray();
-		const enemyStructures = structuresToFace(gameState);
-		if (!enemyStructures)
-		{
-			return undefined;
-		}
-		const wonder = wonderToGuard(gameState);
-
-		// obstruction map
-		const obstructions = createObstructionMap(gameState, NO_LAND, template);
-		const halfSize = footprintHalves(template).halfSize;
-
-		let bestIdx = -1;
-		let bestJdx = cellIndex(this.geography.territoryMap, -1);
-		let bestVal = Infinity;
-
-		const isTower = template.hasClass("Tower");
-		const obstructionRadius = template.obstructionRadius();
-		const radius = template.hasClass("Fortress") ?
-			Math.floor((obstructionRadius.max + 8) / obstructions.cellSize) :
-			Math.ceil(obstructionRadius.max / obstructions.cellSize);
-
-		for (let jIndex = 0; jIndex < this.geography.territoryMap.length; ++jIndex)
-		{
-			const j = cellIndex(this.geography.territoryMap, jIndex);
-			if (!this.defensiveCell(j, !!wonder, !!isTower))
-			{
-				continue;
-			}
-			// with enough room around to build the cc
-			const i = this.geography.territoryMap.getNonObstructedTile(j, radius, obstructions);
-			if (i < 0)
-			{
-				continue;
-			}
-
-			const pos = this.cellCentre(j);
-			// checking distances to other structures
-			const minDist = defenseSpotValue(pos, wonder, enemyStructures, ownStructures);
-			if (minDist === undefined)
-			{
-				continue;
-			}
-			if (minDist > bestVal)
-			{
-				continue;
-			}
-			if (this.isDangerousLocation(gameState, pos, halfSize))
-			{
-				continue;
-			}
-			bestVal = minDist;
-			bestIdx = i;
-			bestJdx = j;
-		}
-
-		if (bestVal === Infinity)
-		{
-			return undefined;
-		}
-
-		const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
-		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
-		return [x, z, this.baseAtIndex(bestJdx)];
+		return findDefensiveSpot(this, gameState, template);
 	}
 
 	/**
@@ -2589,76 +1627,7 @@ export class Headquarters
 		template: CommonStructureTemplate,
 	): [number, number, BaseId] | undefined
 	{
-		const traffic = this.shipTraffic;
-		if (!traffic)
-		{
-			return undefined;
-		}
-		const range = template.attackRange("Ranged")?.max ?? DEFAULT_TOWER_RANGE;
-		const ownDefenses = gameState.getOwnStructures().filter(filters.byClasses(["Fortress", "Tower"]))
-			.toEntityArray().map((ent) => ent.position()).filter((pos) => pos !== undefined);
-		const enemyDefenses = gameState.getEnemyStructures().filter(filters.not(filters.byOwner(GAIA))).filter(
-			filters.byClasses(["CivCentre", "Fortress", "Tower"]),
-		).toEntityArray().map((ent) => ent.position()).filter((pos) => pos !== undefined);
-		const map = this.geography.territoryMap;
-		const width = map.width;
-		const cellSize = map.cellSize;
-		let obstructions: ReturnType<typeof createObstructionMap> | undefined;
-		let best = SHORE_TOWER_TRAFFIC;
-		let found: [number, number, BaseId] | undefined;
-		for (let jIndex = 0; jIndex < map.length; ++jIndex)
-		{
-			const j = cellIndex(map, jIndex);
-			if (map.getOwnerIndex(j) !== PlayerID)
-			{
-				continue;
-			}
-			const pos: CommonPosition = worldPos(
-				cellSize * (j % width + 0.5),
-				cellSize * (Math.floor(j / width) + 0.5),
-			);
-			if (map.isBlinking(pos))
-			{
-				continue;
-			}
-			const score = traffic.within(pos, range, ownDefenses);
-			if (score <= best)
-			{
-				continue;
-			}
-			if (
-				ownDefenses.some((other) => SquareVectorDistance(other, pos) < 900) ||
-				enemyDefenses.some((other) => SquareVectorDistance(other, pos) < 6400)
-			)
-			{
-				continue;
-			}
-			const base = this.baseAtIndex(j);
-			if (base === NO_BASE)
-			{
-				continue;
-			}
-			obstructions ??= createObstructionMap(gameState, NO_LAND, template);
-			const radius = Math.ceil(template.obstructionRadius().max / obstructions.cellSize);
-			const i = map.getNonObstructedTile(j, radius, obstructions);
-			if (i < 0)
-			{
-				continue;
-			}
-			// the free tile found may lie off the cell's centre: the traffic counted from where the tower stands
-			const spot = worldPos(
-				(i % obstructions.width + 0.5) * obstructions.cellSize,
-				(Math.floor(i / obstructions.width) + 0.5) * obstructions.cellSize,
-			);
-			const spotScore = traffic.within(spot, range, ownDefenses);
-			if (spotScore <= best || this.isDangerousLocation(gameState, spot, footprintHalves(template).halfSize))
-			{
-				continue;
-			}
-			best = spotScore;
-			found = [spot[0], spot[1], base];
-		}
-		return found;
+		return this.shipTraffic ? findShoreTowerSpot(this, this.shipTraffic, gameState, template) : undefined;
 	}
 
 	buildTemple(gameState: CommonGameState, queues: HeadquartersQueues): void

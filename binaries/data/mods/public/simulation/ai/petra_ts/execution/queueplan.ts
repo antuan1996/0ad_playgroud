@@ -122,6 +122,30 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 		return costs;
 	}
 
+	/** The fields every saved plan carries */
+	protected serializeBase(category: C): SerializedQueuePlan<T> & { category: C; }
+	{
+		return {
+			category,
+			type: this.type,
+			ID: this.ID,
+			metadata: this.metadata,
+			cost: this.cost.Serialize(),
+			number: this.number,
+		};
+	}
+
+	/** Restores the fields every saved plan carries */
+	protected resumeBase(data: SerializedQueuePlan<T>): void
+	{
+		this.type = data.type;
+		this.ID = data.ID;
+		this.metadata = data.metadata;
+		this.number = data.number;
+		this.cost = new ResourcesManager();
+		this.cost.Deserialize(data.cost);
+	}
+
 	/**
 	 * On Event functions.
 	 * Can be used to do some specific stuffs
@@ -130,6 +154,13 @@ export abstract class QueuePlan<T extends PlanTemplate = PlanTemplate, C extends
 	 */
 	onStart(gameState: CommonGameState): void
 	{
+		if (this.queueToReset)
+		{
+			gameState.ai.queueManager.changePriority(
+				this.queueToReset,
+				gameState.ai.Config.priorities[this.queueToReset],
+			);
+		}
 	}
 }
 
