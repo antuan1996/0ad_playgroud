@@ -578,10 +578,10 @@ export class TransportPlan
 	{
 		const ent = this.units.toEntityArray()[0];
 		const baseID = ent.getMetadata(PlayerID, "base");
-		let base = baseID === undefined ? undefined : hqOf(gameState).getBaseByID(baseID);
+		let base = baseID === undefined ? undefined : hqOf(gameState).basesManager.getBaseByID(baseID);
 		if (!base || !base.anchor || !isPlaced(base.anchor))
 		{
-			for (const newbase of hqOf(gameState).baseManagers())
+			for (const newbase of hqOf(gameState).basesManager.baseManagers)
 			{
 				if (!newbase.anchor || !isPlaced(newbase.anchor))
 				{

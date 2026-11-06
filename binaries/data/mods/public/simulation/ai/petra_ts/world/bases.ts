@@ -60,5 +60,5 @@ export type WorkerBase = BaseView & SupplyBooking & SupplyUpkeep & IdleWorkers;
 /** All our bases, for reading and for dropping gone supplies from their lists. */
 export function basesOf(gameState: CommonGameState): ReadonlyArray<BaseView & SupplyUpkeep>
 {
-	return gameState.ai.HQ.baseManagers();
+	return gameState.ai.HQ.basesManager.baseManagers;
 }

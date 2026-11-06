@@ -274,7 +274,7 @@ export function getBestBase(
 
 	let distmin = Math.min();
 	let bestbase;
-	for (const base of gameState.ai.HQ.baseManagers())
+	for (const base of gameState.ai.HQ.basesManager.baseManagers)
 	{
 		const baseless = gameState.ai.HQ.basesManager.baselessBase();
 		if (base.ID === baseless.ID || exclude && base.ID === exclude)

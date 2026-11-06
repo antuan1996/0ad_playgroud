@@ -52,7 +52,7 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 	}
 
 	// configure our first base strategy
-	if (HQ.hasPotentialBase())
+	if (HQ.basesManager.hasPotentialBase())
 	{
 		configFirstBase(HQ, gameState);
 	}
@@ -422,7 +422,7 @@ function guardAllyCentre(gameState: CommonGameState, ent: CommonEntity, allycc: 
  */
 export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): void
 {
-	if (!HQ.hasPotentialBase())
+	if (!HQ.basesManager.hasPotentialBase())
 	{
 		return;
 	}
@@ -460,7 +460,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 
 	// - count the available food resource, and react accordingly
 	let startingFood = gameState.getResources().food;
-	startingFood += HQ.getTotalResourceLevel(gameState, ["food"], ["nearby", "medium", "faraway"]).food;
+	startingFood += HQ.basesManager.getTotalResourceLevel(gameState, ["food"], ["nearby", "medium", "faraway"]).food;
 
 	if (startingFood < 800)
 	{
@@ -483,7 +483,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		if (!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() && HQ.canBuild(gameState, template))
 		{
 			gameState.ai.queues.corral.addPlan(
-				new ConstructionPlan(gameState, template, { base: HQ.baseManagers()[0].ID }),
+				new ConstructionPlan(gameState, template, { base: HQ.basesManager.baseManagers[0].ID }),
 			);
 		}
 	}
@@ -499,7 +499,7 @@ function startingLandSize(
 	const startingLand = [];
 	for (const region in HQ.geography.landRegions)
 	{
-		for (const base of HQ.baseManagers())
+		for (const base of HQ.basesManager.baseManagers)
 		{
 			if (!base.anchor || base.accessIndex !== +region)
 			{
@@ -518,7 +518,7 @@ function startingLandSize(
 function configByWood(HQ: Headquarters, gameState: CommonGameState): void
 {
 	let startingWood = gameState.getResources().wood;
-	startingWood += HQ.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood;
+	startingWood += HQ.basesManager.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood;
 
 	debugWarn(
 		HQ.Config,
@@ -562,7 +562,7 @@ function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
 	{
 		return;
 	}
-	const newDP = HQ.baseManagers()[0].findBestDropsiteAndLocation(gameState, "wood");
+	const newDP = HQ.basesManager.baseManagers[0].findBestDropsiteAndLocation(gameState, "wood");
 	// templateName is only "" when quality is 0, which the > 40 check rejects.
 	if (newDP.quality <= 40 || !HQ.canBuild(gameState, newDP.templateName))
 	{
@@ -578,6 +578,6 @@ function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
 		gameState.ai.queueManager.setAccounts(gameState, cost, "dropsites");
 	}
 	gameState.ai.queues.dropsites.addPlan(
-		new ConstructionPlan(gameState, newDP.templateName, { base: HQ.baseManagers()[0].ID }, newDP.pos),
+		new ConstructionPlan(gameState, newDP.templateName, { base: HQ.basesManager.baseManagers[0].ID }, newDP.pos),
 	);
 }

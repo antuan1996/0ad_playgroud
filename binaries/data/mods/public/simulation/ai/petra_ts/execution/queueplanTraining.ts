@@ -149,7 +149,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 			if (wantedIndex)
 			{
 				const base = ent.getMetadata(PlayerID, "base");
-				const baseManager = base ? hq.getBaseByID(base) : undefined;
+				const baseManager = base ? hq.basesManager.getBaseByID(base) : undefined;
 				if (!baseManager || baseManager.accessIndex !== wantedIndex)
 				{
 					value += 30;
@@ -166,8 +166,8 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 			const bBase = b.getMetadata(PlayerID, "base");
 			if (workerUnit && aBase && bBase && aBase !== bBase)
 			{
-				const apop = hq.getBaseByID(aBase)?.workers.length;
-				const bpop = hq.getBaseByID(bBase)?.workers.length;
+				const apop = hq.basesManager.getBaseByID(aBase)?.workers.length;
+				const bpop = hq.basesManager.getBaseByID(bBase)?.workers.length;
 				if (apop !== undefined && bpop !== undefined)
 				{
 					if (apop > bpop)

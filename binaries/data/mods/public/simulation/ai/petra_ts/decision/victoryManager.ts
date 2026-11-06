@@ -106,12 +106,12 @@ function isGuardRole(role: WorkerRole | undefined): boolean
 function sendWonderBuilders(gameState: CommonGameState, ent: CommonEntity): void
 {
 	const baseID = ent.getMetadata(PlayerID, "base");
-	const base = baseID === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseID);
+	const base = baseID === undefined ? undefined : gameState.ai.HQ.basesManager.getBaseByID(baseID);
 	if (!base)
 	{
 		return;
 	}
-	const builders = gameState.ai.HQ.bulkPickWorkers(gameState, base, 10);
+	const builders = gameState.ai.HQ.basesManager.bulkPickWorkers(gameState, base, 10);
 	if (builders)
 	{
 		for (const worker of builders.values())

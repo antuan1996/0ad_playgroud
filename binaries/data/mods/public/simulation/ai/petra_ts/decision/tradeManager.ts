@@ -453,7 +453,7 @@ export class TradeManager
 			tradingGoods[res] = 0;
 		}
 		// first, try to anticipate future needs
-		const stocks = gameState.ai.HQ.getTotalResourceLevel(gameState);
+		const stocks = gameState.ai.HQ.basesManager.getTotalResourceLevel(gameState);
 		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState, resTradeCodes);
 		const wantedRates = gameState.ai.HQ.GetWantedGatherRates(gameState);
 		let remaining = 100;
@@ -524,7 +524,7 @@ export class TradeManager
 			// Available resources after account substraction
 			available: gameState.ai.queueManager.getAvailableResources(gameState),
 			needs: gameState.ai.queueManager.currentNeeds(gameState),
-			rates: gameState.ai.HQ.GetCurrentGatherRates(gameState),
+			rates: gameState.ai.HQ.basesManager.GetCurrentGatherRates(gameState),
 			prices: gameState.getBarterPrices(),
 		};
 

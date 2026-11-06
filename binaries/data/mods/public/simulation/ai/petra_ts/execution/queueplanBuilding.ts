@@ -337,13 +337,13 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const territorypos = placement.gamePosToMapPos(worldPos(x, z));
 		const territoryIndex = cellIndex(placement, territorypos[0] + territorypos[1] * placement.width);
 		// default angle = 3*Math.PI/4;
-		return { x: x, z: z, angle: 3 * Math.PI / 4, base: HQ.baseAtIndex(territoryIndex) };
+		return { x: x, z: z, angle: 3 * Math.PI / 4, base: HQ.basesManager.baseAtIndex(territoryIndex) };
 	}
 
 	/** recompute the best dropsite location in case some conditions have changed */
 	private storehouseSpot(gameState: CommonGameState, baseId: BaseId): BuildingPosition | undefined
 	{
-		const base = requireValue(hqOf(gameState).getBaseByID(baseId));
+		const base = requireValue(hqOf(gameState).basesManager.getBaseByID(baseId));
 		const type = this.metadata && this.metadata.type ? this.metadata.type : "wood";
 		const newpos = base.findBestDropsiteLocation(gameState, type, this.template.templateName());
 		if (!newpos || !(newpos.quality > 0))
@@ -498,7 +498,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 			{
 				const j = cellIndex(placement, jIndex);
-				if (base !== undefined ? HQ.baseAtIndex(j) === base : HQ.baseAtIndex(j) !== 0)
+				if (base !== undefined ? HQ.basesManager.baseAtIndex(j) === base : HQ.basesManager.baseAtIndex(j) !== 0)
 				{
 					placement.set(j, 45);
 				}
@@ -543,7 +543,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 		{
 			const j = cellIndex(placement, jIndex);
-			if (base !== undefined ? HQ.baseAtIndex(j) !== base : HQ.baseAtIndex(j) === 0)
+			if (base !== undefined ? HQ.basesManager.baseAtIndex(j) !== base : HQ.basesManager.baseAtIndex(j) === 0)
 			{
 				placement.map[j] = 0;
 				continue;
@@ -560,7 +560,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			{
 				placement.map[j] = 0;
 			}
-			else if (base === undefined && favoredBase && HQ.baseAtIndex(j) === favoredBase)
+			else if (base === undefined && favoredBase && HQ.basesManager.baseAtIndex(j) === favoredBase)
 			{
 				placement.set(j, placement.map[j] + 100);
 			}

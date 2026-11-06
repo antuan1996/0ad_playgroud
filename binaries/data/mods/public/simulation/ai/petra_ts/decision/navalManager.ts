@@ -1280,7 +1280,7 @@ export class NavalManager
 
 	buildNavalStructures(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.hasPotentialBase())
+		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.basesManager.hasPotentialBase())
 		{
 			return;
 		}
@@ -1338,7 +1338,7 @@ export class NavalManager
 			return;
 		}
 		const wantedLand: Record<number, boolean> = {};
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of gameState.ai.HQ.basesManager.baseManagers)
 		{
 			if (base.anchor)
 			{
@@ -1353,7 +1353,7 @@ export class NavalManager
 	/** A dock for the first built base with a sea we can sail and no dock of ours on it */
 	private queueDock(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		for (const base of gameState.ai.HQ.baseManagers())
+		for (const base of gameState.ai.HQ.basesManager.baseManagers)
 		{
 			if (!base.anchor || base.constructing)
 			{

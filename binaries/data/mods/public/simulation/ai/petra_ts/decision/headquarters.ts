@@ -32,7 +32,6 @@ import { createTerritoryMap, type TerritoryMap } from "../world/mapModule.ts";
 import { ProductionLoad } from "../world/production.ts";
 import { ShipTraffic } from "../world/shipTraffic.ts";
 import { AttackManager } from "./attackManager.ts";
-import type { BaseManager } from "./baseManager.ts";
 import { BasesManager } from "./basesManager.ts";
 import { BuildManager } from "./buildManager.ts";
 import { DefenseManager } from "./defenseManager.ts";
@@ -1262,7 +1261,7 @@ export class Headquarters
 	): HeadquartersTrainableRequirement[]
 	{
 		const parameters = requirements.slice();
-		const remainingResources = this.getTotalResourceLevel(gameState); // resources (estimation) still gatherable in our territory
+		const remainingResources = this.basesManager.getTotalResourceLevel(gameState); // resources (estimation) still gatherable in our territory
 		const availableResources = gameState.ai.queueManager.getAvailableResources(gameState); // available (gathered) resources
 		for (const type in remainingResources)
 		{
@@ -1295,33 +1294,6 @@ export class Headquarters
 	}
 
 	/**
-	 * returns an entity collection of workers through BaseManager.pickBuilders
-	 * TODO: when same accessIndex, sort by distance
-	 */
-	bulkPickWorkers(gameState: CommonGameState, baseRef: BaseManager, number: number): CommonEntityCollection | false
-	{
-		return this.basesManager.bulkPickWorkers(gameState, baseRef, number);
-	}
-
-	getTotalResourceLevel(
-		gameState: CommonGameState,
-		resources?: string[],
-		proximity?: string[],
-	): Record<string, number>
-	{
-		return this.basesManager.getTotalResourceLevel(gameState, resources, proximity);
-	}
-
-	/**
-	 * Returns the current gather rate
-	 * This is not per-se exact, it performs a few adjustments ad-hoc to account for travel distance, stuffs like that.
-	 */
-	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>
-	{
-		return this.basesManager.GetCurrentGatherRates(gameState);
-	}
-
-	/**
 	 * Returns the wanted gather rate.
 	 */
 	GetWantedGatherRates(gameState: CommonGameState): Record<string, number>
@@ -1348,7 +1320,7 @@ export class Headquarters
 	): Array<{ type: string; wanted: number; current: number; }>
 	{
 		const wantedRates = this.GetWantedGatherRates(gameState);
-		const currentRates = this.GetCurrentGatherRates(gameState);
+		const currentRates = this.basesManager.GetCurrentGatherRates(gameState);
 		if (!allowedResources.length)
 		{
 			allowedResources = Resources.GetCodes();
@@ -1425,7 +1397,7 @@ export class Headquarters
 		const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
 
 		const indexIdx = gameState.ai.accessibility.landPassMap[bestIdx];
-		for (const base of this.baseManagers())
+		for (const base of this.basesManager.baseManagers)
 		{
 			if (!base.anchor || base.accessIndex === undefined || base.accessIndex === indexIdx)
 			{
@@ -1507,7 +1479,7 @@ export class Headquarters
 		{
 			return false;
 		}
-		const ourLands = new Set(this.baseManagers().map((base) => base.accessIndex));
+		const ourLands = new Set(this.basesManager.baseManagers.map((base) => base.accessIndex));
 		for (const centre of gameState.getEnemyStructures().filter(filters.byClass("CivCentre")).values())
 		{
 			if (centre.owner() !== GAIA && ourLands.has(getLandAccess(gameState, centre)))
@@ -1637,7 +1609,7 @@ export class Headquarters
 		}
 		if (
 			enemies.some((enemy) => enemy.hasClass("Structure")) &&
-			!this.baseManagers().some((base) => base.accessIndex === land && base.anchor)
+			!this.basesManager.baseManagers.some((base) => base.accessIndex === land && base.anchor)
 		)
 		{
 			return true;
@@ -1788,7 +1760,8 @@ export class Headquarters
 	landRunDry(gameState: CommonGameState): boolean
 	{
 		return (!!this.saveResources || this.geography.navalMap) &&
-			this.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood < DRY_WOOD;
+			this.basesManager.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood <
+				DRY_WOOD;
 	}
 
 	/** Build a farmstead */
@@ -2061,7 +2034,7 @@ export class Headquarters
 			return;
 		}
 		// First build one cc if all have been destroyed
-		if (!this.hasPotentialBase())
+		if (!this.basesManager.hasPotentialBase())
 		{
 			buildFirstBase(this, gameState);
 			return;
@@ -2080,7 +2053,7 @@ export class Headquarters
 			return;
 		}
 		// Finally expand if we have lots of units (threshold depending on the aggressivity value)
-		const activeBases = this.numActiveBases();
+		const activeBases = this.basesManager.numActiveBases();
 		const numUnits = gameState.getOwnUnits().length;
 		const numvar = 10 * (1 - this.Config.personality.aggressive);
 		if (
@@ -2101,7 +2074,7 @@ export class Headquarters
 	{
 		const phaseName2 = gameState.getPhaseName(2);
 		if (
-			this.hasPotentialBase() && this.currentPhase === 1 &&
+			this.basesManager.hasPotentialBase() && this.currentPhase === 1 &&
 			(phaseName2 === undefined || !gameState.isResearching(phaseName2))
 		)
 		{
@@ -2224,7 +2197,7 @@ export class Headquarters
 			(!numFortresses ||
 				gameState.ai.elapsedTime >
 					(1 + 0.10 * numFortresses) * this.fortressLapseTime + this.fortressStartTime) &&
-			numFortresses < this.numActiveBases() + 1 + this.extraFortresses &&
+			numFortresses < this.basesManager.numActiveBases() + 1 + this.extraFortresses &&
 			numFortresses < Math.floor(gameState.getPopulation() / 25) &&
 			gameState.getOwnFoundationsByClass("Fortress").length < 2
 		)
@@ -2277,7 +2250,7 @@ export class Headquarters
 		const towerLapseTime = this.saveResources ? (1 + numTowers) * this.towerLapseTime : this.towerLapseTime;
 		if (
 			(!numTowers || gameState.ai.elapsedTime > (1 + 0.1 * numTowers) * towerLapseTime + this.towerStartTime) &&
-			numTowers < 2 * this.numActiveBases() + 3 + this.extraTowers &&
+			numTowers < 2 * this.basesManager.numActiveBases() + 3 + this.extraTowers &&
 			numTowers < Math.floor(gameState.getPopulation() / 8) &&
 			gameState.getOwnFoundationsByClass("Tower").length < 3
 		)
@@ -2287,7 +2260,7 @@ export class Headquarters
 				return;
 			}
 			this.towerStartTime = gameState.ai.elapsedTime;
-			if (numTowers > 2 * this.numActiveBases() + 3)
+			if (numTowers > 2 * this.basesManager.numActiveBases() + 3)
 			{
 				gameState.ai.queueManager.changePriority(
 					"defenseBuilding",
@@ -2651,7 +2624,7 @@ export class Headquarters
 		{
 			const access = gameState.ai.accessibility.getAccessValue(pos);
 			// check nearest base anchor
-			for (const base of this.baseManagers())
+			for (const base of this.basesManager.baseManagers)
 			{
 				if (!base.anchor)
 				{
@@ -2742,7 +2715,7 @@ export class Headquarters
 			return false;
 		}
 
-		if (!this.hasActiveBase())
+		if (!this.basesManager.hasActiveBase())
 		{
 			// if no base, check that we can build outside our territory
 			const buildTerritories = template.buildTerritories();
@@ -2924,40 +2897,6 @@ export class Headquarters
 		}
 	}
 
-	/**
-	 * returns the base corresponding to baseID
-	 */
-	getBaseByID(baseID: BaseId): BaseManager | undefined
-	{
-		return this.basesManager.getBaseByID(baseID);
-	}
-
-	/**
-	 * returns the number of bases with a cc
-	 * ActiveBases includes only those with a built cc
-	 * PotentialBases includes also those with a cc in construction
-	 */
-	numActiveBases(): number
-	{
-		return this.basesManager.numActiveBases();
-	}
-
-	hasActiveBase(): boolean
-	{
-		return this.basesManager.hasActiveBase();
-	}
-
-	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	numPotentialBases(): number
-	{
-		return this.basesManager.numPotentialBases();
-	}
-
-	hasPotentialBase(): boolean
-	{
-		return this.basesManager.hasPotentialBase();
-	}
-
 	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean
 	{
 		return this.isNearInvadingArmy(pos) || this.isUnderEnemyFire(gameState, pos, radius);
@@ -3116,20 +3055,6 @@ export class Headquarters
 		return this.turnCache.accountedWorkers;
 	}
 
-	baseManagers(): BaseManager[]
-	{
-		return this.basesManager.baseManagers;
-	}
-
-	/**
-	 * @param {number} territoryIndex - The index to get the map for.
-	 * @return {number} - The ID of the base at the given territory index.
-	 */
-	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId
-	{
-		return this.basesManager.baseAtIndex(territoryIndex);
-	}
-
 	/**
 	 * Some functions are run every turn
 	 * Others once in a while
@@ -3152,7 +3077,7 @@ export class Headquarters
 			this.researchManager.checkPhase(gameState, queues);
 		}
 
-		if (this.hasActiveBase())
+		if (this.basesManager.hasActiveBase())
 		{
 			this.updateTown(gameState, queues);
 		}
@@ -3177,7 +3102,7 @@ export class Headquarters
 		profiled("HQ bases", () => this.basesManager.update(gameState, queues, events));
 		profiled("HQ naval", () => this.navalManager.update(gameState, queues, events));
 
-		if (this.Config.difficulty > difficulty.SANDBOX && (this.hasActiveBase() || !this.canBuildUnits))
+		if (this.Config.difficulty > difficulty.SANDBOX && (this.basesManager.hasActiveBase() || !this.canBuildUnits))
 		{
 			profiled("HQ attacks", () => this.attackManager.update(gameState, queues, events));
 		}
@@ -3273,7 +3198,10 @@ export class Headquarters
 	/** New bases, the markets, the forge, the temple and the wonder */
 	private updateBuildings(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
-		if (!this.hasPotentialBase() || this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1)
+		if (
+			!this.basesManager.hasPotentialBase() ||
+			this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1
+		)
 		{
 			profiled("HQ checkBaseExpansion", () => this.checkBaseExpansion(gameState, queues));
 		}

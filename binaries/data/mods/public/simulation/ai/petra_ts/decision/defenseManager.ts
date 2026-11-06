@@ -753,7 +753,7 @@ export class DefenseManager
 			}
 		}
 
-		if (i === 0 && this.armies.length <= 1 && gameState.ai.HQ.hasActiveBase())
+		if (i === 0 && this.armies.length <= 1 && gameState.ai.HQ.basesManager.hasActiveBase())
 		{
 			this.captureGaiaStructures(gameState);
 		}
@@ -1275,9 +1275,9 @@ export class DefenseManager
 	private isIndefensible(gameState: CommonGameState, target: CommonPlacedEntity): boolean
 	{
 		const baseId = target.getMetadata(PlayerID, "base");
-		const base = baseId === undefined ? undefined : gameState.ai.HQ.getBaseByID(baseId);
+		const base = baseId === undefined ? undefined : gameState.ai.HQ.basesManager.getBaseByID(baseId);
 		return this.geography.territoryMap.isBlinking(target.position()) && !gameState.ai.HQ.isDefendable(target) ||
-			!base || gameState.ai.HQ.baseManagers().every((b: BaseManager): boolean =>
+			!base || gameState.ai.HQ.basesManager.baseManagers.every((b: BaseManager): boolean =>
 				!b.anchor || b.accessIndex !== base.accessIndex
 			);
 	}

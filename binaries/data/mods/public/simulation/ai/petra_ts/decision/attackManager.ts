@@ -692,7 +692,7 @@ export class AttackManager
 			if (
 				barracksNb >= 1 &&
 					(gameState.currentPhase() > 1 || (phase2 !== undefined && gameState.isResearching(phase2))) ||
-				!gameState.ai.HQ.hasPotentialBase()
+				!gameState.ai.HQ.basesManager.hasPotentialBase()
 			)
 			{ // if we have no base ... nothing else to do than attack
 				this.createMainAttack(gameState);
