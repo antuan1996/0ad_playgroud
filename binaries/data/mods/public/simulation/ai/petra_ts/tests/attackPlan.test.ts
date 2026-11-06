@@ -550,7 +550,7 @@ describe("queues, queries and build orders", () =>
 		assert.equal(emptied.length, 3, "the queues were emptied");
 
 		const prepared = prepOf(plan);
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		plan.addBuildOrder(world.gameState, "Siege3", stat, true);
 		assert.equal(plan.preparation(), undefined, "a started plan trains no more");
 		assert.equal(prepared.buildOrders.length, 5, "it takes no new orders");
@@ -645,7 +645,7 @@ describe("siege units", () =>
 		prepOf(plan).siegeState = 2;
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "already added");
 		prepOf(plan).siegeState = 0;
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		assert.equal(plan.addSiegeUnits(world.gameState), false, "or already started");
 	});
 });
@@ -2460,7 +2460,7 @@ describe("walks and transports during execution", () =>
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		const path = [worldPos(11, 12), worldPos(20, 20), worldPos(30, 118)];
-		plan.stage = { state: "walking", path };
+		plan.stage = { state: "walking", target: plan.stage.target, path };
 		plan.targetPos = worldPos(30, 120); // far enough to keep marching
 		plan.lastPosition = worldPos(50, 50);
 
@@ -2488,7 +2488,7 @@ describe("walks and transports during execution", () =>
 		);
 		const destroyed: number[] = [];
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(12, 12)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(12, 12)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.position5TurnsAgo = worldPos(11, 12);
 		world.ai.playedTurn = 5;
@@ -2519,7 +2519,7 @@ describe("walks and transports during execution", () =>
 			}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(11, 12), worldPos(20, 20)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 
@@ -2543,7 +2543,7 @@ describe("walks and transports during execution", () =>
 			}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(11, 12), worldPos(20, 20)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 
@@ -2562,7 +2562,7 @@ describe("walks and transports during execution", () =>
 			makeEntity({ id: 3000, owner: ENEMY, position: [15, 15], classes: ["Unit", "Melee"] }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(30, 120)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(30, 120)] };
 		plan.targetPos = worldPos(30, 120);
 		// walking, the plan has the way StartAttack made it
 		plan.lastPosition = worldPos(50, 50);
@@ -2685,7 +2685,7 @@ describe("chasing a target during execution", () =>
 			makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 
 		const events = emptyEvents();
 		events.EntityRenamed.push({ entity: entityId(2005), newentity: entityId(2501) });
@@ -2804,7 +2804,7 @@ describe("wrapping up a plan", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(5, 5);
 		const soldier = world.addEntity(
@@ -2867,7 +2867,7 @@ describe("wrapping up a plan", () =>
 		const world = makeWorld();
 		override(world.bases[0].anchor!, { obstructionRadius: () => ({ min: 15, max: 21.2 }) });
 		const plan = makePlan(world, { name: 1 });
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
 		const soldier = world.addEntity(
@@ -2897,7 +2897,7 @@ describe("wrapping up a plan", () =>
 		const world = makeWorld();
 		world.bases.length = 0;
 		const plan = makePlan(world, { name: 1 });
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		plan.position = worldPos(18, 18);
 		plan.rallyPoint = worldPos(60, 60);
 		const soldier = world.addEntity(
@@ -2981,7 +2981,7 @@ describe("wrapping up a plan", () =>
 			makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(10, 10), worldPos(30, 40)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(10, 10), worldPos(30, 40)] };
 		plan.position = worldPos(11, 12);
 		plan.overseas = 0;
 
@@ -3018,8 +3018,7 @@ describe("wrapping up a plan", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.stage = { state: "walking", path: [worldPos(10, 10), worldPos(30, 40)] };
-		plan.path = [worldPos(10, 10), worldPos(30, 40)];
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(10, 10), worldPos(30, 40)] };
 		// set off: its queues left the queue manager
 		plan.removeQueues(world.gameState);
 		const data = plan.Serialize();
@@ -3405,7 +3404,7 @@ describe("attacking miscellany", () =>
 			),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(30, 40)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(30, 40)] };
 		plan.targetPos = worldPos(30, 40);
 		// walking, the plan has the way StartAttack made it
 		resetRecorder();
@@ -3427,7 +3426,7 @@ describe("attacking miscellany", () =>
 			),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(30, 40)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(30, 40)] };
 		plan.targetPos = worldPos(100, 100);
 		resetRecorder();
 
@@ -4340,7 +4339,7 @@ describe("when walls and orders scatter the plan", () =>
 			}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(11, 12), worldPos(20, 20)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 		resetRecorder();
@@ -4361,7 +4360,7 @@ describe("when walls and orders scatter the plan", () =>
 			}, { plan: 1 }),
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(11, 12), worldPos(20, 20)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
 		plan.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 		resetRecorder();
@@ -5375,7 +5374,7 @@ describe("second pass: the army at work", () =>
 			);
 		}
 		const plan = makePlan(world, { name: 1, data: { target } });
-		plan.stage = { state: "walking", path: [worldPos(12, 12)] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(12, 12)] };
 		plan.lastPosition = worldPos(12, 12);
 		plan.position5TurnsAgo = worldPos(12, 12);
 		world.ai.playedTurn = 5;
@@ -5418,7 +5417,7 @@ describe("second pass: targets, withdrawal and events", () =>
 	{
 		const world = makeWorld();
 		const plan = makePlan(world, { name: 1 });
-		plan.stage = { state: "walking", path: [] };
+		plan.stage = { state: "walking", target: plan.stage.target, path: [] };
 		plan.position = worldPos(100, 100);
 		plan.rallyPoint = worldPos(5, 5);
 		world.bases.push({ ID: 2, anchor: undefined, accessIndex: 2 });
