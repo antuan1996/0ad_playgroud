@@ -367,7 +367,7 @@ describe("QueueManager", () =>
 		// a game's minute 7: 424 food, of which the soldiers hold 117 of their
 		// 150, the women 105 of theirs, the techs 182 of their 200; 20 unbooked
 		const gameState = worldWithResources({ food: 424 });
-		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.ai.HQ = fake<Headquarters>({ basesManager: { hasPotentialBase: () => true } });
 		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
 		let started = "";
 		const plan = (type: string, cost: number): PetraRuntime.ConcretePlan =>
@@ -401,7 +401,7 @@ describe("QueueManager", () =>
 	it("pays the women before the soldiers when the food covers one of them", () =>
 	{
 		const gameState = worldWithResources({ food: 150 });
-		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.ai.HQ = fake<Headquarters>({ basesManager: { hasPotentialBase: () => true } });
 		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
 		let started = "";
 		const manager = makeManager(makeConfig(), {
@@ -849,7 +849,7 @@ describe("QueueManager", () =>
 	it("runs one full turn: fund, then start what the money bought", () =>
 	{
 		const gameState = worldWithResources({ food: 300 });
-		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.ai.HQ = fake<Headquarters>({ basesManager: { hasPotentialBase: () => true } });
 		gameState.ai.elapsedTime = seconds(20);
 		gameState.countOwnEntitiesAndQueuedWithRole = (role: string) => role === "worker" ? 100 : 0;
 
@@ -874,7 +874,7 @@ describe("QueueManager", () =>
 	it("repairs a zero priority and asks for a report", () =>
 	{
 		const gameState = worldWithResources();
-		gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true });
+		gameState.ai.HQ = fake<Headquarters>({ basesManager: { hasPotentialBase: () => true } });
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
 		const logged = logs.length;
 		const manager = makeManager(makeConfig({ priorities: { militaryBuilding: 0 } }));
@@ -894,9 +894,8 @@ describe("QueueManager", () =>
 		override(gameState, { getPopulation: () => 42 });
 		override(gameState, { getOwnUnits: () => [] });
 		gameState.ai.HQ = fake<Headquarters>({
-			hasPotentialBase: () => true,
+			basesManager: { hasPotentialBase: () => true, GetCurrentGatherRates: () => ({}) },
 			GetWantedGatherRates: () => ({}),
-			GetCurrentGatherRates: () => ({}),
 			pickMostNeededResources: () => [],
 		});
 		gameState.ai.elapsedTime = seconds(20);
@@ -1089,8 +1088,8 @@ describe("QueueManager", () =>
 			}],
 		});
 		gameState.ai.HQ = fake<Headquarters>({
+			basesManager: { GetCurrentGatherRates: () => ({ food: 0.5 }) },
 			GetWantedGatherRates: () => ({ food: 1 }),
-			GetCurrentGatherRates: () => ({ food: 0.5 }),
 			pickMostNeededResources: () => ["food"],
 		});
 		// the other queues are momentarily empty: they still show in the overview
@@ -1214,14 +1213,14 @@ describe("QueueManager", () =>
 		{
 			const { gameState } = makeFakeGameState(stateOptions);
 			override(gameState, { getResources: () => new ResourcesManager({}) });
-			gameState.ai.HQ = fake<Headquarters>({ hasPotentialBase: () => true, ...hq });
+			gameState.ai.HQ = fake<Headquarters>({ basesManager: { hasPotentialBase: () => true }, ...hq });
 			gameState.countOwnEntitiesAndQueuedWithRole = () => numWorkers;
 			return gameState;
 		}
 
 		it("pauses everything but the dock and the civil centre when baseless", () =>
 		{
-			const gameState = workerWorld(100, { hasPotentialBase: () => false });
+			const gameState = workerWorld(100, { basesManager: { hasPotentialBase: () => false } });
 			const manager = makeManager(makeConfig(), {
 				dock: [],
 				civilCentre: [],

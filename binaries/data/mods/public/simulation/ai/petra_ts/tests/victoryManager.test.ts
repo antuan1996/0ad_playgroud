@@ -151,7 +151,7 @@ describe("a wonder game: the wonder's builders and guards", () =>
 		const { world, hq, manager } = seat(["wonder"]);
 		const helpers = [unit(world, 800, ["Worker"]).ent, unit(world, 801, ["Worker"]).ent];
 		const asked: unknown[] = [];
-		override(hq, {
+		override(hq.basesManager, {
 			bulkPickWorkers: (_gs: unknown, base: { ID: number; }, number: number) =>
 			{
 				asked.push([base.ID, number]);

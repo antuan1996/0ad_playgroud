@@ -178,7 +178,7 @@ describe("a batch of units: TrainingPlan", () =>
 	it("prefers a building on the wanted land, and for workers the town with fewer of them", () =>
 	{
 		const { world, hq } = seat();
-		const town = hq.baseManagers()[0];
+		const town = hq.basesManager.baseManagers[0];
 		// a second town on another land
 		const islandCC = world.addEntity(
 			makeHqEntity(

@@ -409,6 +409,12 @@ export function makeWorld(options: WorldOptions = {}): World
 		findBestTrainableUnit: () => knobs.bestTrainable,
 		capturableTargets: new Map(),
 		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
+		basesManager: {
+			baseManagers: bases,
+			getBaseByID: (id: number) => bases.find((b) => b.ID === id),
+			hasPotentialBase: () => knobs.hasPotentialBase,
+			hasActiveBase: () => true,
+		},
 		isDefendable: () => false,
 		hasActiveBase: () => true,
 		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>

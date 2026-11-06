@@ -42,7 +42,7 @@ function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<H
 	const hq = seatHQ(world, { stubs: doorManagers, ...seatOptions });
 	// the game books the towns' ground before any plan is made (gameAnalysis)
 	hq.updateTerritories(world.gameState);
-	return { world, hq, bs: hq.basesManager, base: hq.baseManagers()[0] };
+	return { world, hq, bs: hq.basesManager, base: hq.basesManager.baseManagers[0] };
 }
 
 /** a worker of ours, on a base's payroll with the given metadata */
@@ -204,13 +204,13 @@ describe("a city's grounds: what the board starts with and how grounds are reuse
 			foundation(world, undefined, 4011, [200, 100], ["Dock"], { resourceDropsiteTypes: () => ["food"] }),
 			BaseManager.STATE_ANCHORLESS,
 		);
-		const count = hq.baseManagers().length;
+		const count = hq.basesManager.baseManagers.length;
 
 		const second = foundation(world, undefined, 4012, [220, 110], ["Dock"]);
 		const reused = hq.basesManager.createBase(world.gameState, second, BaseManager.STATE_ANCHORLESS);
 
 		assert.equal(reused, island, "the island's ground is reused for the second dock");
-		assert.equal(hq.baseManagers().length, count, "no founding run for the second dock");
+		assert.equal(hq.basesManager.baseManagers.length, count, "no founding run for the second dock");
 		assert.equal(second.getMetadata(PLAYER, "base"), island.ID, "the new dock answers to the island");
 		assert.equal(island.accessIndex, 3, "the island ground answers to the island's landmass");
 		void base;
@@ -242,7 +242,7 @@ describe("a building lost: the turn of the destruction events", () =>
 	it("a centre lost to a sally removes the ground's anchor and the ground stops asking for a garrison", () =>
 	{
 		const { world, base, bs, hq } = seat();
-		assert.equal(hq.numActiveBases(), 1);
+		assert.equal(hq.basesManager.numActiveBases(), 1);
 
 		bs.checkEvents(
 			world.gameState,
@@ -255,7 +255,7 @@ describe("a building lost: the turn of the destruction events", () =>
 		);
 
 		assert.equal(base.anchor, undefined);
-		assert.equal(hq.numActiveBases(), 0, "the town is no longer an active ground");
+		assert.equal(hq.basesManager.numActiveBases(), 0, "the town is no longer an active ground");
 	});
 
 	// only the port passes: the original calls newbase.reset(type) for the
@@ -445,7 +445,7 @@ describe("a foundation raised: the turn of the Create events", () =>
 
 		bs.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(4429) }] }));
 
-		const islandBase = hq.baseManagers()[1];
+		const islandBase = hq.basesManager.baseManagers[1];
 		assert.equal(
 			rising.getMetadata(PLAYER, "base"),
 			islandBase.ID,
@@ -569,7 +569,7 @@ describe("a town changing hands: the turn of the OwnershipChanged events", () =>
 		);
 
 		assert.equal(base.anchor, undefined);
-		assert.equal(hq.numActiveBases(), 0, "the captured centre is no ground of ours any more");
+		assert.equal(hq.basesManager.numActiveBases(), 0, "the captured centre is no ground of ours any more");
 	});
 
 	it("a centre taken from the enemy is founded as a new ground, and the office is told", () =>
@@ -934,7 +934,7 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 			classes: ["Structure", "Dock"],
 			dropsiteTypes: ["food"],
 		});
-		const before = hq.baseManagers().length;
+		const before = hq.basesManager.baseManagers.length;
 		const port = world.addEntity(
 			makeHqEntity({
 				id: 4961,
@@ -948,8 +948,8 @@ describe("a body placed by the opening plan: the starting-strategy placing", () 
 
 		bs.assignEntity(world.gameState, port, territoryCellAt([240, 240]));
 
-		assert.equal(hq.baseManagers().length, before + 1, "the island port gets its own ground");
-		assert.equal(port.getMetadata(PLAYER, "base"), hq.baseManagers()[before].ID);
+		assert.equal(hq.basesManager.baseManagers.length, before + 1, "the island port gets its own ground");
+		assert.equal(port.getMetadata(PLAYER, "base"), hq.basesManager.baseManagers[before].ID);
 	});
 
 	it("a worker placed in our own ground is put to work at once", () =>

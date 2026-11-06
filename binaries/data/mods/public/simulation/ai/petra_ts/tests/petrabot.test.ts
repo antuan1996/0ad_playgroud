@@ -106,7 +106,7 @@ describe("the bot at game start", () =>
 		assert.ok(bot.Config.personality.aggressive > 0.7);
 		assert.deepEqual(Object.keys(bot.queues).sort(), Object.keys(bot.Config.priorities).sort());
 		// the town's civil centre is its first base
-		assert.equal(requireValue(bot.HQ).baseManagers().length, 1);
+		assert.equal(requireValue(bot.HQ).basesManager.baseManagers.length, 1);
 		// the difficulty's AI bonus is applied once
 		assert.equal(modifiers.length, 1);
 	});
@@ -256,7 +256,11 @@ describe("saving and loading", () =>
 
 		loaded.Init(PLAYER, g.shared);
 		assert.equal(loaded.isDeserialized, false, "it plays as in a new game");
-		assert.equal(requireValue(loaded.HQ).baseManagers().length, 1, "with the town's centre as its first base");
+		assert.equal(
+			requireValue(loaded.HQ).basesManager.baseManagers.length,
+			1,
+			"with the town's centre as its first base",
+		);
 	});
 
 	it("saving the loaded bot again, before anything happened, gives the same game", () =>

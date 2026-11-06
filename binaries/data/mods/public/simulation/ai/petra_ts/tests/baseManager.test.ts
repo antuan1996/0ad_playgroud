@@ -46,7 +46,7 @@ function seat(worldOptions: Partial<HqWorldOptions> = {}, seatOptions: Partial<H
 	const hq = seatHQ(world, { stubs: doorManagers, ...seatOptions });
 	// the game books the town's ground before any plan is made (gameAnalysis)
 	hq.updateTerritories(world.gameState);
-	const base = hq.baseManagers()[0];
+	const base = hq.basesManager.baseManagers[0];
 	return { world, hq, base };
 }
 
@@ -131,14 +131,14 @@ describe("the town's ground: how its base is founded, kept and lost", () =>
 	it("a centre lost to a raid leaves the ground without an anchor and without an active count", () =>
 	{
 		const { world, hq, base } = seat();
-		assert.equal(hq.numActiveBases(), 1, "the seated centre makes the town one active base");
+		assert.equal(hq.basesManager.numActiveBases(), 1, "the seated centre makes the town one active base");
 
 		base.anchorLost(world.gameState);
 
 		assert.equal(base.anchor, undefined);
 		assert.equal(base.anchorId, undefined);
 		assert.equal(base.neededDefenders, 0, "a ground with no centre has no garrison to ask for");
-		assert.equal(hq.numActiveBases(), 0, "the town no longer counts as an active base");
+		assert.equal(hq.basesManager.numActiveBases(), 0, "the town no longer counts as an active base");
 	});
 });
 
@@ -1898,7 +1898,7 @@ describe("the turn of a town: workers out of a base, and a town whose centre fel
 		// the centre is destroyed: it leaves the world, and the base loses its anchor
 		world.removeEntity(1000);
 		base.anchorLost(world.gameState);
-		assert.equal(hq.numActiveBases(), 0);
+		assert.equal(hq.basesManager.numActiveBases(), 0);
 
 		const active = base.update(world.gameState, world.ai.queues, emptyEvents());
 

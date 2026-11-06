@@ -415,7 +415,7 @@ describe("game start: what the first turn books", () =>
 		gameAnalysis(hq, world.gameState);
 
 		assert.equal(hq.canBuildUnits, true);
-		assert.equal(hq.baseManagers().length, 1);
+		assert.equal(hq.basesManager.baseManagers.length, 1);
 		assert.equal(hq.firstBaseConfig, true);
 		// the land is 20000 cells of 4 square map units: a big start, no field cap
 		assert.equal(hq.maxFields, false);

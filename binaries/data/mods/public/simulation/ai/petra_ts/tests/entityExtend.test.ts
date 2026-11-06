@@ -341,8 +341,7 @@ describe("getBestBase (decision/baseManager.ts): the base an entity belongs to",
 		const baseless: FakeBase = { ID: 0, anchor: undefined, accessIndex: 0, buildings: collectionOf(world, []) };
 		const all = [baseless, ...bases];
 		const hq = world.ai.HQ as unknown as Record<string, unknown>;
-		hq.baseManagers = () => all;
-		hq.basesManager = { baselessBase: () => baseless };
+		hq.basesManager = { baseManagers: all, baselessBase: () => baseless };
 		return baseless;
 	}
 	function anchor(world: World, id: number, position: [number, number], foundation = false): CommonEntity

@@ -1158,7 +1158,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0].type, "structures/athen/storehouse");
 		// it belongs to the first base
-		assert.deepEqual(plans[0].metadata, { base: hq.baseManagers()[0].ID });
+		assert.deepEqual(plans[0].metadata, { base: hq.basesManager.baseManagers[0].ID });
 		// not our starting position: the depot sits by the trees, not at the cc
 		assert.ok(plans[0] instanceof ConstructionPlan);
 		assert.notDeepEqual(plans[0].position, [10, 10]);
@@ -3016,7 +3016,7 @@ describe("a dry town on a naval map", () =>
 			const { world, hq } = seat({ territoryOwner: () => PLAYER });
 			hq.saveResources = false;
 			hq.geography.navalMap = naval;
-			override(hq, { getTotalResourceLevel: () => ({ wood: DRY_WOOD - 1 }) });
+			override(hq.basesManager, { getTotalResourceLevel: () => ({ wood: DRY_WOOD - 1 }) });
 			world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
 				classes: ["Structure", "Trade", "Town", "Market"],
 			});
@@ -3037,7 +3037,7 @@ describe("a town whose land ran dry", () =>
 	{
 		const { world, hq } = seat({ territoryOwner: () => PLAYER });
 		hq.geography.navalMap = true;
-		override(hq, { getTotalResourceLevel: () => ({ wood: dry ? DRY_WOOD - 1 : DRY_WOOD + 1 }) });
+		override(hq.basesManager, { getTotalResourceLevel: () => ({ wood: dry ? DRY_WOOD - 1 : DRY_WOOD + 1 }) });
 		for (let i = 0; i < workers; ++i)
 		{
 			world.addEntity(
@@ -3087,7 +3087,7 @@ describe("a town whose land ran dry", () =>
 		override(world.ai.queues.civilCentre, { hasQueuedUnits: () => true });
 		hq.provideForDryLand(world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), raised, "queued on dry land");
-		override(hq, { getTotalResourceLevel: () => ({ wood: DRY_WOOD + 1 }) });
+		override(hq.basesManager, { getTotalResourceLevel: () => ({ wood: DRY_WOOD + 1 }) });
 		hq.provideForDryLand(world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "wood again");
 	});
@@ -3314,7 +3314,7 @@ describe("canBuild: which stones the office will book", () =>
 		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined; }).foundationProgress = () => 0;
 		hq.basesManager.resetBaseCache();
 
-		assert.equal(hq.hasActiveBase(), false);
+		assert.equal(hq.basesManager.hasActiveBase(), false);
 		assert.equal(hq.canBuild(world.gameState, "structures/{civ}/house"), false);
 		assert.deepEqual(
 			hq.buildManager.unbuildables.get("structures/athen/house"),
@@ -3332,7 +3332,7 @@ describe("canBuild: which stones the office will book", () =>
 		(world.ents.get(1000) as unknown as { foundationProgress(): number | undefined; }).foundationProgress = () => 0;
 		hq.basesManager.resetBaseCache();
 
-		assert.equal(hq.hasActiveBase(), false);
+		assert.equal(hq.basesManager.hasActiveBase(), false);
 		assert.equal(
 			hq.canBuild(world.gameState, "structures/{civ}/civil_centre"),
 			true,
@@ -3477,7 +3477,7 @@ describe("trainEmergencyUnits: the last call for the wall", () =>
 		} = {},
 	)
 	{
-		const anchor = requireValue(hq.baseManagers()[0].anchor);
+		const anchor = requireValue(hq.basesManager.baseManagers[0].anchor);
 		override(anchor, {
 			trainableEntities: () => options.trainables ?? [],
 			trainingQueue: () => options.queue ?? false,
@@ -4797,7 +4797,7 @@ describe("the stock of gatherable resources: getTotalResourceLevel", () =>
 		};
 		base.dropsiteSupplies.wood = { nearby: [{ id: 2 }], medium: [{ id: 2 }, { id: 3 }], faraway: [] };
 
-		const total = hq.getTotalResourceLevel(world.gameState);
+		const total = hq.basesManager.getTotalResourceLevel(world.gameState);
 
 		assert.equal(total.wood, 500, "the near tree and the medium tree, each once");
 		assert.equal(total.food, 0, "a resource with no supply on the books reads zero");
@@ -4817,7 +4817,7 @@ describe("the stock of gatherable resources: getTotalResourceLevel", () =>
 		};
 		base.dropsiteSupplies.wood = { nearby: [{ id: 2 }], medium: [{ id: 2 }, { id: 3 }], faraway: [] };
 
-		const total = hq.getTotalResourceLevel(world.gameState, ["wood"], ["nearby"]);
+		const total = hq.basesManager.getTotalResourceLevel(world.gameState, ["wood"], ["nearby"]);
 
 		assert.equal(total.wood, 300, "only the tree within the nearby band counts");
 	});
@@ -5377,7 +5377,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		});
 		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 		// the quota is two towers per base, three more, and the difficulty's extras
-		const quota = 2 * hq.numActiveBases() + 3 + hq.extraTowers;
+		const quota = 2 * hq.basesManager.numActiveBases() + 3 + hq.extraTowers;
 		for (let i = 0; i < quota; ++i)
 		{
 			standing(world, 2710 + i, ["Structure", "StoneTower", "Defensive", "Tower"], TOWER, [30 + 4 * i, 30]);
@@ -5763,7 +5763,7 @@ describe("the temple, the market and the farmstead", () =>
 			const { world, hq } = seat({ stock: { food: 100, wood: 1800, stone: 3000, metal: 3000 } });
 			world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 			hq.saveResources = saving ? true : undefined;
-			hq.getTotalResourceLevel = () => ({ wood: woodLeft });
+			hq.basesManager.getTotalResourceLevel = () => ({ wood: woodLeft });
 			hq.buildEarlyMarket(world.gameState, world.ai.queues);
 			return { world, hq };
 		};
@@ -5795,7 +5795,7 @@ describe("the temple, the market and the farmstead", () =>
 		const { world, hq } = seat({ stock: { food: 600, wood: 600 } });
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		hq.saveResources = true;
-		hq.getTotalResourceLevel = () => ({ wood: 0 });
+		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		const queueManager = world.ai.queueManager;
 		hq.buildEarlyMarket(world.gameState, world.ai.queues);
 
@@ -5815,7 +5815,7 @@ describe("the temple, the market and the farmstead", () =>
 		const { world, hq } = seat();
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		hq.saveResources = true;
-		hq.getTotalResourceLevel = () => ({ wood: 0 });
+		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		hq.buildEarlyMarket(world.gameState, world.ai.queues);
 		hq.buildEarlyMarket(world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "queued once");
@@ -5823,7 +5823,7 @@ describe("the temple, the market and the farmstead", () =>
 		const standing = seat();
 		standing.world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		standing.hq.saveResources = true;
-		standing.hq.getTotalResourceLevel = () => ({ wood: 0 });
+		standing.hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		standing.world.addEntity(
 			makeHqEntity({
 				id: 2900,
@@ -6264,16 +6264,16 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 	it("a base is found by its own number, and an unknown number finds none", () =>
 	{
 		const { hq } = seat();
-		const base = hq.baseManagers()[0];
+		const base = hq.basesManager.baseManagers[0];
 
-		assert.equal(hq.getBaseByID(base.ID), base);
-		assert.equal(hq.getBaseByID(baseId(999)), undefined);
+		assert.equal(hq.basesManager.getBaseByID(base.ID), base);
+		assert.equal(hq.basesManager.getBaseByID(baseId(999)), undefined);
 	});
 
 	it("after a reload, the bases' territory map is rebuilt from the bases' own ground", () =>
 	{
 		const { world, hq } = seat();
-		const base = hq.baseManagers()[0];
+		const base = hq.basesManager.baseManagers[0];
 		const reloaded = new BasesManager(hq.Config, world.gameState, hq.basesManager.Serialize());
 
 		for (const j of base.territoryIndices)
@@ -6349,9 +6349,9 @@ describe("the last rarely-read answers: potential bases, far allies, round marke
 			0.5;
 		hq.basesManager.resetBaseCache();
 
-		assert.equal(hq.numActiveBases(), 0, "no built centre yet");
-		assert.equal(hq.numPotentialBases(), 1, "the centre in the works still holds the ground");
-		assert.equal(hq.hasPotentialBase(), true);
+		assert.equal(hq.basesManager.numActiveBases(), 0, "no built centre yet");
+		assert.equal(hq.basesManager.numPotentialBases(), 1, "the centre in the works still holds the ground");
+		assert.equal(hq.basesManager.hasPotentialBase(), true);
 	});
 
 	it("a third allied town farther than the other two is weighed as the far one", () =>

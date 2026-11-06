@@ -517,7 +517,7 @@ describe("what traders carry and what the market barters", () =>
 	it("trading goods favour the scarce resources and the most needed, and more traders are wanted", () =>
 	{
 		const { world, hq, manager } = seat();
-		hq.getTotalResourceLevel = () => ({ food: 5000, wood: 100, stone: 300, metal: 2000 });
+		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 100, stone: 300, metal: 2000 });
 		hq.GetWantedGatherRates = () => ({ food: 10, wood: 30, stone: 0, metal: 0 });
 		hq.pickMostNeededResources =
 			() => [{ type: "wood", wanted: 30, current: 0 }, { type: "food", wanted: 10, current: 0 }];
@@ -536,7 +536,7 @@ describe("what traders carry and what the market barters", () =>
 	it("when only one resource is wanted, it takes all that is left", () =>
 	{
 		const { world, hq, manager } = seat();
-		hq.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
+		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
 		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
 		hq.pickMostNeededResources =
 			() => [{ type: "metal", wanted: 10, current: 0 }, { type: "food", wanted: 0, current: 0 }];
@@ -547,7 +547,7 @@ describe("what traders carry and what the market barters", () =>
 	it("a resource of which we hold 500 to 1000 is carried a little, and wants one more trader", () =>
 	{
 		const { world, hq, manager } = seat();
-		hq.getTotalResourceLevel = () => ({ food: 5000, wood: 700, stone: 5000, metal: 5000 });
+		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 700, stone: 5000, metal: 5000 });
 		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
 		hq.pickMostNeededResources =
 			() => [{ type: "metal", wanted: 10, current: 0 }, { type: "food", wanted: 0, current: 0 }];
@@ -570,7 +570,7 @@ describe("what traders carry and what the market barters", () =>
 		const qm = s.world.ai.queueManager as unknown as Record<string, unknown>;
 		qm.getAvailableResources = () => ({ food: 0, wood: 0, stone: 0, metal: 0, ...available });
 		qm.currentNeeds = () => ({ food: 0, wood: 0, stone: 0, metal: 0, ...needs });
-		s.hq.GetCurrentGatherRates = () => ({ food: 1, wood: 1, stone: 1, metal: 1 });
+		s.hq.basesManager.GetCurrentGatherRates = () => ({ food: 1, wood: 1, stone: 1, metal: 1 });
 		const all = { food: 100, wood: 100, stone: 100, metal: 100 };
 		(s.world.gameState as unknown as Record<string, unknown>).getBarterPrices = () => ({
 			buy: { ...all, ...prices.buy },
@@ -874,7 +874,7 @@ describe("the trade office through its turn: update", () =>
 		manager.assignTrader(t1.ent);
 		manager.assignTrader(trader(world, 301, [60, 40], { idle: false }).ent);
 		hq.canBarter = true;
-		hq.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
+		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
 		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
 		hq.pickMostNeededResources = () => [{ type: "metal", wanted: 10, current: 0 }];
 		hq.findMarketLocation = () => false;
