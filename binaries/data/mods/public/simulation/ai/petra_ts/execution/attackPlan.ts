@@ -545,14 +545,26 @@ type AttackPlanSetup =
 type AttackAim = { target: CommonEntity; pos: CommonPosition; };
 
 /**
- * An attack plan's state and what the state holds. Walking holds the path the
- * plan walks, made when it sets off (StartAttack); the other states hold
- * nothing more, so the path cannot be read outside walking.
+ * What a plan attacks and what it knows of it: the entity, where it was last
+ * seen, its owner, and the unique target it was asked to keep. Every stage
+ * carries one, so the target and its position move together.
  */
-type AttackStage = { state: "unexecuted" | "completing"; prep: AttackPreparation; } | {
-	state: "walking";
-	path: CommonPosition[];
-} | { state: "transporting" | "arrived" | ""; };
+type AttackTarget = {
+	ent: CommonEntity | undefined;
+	pos: CommonPosition | undefined;
+	player: PlayerId | undefined;
+	uniqueTargetId: EntityId | undefined;
+};
+
+/**
+ * An attack plan's state and what the state holds. A preparing plan may hold
+ * the path it will walk, made when it sets off (getPathToTarget); walking
+ * holds the path it walks, so a path is never read outside those states.
+ */
+type AttackStage =
+	| { state: "unexecuted" | "completing"; prep: AttackPreparation; target: AttackTarget; path?: CommonPosition[]; }
+	| { state: "walking"; path: CommonPosition[]; target: AttackTarget; }
+	| { state: "transporting" | "arrived" | ""; target: AttackTarget; };
 
 /**
  * What a preparing plan trains with: its three queues (removed from the
@@ -579,8 +591,6 @@ export class AttackPlan
 	name: AttackPlanId;
 	neededShips: number;
 	overseas: SeaIndex | 0;
-	/** The way to the target, made when the plan sets off (getPathToTarget); walked in STATE_WALKING */
-	path: CommonPosition[] | undefined = undefined;
 	paused: boolean;
 	position: CommonPosition | undefined;
 	position5TurnsAgo: CommonPosition;
@@ -593,6 +603,24 @@ export class AttackPlan
 	get state(): AttackPlanState
 	{
 		return this.stage.state;
+	}
+	/** The path a preparing plan will walk, or the one a walking plan walks. */
+	get path(): CommonPosition[] | undefined
+	{
+		const stage = this.stage;
+		return stage.state === "unexecuted" || stage.state === "completing" || stage.state === "walking" ?
+			stage.path :
+			undefined;
+	}
+	set path(path: CommonPosition[] | undefined)
+	{
+		const stage = this.stage;
+		if (stage.state === "unexecuted" || stage.state === "completing" || stage.state === "walking")
+		{
+			stage.path = path;
+			return;
+		}
+		throw new Error("Petra error: attack plan " + this.name + " given a path while \"" + stage.state + "\"");
 	}
 	/**
 	 * A state for a test's set-up: a preparing one keeps the plan's
@@ -617,20 +645,47 @@ export class AttackPlan
 	{
 		if (state !== AttackPlan.STATE_UNEXECUTED && state !== AttackPlan.STATE_COMPLETING)
 		{
-			return { state };
+			return { state, target: this.stage.target };
 		}
 		const prep = this.preparation();
 		if (!prep)
 		{
 			throw new Error("Petra error: attack plan " + this.name + " back to \"" + state + "\" after it set off");
 		}
-		return { state, prep };
+		return { state, prep, target: this.stage.target };
 	}
-	target: CommonEntity | undefined;
-	targetPlayer: PlayerId | undefined;
-	targetPos: CommonPosition | undefined;
+	/** The entity the plan attacks, carried with its place and owner by every stage. */
+	get target(): CommonEntity | undefined
+	{
+		return this.stage.target.ent;
+	}
+	set target(target: CommonEntity | undefined)
+	{
+		this.stage.target.ent = target;
+	}
+	get targetPlayer(): PlayerId | undefined
+	{
+		return this.stage.target.player;
+	}
+	set targetPlayer(player: PlayerId | undefined)
+	{
+		this.stage.target.player = player;
+	}
+	/** Where the target is, or was last seen (a unit that went in somewhere). */
+	get targetPos(): CommonPosition | undefined
+	{
+		return this.stage.target.pos;
+	}
+	set targetPos(pos: CommonPosition | undefined)
+	{
+		this.stage.target.pos = pos;
+	}
+	/** The unique target the plan was asked to keep, if any. */
+	get uniqueTargetId(): EntityId | undefined
+	{
+		return this.stage.target.uniqueTargetId;
+	}
 	type: AttackType;
-	uniqueTargetId: EntityId | undefined;
 	unit: Record<string, CommonEntityCollection>;
 	unitCollUpdateArray: EntityId[] | undefined = undefined;
 	unitCollection: CommonEntityCollection;
@@ -736,7 +791,8 @@ export class AttackPlan
 		this.Config = config;
 		this.name = attackPlanId(uniqueID);
 		// the plan's stage, once its build orders are known (made below for every plan)
-		let makeStage: (buildOrders: AttackBuildOrder[]) => AttackStage;
+		let makeStage: (buildOrders: AttackBuildOrder[], target: AttackTarget) => AttackStage;
+		let target: AttackTarget;
 		if (setup.kind === "saved")
 		{
 			const saved = setup.saved;
@@ -753,14 +809,15 @@ export class AttackPlan
 			this.lastPosition = saved.properties.lastPosition;
 			this.position = saved.properties.position;
 			this.isBlocked = saved.properties.isBlocked;
-			this.targetPlayer = saved.properties.targetPlayer;
-			this.targetPos = saved.properties.targetPos;
-			this.uniqueTargetId = saved.properties.uniqueTargetId;
-			this.path = saved.properties.path;
 			this.unitCollUpdateArray = saved.properties.unitCollUpdateArray;
 
 			const targetId = saved.properties.target;
-			this.target = typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined;
+			target = {
+				ent: typeof targetId === "number" ? gameState.getEntityById(targetId) : undefined,
+				pos: saved.properties.targetPos,
+				player: saved.properties.targetPlayer,
+				uniqueTargetId: saved.properties.uniqueTargetId,
+			};
 		}
 		else
 		{
@@ -768,11 +825,13 @@ export class AttackPlan
 			this.type = setup.type;
 			this.forced = false; // true when this attacked has been forced to help an ally
 
-			this.target = data && data.target ? data.target : undefined;
-			this.targetPos = this.target ? this.target.position() : undefined;
-			this.targetPlayer = this.target ? this.target.owner() : undefined;
-
-			this.uniqueTargetId = data && data.uniqueTargetId || undefined;
+			const chosen = data && data.target ? data.target : undefined;
+			target = {
+				ent: chosen,
+				pos: chosen ? chosen.position() : undefined,
+				player: chosen ? chosen.owner() : undefined,
+				uniqueTargetId: data && data.uniqueTargetId || undefined,
+			};
 
 			this.rallyPoint = setup.start.rallyPoint;
 			this.overseas = setup.start.overseas;
@@ -798,7 +857,7 @@ export class AttackPlan
 		this.unitCollection.registerUpdates();
 
 		this.unit = {};
-		this.stage = makeStage(this.unitCollections());
+		this.stage = makeStage(this.unitCollections(), target);
 	}
 
 	/**
@@ -823,39 +882,47 @@ export class AttackPlan
 	}
 
 	/** A new plan's stage: unexecuted, with its three queues (TODO: there should probably be one queue per type of training building) */
-	private newStage(gameState: CommonGameState, priority: number): (buildOrders: AttackBuildOrder[]) => AttackStage
+	private newStage(
+		gameState: CommonGameState,
+		priority: number,
+	): (buildOrders: AttackBuildOrder[], target: AttackTarget) => AttackStage
 	{
 		const queue = gameState.ai.queueManager.addQueue(`plan_${this.name}`, priority);
 		const queueChamp = gameState.ai.queueManager.addQueue(`plan_${this.name}_champ`, priority + 1);
 		const queueSiege = gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
-		return (buildOrders: AttackBuildOrder[]): AttackStage => ({
+		return (buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage => ({
 			state: AttackPlan.STATE_UNEXECUTED,
 			prep: { queue, queueChamp, queueSiege, buildOrders, siegeState: AttackPlan.SIEGE_NOT_TESTED },
+			target,
 		});
 	}
 
 	/**
 	 * A saved plan's stage: a preparing plan's queues were restored with the queue manager, a plan that set off
-	 * has none; a walking plan walks its saved path, one saved without (never written) attacks where it stands
+	 * has none; a walking plan walks its saved path, one saved without (never written) attacks where it stands.
+	 * A preparing plan keeps the path it had made, as a plan that set off but has not walked yet.
 	 */
 	private savedStage(
 		gameState: CommonGameState,
 		saved: SerializedAttackPlan,
-	): (buildOrders: AttackBuildOrder[]) => AttackStage
+	): (buildOrders: AttackBuildOrder[], target: AttackTarget) => AttackStage
 	{
 		const state = saved.properties.state;
 		const savedPath = saved.properties.path;
 		const preparing = (prepState: "unexecuted" | "completing") =>
 		{
 			const queues = this.savedQueues(gameState);
-			return (buildOrders: AttackBuildOrder[]): AttackStage => ({
+			return (buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage => ({
 				state: prepState,
 				prep: { ...queues, buildOrders, siegeState: saved.properties.siegeState },
+				target,
+				path: savedPath,
 			});
 		};
 		if (state === AttackPlan.STATE_WALKING)
 		{
-			return () => savedPath ? { state, path: savedPath } : { state: AttackPlan.STATE_ARRIVED };
+			return (_buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage =>
+				savedPath ? { state, path: savedPath, target } : { state: AttackPlan.STATE_ARRIVED, target };
 		}
 		if (state === AttackPlan.STATE_UNEXECUTED || state === AttackPlan.STATE_COMPLETING)
 		{
@@ -866,7 +933,7 @@ export class AttackPlan
 			state === AttackPlan.STATE_ATTACKING
 		)
 		{
-			return () => ({ state });
+			return (_buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage => ({ state, target });
 		}
 		aiWarn(
 			"Petra: attack plan " + saved.properties.name + " saved in an unknown state \"" + state +
@@ -961,7 +1028,7 @@ export class AttackPlan
 					"\", not from \"completing\"",
 			);
 		}
-		this.stage = { state: AttackPlan.STATE_WALKING, path };
+		this.stage = { state: AttackPlan.STATE_WALKING, path, target: this.stage.target };
 	}
 
 	isPaused(): boolean
