@@ -371,6 +371,8 @@ export function makeTemplate(name: string, detail: {
 	maxGatherers?: number;
 	/** the Research/Time of a technology; other templates carry none */
 	researchTime?: number;
+	/** the Identity/Civ; a gaia template has none */
+	civ?: string;
 } = {}): CommonTemplate
 {
 	const cost = detail.cost ?? {};
@@ -420,6 +422,8 @@ export function makeTemplate(name: string, detail: {
 		resistanceStrengths: () =>
 			detail.resistanceStrengths ? { Damage: { ...detail.resistanceStrengths } } : undefined,
 		maxHitpoints: () => detail.maxHitpoints ?? 100,
+		// as common-api template.civ reads Identity/Civ
+		civ: () => detail.civ,
 		maxGatherers: () => detail.maxGatherers ?? 0,
 		researchTime: detail.researchTime,
 		// as the common-api Template.buildCategory (entity.js 479) reads
