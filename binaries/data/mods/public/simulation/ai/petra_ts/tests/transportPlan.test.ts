@@ -447,7 +447,8 @@ describe("a transport plan when boarding goes wrong", () =>
 		assert.equal(p.state, TransportPlan.BOARDING);
 	});
 
-	it("a ship that makes no headway to the shore is sent again, then to another landing spot", () =>
+	// only the port passes: Petra sent it again from where it stood, and a ship that did not move stayed (FINDINGS §54)
+	it("a ship that makes no headway to the shore is sent again, then nudged out and sent to another landing spot", () =>
 	{
 		const s = seat();
 		const a = soldier(s.world, 100, [140, 160]);
@@ -462,8 +463,19 @@ describe("a transport plan when boarding goes wrong", () =>
 		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
 		p.update(s.world.gameState);
 
-		assert.equal(carrier.state.moves.length, 3);
-		assert.notDeepEqual(carrier.state.moves.at(-1), first, "second retry: another spot");
+		assert.equal(carrier.state.moves.length, 2, "still where it was sent from: not sent again");
+		assert.equal(carrier.state.moveApart.length, 1, "nudged out to sea");
+		const second = requireValue(p.shipPoints()[202]);
+		assert.notDeepEqual(second, first, "second retry: another spot");
+
+		// out of the nudge, it stops again: it is sent to the new spot
+		carrier.state.pos = [215, 160];
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
+		p.update(s.world.gameState);
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + SHIP_STUCK + 1);
+		p.update(s.world.gameState);
+		assert.deepEqual(carrier.state.moves.at(-1), p.shipPoints()[202]);
+		assert.notDeepEqual(carrier.state.moves.at(-1), first, "never the failed spot again");
 	});
 
 	// only the port passes: Petra judged the ship by the unit waiting on the
