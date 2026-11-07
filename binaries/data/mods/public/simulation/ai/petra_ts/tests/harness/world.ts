@@ -381,9 +381,13 @@ export function makeWorld(options: WorldOptions = {}): World
 			},
 		},
 		garrisonManager: {
-			// like the engine: garrisoning fills the target's slots
+			// like the engine: garrisoning fills the target's slots; like GarrisonManager.garrison, a full one takes nobody
 			garrison: (_gs: CommonGameState, unit: CommonEntity, target: CommonEntity, type: string) =>
 			{
+				if ((garrisonCounts.get(target.id()) ?? 0) >= target.garrisonMax())
+				{
+					return;
+				}
 				garrisonCalls.push([unit, target, type]);
 				garrisonCounts.set(target.id(), (garrisonCounts.get(target.id()) ?? 0) + 1);
 			},

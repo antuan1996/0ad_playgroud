@@ -1967,11 +1967,9 @@ describe("garrisoning by hand", () =>
 			"the emergency got a place",
 		);
 		assert.deepEqual(unloadCalls, [3000], "the resident was evicted first");
-		assert.deepEqual(world.garrisonCalls.map(([unit, target, type]) => [unit.id(), target.id(), type]), [[
-			3001,
-			5000,
-			GarrisonManager.TYPE_EMERGENCY,
-		]], "an emergency with no healing house is an emergency case, not for healing");
+		// the eviction is an order the engine carries out after the turn: the shelter still reads full, and the
+		// garrison is refused on this turn (a quirk Petra shares, FINDINGS §50)
+		assert.deepEqual(world.garrisonCalls, [], "no place yet on this turn");
 	});
 
 	it("refuses the eviction when the shelter holds nobody to evict", () =>
@@ -2320,6 +2318,45 @@ describe("rarer turns of the defence", () =>
 			GarrisonManager.TYPE_DECAY,
 		], [3006, GarrisonManager.TYPE_DECAY]]);
 		assert.equal(army.ownEntities.includes(entityId(3005)), false);
+	});
+
+	// only the port passes: Petra took every soldier in reach out of its plan, the tower full after three (FINDINGS §50)
+	it("a captured tower too small to stop its decay takes three of the army, and the rest stay in their attack", () =>
+	{
+		const { world, manager } = assembledWorld();
+		// a sentry tower holds 3; its decay (20) less its regeneration (10) needs 4 men at 2.5 each
+		const tower = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Tower"], {
+			isGarrisonHolder: () => true,
+			garrisonMax: () => 3,
+		});
+		world.addEntity(tower);
+		const removed: number[] = [];
+		const planStub = {
+			state: "completing",
+			removeUnit: (ent: CommonEntity) =>
+			{
+				removed.push(ent.id());
+			},
+		};
+		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
+		// eight soldiers of an attack plan gathering at their rally point beside it
+		for (let i = 0; i < 8; ++i)
+		{
+			world.addEntity(
+				makeEntity({ id: 3000 + i, owner: PLAYER, position: [32 + i, 30], classes: ["Unit", "Infantry"] }, {
+					attackTypes: () => ["Melee"],
+				}, { plan: 1, role: "attack", subrole: "completing" }),
+			);
+		}
+
+		const ret = manager.garrisonUnitsInside(world.gameState, placed(tower), {
+			min: 4,
+			type: GarrisonManager.TYPE_DECAY,
+		});
+
+		assert.equal(ret, true);
+		assert.deepEqual(world.garrisonCalls.map(([unit]) => unit.id()), [3000, 3001, 3002], "the three nearest go in");
+		assert.deepEqual(removed, [3000, 3001, 3002], "only they leave the plan");
 	});
 
 	it("a stone thrower under fire goes to the nearest fortress that can take it", () =>
