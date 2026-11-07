@@ -575,9 +575,12 @@ the estimator makes a start *conditional* on winning, not earlier.
   second against the other's mix, its total hit points, and the outcome is
   the side whose `dps x hp` against the other is larger, with the fraction
   left `sqrt(1 - weaker/stronger)`. Structures that shoot (towers, civic
-  centres, fortresses, with their garrisons' arrows) count as a fixed
-  damage-per-second side with their hit points. Melee against ranged reach is
-  a later refinement, only if calibration needs it.
+  centres, fortresses, with their garrisons' arrows) add their arrows'
+  damage per second to their side, not their hit points: an attacker wins
+  the fight by killing the army, not the towers. Melee against ranged reach
+  is a later refinement, only if calibration needs it. (Step 1 done,
+  2026-11-08: `combatStats` in `adapter/templateData.ts`,
+  `decision/fightEstimate.ts`, 13 tests; no play change.)
 - **Where.** `decision/fightEstimate.ts`, pure (like `economyScore.ts`):
   in, two lists of `{ template, count, hpFraction }` and the structures; out,
   `{ winner, ourFractionLeft, seconds }`. Unit-tested on hand-made

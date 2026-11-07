@@ -2391,3 +2391,25 @@ another pool), no headway 59 (124), still 16 (52), circling 113 (201); one
 transport stage over 5 minutes in 22016. Kept as a fix: no loss, the stalls
 fewer.
 
+## 55. Stage 6: the fight estimator's first step, and `counters()` (2026-11-08)
+
+PLAN §6.3.1, step 1: `combatStats` (`adapter/templateData.ts`) reads a
+template's or an entity's hit points, damage resistances, classes, civ and
+its Melee and Ranged attacks (damage, repeat time, range, bonuses; Capture
+and Slaughter left out); `decision/fightEstimate.ts` estimates a fight by
+the square law (the module's head), with `fightSide` grouping entities by
+owner and template. Nothing calls it yet: the smoke test is 24 of 24
+identical. Tests (`fightEstimate.test.ts`) on the templates' own numbers:
+equal armies tie, 30 against 20 keep 74.5%, 30 at half health only just
+beat 20, spearmen beat as many cavalry swordsmen, a stone tower with five
+archers in it decides an even fight.
+
+Found reading the API for it: common-api's `Template.counters(target)`
+builds the list of classes the attack counters with `mcounter.concat(...)`
+and drops the result, so it asks `target.hasClasses([])`, which
+`MatchesClassList` answers false: `counters()` is always false. The attack
+plans' choice of prey (`sortByAttackValue`, §51) gives a countered unit 100
+points through it, which never count; Petra is the same. Not changed: the
+fix is common-api's (shared by every bot), and it would change the play;
+the estimator reads the bonuses itself.
+
