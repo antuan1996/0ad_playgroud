@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (50 tests in all; the
+Each is pinned by a test that only the port passes (53 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -72,6 +72,7 @@ whether a game can reach it.
 | `headquarters.constructTrainingBuildings` arsenal (stage 5) | a saving town returned before its arsenal: on islands no siege engine was ever trained (§37) | a saving town of the city phase with a market builds its arsenal | headquarters: "a saving town of the third phase with a market builds its arsenal; without one it does not" |
 | `defenseManager.garrisonUnitsInside` (stage 6) | a decaying holder asked for more men than it holds (a captured sentry tower: 4 to stop its decay, room for 3) took every soldier in reach out of his attack plan on every turn, the full tower refusing them: the HugeAttack churn and the army that never left (§50) | takes no more than the holder holds | defenseManager: "a captured tower too small to stop its decay takes three of the army, and the rest stay in their attack" |
 | `defenseManager.garrisonToShoot`, `garrisonManager` threats (stage 6) | a tower shooting at an enemy merchant ship (no weapon) took five workers in; the next review let them out, the ship gone by: every 15 s for nine minutes by a trade route (§52) | no garrison against, and no threat from, a unit that cannot attack | defenseManager: "takes nobody into the tower that shoots at an enemy merchant ship sailing by"; garrisonManager: "an enemy merchant ship sailing by in bowshot keeps nobody in the tower" |
+| `transportPlan.landShip` sailing (stage 6) | a ship the engine kept WALKING without moving was never sent again (one stood 81 m from its landing point with 11 aboard for 63 minutes); a ship re-routed again and again got nowhere; a wedged ship was sent again from where it stood, the plan swapping between two points it never reached (§53) | no headway in 60 s: sent straight; a ship that has not moved since its last send is nudged out; failed points avoided | transportPlan: "a loaded ship under way that comes no nearer its landing point in a minute is sent there straight", "a ship stopped short and sent again, still where it stood seconds later, is nudged out to sea", "a ship that failed at two landing points tries a third, not the first again" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -2301,4 +2302,62 @@ Not found in this match: a transport circling or shuttling without getting
 anywhere (§49's last point, the user's watch). The orders show none of the
 repeated route sends of §45; finding one needs the ships' positions over
 time (a visual game, or a per-ship position log), not the command log.
+
+## 53. Stage 6: ships that sail and get nowhere (2026-11-07)
+
+PLAN §6.2's fourth item, the user's "ships wandering in a small region as if
+stuck". The command log cannot show it (§52), so `match.sh -b` now samples
+our ships every 5 s (`ships.txt`: position, angle, state, units aboard,
+transport plan, stage, goal), and `ship-log.ts` finds ships with no headway
+(100 m sailed in 60 s, under 20 m nearer the goal, more than 40 m from it),
+still (under 10 m in 60 s, more than 40 m from the goal) or circling (100 m
+within 40 m of the start; fishing boats left out, their work is a shuttle).
+The game is the same with the log (the Dodecanese match's fingerprint
+`84d797fe2998a605` with and without `-b`).
+
+The Dodecanese match (§52's) at the committed code: 1517 transport
+ship-minutes with a goal; still 226 ship-minutes, no headway 72; the longest
+time one ship kept one goal 3810 s. The longest still: player 3's ship 3353,
+11 units aboard, 81-87 m from its landing point, WALKING, from minute 26 to
+the end at 90. Three causes, traced:
+
+- `landShip` looks only at a ship that is idle (§41: one between two of its
+  route's waypoints must not be sent again); the engine can keep a ship
+  WALKING that no longer moves, and then nothing ever happens to it.
+- A sailing ship re-routed round the enemy's shooters as they move
+  (`checkRoutes`) shuttled for minutes, sent by a new way each time, and
+  never came nearer (player 4's ship 4062: 2.4 km sailed in 7 minutes,
+  ~210 m from its point throughout).
+- A wedged ship (player 4's 4590, by a shore) stayed idle wherever it was
+  sent; the escalation, a new landing point every third try, swapped between
+  two points it could reach neither of, for 17 minutes (`retryBoardingPos`
+  picks the cheapest from where the ship stands; only the current point was
+  kept off).
+
+**Changed** (the port; Petra does the same): a ship under way that has not
+come 20 m nearer its landing point in 60 s is sent again, straight (no route
+round the shooters), counting toward a new landing point as a stopped ship
+does; a ship that stands where it stood when last sent, 5 s or more before,
+is nudged 30 m out away from its point and sent on a later turn; a landing
+point a ship failed at is kept off its later retries (as another ship's
+point is). Not saved (like the routes): after a load the measures start
+again.
+
+The Dodecanese match with it: still 150 ship-minutes, all in the boarding
+stage (none sailing), the longest time on one goal 175 s, no stage over 5
+minutes; circling up (288 ship-minutes: nudged and re-sent ships near their
+points). The smoke test: 24 of 24 games identical. Against `petra_prev`
+(the committed stage-6 code, fa3c91739a), 40 island games (`random/islands`,
+20 fresh pairs from both slots, pool seed 4244, `stage6-ship-headway-islands`,
+with the ship log): 17 won, 15 lost, 8 drawn (53.1% of the decided, CI
+36-69%; SPRT undecided); our ships over the 40 games: one transport stage
+over 5 minutes in 23097, still 52 ship-minutes in 9055 with a goal. Kept as
+a fix: no loss, the stalls gone. (The batch played the code before one last
+change: a ship joining a plan at sea gets its landing point at once rather
+than when it stops; the smoke games and tests are the same.) The 8 draws
+against 21 in §52's island batch are another pool, no evidence.
+
+Left: the boarding stage's waits (a ship with 28 aboard 67 m from its
+boarding point for 27 minutes in one Dodecanese game), and the circling
+that the nudges add.
 

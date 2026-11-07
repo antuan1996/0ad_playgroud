@@ -12,7 +12,7 @@ project are referenced to the files that hold them.
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
 | Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex`, `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<Grid>` are branded (stage 2; conversions in `petra_ts/brands.ts`); commands are a union by `type` |
-| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1709 tests on the sources and the built bot, importing and typed by the port; 75 pin a bug of the original or a fix of stages 4-6 (the original failed the first 20 when it was last a target, stage 3) |
+| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1712 tests on the sources and the built bot, importing and typed by the port; 78 pin a bug of the original or a fix of stages 4-6 (the original failed the first 20 when it was last a target, stage 3) |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
 | Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |
@@ -532,7 +532,11 @@ arrival turn's sort made cheap with no play change, the worst AI turn of
 unload totals are mostly ordinary transport work; the repeats were towers
 letting workers in and out as enemies passed (§52): fixed for unarmed
 targets; a threat memory for armed ones was measured and dropped (47.5%
-mainland, 47.4% islands); no circling ship found in the command log yet.
+mainland, 47.4% islands). Ships: a 5 s position log (`ships.txt`,
+`ship-log.ts`) found transports stalled for up to an hour; a headway test,
+a nudge for wedged ships and failed landing points avoided end the sailing
+stalls (§53: 53.1% on islands, no loss); the boarding stage's waits are
+left.
 `petra-ts-prev` now names fa3c91739a (stage 6's kept changes).
 
 Then the build-order planner and the fight estimator (3.4), where the
