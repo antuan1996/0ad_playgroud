@@ -2287,8 +2287,15 @@ a tower keeps its shooters for 20 s after it last saw a threat (stamped at
 entry and at each review with one). The Dodecanese match: 36 round trips
 under 10 s against 209. But it moves 18 of the 24 smoke games (the same
 winners; some decided much later, 16:06 to 23:05, 21:12 to 27:43): towers
-keep workers out of the fields on mainland too. Not committed; to be
-measured on both pools first.
+keep workers out of the fields on mainland too. Measured against
+`petra_prev` moved to the committed code (`petra-ts-prev` at fa3c91739a), 20
+fresh seed pairs from both slots on each pool: mainland (pool seed 74,
+`stage6-threat-memory-mainland`) 19 won, 21 lost (47.5%, CI 33-63%), 19 of 20
+pairs split by the slot, 5% less gathered; islands (`random/islands`, pool
+seed 4243, `stage6-threat-memory-islands`) 9 won, 10 lost, 21 drawn at the
+time limit (47.4% of the decided, CI 27-68%), every pair split, gathering
+even. No gain on either: dropped. The oscillation against armed enemies
+passing by is left; it costs orders, not games.
 
 Not found in this match: a transport circling or shuttling without getting
 anywhere (§49's last point, the user's watch). The orders show none of the

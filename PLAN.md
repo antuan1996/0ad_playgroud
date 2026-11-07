@@ -531,8 +531,9 @@ arrival turn's sort made cheap with no play change, the worst AI turn of
 §48's long games from 97 to 40 ms (§51). Item 4: the ships' garrison and
 unload totals are mostly ordinary transport work; the repeats were towers
 letting workers in and out as enemies passed (§52): fixed for unarmed
-targets; a threat memory for armed ones is to be measured (it moves most
-mainland games); no circling ship found in the command log yet.
+targets; a threat memory for armed ones was measured and dropped (47.5%
+mainland, 47.4% islands); no circling ship found in the command log yet.
+`petra-ts-prev` now names fa3c91739a (stage 6's kept changes).
 
 Then the build-order planner and the fight estimator (3.4), where the
 attack timing of §46 is decided.
