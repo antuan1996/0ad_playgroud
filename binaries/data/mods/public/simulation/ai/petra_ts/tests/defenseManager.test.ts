@@ -1224,6 +1224,38 @@ describe("when our own are hit", () =>
 		assert.deepEqual(Array.from(world.garrisonCounts.keys()), [5000], "the tower fills its slots");
 	});
 
+	// only the port passes: Petra took them in for every merchant ship that came in bowshot (FINDINGS §52)
+	it("takes nobody into the tower that shoots at an enemy merchant ship sailing by", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const tower = makeStructure(5000, [30, 30], PLAYER, ["Structure", "Tower"], {
+			isGarrisonHolder: () => true,
+			getArrowMultiplier: () => 1,
+			attackTypes: () => ["Ranged"],
+			attackRange: () => ({ max: 60 }),
+			garrisonMax: () => 10,
+		});
+		world.addEntity(tower);
+		// a merchant has no weapon: the engine reports no attack types
+		world.addEntity(
+			makeEntity({ id: 2000, owner: ENEMY, position: [70, 50], classes: ["Unit", "Ship", "Trader"] }, {
+				attackTypes: () => undefined,
+			}),
+		);
+		world.addEntity(
+			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Infantry"] }, {
+				attackTypes: () => ["Ranged"],
+			}),
+		);
+
+		manager.checkEvents(
+			world.gameState,
+			eventsWith({ Attacked: [{ target: entityId(2000), attacker: entityId(5000) }] }),
+		);
+
+		assert.deepEqual(world.garrisonCalls, []);
+	});
+
 	it("hands the fight over to the started plan that a swordsman serves", () =>
 	{
 		const { world, manager } = assembledWorld();

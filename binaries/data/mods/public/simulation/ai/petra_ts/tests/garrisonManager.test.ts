@@ -429,6 +429,35 @@ describe("garrisonManager", () =>
 			assert.equal(tower.getMetadata(PLAYER, "holderTimeUpdate"), 104, "the patrol walked its round");
 		});
 
+		// only the port passes: Petra counted every enemy unit about as a threat (FINDINGS §52)
+		it("an enemy merchant ship sailing by in bowshot keeps nobody in the tower", () =>
+		{
+			const unloadCalls: number[] = [];
+			const { world, manager, tower } = towerWorld({
+				garrisoned: () => [3021],
+				garrisonedSlots: () => 1,
+				unload: (id: number) =>
+				{
+					unloadCalls.push(id);
+				},
+			});
+			const archer = residentArm(3021, ["Ranged"]);
+			world.addEntity(archer);
+			manager.garrison(world.gameState, archer, tower, GarrisonManager.TYPE_PROTECTION);
+			// a merchant has no weapon: the engine reports no attack types
+			world.addEntity(
+				foeUnit(2000, [50, 40], {
+					classes: ["Ship", "Trader"],
+					methods: { unitAIState: () => "INDIVIDUAL.TRADE.APPROACHINGMARKET" },
+				}),
+			);
+			world.ai.elapsedTime = seconds(104);
+
+			manager.update(world.gameState, emptyEvents());
+
+			assert.deepEqual(unloadCalls, [3021]);
+		});
+
 		it("a soldier riding in a ram and a raider out of bowshot are no threat at the gate", () =>
 		{
 			const unloadCalls: number[] = [];
