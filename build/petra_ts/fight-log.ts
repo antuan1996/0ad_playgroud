@@ -2,7 +2,7 @@
  * Scores the fight estimator (decision/fightEstimate.ts, PLAN.md §6.3.1)
  * against the fights of match.sh -b (fights.txt, bot-state.js logFights):
  *
- *   node build/petra_ts/fight-log.ts <match dir | batch dir> [--after 60|120] [--worst N]
+ *   node build/petra_ts/fight-log.ts <match dir | batch dir> [--after 30|60|120] [--worst N] [--variants]
  *
  * A fight's real winner is the side that lost the smaller share of its units
  * (dead or taken) by --after seconds (default 120), nobody if the shares are
@@ -11,9 +11,21 @@
  * against what was left, where it named the winner right; and the worst misses.
  * The calibration's exit (PLAN.md §6.3.3): right in 75% of the fights of ten
  * or more units a side.
+ *
+ * --variants re-estimates every fight from its logged sides (each side by
+ * template and distance band, fightstats.txt's stats) with the port's own
+ * estimator under other choices of who fights: only the units within 20 or
+ * 40 m of the other side, the far ones weighed less, no towers, the head
+ * count alone; and prints each one's accuracy, by 30, 60 and 120 s.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+
+import type { CombatStats } from "../../binaries/data/mods/public/simulation/ai/petra_ts/adapter/templateData.ts";
+import type {
+	FightGroup,
+	FightSide,
+} from "../../binaries/data/mods/public/simulation/ai/petra_ts/decision/fightEstimate.ts";
 
 /** One FIGHTLOG line. */
 type Fight = {
@@ -25,6 +37,10 @@ type Fight = {
 	theirs: number;
 	estimate: { winner: "ours" | "theirs" | "none"; ourLeft: number; theirLeft: number; seconds: number | string; };
 	lost: Record<string, [number, number]>;
+	/** by "owner:template", per distance band (20, 40, 80 m, farther): count and summed health level */
+	oursBy?: Record<string, Array<[number, number]>>;
+	theirsBy?: Record<string, Array<[number, number]>>;
+	towersBy?: { ours: Record<string, number>; theirs: Record<string, number>; };
 };
 type Scored = Fight & { game: string; real: "ours" | "theirs" | "none"; ourLeftReal: number; };
 
@@ -129,6 +145,144 @@ export function report(dir: string, after = 120, worst = 8): string
 	return out.join("\n");
 }
 
+/** A model of who fights: how much each distance band counts, and whether the towers do. */
+type Variant = { name: string; bandWeights: number[]; towers: boolean; headCount?: boolean; };
+
+const VARIANTS: Variant[] = [
+	{ name: "the estimator (all units, towers)", bandWeights: [1, 1, 1, 1], towers: true },
+	{ name: "no towers", bandWeights: [1, 1, 1, 1], towers: false },
+	{ name: "within 80 m", bandWeights: [1, 1, 1, 0], towers: true },
+	{ name: "within 40 m", bandWeights: [1, 1, 0, 0], towers: true },
+	{ name: "within 20 m", bandWeights: [1, 0, 0, 0], towers: true },
+	{ name: "the far weighed less (1, 1, 0.5, 0.25)", bandWeights: [1, 1, 0.5, 0.25], towers: true },
+	{ name: "the head count alone", bandWeights: [1, 1, 1, 1], towers: false, headCount: true },
+];
+
+/** A side of a logged fight under a variant. */
+function sideOf(
+	by: Record<string, Array<[number, number]>>,
+	towers: Record<string, number>,
+	stats: Map<string, CombatStats>,
+	variant: Variant,
+): FightSide
+{
+	const units: FightGroup[] = [];
+	for (const key in by)
+	{
+		const unitStats = stats.get(key);
+		if (!unitStats)
+		{
+			continue;
+		}
+		let count = 0;
+		let health = 0;
+		by[key].forEach(([n, hp], band) =>
+		{
+			count += n * variant.bandWeights[band];
+			health += hp * variant.bandWeights[band];
+		});
+		if (count > 0)
+		{
+			units.push({ stats: unitStats, count, hpFraction: health / count });
+		}
+	}
+	const shooters: FightGroup[] = [];
+	for (const key in variant.towers ? towers : {})
+	{
+		const towerStats = stats.get(key);
+		if (towerStats)
+		{
+			shooters.push({ stats: towerStats, count: towers[key], hpFraction: 1 });
+		}
+	}
+	return { units, shooters };
+}
+
+/** The variants' accuracy on a folder's fights, by 30, 60 and 120 s. */
+async function variants(dir: string): Promise<string>
+{
+	// the estimator matches bonus classes with the game's own MatchesClassList (globalscripts/Templates.js)
+	const scope: Record<string, unknown> = globalThis;
+	scope.MatchesClassList = (classes: string[], match: string) =>
+		match.split(/\s+/).some((sub) =>
+			sub.split("+").every((c) => c[0] === "!" ? !classes.includes(c.slice(1)) : classes.includes(c))
+		);
+	const { estimateFight } = await import(
+		"../../binaries/data/mods/public/simulation/ai/petra_ts/decision/fightEstimate.ts"
+	);
+	const out: string[] = [];
+	const rows: Array<{ fight: Fight; stats: Map<string, CombatStats>; }> = [];
+	for (const [game, file] of fightFiles(dir))
+	{
+		const statsFile = join(file, "..", "fightstats.txt");
+		const stats = new Map<string, CombatStats>();
+		for (const line of existsSync(statsFile) ? readFileSync(statsFile, "utf8").split("\n") : [])
+		{
+			if (line.trim())
+			{
+				const entry: { key: string; stats: CombatStats; } = JSON.parse(line);
+				stats.set(entry.key, entry.stats);
+			}
+		}
+		for (const fight of scoreFights(game, readFileSync(file, "utf8"), 120))
+		{
+			if (fight.oursBy && fight.theirsBy && fight.towersBy)
+			{
+				rows.push({ fight, stats });
+			}
+		}
+	}
+	out.push(
+		`${rows.length} fights with their sides logged (ten or more a side: ` + `${
+			rows.filter(({ fight }) => Math.min(fight.ours, fight.theirs) >= 10).length
+		})`,
+	);
+	out.push("variant                                      30 s   60 s  120 s   (ten or more a side: 30, 60, 120 s)");
+	for (const variant of VARIANTS)
+	{
+		const cells: string[] = [];
+		for (const big of [false, true])
+		{
+			for (const after of ["30", "60", "120"])
+			{
+				let right = 0;
+				let n = 0;
+				for (const { fight, stats } of rows)
+				{
+					const lost = fight.lost[after];
+					if (!lost || big && Math.min(fight.ours, fight.theirs) < 10)
+					{
+						continue;
+					}
+					const ourShare = lost[0] / fight.ours;
+					const theirShare = lost[1] / fight.theirs;
+					if (ourShare === theirShare)
+					{
+						continue;
+					}
+					const ours = sideOf(requireBy(fight.oursBy), fight.towersBy?.ours ?? {}, stats, variant);
+					const theirs = sideOf(requireBy(fight.theirsBy), fight.towersBy?.theirs ?? {}, stats, variant);
+					const winner = variant.headCount ?
+						(count(ours) > count(theirs) ? "ours" : count(ours) < count(theirs) ? "theirs" : "none") :
+						estimateFight(ours, theirs).winner;
+					++n;
+					if (winner === (ourShare < theirShare ? "ours" : "theirs"))
+					{
+						++right;
+					}
+				}
+				cells.push(pct(right, n).padStart(5));
+			}
+		}
+		out.push(`${variant.name.padEnd(44)} ${cells.slice(0, 3).join("  ")}   (${cells.slice(3).join(", ")})`);
+	}
+	out.push("(fights whose two sides lost the same share are left out: they say nothing of who won)");
+	return out.join("\n");
+}
+
+const requireBy = (by: Fight["oursBy"]): Record<string, Array<[number, number]>> => by ?? {};
+const count = (side: FightSide): number => side.units.reduce((sum, g) => sum + g.count, 0);
+
 if (import.meta.main)
 {
 	const args = process.argv.slice(2);
@@ -143,5 +297,12 @@ if (import.meta.main)
 		console.error("usage: node build/petra_ts/fight-log.ts <match dir | batch dir> [--after 60|120] [--worst N]");
 		process.exit(2);
 	}
-	console.log(report(dir, Number(value("--after") ?? 120), Number(value("--worst") ?? 8)));
+	if (args.includes("--variants"))
+	{
+		console.log(await variants(dir));
+	}
+	else
+	{
+		console.log(report(dir, Number(value("--after") ?? 120), Number(value("--worst") ?? 8)));
+	}
 }

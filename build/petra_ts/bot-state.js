@@ -53,8 +53,13 @@
  * start each side's units and the estimate (decision/fightEstimate.js), then
  * each side's losses (dead or taken) 60 and 120 s later, in one line:
  *   FIGHTLOG {"t":..,"player":..,"kind":"attack"|"defense","id":..,"ours":n,"theirs":n,
- *             "estimate":{..},"lost":{"60":[ours,theirs],"120":[ours,theirs]}}
- * read by fight-log.ts.
+ *             "estimate":{..},"lost":{"30":[ours,theirs],"60":..,"120":..},
+ *             "oursBy":{key:[[n,hp]..]},"theirsBy":..,"towersBy":{"ours":{key:arrows},"theirs":..}}
+ * each side by "owner:template" and by distance from the other side's centre
+ * (within 20, 40, 80 m, farther: count and summed health level), and the
+ * first time a key is met its stats (combatStats) in a line of their own:
+ *   FIGHTSTATS {"player":..,"key":..,"stats":{..}}
+ * read by fight-log.ts, which can try other models on the same fights.
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
  * event: created, progress every 30 s, ended with its dead and killed):
  *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
@@ -79,6 +84,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { VectorDistance } from "simulation/ai/common-api/utils.js";
 import { PetraBot } from "simulation/ai/petra_out/_petrabot.js";
 import { createObstructionMap } from "simulation/ai/petra_out/world/mapModule.js";
+import { combatStats } from "simulation/ai/petra_out/adapter/templateData.js";
 import { estimateFight, fightSide } from "simulation/ai/petra_out/decision/fightEstimate.js";
 
 const DUMP_FIRST = 60;
@@ -94,7 +100,9 @@ const SHIP_EVERY = 5;
 const FIGHT_EVERY = 10;
 const FIGHT_MIN = 5;
 const FIGHT_RANGE = 80;
-const FIGHT_AFTER = [60, 120];
+const FIGHT_AFTER = [30, 60, 120];
+/** the distance bands (m, from the other side's centre) a fight's sides are counted in */
+const FIGHT_BANDS = [20, 40, 80];
 /** game seconds at which the common API is probed (apiProbe) */
 const API_PROBE_AT = [360, 1200];
 /** entity methods that send a command or write metadata: the probe never calls them */
@@ -712,7 +720,8 @@ export class PetraBotState extends PetraBot
 				continue;
 			print("FIGHTLOG " + JSON.stringify({ "t": Math.round(fight.t), "player": PlayerID, "kind": fight.kind,
 				"id": fight.id, "ours": fight.ours.length, "theirs": fight.theirs.length, "oursHp": fight.oursHp,
-				"theirsHp": fight.theirsHp, "estimate": fight.estimate, "lost": fight.lost }) + "\n");
+				"theirsHp": fight.theirsHp, "estimate": fight.estimate, "lost": fight.lost, "oursBy": fight.oursBy,
+				"theirsBy": fight.theirsBy, "towersBy": fight.towersBy }) + "\n");
 			this.fights.delete(key);
 		}
 		return undefined;
@@ -738,6 +747,46 @@ export class PetraBotState extends PetraBot
 			return;
 		const shooters = list => list.map(structure => ({ structure, "arrows": this.arrowsOf(structure) }));
 		const estimate = estimateFight(fightSide(ours, shooters(ourTowers)), fightSide(theirs, shooters(theirTowers)));
+		const centre = list =>
+		{
+			const at = [0, 0];
+			for (const ent of list)
+			{
+				at[0] += ent.position()[0] / list.length;
+				at[1] += ent.position()[1] / list.length;
+			}
+			return at;
+		};
+		const by = (list, from) =>
+		{
+			const out = {};
+			for (const ent of list)
+			{
+				const key = this.statsKey(ent);
+				const d = VectorDistance(ent.position(), from);
+				let band = FIGHT_BANDS.findIndex(limit => d <= limit);
+				if (band < 0)
+					band = FIGHT_BANDS.length;
+				out[key] ??= FIGHT_BANDS.map(() => [0, 0]).concat([[0, 0]]);
+				out[key][band][0] += 1;
+				out[key][band][1] = Math.round((out[key][band][1] + ent.healthLevel()) * 100) / 100;
+			}
+			return out;
+		};
+		const towersBy = list =>
+		{
+			const out = {};
+			for (const structure of list)
+			{
+				const arrows = this.arrowsOf(structure);
+				if (arrows > 0)
+				{
+					const key = this.statsKey(structure);
+					out[key] = (out[key] ?? 0) + arrows;
+				}
+			}
+			return out;
+		};
 		const round = v => Number.isFinite(v) ? Math.round(v * 1000) / 1000 : String(v);
 		const hp = list => Math.round(list.reduce((sum, ent) => sum + ent.hitpoints(), 0));
 		this.fightsDone.add(key);
@@ -750,8 +799,24 @@ export class PetraBotState extends PetraBot
 				"theirLeft": round(estimate.theirFractionLeft), "seconds": round(estimate.seconds),
 				"ourTowers": ourTowers.filter(t => this.arrowsOf(t) > 0).length,
 				"theirTowers": theirTowers.filter(t => this.arrowsOf(t) > 0).length },
-			"lost": {}
+			"lost": {},
+			"oursBy": by(ours, centre(theirs)),
+			"theirsBy": by(theirs, centre(ours)),
+			"towersBy": { "ours": towersBy(ourTowers), "theirs": towersBy(theirTowers) }
 		});
+	}
+
+	/** An entity's key in the fight log, its stats printed the first time it is met. */
+	statsKey(ent)
+	{
+		const key = ent.owner() + ":" + ent.templateName();
+		this.fightStatsDone ??= new Set();
+		if (!this.fightStatsDone.has(key))
+		{
+			this.fightStatsDone.add(key);
+			print("FIGHTSTATS " + JSON.stringify({ "player": PlayerID, key, "stats": combatStats(ent) }) + "\n");
+		}
+		return key;
 	}
 
 	/** How many of these units are gone or no longer their owner's. */
