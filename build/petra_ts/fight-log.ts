@@ -41,6 +41,10 @@ type Fight = {
 	oursBy?: Record<string, Array<[number, number]>>;
 	theirsBy?: Record<string, Array<[number, number]>>;
 	towersBy?: { ours: Record<string, number>; theirs: Record<string, number>; };
+	/** soldiers off the fight that could walk to it within a minute, by key: count and summed health level */
+	reinforcementsBy?: { ours: Record<string, [number, number]>; theirs: Record<string, [number, number]>; };
+	/** each side's units within 60 m of the fight's centre at the last count */
+	ground?: [number, number];
 };
 type Scored = Fight & { game: string; real: "ours" | "theirs" | "none"; ourLeftReal: number; };
 
@@ -146,7 +150,7 @@ export function report(dir: string, after = 120, worst = 8): string
 }
 
 /** A model of who fights: how much each distance band counts, and whether the towers do. */
-type Variant = { name: string; bandWeights: number[]; towers: boolean; headCount?: boolean; };
+type Variant = { name: string; bandWeights: number[]; towers: boolean; headCount?: boolean; reinforcements?: number; };
 
 const VARIANTS: Variant[] = [
 	{ name: "the estimator (all units, towers)", bandWeights: [1, 1, 1, 1], towers: true },
@@ -156,16 +160,26 @@ const VARIANTS: Variant[] = [
 	{ name: "within 20 m", bandWeights: [1, 0, 0, 0], towers: true },
 	{ name: "the far weighed less (1, 1, 0.5, 0.25)", bandWeights: [1, 1, 0.5, 0.25], towers: true },
 	{ name: "the head count alone", bandWeights: [1, 1, 1, 1], towers: false, headCount: true },
+	{ name: "with the reinforcements", bandWeights: [1, 1, 1, 1], towers: true, reinforcements: 1 },
+	{ name: "with half the reinforcements", bandWeights: [1, 1, 1, 1], towers: true, reinforcements: 0.5 },
+	{
+		name: "head count with the reinforcements",
+		bandWeights: [1, 1, 1, 1],
+		towers: false,
+		headCount: true,
+		reinforcements: 1,
+	},
 ];
 
 /** A side of a logged fight under a variant. */
 function sideOf(
 	by: Record<string, Array<[number, number]>>,
-	towers: Record<string, number>,
+	more: { towers: Record<string, number>; reinforcements: Record<string, [number, number]>; },
 	stats: Map<string, CombatStats>,
 	variant: Variant,
 ): FightSide
 {
+	const towers = more.towers;
 	const units: FightGroup[] = [];
 	for (const key in by)
 	{
@@ -184,6 +198,16 @@ function sideOf(
 		if (count > 0)
 		{
 			units.push({ stats: unitStats, count, hpFraction: health / count });
+		}
+	}
+	for (const key in variant.reinforcements ? more.reinforcements : {})
+	{
+		const unitStats = stats.get(key);
+		const [n, hp] = more.reinforcements[key];
+		const weight = variant.reinforcements ?? 0;
+		if (unitStats && n > 0)
+		{
+			units.push({ stats: unitStats, count: n * weight, hpFraction: hp / n });
 		}
 	}
 	const shooters: FightGroup[] = [];
@@ -237,7 +261,22 @@ async function variants(dir: string): Promise<string>
 			rows.filter(({ fight }) => Math.min(fight.ours, fight.theirs) >= 10).length
 		})`,
 	);
-	out.push("variant                                      30 s   60 s  120 s   (ten or more a side: 30, 60, 120 s)");
+	out.push(
+		"variant                                      by the share lost: 30 s   60 s  120 s   (ten or more: 30, 60, " +
+			"120 s)   holds the ground: all, ten or more",
+	);
+	const predict = (fight: Fight, stats: Map<string, CombatStats>, variant: Variant): string =>
+	{
+		const side = (by: Fight["oursBy"], towers: Record<string, number>, more: Record<string, [number, number]>) =>
+			sideOf(requireBy(by), { towers, reinforcements: more }, stats, variant);
+		const ours = side(fight.oursBy, fight.towersBy?.ours ?? {}, fight.reinforcementsBy?.ours ?? {});
+		const theirs = side(fight.theirsBy, fight.towersBy?.theirs ?? {}, fight.reinforcementsBy?.theirs ?? {});
+		if (variant.headCount)
+		{
+			return count(ours) > count(theirs) ? "ours" : count(ours) < count(theirs) ? "theirs" : "none";
+		}
+		return estimateFight(ours, theirs).winner;
+	};
 	for (const variant of VARIANTS)
 	{
 		const cells: string[] = [];
@@ -260,13 +299,8 @@ async function variants(dir: string): Promise<string>
 					{
 						continue;
 					}
-					const ours = sideOf(requireBy(fight.oursBy), fight.towersBy?.ours ?? {}, stats, variant);
-					const theirs = sideOf(requireBy(fight.theirsBy), fight.towersBy?.theirs ?? {}, stats, variant);
-					const winner = variant.headCount ?
-						(count(ours) > count(theirs) ? "ours" : count(ours) < count(theirs) ? "theirs" : "none") :
-						estimateFight(ours, theirs).winner;
 					++n;
-					if (winner === (ourShare < theirShare ? "ours" : "theirs"))
+					if (predict(fight, stats, variant) === (ourShare < theirShare ? "ours" : "theirs"))
 					{
 						++right;
 					}
@@ -274,9 +308,32 @@ async function variants(dir: string): Promise<string>
 				cells.push(pct(right, n).padStart(5));
 			}
 		}
-		out.push(`${variant.name.padEnd(44)} ${cells.slice(0, 3).join("  ")}   (${cells.slice(3).join(", ")})`);
+		const ground: string[] = [];
+		for (const big of [false, true])
+		{
+			let right = 0;
+			let n = 0;
+			for (const { fight, stats } of rows)
+			{
+				const held = fight.ground;
+				if (!held || held[0] === held[1] || big && Math.min(fight.ours, fight.theirs) < 10)
+				{
+					continue;
+				}
+				++n;
+				if (predict(fight, stats, variant) === (held[0] > held[1] ? "ours" : "theirs"))
+				{
+					++right;
+				}
+			}
+			ground.push(`${pct(right, n)} of ${n}`);
+		}
+		out.push(
+			`${variant.name.padEnd(44)} ${cells.slice(0, 3).join("  ")}   (${cells.slice(3).join(", ")})   ` +
+				ground.join(", "),
+		);
 	}
-	out.push("(fights whose two sides lost the same share are left out: they say nothing of who won)");
+	out.push("(fights whose two sides lost the same share, or held the ground as many, are left out)");
 	return out.join("\n");
 }
 

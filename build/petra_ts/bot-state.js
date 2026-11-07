@@ -57,7 +57,11 @@
  *             "oursBy":{key:[[n,hp]..]},"theirsBy":..,"towersBy":{"ours":{key:arrows},"theirs":..}}
  * each side by "owner:template" and by distance from the other side's centre
  * (within 20, 40, 80 m, farther: count and summed health level), and the
- * first time a key is met its stats (combatStats) in a line of their own:
+ * first time a key is met its stats (combatStats) in a line of their own;
+ * "reinforcementsBy" (ours and theirs: soldiers not in the fight, on its
+ * land, that can walk to its centre within 60 s, by key, [count, summed
+ * health]), and "ground" (each side's units within 60 m of the fight's
+ * centre at the last count: who holds the place):
  *   FIGHTSTATS {"player":..,"key":..,"stats":{..}}
  * read by fight-log.ts, which can try other models on the same fights.
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
@@ -103,6 +107,10 @@ const FIGHT_RANGE = 80;
 const FIGHT_AFTER = [30, 60, 120];
 /** the distance bands (m, from the other side's centre) a fight's sides are counted in */
 const FIGHT_BANDS = [20, 40, 80];
+/** reinforcements: units not in the fight that can walk to it within this many seconds */
+const FIGHT_REACH = 60;
+/** who holds the ground: each side's units this near the fight's centre, the last time its losses are counted */
+const FIGHT_GROUND = 60;
 /** game seconds at which the common API is probed (apiProbe) */
 const API_PROBE_AT = [360, 1200];
 /** entity methods that send a command or write metadata: the probe never calls them */
@@ -715,13 +723,18 @@ export class PetraBotState extends PetraBot
 		{
 			for (const after of FIGHT_AFTER)
 				if (fight.lost[after] === undefined && now - fight.t >= after)
+				{
 					fight.lost[after] = [this.lostOf(fight.ours), this.lostOf(fight.theirs)];
+					if (after == FIGHT_AFTER.at(-1))
+						fight.ground = this.groundAt(fight.centre, fight.enemies);
+				}
 			if (fight.lost[FIGHT_AFTER.at(-1)] === undefined)
 				continue;
 			print("FIGHTLOG " + JSON.stringify({ "t": Math.round(fight.t), "player": PlayerID, "kind": fight.kind,
 				"id": fight.id, "ours": fight.ours.length, "theirs": fight.theirs.length, "oursHp": fight.oursHp,
 				"theirsHp": fight.theirsHp, "estimate": fight.estimate, "lost": fight.lost, "oursBy": fight.oursBy,
-				"theirsBy": fight.theirsBy, "towersBy": fight.towersBy }) + "\n");
+				"theirsBy": fight.theirsBy, "towersBy": fight.towersBy, "reinforcementsBy": fight.reinforcementsBy,
+				"ground": fight.ground }) + "\n");
 			this.fights.delete(key);
 		}
 		return undefined;
@@ -773,6 +786,10 @@ export class PetraBotState extends PetraBot
 			}
 			return out;
 		};
+		const ourCentre = centre(ours);
+		const theirCentre = centre(theirs);
+		const fightCentre = [(ourCentre[0] + theirCentre[0]) / 2, (ourCentre[1] + theirCentre[1]) / 2];
+		const enemies = [...new Set(theirs.map(ent => ent.owner()))];
 		const towersBy = list =>
 		{
 			const out = {};
@@ -802,8 +819,48 @@ export class PetraBotState extends PetraBot
 			"lost": {},
 			"oursBy": by(ours, centre(theirs)),
 			"theirsBy": by(theirs, centre(ours)),
-			"towersBy": { "ours": towersBy(ourTowers), "theirs": towersBy(theirTowers) }
+			"towersBy": { "ours": towersBy(ourTowers), "theirs": towersBy(theirTowers) },
+			"centre": fightCentre,
+			"enemies": enemies,
+			"reinforcementsBy": this.reinforcementsBy(fightCentre, ours, theirs, enemies)
 		});
+	}
+
+	/** Soldiers of each side not in the fight, on its land, that can walk to its centre within FIGHT_REACH s. */
+	reinforcementsBy(at, ours, theirs, enemies)
+	{
+		const inFight = new Set([...ours, ...theirs].map(ent => ent.id()));
+		const land = this.gameState.ai.accessibility.getAccessValue(at);
+		const pick = list =>
+		{
+			const out = {};
+			for (const ent of list)
+			{
+				const pos = ent.position();
+				if (!pos || inFight.has(ent.id()) || ent.hasClasses(["Ship", "Support"]) || !ent.attackTypes())
+					continue;
+				if (this.gameState.ai.accessibility.getAccessValue(pos) !== land)
+					continue;
+				if (VectorDistance(pos, at) > (ent.walkSpeed() || 0) * FIGHT_REACH)
+					continue;
+				const key = this.statsKey(ent);
+				out[key] ??= [0, 0];
+				out[key][0] += 1;
+				out[key][1] = Math.round((out[key][1] + ent.healthLevel()) * 100) / 100;
+			}
+			return out;
+		};
+		const enemyUnits = this.gameState.getEnemyUnits().filter(ent => enemies.includes(ent.owner())).toEntityArray();
+		return { "ours": pick(this.gameState.getOwnUnits().toEntityArray()), "theirs": pick(enemyUnits) };
+	}
+
+	/** Each side's units within FIGHT_GROUND m of the fight's centre: ours, and the enemies' it fought. */
+	groundAt(at, enemies)
+	{
+		const near = ent => !!ent.position() && VectorDistance(ent.position(), at) <= FIGHT_GROUND && !ent.hasClass("Ship");
+		const ours = this.gameState.getOwnUnits().filter(near).length;
+		const theirs = this.gameState.getEnemyUnits().filter(ent => enemies.includes(ent.owner()) && near(ent)).length;
+		return [ours, theirs];
 	}
 
 	/** An entity's key in the fight log, its stats printed the first time it is met. */
