@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (53 tests in all; the
+Each is pinned by a test that only the port passes (54 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -73,6 +73,7 @@ whether a game can reach it.
 | `defenseManager.garrisonUnitsInside` (stage 6) | a decaying holder asked for more men than it holds (a captured sentry tower: 4 to stop its decay, room for 3) took every soldier in reach out of his attack plan on every turn, the full tower refusing them: the HugeAttack churn and the army that never left (§50) | takes no more than the holder holds | defenseManager: "a captured tower too small to stop its decay takes three of the army, and the rest stay in their attack" |
 | `defenseManager.garrisonToShoot`, `garrisonManager` threats (stage 6) | a tower shooting at an enemy merchant ship (no weapon) took five workers in; the next review let them out, the ship gone by: every 15 s for nine minutes by a trade route (§52) | no garrison against, and no threat from, a unit that cannot attack | defenseManager: "takes nobody into the tower that shoots at an enemy merchant ship sailing by"; garrisonManager: "an enemy merchant ship sailing by in bowshot keeps nobody in the tower" |
 | `transportPlan.landShip` sailing (stage 6) | a ship the engine kept WALKING without moving was never sent again (one stood 81 m from its landing point with 11 aboard for 63 minutes); a ship re-routed again and again got nowhere; a wedged ship was sent again from where it stood, the plan swapping between two points it never reached (§53) | no headway in 60 s: sent straight; a ship that has not moved since its last send is nudged out; failed points avoided | transportPlan: "a loaded ship under way that comes no nearer its landing point in a minute is sent there straight", "a ship stopped short and sent again, still where it stood seconds later, is nudged out to sea", "a ship that failed at two landing points tries a third, not the first again" |
+| `transportPlan.checkBoardingShip` (stage 6) | a ship stuck on its way to its boarding point was sent again from where it stood, every few seconds, and never went: one stayed 46 minutes, five units waiting on the shore (§54) | nudged out when it has not moved since its last send; failed boarding points avoided | transportPlan: "a ship that makes no headway to the shore is sent again, then nudged out and sent to another landing spot" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -2360,4 +2361,33 @@ against 21 in §52's island batch are another pool, no evidence.
 Left: the boarding stage's waits (a ship with 28 aboard 67 m from its
 boarding point for 27 minutes in one Dodecanese game), and the circling
 that the nudges add.
+
+## 54. Stage 6: ships stuck on their way to their boarding point (2026-11-07)
+
+§53's last point. The Dodecanese match at §53's code: 382 ship-minutes of
+boarding-stage episodes (`ship-log.ts`), the longest player 3's ship 3054,
+WALKING at (449, 276) and never moving for 46 minutes, its plan's five units
+idle on the shore 250 m off (traced: all assigned to it). The boarding check
+(`checkBoardingShip`) saw it stuck (neither moved nor turned for 5 s) and
+sent it again, to another boarding point at every second try, from where it
+stood; it never went, and its units were sent to garrison in it again and
+again (the boarding phase's garrison orders of §49).
+
+Changed (the port; Petra does the same): as at sea (§53), a ship sent again
+that stands where it stood when last sent, 5 s or more before, is nudged 30
+m out away from its point and sent on a later turn, and a boarding point it
+failed at is kept off its later retries (`retryBoarding`, split from
+`checkBoardingShip`). The Dodecanese match: boarding episodes 382 to 40
+ship-minutes, still 150 to 4, circling 288 to 41 (the game moves). Left in it:
+ships waiting 70-80 m off a shared boarding point for 20-30 minutes while
+units trickle in (a plan filling its army, not a stall). Smoke: 24 of 24
+identical.
+
+Against `petra_prev` moved to §53's commit (`petra-ts-prev` at b06a06459e),
+40 island games (pool seed 4245, `stage6-boarding-islands`, with the ship
+log): 16 won, 17 lost, 7 drawn (48.5% of the decided, CI 33-65%; SPRT
+undecided). Our ships: boarding episodes 45 ship-minutes (96 in §53's batch,
+another pool), no headway 59 (124), still 16 (52), circling 113 (201); one
+transport stage over 5 minutes in 22016. Kept as a fix: no loss, the stalls
+fewer.
 
