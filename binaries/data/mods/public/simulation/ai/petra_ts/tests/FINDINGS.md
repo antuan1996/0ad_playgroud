@@ -2496,3 +2496,43 @@ attacks' start or withdrawal. Kept: `fightEstimate.ts` and its tests, the
 fight log and `fight-log.ts`, for measuring fights (the started attacks'
 losses per enemy killed, which §6.3.1 names as a supporting metric).
 
+## 58. Stage 6: the build-order planner's forecast, and where it stops (2026-11-08)
+
+PLAN §6.3.2, with the objective the user chose after §57: citizen soldiers
+at minute 13 (the head count of §46). `decision/economyForecast.ts`
+forecasts in steps of 10 s from the present state: income at the measured
+rates per gatherer (`world/gatherEconomy.ts`), new units gathering in the
+present split; each civic centre and barracks training batches
+(`workforce.ts` `batchSize`, in `seconds x n^0.8`, the engine's
+`Trainer.GetBatchTime`), the batches already queued first (paid for);
+support units first up to their cap (`supportRatio x target`), then
+soldiers; a house when the room runs short. Its calibration in the state
+dump (`forecasts.txt`, `bot-state.js` `logForecasts`: every minute from
+minute 2 to 13, the forecast 60, 120 and 180 s on against what was there;
+`forecast-log.ts`). The game is the same with it (§47's game 19,
+`77eb6671fec85cc7`).
+
+Rounds of fixes, each measured on game 19:
+
+1. One unit at a time at each trainer: population at 180 s 41 against 57.
+   Batches added.
+2. The queued batches (paid for, so the stock looked spent) and the
+   support units' queue funded first (§24: the women come first). Women
+   first up to their cap.
+3. The tests found the 10 s steps took a 14 s batch for 20 s, and a batch
+   of women overshot their cap: time now runs through a step, the batch is
+   cut to the cap.
+
+Then 10 mainland mirror games (pool seed 83, `stage6-forecast-mainland`,
+240 forecasts): median error at 180 s, support units 19% (too many: in
+the games they level off below the cap), citizen soldiers 36% (90th
+percentile 121%, too few: the attack plans' own training and the barracks
+built meanwhile are not in it), population 20%; at 60 s 5%, 6%, 9%.
+
+Not met: the exit (within 10% at 180 s on the median) and the time box's
+15% after two rounds. Stopped, as §6.3.2 asks: the planner is not built on
+it. What would be needed is a model of Petra's own decisions (which queues
+it funds, when it builds barracks and houses, what the attack plans train),
+in effect a second copy of the bot's economy, which is not the narrow model
+§3.4 meant. Kept: the module and its tests, the log and `forecast-log.ts`.
+

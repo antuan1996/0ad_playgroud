@@ -648,6 +648,10 @@ the estimator makes a start *conditional* on winning, not earlier.
   trained within 10% at 180 s on the median game. Then the early proxy
   (`pair-score.ts`, minute 8) on 40 pairs picks whether the SPRT is worth
   running.
+- **Done and stopped** (2026-11-08, `FINDINGS.md` §58): the objective is
+  the soldiers' head count at minute 13 (the estimator of §6.3.1 did not
+  pass). `decision/economyForecast.ts` and its log; after three rounds of
+  fixes, 10 games: soldiers at 180 s off by a median 36%. Not built on.
 - **Time box.** If the forecast error stays above 15% after two rounds of
   fixes, or the proxy shows nothing after 40 pairs, it stops there and is
   written down in `FINDINGS.md`; the estimator does not depend on it.
