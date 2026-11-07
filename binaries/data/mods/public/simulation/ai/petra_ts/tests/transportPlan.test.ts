@@ -876,6 +876,81 @@ describe("a transport plan at sea: unloading on the far shore", () =>
 		assert.notDeepEqual(p.shipPoints()[202], target);
 	});
 
+	// only the port passes: Petra left a ship WALKING to its fate, however long it got nowhere (FINDINGS §53)
+	it("a loaded ship under way that comes no nearer its landing point in a minute is sent there straight", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		board(a, carrier);
+		p.update(s.world.gameState);
+		const target = requireValue(p.shipPoints()[202]);
+		// the engine keeps it WALKING, and it does not move
+		carrier.state.pos = [200, 160];
+		carrier.state.aiState = "INDIVIDUAL.WALKING";
+		carrier.state.idle = false;
+		const start = s.world.ai.elapsedTime;
+		p.update(s.world.gameState);
+		const moves = carrier.state.moves.length;
+
+		s.world.ai.elapsedTime = seconds(start + 30);
+		p.update(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves, "half a minute: left to sail");
+
+		s.world.ai.elapsedTime = seconds(start + 61);
+		p.update(s.world.gameState);
+		assert.equal(carrier.state.moves.length, moves + 1, "a minute with no headway: one move, no route");
+		assert.deepEqual(carrier.state.moves.at(-1), target, "straight to its landing point");
+	});
+
+	// only the port passes: Petra sent it again from where it stood, which left it idle there (FINDINGS §53)
+	it("a ship stopped short and sent again, still where it stood seconds later, is nudged out to sea", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		board(a, carrier);
+		p.update(s.world.gameState);
+		carrier.state.pos = [200, 160]; // stopped mid-sea
+		p.update(s.world.gameState); // sent again
+		const moves = carrier.state.moves.length;
+
+		s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 8);
+		p.update(s.world.gameState);
+
+		assert.equal(carrier.state.moveApart.length, 1, "nudged away from its landing point");
+		assert.equal(carrier.state.moves.length, moves, "not sent where it cannot go from here");
+	});
+
+	// only the port passes: Petra could swap for good between two landing points the ship never reached (FINDINGS §53)
+	it("a ship that failed at two landing points tries a third, not the first again", () =>
+	{
+		const s = seat();
+		const a = soldier(s.world, 100, [140, 160]);
+		const { carrier, p } = shipped(s, [a]);
+		p.update(s.world.gameState);
+		board(a, carrier);
+		p.update(s.world.gameState);
+		const tried = [requireValue(p.shipPoints()[202])];
+		// it stops short each time, a few metres on from where it stopped before
+		for (let turn = 0; turn < 6; ++turn)
+		{
+			carrier.state.pos = [200 + turn * 3, 160];
+			s.world.ai.elapsedTime = seconds(s.world.ai.elapsedTime + 8);
+			p.update(s.world.gameState);
+			const point = requireValue(p.shipPoints()[202]);
+			if (point !== tried.at(-1))
+			{
+				tried.push(point);
+			}
+		}
+
+		assert.equal(tried.length, 3, "two new landing points");
+		assert.notDeepEqual(tried[2], tried[0], "the third is not the first");
+	});
+
 	// only the port passes: Petra sent a ship again by a new route each turn it
 	// was not WALKING, between two waypoints too (FINDINGS §41)
 	it("a ship still busy on its way is not sent again, however far from the shore; once stopped, it is", () =>
