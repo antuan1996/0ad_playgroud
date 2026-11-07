@@ -1156,12 +1156,16 @@ export class DefenseManager
 	/**
 	 * If enemies are in range of one of our defensive structures, garrison it for arrow multiplier
 	 * (enemy non-defensive structure are not considered to stay in sync with garrisonManager).
+	 * Not for a target that cannot fight back (a merchant, a fishing boat): the tower shoots it alone. A tower by an
+	 * enemy trade route took five workers in each time a merchant ship came within its range and let them out on
+	 * the next review, the ship gone by, every 15 s for nine minutes (FINDINGS §52).
 	 */
 	private garrisonToShoot(gameState: CommonGameState, attacker: CommonEntity, target: CommonPlacedEntity): void
 	{
 		if (
 			!gameState.isEntityEnemy(target) || attacker.hasClass("Ship") ||
-			target.hasClass("Structure") && !target.attackRange("Ranged")
+			target.hasClass("Structure") && !target.attackRange("Ranged") ||
+			target.hasClass("Unit") && target.attackTypes() === undefined
 		)
 		{
 			return;

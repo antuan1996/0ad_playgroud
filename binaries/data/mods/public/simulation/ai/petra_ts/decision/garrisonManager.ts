@@ -13,7 +13,10 @@ type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSi
 /** The fields a save keeps. */
 export type SerializedGarrisonManager = Pick<GarrisonManager, "holders" | "decayingStructures">;
 
-/** Whether an enemy entity can threaten a holder: a structure that shoots, a unit, gaia's only while fighting. */
+/**
+ * Whether an enemy entity can threaten a holder: a structure that shoots, an armed unit, gaia's only while
+ * fighting; a merchant or a fishing boat cannot (in step with DefenseManager.garrisonToShoot, FINDINGS §52)
+ */
 function mayThreaten(ent: CommonEntity): boolean
 {
 	if (ent.hasClass("Structure"))
@@ -22,7 +25,7 @@ function mayThreaten(ent: CommonEntity): boolean
 	}
 	if (ent.hasClass("Unit"))
 	{
-		return ent.owner() !== 0 || hasActivity(ent, "COMBAT");
+		return ent.attackTypes() !== undefined && (ent.owner() !== 0 || hasActivity(ent, "COMBAT"));
 	}
 	return false;
 }
