@@ -122,3 +122,50 @@ export function attackBonuses(template: CommonTemplate, type: string): AttackBon
 	}
 	return list;
 }
+
+/** The attack types a fight counts: Capture takes buildings and Slaughter kills animals, neither kills an army. */
+const FIGHTING_ATTACKS = ["Melee", "Ranged"];
+
+/** One attack a unit fights with: damage by type, the seconds between two blows, its reach, its bonuses. */
+export type AttackStats = {
+	damage: Readonly<Record<string, number>>;
+	repeatSeconds: number;
+	range: number;
+	bonuses: readonly AttackBonus[];
+};
+
+/** What a fight reads of a unit or a shooting structure (fightEstimate.ts), with its owner's technologies. */
+export type CombatStats = {
+	hp: number;
+	resistance: Readonly<Record<string, number>>;
+	classes: readonly string[];
+	civ: string | undefined;
+	attacks: readonly AttackStats[];
+};
+
+/** A template's (or an entity's, its technologies applied) fighting stats. */
+export function combatStats(template: CommonTemplate): CombatStats
+{
+	const attacks: AttackStats[] = [];
+	for (const type of template.attackTypes() ?? [])
+	{
+		const damage = template.attackStrengths(type);
+		if (!FIGHTING_ATTACKS.includes(type) || !damage)
+		{
+			continue;
+		}
+		attacks.push({
+			damage,
+			repeatSeconds: (template.attackTimes(type)?.repeat ?? 1000) / 1000,
+			range: template.attackRange(type)?.max ?? 0,
+			bonuses: attackBonuses(template, type),
+		});
+	}
+	return {
+		hp: template.maxHitpoints(),
+		resistance: template.resistanceStrengths()?.Damage ?? {},
+		classes: template.classes() ?? [],
+		civ: template.civ(),
+		attacks,
+	};
+}
