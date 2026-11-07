@@ -1,6 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import { allowCapture, getLandAccess, isSiegeUnit } from "../adapter/entityExtend.ts";
+import { allowCapture, getLandAccess, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
@@ -726,6 +726,50 @@ function helpNearestComrade(
 	}
 }
 
+/**
+ * The enemy units in reach, the best for the attacker first: civilians, those it counters, the nearer (their
+ * "distance", when both have one), and those not vetoed. Each one's worth and distance are read once rather than
+ * at every comparison: the comparison is the same, and so the order, but an army reaching its target ordered 111
+ * units at 0.46 ms each in the sort alone, 51 ms of a 67 ms turn (FINDINGS §51).
+ */
+function sortByAttackValue(ent: CommonEntity, mUnit: CommonEntity[], veto: Record<string, boolean>): void
+{
+	const worth = new Map<CommonEntity, number>();
+	const distance = new Map<CommonEntity, number | undefined>();
+	for (const unit of mUnit)
+	{
+		let value = unit.hasClass("Support") ? 50 : 0;
+		if (ent.counters(unit))
+		{
+			value += 100;
+		}
+		worth.set(unit, value);
+		distance.set(unit, unit.getMetadata(PlayerID, "distance"));
+	}
+	// the sums in the original's order, so that a near tie falls the same way
+	mUnit.sort((unitA: CommonEntity, unitB: CommonEntity): number =>
+	{
+		let vala = requireValue(worth.get(unitA));
+		let valb = requireValue(worth.get(unitB));
+		const distA = distance.get(unitA);
+		const distB = distance.get(unitB);
+		if (distA && distB)
+		{
+			vala -= distA;
+			valb -= distB;
+		}
+		if (veto[unitA.id()])
+		{
+			vala -= 20000;
+		}
+		if (veto[unitB.id()])
+		{
+			valb -= 20000;
+		}
+		return valb - vala;
+	});
+}
+
 /** Another attacker's next target: an enemy unit in reach, a structure, else help the nearest comrade. */
 function orderUnitAttacker(
 	gameState: CommonGameState,
@@ -740,35 +784,7 @@ function orderUnitAttacker(
 	const mUnit = enemyUnitsInReach(gameState, ent, reach, ctx);
 	if (mUnit.length)
 	{
-		mUnit.sort((unitA: CommonEntity, unitB: CommonEntity): number =>
-		{
-			let vala = unitA.hasClass("Support") ? 50 : 0;
-			if (ent.counters(unitA))
-			{
-				vala += 100;
-			}
-			let valb = unitB.hasClass("Support") ? 50 : 0;
-			if (ent.counters(unitB))
-			{
-				valb += 100;
-			}
-			const distA = unitA.getMetadata(PlayerID, "distance");
-			const distB = unitB.getMetadata(PlayerID, "distance");
-			if (distA && distB)
-			{
-				vala -= distA;
-				valb -= distB;
-			}
-			if (veto[unitA.id()])
-			{
-				vala -= 20000;
-			}
-			if (veto[unitB.id()])
-			{
-				valb -= 20000;
-			}
-			return valb - vala;
-		});
+		sortByAttackValue(ent, mUnit, veto);
 		const rand = randIntExclusive(0, mUnit.length * 0.1);
 		ent.attack(mUnit[rand].id(), allowCapture(gameState, ent, mUnit[rand]));
 	}
