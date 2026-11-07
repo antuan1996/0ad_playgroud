@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
 
 ## Repository
 
@@ -13,428 +14,212 @@ The work here is a **TypeScript port of the Petra AI** and its behaviour-test
 suite, under `binaries/data/mods/public/simulation/ai/`, and its evolution into
 a stronger AI.
 
-**`PLAN.md` is the project's goal and plan**: the constraints every change must
-keep (determinism, the engine interface, the runtime, save games), the
-strategy (freeze the port as the `petra_parity` baseline, evolve `petra_ts`),
-the type-driven architecture (typestates for plans, parsed observations,
-branded types, layers), validation (parity, per-change checks, win-rate with
-SPRT) and the staged roadmap with exit criteria. Check work against it, and
-update it when a stage is done or a decision changes.
+- **`PLAN.md` is the project's goal and plan**: constraints (`§1`), baseline
+  strategy (`§2`), type-driven architecture (`§3`), performance budget (`§4`),
+  validation (`§5`), and Stage 6 roadmap (`§6.2`). Read only the sections
+  relevant to your task. Completed Stage 0–5 history lives in
+  `build/petra_ts/STAGE_HISTORY.md`.
+- **`build/petra_ts/README.md`** documents `match.sh`, `batch.ts`, baselines,
+  parity tools, state/economy/attack logs, and `quality.ts` / `structure.ts`
+  details. Read it only when running matches, batches, or baselines.
+- **`petra_ts/tests/FINDINGS.md`** (2,100+ lines) records bugs, differences, and
+  match measurements. Search it with `grep` and read specific sections with
+  `offset`/`limit` rather than reading the entire file.
 
 ## Commands
 
 ### Engine (C++)
+
 ```sh
 libraries/build-source-libs.sh            # bundled third-party libs (once)
-build/workspaces/update-workspaces.sh     # premake -> build/workspaces/gcc/ (options: --without-tests, --without-atlas, ...)
+build/workspaces/update-workspaces.sh     # premake -> build/workspaces/gcc/
 make -C build/workspaces/gcc -j$(nproc)   # binaries land in binaries/system/
-binaries/system/test                      # cxxtest runner (also runs the JS component tests)
-binaries/system/test --suite <Suite> [--test <name>]   # one suite / one test; --list to enumerate
+binaries/system/test                      # cxxtest runner (also runs JS component tests)
+binaries/system/test --suite <Suite> [--test <name>]   # one suite / one test; --list
 ```
 
 ### Linting and formatting
-- `npm run lint` / `npm run lint:fix` — ESLint for the game's **JS** (tabs, see `.editorconfig`). It does not lint `.ts` files.
-- `npm run format:petra` / `npm run format:petra:check` — dprint for the Petra port, tests, declarations and TypeScript tools. The config is `dprint.json`; generated bots and match/batch outputs are excluded.
-- `pre-commit run --all-files` — the CI hooks (ruff, shellcheck/shfmt, markdownlint, yamllint, eslint, dprint, the non-breaking space in "0 A.D." under `binaries/`).
+
+- `npm run lint` / `npm run lint:fix` — ESLint for the game's **JS** (tabs, see
+  `.editorconfig`). It does not lint `.ts` files.
+- `npm run format:petra` / `npm run format:petra:check` — dprint for the Petra
+  port, tests, declarations and TypeScript tools (`dprint.json`; generated bots
+  and match/batch outputs are excluded).
+- `pre-commit run --all-files` — CI hooks (ruff, shellcheck/shfmt, markdownlint,
+  yamllint, eslint, dprint, non-breaking space in "0 A.D." under `binaries/`).
 
 ### Petra TS port
+
 **Mandatory for coding agents:** after editing Petra TypeScript sources, tests,
 declarations or tools, run `npm run format:petra` before every typecheck or test
-run and before committing. Format again after any later edits. The Petra test
-and coverage npm scripts verify this before running, and pre-commit enforces it
-for commits. See `AGENTS.md`.
+run and before committing. Format again after any later edits. See `AGENTS.md`.
 
 ```sh
-npm run format:petra                 # apply the required formatting first
+npm run format:petra                 # apply required formatting first
 npm run format:petra:check           # verify without modifying files
-npm run build:petra                 # strict typecheck of the port (noEmit); clean
-npm run typecheck:petra:tests       # typecheck tests + harness (also re-checks the port); clean
-npm run build:petra:out             # build the "Petra TS" in-game bot into simulation/ai/petra_out/ (gitignored)
-npm run test:petra                  # all tests against the port (petra_ts/*.ts)
-npm run test:petra:out              # build the bot, then the same tests against petra_out/*.js
-npm run test:petra:match            # integration: a fixed headless mirror match in the game, checked for anomalies
-npm run test:petra:smoke            # 24 fixed games vs petra_parity, each compared with the recorded reference (~3 min)
-npm run build:petra:baselines       # the baseline bots petra_parity and petra_fixed (gitignored)
-npm run batch:petra -- [options]    # many headless matches in parallel, a results table and win-rate statistics
-npm run test:petra:tools            # unit tests of the batch statistics (batch-stats.test.ts)
-npm run coverage:petra -- [src|out] [--file <module>]   # real per-module coverage
-npm run quality:petra -- [--file <module>] [--top N] [--tests] [--renamed] [--json F]   # size, complexity, duplication
-# one file / one test (tests/run.ts preloads harness/setup.ts; a bare node --test cannot load the port):
+npm run typecheck:petra:tests       # typecheck tests + harness + port; clean
+npm run build:petra                 # strict typecheck of the port alone (noEmit)
+npm run build:petra:out             # build "Petra TS" bot into simulation/ai/petra_out/
+# one file / one test while iterating (tests/run.ts preloads harness/setup.ts):
 npm run test:petra -- <name>.test.ts --test-name-pattern="<regex>"
 npm run test:petra:out -- <name>.test.ts
+# full suite (use --test-reporter=dot to avoid 1700+ lines of stdout):
+npm run test:petra -- --test-reporter=dot
+npm run test:petra:out -- --test-reporter=dot
+# real coverage, complexity/duplication, and layer/structure checks (scope with --file / --top):
+npm run coverage:petra -- [src|out] [--file <module>]
+npm run quality:petra -- [--file <module>] [--top 5] [--tests] [--renamed] [--json F]
+npm run structure:petra -- --check [--top 0] [--update-baseline] [--json F]
+# matches, smoke tests, baselines, and batches (see build/petra_ts/README.md for flags):
+npm run test:petra:match            # fixed headless mirror match checked for anomalies (~80s)
+npm run test:petra:smoke            # 24 fixed games vs petra_parity compared to reference (~3m)
+npm run build:petra:baselines       # build petra_parity and petra_fixed (gitignored)
+npm run match:petra -- [options]    # headless or visual match (build/petra_ts/match.sh -h)
+npm run batch:petra -- [options]    # parallel headless matches + SPRT/Wilson stats
+npm run test:petra:tools            # unit tests for batch-stats, quality, and structure
 ```
-Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
-built-in line figure counts never-run branches as covered.
-`quality:petra` (`build/petra_ts/quality.ts`, tested by `quality.test.ts` in
-`test:petra:tools`) parses the port (not the `.d.ts`; `--tests` adds the
-tests) with the TypeScript compiler, no type check: per function its lines,
-cyclomatic and cognitive (SonarSource) complexity, nesting depth and
-parameters, a callback measured on its own; per class lines, methods and
-fields; per module code lines and sums; and duplicated code, runs of at
-least 60 tokens over 6 lines found twice or more (imports left out;
-`--renamed` also catches copies over other names). It prints the functions
-over the thresholds (lines 96, cyclomatic 15, cognitive 25, depth 4, params
-5; the line limit is 96 rather than 80 because dprint's `useBraces: "always"`
-added a brace to every single-line block, +21% code lines), the worst
-functions, modules and classes, and each clone with every
-place it occurs. Half a second for the port. The port has no function over
-the thresholds and no clone: keep it so (split by extract-method, the games
-identical, checked by the smoke test).
-`npm run structure:petra -- [--check] [--update-baseline] [--top N] [--json F]`
-(`build/petra_ts/structure.ts`, tested by `structure.test.ts` in
-`test:petra:tools`, about a second) checks the port's structure. Rules, which
-`--check` fails on: no `as` cast outside `adapter/brands.ts` (`as const`
-apart), no `!`, `Engine.PostCommand` only in `adapter/commands.ts`, execution
-code reaching the HQ only through `execution/hq.ts`. Counts that `--check`
-holds to `build/petra_ts/structure-baseline.json` (lower one, then
-`--update-baseline` in the same commit): imports against the layers (adapter <
-world < execution < decision < root, `PLAN.md` §3.4; type-only ones too),
-modules in value-import cycles, `Engine` outside `adapter/` (profiling apart),
-dead exports (unmarked), dead methods (no code of the port or `bot-state.js` names
-them, unmarked) and stale `TODO never called` markers (a call of the port
-reaches the method, resolved by the type checker). It also lists exports
-only their module or only the tests use, each module's fan-in and fan-out,
-and per class its methods, fields and LCOM4 (groups of methods sharing no
-field nor call, the members an eighth of the methods use set apart as hubs)
-with the methods using no member (module functions, really). Every
-count is 0, and no module exports what only it uses: keep it so.
 
-The TypeScript configs are in `build/petra_ts/` (`tsconfig.json` strict check,
-`tsconfig.build.json` emit, `tsconfig.tests.json`; the root `tsconfig.json` only
-points editors at the tests one). **Never put a `.json` file under
-`simulation/ai/`** other than a bot's `data.json`: the engine
-(`ICmpAIManager.cpp` GetAIs) lists every `*.json` there as a bot, and the game
-setup's AI list breaks on one without a `name`.
-
-`build:petra:out` = clean, `tsc`, then `build/petra_ts/prepare-bot.ts`, which
-rewrites the output's relative imports to VFS paths
-(`simulation/ai/petra_out/x.js`: the engine's module loader does not resolve
-`./x.js`) and writes `data.json` ("Petra TS", constructor `PetraBot`). In game
-the bot id is `petra_out`.
-
-`npm run match:petra -- [options]` (`build/petra_ts/match.sh`, `-h` for the
-options: map, seeds, difficulty, civ, `-w` victory conditions (default
-conquest, the game's default; e.g. `conquest,wonder,capture_the_relic`), `-W` minutes a wonder or the relics must be
-held (default 20), `-o` the blue bot, `-p` the red bot (each `petra_out`,
-`petra`, `petra_parity`, `petra_prev` or `petra_fixed`), `-x` swap slots, `-B` do not build,
-`-v` speed, `-n` headless, `-t` timeline, `-l` command log and notices, `-b`
-the bot's own state (both for debugging), `-P` each AI's script time per turn
-(`aitimes.txt`, measured by the engine: `PYROGENESIS_AI_TIMES` in
-`CCmpAIManager.cpp`, two clock reads per AI and turn kept in memory and written
-at the end; `build/petra_ts/ai-times.ts <dir>...` summarises, `--compare
-<batch>` sets two bots' times side by side, the turn budget's check),
-`-N` the number of players, 2 to 8, all against all, players 3 and up
-playing the `-q` bot (default `petra_out`), `-i` idle time (`idle.txt`, from
-`maps/scripts/MatchIdle.js`: every unit of every player sampled each 5 game
-seconds, garrisoned ones left out; per minute each player's idle time so far
-by kind of unit, its idle spells by length and its longest; `node
-build/petra_ts/idle-log.ts <match dir>` summarises it by 10-minute band, and
-`match.txt` shows the summary), `-k` how many match folders to keep, default 5; `-K MIN` and `-S SEC` the
-watchdog's limits, below) builds the bots and starts an
-observed match of Petra TS (`petra_out`) against itself, or with
-`-o`/`-p` against the original, Petra JS (`petra`), or a baseline; it needs the
-engine built from this repo. Petra TS against itself is the default: the original
-loses most games to its `removeSupply` bug (`tests/FINDINGS.md` §10). Each match is recorded in `build/petra_ts/matches/<time>/`
-(`latest` links the newest; gitignored): `match.txt` (who is who, seeds,
-commit SHA, a sha256 of the `petra_out` build, command, a line to rerun it;
-then the result, a statistics table, the distinct errors/warnings, the replay
-path and a fingerprint, written by `build/petra_ts/match-report.ts`),
-`statistics.json`, `timeline.txt` with `-t`, `commands.txt` with `-l` (every
-command each bot sent, `<game ms> <player> <JSON>`, from
-`maps/scripts/MatchCommands.js`: AI commands are not in the replay; diffing two
-runs' logs finds where they diverge), `notices.txt` with `-l` (what the game
-told the bots: refused orders, their chat; `maps/scripts/MatchNotices.js`),
-`botstate.txt` with `-b` (Petra TS's AI-side state every two game minutes:
-workers by role, each base's resource lists, queues and reserved resources,
-attack plans, HQ flags; `build/petra_ts/bot-state.js`, which
-`prepare-bot.ts state` adds to the `petra_out` build only, so the port stays
-1:1 and the game is the same), `attacks.txt` with `-b` (the attack plans'
-lives from the same file: each plan's creation, start, abort and end as they
-happen, and every minute while it prepares a snapshot of its units per
-category against minimum and target, queued units, paused queues, free
-population, workers and stock; `node build/petra_ts/attack-log.ts <batch or
-match dir>` summarises them per attack type, why plans were aborted, what the
-long preparations lacked, and won against lost sides), `economy.txt` with `-b`
-(its economy every 30 game seconds, when the replay samples its statistics:
-per resource its own gather-rate estimate, the rate its queues want, the order
-`pickMostNeededResources` gives, gatherers and what they do (gathering,
-walking, carrying), the sum of the gathering units' rates, the median trip from
-supply to dropsite, and in the first line each base's supply lists, the
-start's layout; each trainer's seconds by what it did (training, waiting for
-housing, idle with a plan unfunded or none queued) and each queue's account
-against its next plan's cost; `node build/petra_ts/economy-log.ts <batch or match dir>` sets
-it beside what the statistics say was really gathered, per band of minutes,
-won against lost sides, and the seed pairs won from one slot and lost from the
-other), `apiprobe.txt` with `-b` (at game minutes 6 and 20, every read-only
-common-API accessor called on a sample of entities and templates, with how
-often it came back undefined, NaN, 0 or threw: the engine-interface audit,
-`FINDINGS.md` §23; rerun after an engine update), the replay's
-`metadata.json` (each
-statistic sampled every 30 game seconds), and `logs.tar.gz`: `game.log`
-(stdout/stderr: script errors and the end-of-game statistics) and the engine's
-`mainlog.html`/`interestinglog.html`.
-Every match runs under a watchdog (`match.sh`): every 5 s it reads the
-engine's CPU time from `/proc/<pid>/stat` and kills the engine once that has
-not moved for `-S` seconds (default 60: a deadlock, every thread waiting) or
-the game has run `-K` minutes of wall time (default 10 headless, none
-visual: the engine spinning for good); a killed game says `watchdog: ...` in
-`match.txt` and its exit status is 137, and an engine the kill leaves stuck in
-the kernel is left behind after 30 s (`FINDINGS.md` §16).
-Matches are deterministic: an explicit `-autostart-seed` also picks the
-settings the game setup leaves random (biome, placement, ...), so the same
-seeds and code replay the same game and print the same fingerprint.
-After a port change, a headless match (`-n`) is a quick smoke test: the unit
-tests once missed a `requireValue` that threw every turn in a real game.
-`npm run test:petra:match` (`build/petra_ts/match.test.ts`, about 80 s, skipped
-without the engine) plays one fixed mirror match (seeds 287591089/941505347,
-recorded in `matches/test/`, `-r`) with `-t -l -T` (`-T`: `MatchTimeLimit.js`
-ends an undecided game at 90 game minutes, "time limit") and asserts the
-checks of `build/petra_ts/match-checks.ts`, which also runs on any record
-(`node build/petra_ts/match-checks.ts <dir>`): no errors, a decided game, the
-winner's town phase and metal, idle women, unspent stockpiles, early growth,
-a march that goes on for good (units in UnitAI WALKING),
-and from the commands silence, a command repeated turn after turn, floods,
-production churn and phases ordered but not had, and from the notices refused
-orders. The checks read only what the engine records, never `botstate.txt`:
-the bot's internal structure changes with its code, so `-b` is for reading
-while debugging (a section of the dump that no longer fits the code prints as
-`{"error": ...}` rather than breaking the bot's turn). It does not assert the
-fingerprint, which any change to the bot moves; it prints it.
-`npm run test:petra:smoke` (`build/petra_ts/smoke.ts`; `-- --jobs J`, default
-12) plays 24 headless games, `petra_out` against `petra_parity`: the 12 map/AI
-seed pairs of `build/petra_ts/smoke/reference.tsv`, each from both slots, on
-random/mainland, athen, difficulty 5, conquest, ended at 90 game minutes (one
-`batch.ts` run into `batches/smoke-<time>/`). Each game's fingerprint (the
-decision's game time and both players' end statistics) is compared with the
-reference's; it fails on a game that differs, a script error or warning, or a
-game the engine could not finish (an abort, status 134, is replayed up to
-twice first), and lists each moved game's seeds, old and new outcome and
-length. A refactor must leave all 24 identical (the check every type and
-structure change since stage 4 was held to); a change meant to alter play
-records the new games with `-- --update` (or `-- --update --from <batch>` from
-a batch already played on the reference's pairs), and the reference is
-committed with that change. Changes to the game data or the engine move the
-fingerprints too, `petra_parity`'s games included. The reference's header
-names the commit and the parity tag it was recorded with; its 24 games run
-20-56 game minutes. Its win-rate means nothing (24 games): strength is
-`batch.ts` with hundreds of games.
-Baselines (`PLAN.md` §2; `build/petra_ts/baselines.ts`, gitignored outputs):
-`petra_parity` ("Petra TS parity") is the port compiled from the tag
-`petra-ts-parity` (git archive of that tag's `petra_ts/` and tsconfigs, tsc,
-`prepare-bot.ts --bot=petra_parity`), so it stays fixed while `petra_ts`
-changes; `petra_prev` ("Petra TS previous", `baselines.ts prev`, built only
-when a batch or match names it) is the port at the tag `petra-ts-prev` the
-same way, the version before the change being measured (move the tag with
-`git tag -f petra-ts-prev <commit>` when a change is kept; tune on one seed
-pool and decide on another: `FINDINGS.md` §19); `petra_fixed` ("Petra fixed") is `petra/*.js` with
-`upstream/petra-fixes.patch` applied and its imports pointed at
-`simulation/ai/petra_fixed/`. With the patch's 15 fixes the two play the same
-games command for command (stage 1, `FINDINGS.md` §14: a game with the slots
-swapped is the same game, the same command log).
-Parity tools: `node build/petra_ts/command-diff.ts <dir> <dir>` (where two
-command logs part, with context) or `<batch dir>` (each seed pair's two games
-from a `--slots both` batch played with `-- -l`; `batch.ts --pairs M/A,...`
-replays chosen seeds); `node build/petra_ts/baselines.ts hybrid <petra_hybrid_*
-id> <module>...` (`petra_fixed` with those modules from the port; the port's
-extra helper exports are appended); `node build/petra_ts/parity-bisect.ts
---pair M/A --player P [--with m]` (plays the reference games to the end, then
-one hybrid per module to 2 minutes past the divergence, `match.sh -L`, and
-names the module whose hybrid plays as `petra_parity`; about 1.5 minutes).
-`match.sh -L MIN` is `-T` at game minute MIN (`-autostart-timelimit`, the
-`MatchTimeLimit` game setting read by `maps/scripts/MatchTimeLimit.js`).
-`build/petra_ts/batch.ts` (`--blue`, `--red`, `--games` seed pairs, `--slots
-one|both`, `--seed` of the pool, `--jobs`, `--twice N`, `--out`; header for
-the rest) builds the bots once, then runs `match.sh -n -T -B -r` per game,
-`--jobs` at a time, each job with its own `XDG_DATA_HOME`/`CONFIG`/`CACHE`/
-`STATE` under `build/petra_ts/workers/<job>/` (the engine's replays, logs,
-config and cache; checked per game), into `build/petra_ts/batches/<name>/`:
-`batch.txt`, `games/<n>/` (match records; replays are deleted, the rerun line
-replays), `results.jsonl`/`results.tsv` (one row per game, from each record's
-`result.json`, written by `match-report.ts`) and `summary.txt`
-(`batch-stats.ts`, also a CLI: win-rate over decided games with a 95% Wilson
-interval, an SPRT of 50% against `--h1` (0.55), slot advantage, seed pairs won
-from both slots, errors, game lengths, mean statistics, and determinism: games
-played twice by `--twice` must share a fingerprint). Time-limit games are
-draws, outside the win-rate. An existing `--out` resumes the batch.
-`--bot-state` builds Petra TS with the state dump and plays every game with
-`-b` (each game's `botstate.txt`, `attacks.txt` and `economy.txt`; the games are the same,
-checked on 196 games). `--game-timeout M` (default 15) is each game's wall-time
-limit, passed to the watchdog as `-K` (which also catches a deadlock within a
-minute); a killed game is marked failed with the watchdog's reason, and a
-resumed batch, and the smoke test, play it again; the batch itself kills a
-`match.sh` still running two minutes past the limit. For analyses across a batch, the paired
-games of `--slots both` compare the same map from both slots; `--map
-random/mainland_mirror` (`maps/random/mainland_mirror.js`) plays Mainland with
-player 1's half turned onto player 2's, the same start for both (two players,
-one civilisation), which takes the slot's advantage down but not the noise
-(`FINDINGS.md` §22: mainland stays the deciding pool); the replays'
-`metadata.json` hold each statistic by unit class every 30 game seconds
-(`total` is recorded as 0 for units lost and killed: use the `Unit` class).
-`node build/petra_ts/pair-score.ts <batch> [--minute M] [--compare <batch>]`
-is the early proxy for tuning (`PLAN.md` §5.3): blue's lead at minute M
-(default 8) in units trained and in resources gathered, averaged over a seed
-pair's two games so the slot cancels; exactly 0 for a bot that plays as red
-until then (the two games mirror each other), so any lead is the change's.
-It also prints how often the side ahead won at minutes 4-12 (gathered at
-minute 8: 79% in stage 4's games), and with `--compare` the pair-by-pair
-difference to another batch on the same pairs (a change against its control).
-It chooses what to try; the SPRT on the win-rate still decides.
-The names and colors use autostart options added on this branch
-(`-autostart-name`, `-autostart-color`, `-autostart-script`; see
-`autostart/cmd_line_args.js`), and `-autostart-stop-on-end` (C++: `CGame::Update`)
-runs no turn after the one the game is decided in, the turn a non-visual game
-quits on, so both leave the same files; a visual game then shows the result
-(`gui/session/message_box/QuitConfirmationObserver.js`: how it was won, then
-each player's state) until you leave it. `maps/scripts/MatchEnd.js` prints the
-decision with the game's reason ("last player alive", "wonder victory",
-"Capture the Relic", ...), which `match.txt` shows with the result.
+- Use `coverage:petra` (`tests/coverage.ts`), not `test:petra:coverage`: Node's
+  built-in line figure counts never-run branches as covered.
+- `quality:petra` enforces max per-function thresholds: **96 lines, cyclomatic
+  15, cognitive 25, nesting depth 4, 5 parameters**, and **0 duplicated code
+  clones** (>= 60 tokens over >= 6 lines). Split long functions by
+  extract-method keeping smoke games identical.
+- `structure:petra -- --check` enforces: no `as` cast outside `adapter/brands.ts`
+  (`as const` apart), no `!`, `Engine.PostCommand` only in `adapter/commands.ts`,
+  `execution/` reaching the HQ only via `execution/hq.ts`, and holds baseline
+  counts in `build/petra_ts/structure-baseline.json` at **0** (layer violations
+  across `adapter < world < execution < decision < root` including type-only
+  imports, value-import cycles, `Engine` outside `adapter/`, unmarked dead
+  exports/methods, stale `TODO never called` markers). No module may export what
+  only it uses.
+- TypeScript configs are in `build/petra_ts/` (`tsconfig.json`,
+  `tsconfig.build.json`, `tsconfig.tests.json`). **Never put a `.json` file
+  under `simulation/ai/`** other than a bot's `data.json` (`ICmpAIManager.cpp`
+  lists every `*.json` there as a bot).
+- For full details on `match:petra`, `batch:petra`, `test:petra:match`,
+  `test:petra:smoke`, baselines (`petra_parity`, `petra_prev`, `petra_fixed`),
+  state logs (`-b`, `-l`, `-t`, `-P`), and parity tools, read
+  `build/petra_ts/README.md`.
 
 ## Petra architecture (`simulation/ai/`)
 
-- `common-api/` — shared, engine-facing JS (not part of the port): `SharedScript`
-  (entities, templates, terrain/accessibility, resource maps), `GameState`,
-  `Entity`/`Template`, `EntityCollection`, `filters`, `BaseAI`.
-- `petra/` — the original JS bot, the reference: the baselines are built from it
-  (`petra_fixed`) and from the frozen port (`petra_parity`); it is no test
-  target since stage 3. The game loads the bot named by a folder's `data.json`
-  (`constructor`, `filename`, `useShared`).
-- `petra_ts/` — the port, in layers (stage 3, `PLAN.md` §3.4): `_petrabot.ts`
-  and the `.d.ts` declarations at the root; `adapter/` (the engine boundary:
-  `brands.ts`, `entityExtend.ts`, `chatHelper.ts`, `unitState.ts` parsing what a
-  unit does, `orders.ts` reading what it was ordered to do, `commands.ts` where the bot's own commands leave it, `pathfinder.ts` the engine's
-  pathfinder); `world/` (the
-  AI's model: `config.ts` and `difficultyLevel.ts`, the bot's settings, read by every layer; `mapModule.ts`, `mapMask.ts`; `geography.ts`, the territory and
-  border maps and the land/sea regions, owned by the HQ; `gatherEconomy.ts`,
-  each resource's and each food source's measured rate per gatherer, the walk included, owned by the HQ; `production.ts`, how busy the barracks and ranges are, measured, owned by the HQ and not saved; `census.ts`, our population against its room; `seaRoute.ts`, a ship's route round the enemy's shooters on the sea grid; `shipTraffic.ts`, where the enemy's ships sail, fading, owned by the HQ on naval maps and not saved, which places the towers (`FINDINGS.md` §38); `baseResources.ts`,
-  the supplies each base's dropsites reach, owned by each base; `bases.ts`, the
-  read-only view of the bases); `decision/` (headquarters, startingStrategy,
-  the managers; stage 5's utility decisions: `foodSource.ts`, berries or fields by what a gatherer brings in from each (`FINDINGS.md` §20), `economyScore.ts`, the economy's options by the seconds they take to pay back from the income they add, measured, which the research manager reads (§28), `housing.ts`, `fields.ts` and `dropsites.ts`, Petra's house, field and dropsite rules as pure functions over a census (§31), and `gatherSplit.ts`, a share of the gatherers per resource, not wired (§19)); `execution/` (attack and transport plans, defense armies, queues,
-  the queue plans, `worker.ts`). Files kept the original's names; the 1:1 rule
-  ended with the tag `petra-ts-parity`.
-- `petra_out/` — generated, gitignored: the port built as the "Petra TS" bot.
-  Imports use VFS paths (`simulation/ai/common-api/...`); the engine-facing
-  shapes are declared in `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`
-  and `petra-runtime.d.ts` (port-wide metadata/config types).
+- `common-api/` — shared, engine-facing JS (not part of the port):
+  `SharedScript` (entities, templates, terrain/accessibility, resource maps),
+  `GameState`, `Entity`/`Template`, `EntityCollection`, `filters`, `BaseAI`.
+- `petra/` — the original JS bot (reference only; untouched).
+- `petra_ts/` — the port, in layers (`PLAN.md` §3.4):
+  - Root: `_petrabot.ts` and `.d.ts` declarations (`engine-api.d.ts`,
+    `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts`).
+  - `adapter/` (engine boundary): `brands.ts`, `entityExtend.ts`, `chatHelper.ts`,
+    `unitState.ts` (parses what a unit is doing), `orders.ts` (reads what it was
+    ordered to do), `commands.ts` (sole exit for bot commands), `pathfinder.ts`,
+    `templateData.ts`, `placed.ts`, `debug.ts`.
+  - `world/` (AI's model): `config.ts`, `difficultyLevel.ts`, `mapModule.ts`,
+    `mapMask.ts`, `geography.ts` (territory/border maps and land/sea regions,
+    owned by HQ), `gatherEconomy.ts` (measured gather rates including walk,
+    owned by HQ), `production.ts` (measured trainer busyness, owned by HQ, not
+    saved), `census.ts` (population vs room), `seaRoute.ts` (ship routing round
+    enemy shooters), `shipTraffic.ts` (fading enemy ship heatmap on naval maps,
+    places towers), `baseResources.ts` (dropsite supplies per base), `bases.ts`
+    (read-only `BaseView`).
+  - `decision/`: `headquarters.ts`, `startingStrategy.ts`, managers (`attack`,
+    `base`, `bases`, `build`, `defense`, `diplomacy`, `emergency`, `garrison`,
+    `naval`, `research`, `trade`, `victory`), `placement.ts`, `enemySelection.ts`,
+    and pure/utility modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`,
+    `fields.ts`, `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
+  - `execution/`: `attackPlan.ts`, `transportPlan.ts`, `defenseArmy.ts`,
+    `queue.ts`, `queueManager.ts`, `queueplan.ts`, `queueplanBuilding.ts`,
+    `queueplanTraining.ts`, `queueplanResearch.ts`, `worker.ts`, `unitPlan.ts`,
+    `hq.ts`.
+- `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
+  `build/petra_ts/prepare-bot.ts`).
 
 Control flow: `_petrabot.ts` (`PetraBot extends BaseAI`) → on the first turn
-`startingStrategy.gameAnalysis` reads the map and sets up `Headquarters`; then
-one turn in eight (offset by player id) `Headquarters.update` drives the
-managers (bases/base, build, attack + attack/transport plans, defense +
-defense armies, naval, trade, research, diplomacy, garrison, victory,
-emergency) and `QueueManager` funds `queues` of plans
-(`queueplanBuilding`/`Training`/`Research`) by priority. Workers are steered
-by `worker.ts` through entity metadata (`role`, `subrole`, `base`, `plan`,
-`transport`, …). Every manager has `Serialize` for save games; objects are made whole by their constructor (no `init` step): `analyseMap` makes the `Geography`, `new Headquarters(config, gameState, geography)` builds every manager with what it needs, `Headquarters.restore` (and each manager's or plan's `restore`) builds them from a save; `gameAnalysis` keeps only the first turn's actions; a `Worker` hands each unit a `UnitWork` holding its land and base access.
+`startingStrategy.analyseMap` creates `Geography`, `new Headquarters(config,
+gameState, geography)` constructs all managers whole (no two-step `init`), and
+`gameAnalysis` runs first-turn actions; on load `Headquarters.restore` (and each
+manager's/plan's `restore` factory) rebuilds from save data. Then one turn in
+eight (offset by player id) `Headquarters.update` drives the managers and
+`QueueManager` funds `queues` of plans by priority. `worker.ts` steers workers
+via entity metadata (`role`, `subrole`, `base`, `plan`, `transport`, …) with a
+`UnitWork` per unit.
 
 ## Petra tests (`petra_ts/tests/`)
 
-Read `tests/README.md` before writing tests; `tests/FINDINGS.md` records the
-known bugs, port/original differences, shared quirks, unreachable code and
-untested branches.
+Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
+(`offset`/`limit`) when inspecting large `.test.ts` files or `tests/FINDINGS.md`.
 
 - The harness (`tests/harness/`) recreates the engine. `setup.ts` is preloaded
-  into every test process (`--import`, by `tests/run.ts`): `hooks.ts` resolves
-  VFS specifiers and, for `PETRA_TARGET=out`, loads the built `petra_out/` module
-  for each import of a port source; `engine.ts` evaluates the real
+  (`--import`, via `tests/run.ts`): `hooks.ts` resolves VFS specifiers and swaps
+  in `petra_out/` when `PETRA_TARGET=out`; `engine.ts` evaluates real
   `globalscripts` and records `Engine.PostCommand`/warnings (`commands`,
   `sent(type)`, `logs`).
 - Tests import the port directly (`../execution/queue.ts`) and are typed by it:
-  no local copies of the port's classes or types (export a type from the port
-  when a test needs it), branded values through `adapter/brands.ts`.
+  no local copies of port classes or types (export a type from the port when
+  needed), branded values via `adapter/brands.ts`.
 - Fakes: `fakes.ts` (`makeEntity`, `makeTemplate`, `emptyEvents`/`eventsWith`,
-  `stubGlobal`/`restoreEngine`; `fake<T>()` types a fake as the real object, the
-  harness's one cast, and `override(target, { method })` changes a fake's
-  answers), `world.ts` (`makeWorld`: entities around a stub HQ), `hqWorld.ts`
-  (`makeHqWorld`/`seatHQ`: a real Headquarters on real InfoMaps, with
-  out-of-scope managers swapped for recording `doorStub`s, `doorManagers`),
-  `navalWorld.ts`, `bareState.ts` (`makeFakeGameState`: config, queues,
-  templates), `diplomacy.ts` (`setPlayers`), `persistence.ts` (save/reload
-  round trips).
-- Fake entities and stubs **throw on any undeclared method**: declare what the
-  code under test asks for in the test itself.
-- Every test fails if a plan moved from a state its caller did not expect
-  (`changeState`'s warning; the guard is in `harness/engine.ts`): set the state
-  the game has there, or call `allowMisplacedMoves()` in that test.
-- Harness answers must match what the common-api really returns (e.g. parsed
-  template leaves are strings; `resistanceStrengths()` is `{ Damage: {...} }`).
+  `stubGlobal`/`restoreEngine`, `fake<T>()`, `override(target, { method })`),
+  `world.ts` (`makeWorld`), `hqWorld.ts` (`makeHqWorld`/`seatHQ` with
+  `doorStub`/`doorManagers`), `navalWorld.ts`, `bareState.ts`
+  (`makeFakeGameState`), `diplomacy.ts` (`setPlayers`), `persistence.ts`
+  (save/reload round trips).
+- Fake entities and stubs **throw on any undeclared method**: declare only what
+  the code under test asks for in the test itself.
+- Every test fails if an attack plan moved from a state its caller did not
+  expect (`changeState`'s warning in `harness/engine.ts`): set the realistic
+  game state or call `allowMisplacedMoves()` in that test.
+- Harness answers must match real `common-api` shapes (e.g. parsed template
+  leaves are strings; `resistanceStrengths()` is `{ Damage: {...} }`).
 
 ### Conventions for this work
+
 - Tests assert behaviour in realistic game situations, not implementation.
-  Check new tests actually reach the branch they name (run `coverage:petra --file`).
-- Tests run on the port's sources (`src`) and on the built bot (`out`); the
-  original is no target since stage 3. A test with `// only the port passes:
-  ...` pins one of the original's bugs; the original failed exactly the first 20
-  when last run (19 bugs; one pins the attack plan's save validation); eight
-  more pin stage-4 fixes and forty-four stage 5's (the engine's order shape, the first
-  field by what berries bring in, the house before the training queues, the
-  best plan paid from the split accounts, the women paid before the
-  soldiers, the women's share of 0.5, research by payback, one more barracks while
-  the barracks are busy, a ship without a boarding point, units ashore answering an
-  attacker, an army that sails leaving local attacks, attacks on defended
-  buildings without siege, sea routes round the enemy's shooters, re-routing at sea,
-  landing away from threats, an early market on a dry island, the ship queue while a
-  transport waits, the town phase of a dry island, a saving town's arsenal, soldiers beside enemies neither drafted nor shipped away, nor counted while the plan prepares, units waiting for a ship at the rally point answering, a plan clearing its rally point's island before it sails, towers over the enemy's sea passages, a saving town's tower over one, civic centre spots followed and contested ones skipped, a dry town on a naval map, a dry town's fields, fishing and idle workers, an attack drafting while it waits for ships and the ship queue raised for it, a base for room, an attack that cannot grow, a field per island, fishing by the fish left, ships keeping their course, a hunting fleet, docks as targets, ships blocked only when neither moving nor turning, routed transports left to their plan, a boarding ship turning not taken for stuck), 72 in all.
+  Verify new tests reach the branch they name (`npm run coverage:petra -- src --file <module>`).
+- Tests run on both `src` and `out`. Tests marked `// only the port passes: ...`
+  pin original bugs and Stage 4–5 fixes (72 in all; see `tests/FINDINGS.md` §1).
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.
-- Ids, positions, regions, times, template names and grid cells are branded
-  (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`, `SeaIndex`,
-  `RegionIndex`, `GameMs`, `GameSeconds`, `TemplateName` (entity templates),
-  `TechName` (technologies), `AttackPlanId`, `BaseId`, `ArmyId`, `TransportPlanId`,
-  `CellIndex<Grid>` in `engine-api.d.ts`; `InfoMap<Grid>` and `CommonGrid<Grid>` carry their
-  grid): what the engine hands over carries the brand. `petra_ts/brands.ts`
-  is the only place that gives it to a plain value (`entityId`, `playerId`,
-  `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
-  `templateName`, `techName`, `attackPlanId`, `baseId`, `armyId`, `transportPlanId`, `cellIndex`, and `GAIA`, `INVALID_PLAYER`,
-  `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`, `NO_BASE`, `NEW_BASE`,
-  `NEW_ANCHORLESS_BASE`): its identity
-  functions hold the port's only sanctioned casts. A loop over a map's cells
-  brands its index once (`const j = cellIndex(map, jIndex)`). A loop over player indices brands its index once
-  (`const i = playerId(iIndex)`); records keyed by a `for...in` key keep
-  `number` keys.
-- Names and states that are a fixed set are typed as one: queue names
-  (`PetraRuntime.QueueName`: the configured ones and an attack plan's
-  `plan_<n>`, `_champ`, `_siege`), attack types (`AttackType`,
-  `ATTACK_TYPES`), a unit's `plan` metadata (`UnitPlan`; its states and
-  lending in `execution/unitPlan.ts`), roles (`WorkerRole`, `WorkerSubrole`).
-  Metadata reads and writes are typed by key (`PetraEntityMetadata`), and a
-  plan's metadata as the entity metadata it becomes (`PlanMetadata`). Template data is read through
-  `adapter/templateData.ts` (`Template.get()` returns `unknown`).
-- A debug warning is `debugWarn(config, level, () => message)` (`adapter/debug.ts`):
-  the message is built only at that level. The port compiles with
-  `noUnusedLocals`.
-- The attack plan's state changes only through `changeState(from, to)`
-  (the moves are in `AttackTransitions`, `attackPlan.ts`).
-- What a unit has been ordered to do is read through `adapter/orders.ts`
-  (`ordersOf`: each order's data; `gatherRate`): `Entity.unitAIOrderData()`
-  returns UnitAI's orders, `{type, data}`, since the engine's commit
-  4b516b336e, and the common API's `currentGatherRate` has returned 0 since
-  (`FINDINGS.md` §18). Fakes give orders with `orders(...)` (`harness/fakes.ts`).
-- What a unit is doing is read through `adapter/unitState.ts` (`isInState`,
-  `hasActivity`, `stateIs`, ...), never by comparing `unitAIState()` strings:
-  the state names are the union `UnitAIStateName`, taken from `UnitAI.js`
-  (`unitState.test.ts` fails when UnitAI's states change).
-- The bot's own commands go through `adapter/commands.ts` (`postCommand`,
-  `debugShade`); only that module calls `Engine.PostCommand`.
-- Saved data carries `SAVE_VERSION` (`_petrabot.ts`): raise it with any change
-  to a manager's saved shape; a save of another version is refused and the bot
-  starts afresh.
-- World state lives in `world/` objects owned by the managers that used to hold
-  it (`HQ.geography`, `base.resources`), and the port reads them there
-  (`HQ.geography.territoryMap`, `base.resources.dropsiteSupplies`): an accessor
-  on a hot path cost measurable turn time. The owners keep get/set accessors with
-  the old names (`HQ.territoryMap`, `HQ.landRegions`, `base.dropsiteSupplies`,
-  ...) for the save format and the tests; the stub HQ of `harness/world.ts` is
-  its own `geography`.
-- Execution code (`execution/`) reaches the headquarters only through
-  `hqOf(gameState)` (`execution/hq.ts`): a read-only view of the members it
-  uses, whose bases are `BaseView`s, and four reports (`phaseResearched`,
-  `markBuildingStarted`, `noteNothingToGather`, `allowsDistantFood`). It reads
-  bases through `world/bases.ts` (`BaseView`, read-only supply lists) and
-  changes them only through its capabilities (`SupplyBooking`, `SupplyUpkeep`,
-  `IdleWorkers`); a manager's own state (e.g. the victory manager's raided
-  relics) is changed only through that manager's methods. A new use of the HQ
-  from execution code goes into `ExecutionHQ`, as a read or a report.
-- Methods never called (in port and original) are marked `/** TODO never called ... */`.
+- IDs, positions, regions, times, template/tech names, plan/base/army IDs, and
+  grid cells are branded (`EntityId`, `PlayerId`, `WorldPos`, `MapPos`,
+  `AccessIndex`, `SeaIndex`, `RegionIndex`, `GameMs`, `GameSeconds`,
+  `TemplateName`, `TechName`, `AttackPlanId`, `BaseId`, `ArmyId`,
+  `TransportPlanId`, `CellIndex<Grid>` in `engine-api.d.ts`).
+  `adapter/brands.ts` holds the port's only sanctioned casts (`entityId`,
+  `playerId`, `worldPos`, `landRegion`, `seaRegion`, `seconds`, `secondsOf`,
+  `templateName`, `techName`, `attackPlanId`, `baseId`, `armyId`,
+  `transportPlanId`, `cellIndex`, and sentinel constants `GAIA`,
+  `INVALID_PLAYER`, `INVALID_ENTITY`, `NO_LAND`, `NO_REGION`, `NO_TEMPLATE`,
+  `NO_BASE`, `NEW_BASE`, `NEW_ANCHORLESS_BASE`). Brand loop indices once (`const
+  j = cellIndex(map, jIndex)`, `const i = playerId(iIndex)`); records keyed by
+  `for...in` keep `number` keys.
+- Fixed sets are union types: queue names (`PetraRuntime.QueueName`), attack
+  types (`AttackType`, `ATTACK_TYPES`), unit `plan` metadata (`UnitPlan` in
+  `execution/unitPlan.ts`), worker roles (`WorkerRole`, `WorkerSubrole`).
+  Metadata reads/writes are typed by key (`PetraEntityMetadata`, `PlanMetadata`).
+  Template data is read through `adapter/templateData.ts`.
+- Debug warnings use `debugWarn(config, level, () => message)`
+  (`adapter/debug.ts`). The port compiles with `noUnusedLocals`.
+- Attack plan state changes only through `changeState(from, to)`
+  (`AttackTransitions` in `attackPlan.ts`).
+- Unit orders are read through `adapter/orders.ts` (`ordersOf`, `gatherRate`);
+  fakes supply orders with `orders(...)` (`harness/fakes.ts`).
+- Unit states are read through `adapter/unitState.ts` (`isInState`,
+  `hasActivity`, `stateIs`, …), never by comparing raw `unitAIState()` strings.
+- Bot commands go through `adapter/commands.ts` (`postCommand`, `debugShade`);
+  only that module calls `Engine.PostCommand`.
+- Saved data carries `SAVE_VERSION` (`_petrabot.ts`): increment it whenever a
+  manager's saved shape changes.
+- World state lives in `world/` objects owned by managers (`HQ.geography`,
+  `base.resources`) and hot paths read them directly
+  (`HQ.geography.territoryMap`, `base.resources.dropsiteSupplies`), while owners
+  keep get/set accessors for saves and tests.
+- Execution code (`execution/`) reaches `Headquarters` only through
+  `hqOf(gameState)` (`execution/hq.ts`), reads bases through `world/bases.ts`
+  (`BaseView`), and mutates them only through capability interfaces
+  (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`).
+- Methods never called (in port and original) are marked
+  `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
