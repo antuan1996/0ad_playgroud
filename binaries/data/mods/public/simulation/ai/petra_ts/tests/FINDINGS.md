@@ -2200,9 +2200,53 @@ decided sooner (games 4, 9, 18, 19, 20: 24:27 to 23:53, 21:16 to 19:05,
 26:37 to 22:02, 23:16 to 22:31, 28:59 to 28:17). The integration match:
 the same fingerprint twice (`42137e373adaee7f`).
 
+**Against `petra_prev`** (40 games, 20 fresh mainland pairs from both slots,
+pool seed 73, `stage6-garrison-cap`): 20 won, 20 lost (50%, CI 35-65%),
+every pair split by the slot, as the control batch's were: in these games
+the case does not arise or does not decide. Kept as a fix of the play and of
+the turn time where it does (game 19, the smoke test's five).
+
 **Left, a quirk both share:** `garrisonAttackedUnit` in an emergency evicts a
 resident to make room (`unload`, an order the engine carries out after the
 turn) and garrisons the wounded unit at once, but the holder still reads
 full on that turn, so `garrison` refuses it; it returns true all the same.
 The harness used to accept him; its test now states what happens.
+
+## 51. Stage 6: an army's arrival turn (2026-11-07)
+
+PLAN §6.2's third item. §48's four long mirror games (seed pairs
+10357832/21428834, 581830560/441091089, 69005611/703238273,
+501488891/576103559) replayed with `-P` after §50's fix keep their
+fingerprints (the decaying-tower case does not arise in them); their AI turns
+over 25 ms were four, all a started attack's `Update Attack`: 85, 62, 56 and
+39 ms, the turn an army reached its target. On that turn
+(`startingAttack`) `updateAttacking` orders every unit rather than 10 a turn.
+Profiled inside (game 2, minute 19.1, player 1, 168 units): 65.5 ms for the
+orders, of which **51.5 ms in the sort** of the enemy units in reach (111
+attackers, 0.46 ms each) and 12.9 ms in finding them. The sort's comparison
+asked `ent.counters(enemy)` (template reads) and two metadata reads for both
+sides of every comparison.
+
+Changed (the port, no play change): each enemy's worth (civilian, countered)
+and distance are read once per attacker, and the comparison is made on them,
+with its sums in the same order so a near tie falls the same way
+(`sortByAttackValue`). The same games: the smoke test 24 of 24 identical,
+the four long games the same four fingerprints. Their AI script time per
+turn: worst 97.1 and 67.7 ms (players 1 and 2) to 40.4 and 38.1; 99.9th
+11.1/11.7 to 10.1/10.2; the whole turn's worst 102 to 47.5. Three turns over
+25 ms are left in the four games, each an arrival (40, 38, 33 ms; 30 of the
+40 in `Update Attack`).
+
+Tried and dropped: testing the distance before `canAttackTarget` when
+finding the enemies in reach. It is not the same: `allowCapture` (through
+`jointCaptureStrength`) books the attacker into `HQ.capturableTargets` as
+capturing every capturable target it only considers, so testing fewer
+targets changes the capture strengths read later. That booking is itself a
+quirk the port shares with Petra: an attacker that weighed a target and went
+for another still counts in the strength said to be capturing the first.
+Not changed.
+
+The rest of an arrival's cost is the per-unit search itself (all units on
+one turn); spreading it over turns would change the play, and with the worst
+turn at 40 ms it is left.
 

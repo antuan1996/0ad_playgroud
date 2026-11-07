@@ -524,6 +524,12 @@ beside the win-rate:
    another ship, the plan released), measured by the orders sent per
    transport and the island games' draws.
 
+Progress (2026-11-07): items 1 and 2 were one bug, the garrison loop that
+emptied every plan for a tower it could not fill (`FINDINGS.md` §50; fixed;
+a draft cap and an earlier start were tried first and lost). Item 3: the
+arrival turn's sort made cheap with no play change, the worst AI turn of
+§48's long games from 97 to 40 ms (§51). Item 4 is next.
+
 Then the build-order planner and the fight estimator (3.4), where the
 attack timing of §46 is decided.
 
