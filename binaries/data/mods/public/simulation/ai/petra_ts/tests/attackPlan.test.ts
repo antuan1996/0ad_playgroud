@@ -5285,6 +5285,28 @@ describe("second pass: the army at work", () =>
 		assert.deepEqual(spearman.strikes, [[horse.id(), false]]);
 	});
 
+	it("a soldier by the target passes over the nearer swordsmen four brothers already fight, for a free one", () =>
+	{
+		const world = makeWorld();
+		const target = makeTarget(world, {}, 2005);
+		// two swordsmen beside him, each fought by four of ours, and a free one farther off
+		for (const [id, x, brothers] of [[3000, 24, 1100], [3002, 26, 1200]])
+		{
+			foe(world, id, [x, 20], ["Unit", "Infantry", "Melee"]);
+			for (let i = 0; i < 4; ++i)
+			{
+				fighter(world, brothers + i, [x - 1, 21], ["Melee"], {
+					unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+					unitAIOrderData: () => orders({ target: entityId(id) }),
+				});
+			}
+		}
+		const free = foe(world, 3001, [40, 20], ["Unit", "Infantry", "Melee"]);
+		const soldier = fighter(world, 1010, [20, 20], ["Infantry", "Melee"], { isIdle: () => true });
+		attacking(world, target).update(world.gameState, emptyEvents());
+		assert.deepEqual(soldier.strikes, [[free.id(), false]]);
+	});
+
 	it("a soldier by the target with no foe about breaks the gate first when it can break walls", () =>
 	{
 		const world = makeWorld();
