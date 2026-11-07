@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (48 tests in all; the
+Each is pinned by a test that only the port passes (50 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -71,6 +71,7 @@ whether a game can reach it.
 | `researchManager.checkPhase` (stage 5) | asked for the town phase at 112 population, also in a saving town whose land had run dry of wood: the wood went into houses until less than the phase's 500 was left (§37) | a dry saving town asks for it at once | researchManager: "a saving town whose land has run dry of wood asks for the town phase without waiting for its population" |
 | `headquarters.constructTrainingBuildings` arsenal (stage 5) | a saving town returned before its arsenal: on islands no siege engine was ever trained (§37) | a saving town of the city phase with a market builds its arsenal | headquarters: "a saving town of the third phase with a market builds its arsenal; without one it does not" |
 | `defenseManager.garrisonUnitsInside` (stage 6) | a decaying holder asked for more men than it holds (a captured sentry tower: 4 to stop its decay, room for 3) took every soldier in reach out of his attack plan on every turn, the full tower refusing them: the HugeAttack churn and the army that never left (§50) | takes no more than the holder holds | defenseManager: "a captured tower too small to stop its decay takes three of the army, and the rest stay in their attack" |
+| `defenseManager.garrisonToShoot`, `garrisonManager` threats (stage 6) | a tower shooting at an enemy merchant ship (no weapon) took five workers in; the next review let them out, the ship gone by: every 15 s for nine minutes by a trade route (§52) | no garrison against, and no threat from, a unit that cannot attack | defenseManager: "takes nobody into the tower that shoots at an enemy merchant ship sailing by"; garrisonManager: "an enemy merchant ship sailing by in bowshot keeps nobody in the tower" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -2249,4 +2250,48 @@ Not changed.
 The rest of an arrival's cost is the per-unit search itself (all units on
 one turn); spreading it over turns would change the play, and with the worst
 turn at 40 ms it is left.
+
+## 52. Stage 6: the ships' orders, and towers that let their men in and out (2026-11-07)
+
+PLAN §6.2's fourth item, measured on the 4-player Dodecanese match
+(`match.sh -m random/dodecanese -s 20261101 -a 4242 -N 4 -n -T -l`, 90
+minutes, at §51's code): 10099 garrison and 6419 unload orders (§49: 10555
+and 6803), so nothing there had changed. What they are:
+
+- **Most are the transports' ordinary work**: a ship carrying 30 units gets
+  30 garrison orders at its boarding point and 30 unloads at the landing, one
+  per unit; player 1's ship 2733 made 10 such trips between minutes 19.5 and
+  25.5 with no repeat. The totals measure how much is carried, not ships
+  that are stuck.
+- **The repeats were towers.** Player 1's units 2937-2941 were garrisoned 27
+  times each, all into one holder that never moved: a stone tower
+  (`structures/athen/defense_tower`, range 60) beside an enemy trade route
+  (§38 places towers where enemy ships pass). Traced: each time a merchant
+  ship (player 3's `ship_merchant`, no weapon) came within 60 m (it sailed by
+  at 58-98 m), `DefenseManager.garrisonToShoot` took the five nearest workers
+  in; the garrison manager's review 3 s later (`threatsAround`) found nobody
+  within range, the ship gone by, and let them out. Every 15 s, minutes 27.8
+  to 37. Counted over the match: units garrisoned into a building and
+  unloaded within 10 s, 209 (120 of them player 1's).
+
+**Changed** (the port; Petra does the same): no garrisoning against a unit
+that cannot attack (the engine reports no attack types: merchants, traders,
+fishing boats), and such a unit is no threat at review either (`mayThreaten`),
+so the two stay in step; the tower shoots it alone. The smoke test: 24 of 24
+games identical (mainland has no such targets by its towers by then).
+
+Left after it, the same oscillation against armed enemies passing at the
+edge of a tower's range (traced: ram ships, soldiers walking by): the entry
+test and the review 3 s later look at a moving enemy at two moments. Tried:
+a tower keeps its shooters for 20 s after it last saw a threat (stamped at
+entry and at each review with one). The Dodecanese match: 36 round trips
+under 10 s against 209. But it moves 18 of the 24 smoke games (the same
+winners; some decided much later, 16:06 to 23:05, 21:12 to 27:43): towers
+keep workers out of the fields on mainland too. Not committed; to be
+measured on both pools first.
+
+Not found in this match: a transport circling or shuttling without getting
+anywhere (§49's last point, the user's watch). The orders show none of the
+repeated route sends of §45; finding one needs the ships' positions over
+time (a visual game, or a per-ship position log), not the command log.
 
