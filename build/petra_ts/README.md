@@ -116,6 +116,10 @@ built in `binaries/system/pyrogenesis`.
     (`decision/fightEstimate.ts`) and each side's losses 60 and 120 s on;
     `node build/petra_ts/fight-log.ts <match or batch dir>` scores the
     estimator (PLAN.md §6.3.1).
+  - `forecasts.txt`: every minute from minute 2 to 13, the build-order
+    planner's forecast (`decision/economyForecast.ts`) 60, 120 and 180 s on,
+    against what was there; `node build/petra_ts/forecast-log.ts <match or
+    batch dir>` gives its errors (PLAN.md §6.3.2).
   - `apiprobe.txt`: at minutes 6 and 20, read-only common-API accessor audit
     (`tests/FINDINGS.md` §23).
 - `-P`: script turn timing (`aitimes.txt` via `PYROGENESIS_AI_TIMES` in

@@ -517,6 +517,7 @@ if [ "$botState" = true ]; then
 	grep -oE 'SHIPLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/ships.txt" || true
 	grep -oE 'FIGHTLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/fights.txt" || true
 	grep -oE 'FIGHTSTATS \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/fightstats.txt" || true
+	grep -oE 'FORECAST \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/forecasts.txt" || true
 	grep -oE 'APIPROBE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/apiprobe.txt" || true
 fi
 

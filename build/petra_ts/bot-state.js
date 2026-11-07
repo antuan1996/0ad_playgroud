@@ -64,6 +64,13 @@
  * centre at the last count: who holds the place):
  *   FIGHTSTATS {"player":..,"key":..,"stats":{..}}
  * read by fight-log.ts, which can try other models on the same fights.
+ * And the build-order planner's forecast (decision/economyForecast.js,
+ * PLAN.md §6.3.2) against what happened (forecasts.txt with match.sh -b):
+ * every minute from minute 2 to 13, the state it starts from, the support
+ * units, citizen soldiers and population it forecasts 60, 120 and 180 s on
+ * under the present settings, and those there were then, in one line:
+ *   FORECAST {"t":..,"player":..,"from":{..},"forecast":{"60":{..},..},"actual":{"60":{..},..}}
+ * read by forecast-log.ts.
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
  * event: created, progress every 30 s, ended with its dead and killed):
  *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
@@ -90,6 +97,7 @@ import { PetraBot } from "simulation/ai/petra_out/_petrabot.js";
 import { createObstructionMap } from "simulation/ai/petra_out/world/mapModule.js";
 import { combatStats } from "simulation/ai/petra_out/adapter/templateData.js";
 import { estimateFight, fightSide } from "simulation/ai/petra_out/decision/fightEstimate.js";
+import { forecast } from "simulation/ai/petra_out/decision/economyForecast.js";
 
 const DUMP_FIRST = 60;
 const DUMP_EVERY = 120;
@@ -111,6 +119,10 @@ const FIGHT_BANDS = [20, 40, 80];
 const FIGHT_REACH = 60;
 /** who holds the ground: each side's units this near the fight's centre, the last time its losses are counted */
 const FIGHT_GROUND = 60;
+/** the planner's forecast (forecasts.txt): every minute from minute 2 to 13, forecast so far ahead, then checked */
+const FORECAST_EVERY = 60;
+const FORECAST_UNTIL = 780;
+const FORECAST_AHEAD = [60, 120, 180];
 /** game seconds at which the common API is probed (apiProbe) */
 const API_PROBE_AT = [360, 1200];
 /** entity methods that send a command or write metadata: the probe never calls them */
@@ -148,6 +160,9 @@ export class PetraBotState extends PetraBot
 		if (defense && "error" in defense)
 			print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...defense }) + "\n");
 		section(() => this.sampleProduction());
+		const forecasts = section(() => this.logForecasts());
+		if (forecasts && "error" in forecasts)
+			print("FORECAST " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, ...forecasts }) + "\n");
 		const fights = section(() => this.logFights());
 		if (fights && "error" in fights)
 			print("FIGHTLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "kind": "error", ...fights }) + "\n");
@@ -687,6 +702,114 @@ export class PetraBotState extends PetraBot
 	 * killed (gone from the game while it fought them; a foe that walked out
 	 * of sight counts as gone too, so "killed" is an upper bound).
 	 */
+	/** Our support units, citizen soldiers and population now. */
+	workforceNow()
+	{
+		const units = this.gameState.getOwnUnits();
+		return {
+			"supports": units.filter(filters.byClasses(["Support+Worker"])).length,
+			"soldiers": units.filter(filters.byClass("CitizenSoldier")).length,
+			"population": this.gameState.getPopulation()
+		};
+	}
+
+	/** The state the planner's forecast starts from (decision/economyForecast.js EconomyState). */
+	economyState()
+	{
+		const gameState = this.gameState;
+		const civ = gameState.getPlayerCiv();
+		const template = name => gameState.getTemplate(name.replace("{civ}", civ));
+		const trained = name =>
+		{
+			const t = template(name);
+			return { "cost": { ...t.cost() }, "seconds": t.buildTime() };
+		};
+		const house = template("structures/{civ}/house");
+		const resources = gameState.getResources();
+		const built = cls => gameState.getOwnEntitiesByClass(cls, true).filter(filters.isBuilt()).length;
+		const economy = this.HQ.gatherEconomy;
+		const gatherers = {};
+		const rates = {};
+		for (const res of ["food", "wood", "stone", "metal"])
+		{
+			gatherers[res] = economy.gatherers[res] ?? 0;
+			rates[res] = economy.rateOf(res);
+		}
+		const now = this.workforceNow();
+		return {
+			"time": this.elapsedTime,
+			"stock": { "food": resources.food, "wood": resources.wood, "stone": resources.stone, "metal": resources.metal },
+			gatherers, "ratePerGatherer": rates,
+			"supports": now.supports, "soldiers": now.soldiers, "population": now.population,
+			"popLimit": gameState.getPopulationLimit(), "popMax": gameState.getPopulationMax(),
+			"trainers": this.trainersNow(), "batchModifier": 0.8,
+			"support": trained("units/{civ}/support_female_citizen"),
+			"soldier": trained("units/{civ}/infantry_spearman_b"),
+			"house": { "cost": { ...house.cost() }, "seconds": house.buildTime(), "room": house.getPopulationBonus() }
+		};
+	}
+
+	/** Our civic centres and barracks with the batches in their queues (decision/economyForecast.js Trainer). */
+	trainersNow()
+	{
+		const kindOf = name =>
+		{
+			const t = this.gameState.getTemplate(name);
+			return !t ? "other" : t.hasClass("Support") ? "support" : t.hasClass("CitizenSoldier") ? "soldier" : "other";
+		};
+		const trainers = [];
+		for (const cls of ["CivCentre", "Barracks"])
+			for (const ent of this.gameState.getOwnEntitiesByClass(cls, true).filter(filters.isBuilt()).values())
+			{
+				const queue = [];
+				for (const item of ent.trainingQueue() ?? [])
+				{
+					if (!item.unitTemplate)
+						continue;
+					const t = this.gameState.getTemplate(item.unitTemplate);
+					const seconds = queue.length ? (t?.buildTime() ?? 10) * Math.pow(item.count, 0.8) : item.timeRemaining / 1000;
+					queue.push({ "kind": kindOf(item.unitTemplate), "count": item.count, seconds });
+				}
+				trainers.push({ "centre": cls == "CivCentre", queue });
+			}
+		return trainers;
+	}
+
+	/** The planner's forecasts, checked against what happened (see the head). */
+	logForecasts()
+	{
+		if (!this.HQ?.gatherEconomy)
+			return undefined;
+		this.forecasts ??= [];
+		this.nextForecast ??= 120;
+		const now = this.elapsedTime;
+		if (now >= this.nextForecast && now <= FORECAST_UNTIL)
+		{
+			this.nextForecast += FORECAST_EVERY;
+			const from = this.economyState();
+			const settings = { "supportRatio": this.Config.Economy.supportRatio, "targetWorkers": this.HQ.targetNumWorkers };
+			const ahead = {};
+			for (const seconds of FORECAST_AHEAD)
+				ahead[seconds] = forecast(from, settings, from.time + seconds);
+			this.forecasts.push({ "t": from.time, from, settings, "forecast": ahead, "actual": {} });
+		}
+		for (const entry of this.forecasts)
+			for (const seconds of FORECAST_AHEAD)
+				if (entry.actual[seconds] === undefined && now - entry.t >= seconds)
+					entry.actual[seconds] = this.workforceNow();
+		const last = FORECAST_AHEAD.at(-1);
+		for (const entry of this.forecasts.filter(e => e.actual[last] !== undefined))
+		{
+			const round = v => Math.round(v * 100) / 100;
+			const from = { ...entry.from, "trainers": entry.from.trainers.map(t => [t.centre ? "centre" : "barracks", t.queue.length]), "stock": Object.fromEntries(Object.entries(entry.from.stock).map(([k, v]) => [k, Math.round(v)])),
+				"ratePerGatherer": Object.fromEntries(Object.entries(entry.from.ratePerGatherer).map(([k, v]) => [k, round(v)])) };
+			print("FORECAST " + JSON.stringify({ "t": Math.round(entry.t), "player": PlayerID, from,
+				"settings": entry.settings, "forecast": entry.forecast, "actual": entry.actual }) + "\n");
+		}
+		this.forecasts = this.forecasts.filter(e => e.actual[last] === undefined);
+		return undefined;
+	}
+
 	/** The fights started, followed to their losses 60 and 120 s on (see the head). */
 	logFights()
 	{
