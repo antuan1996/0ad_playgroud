@@ -177,7 +177,7 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
 - Tests assert behaviour in realistic game situations, not implementation.
   Verify new tests reach the branch they name (`npm run coverage:petra -- src --file <module>`).
 - Tests run on both `src` and `out`. Tests marked `// only the port passes: ...`
-  pin original bugs and Stage 4–5 fixes (72 in all; see `tests/FINDINGS.md` §1).
+  pin original bugs and Stage 4–6 fixes (73 in all; see `tests/FINDINGS.md` §1).
 - Port code must not silence the compiler with `as X` casts or `!`; use
   `requireValue` / `requireTemplate` / `requireMetadata` (`entityExtend.ts`)
   where the context guarantees a value, and remove guards that cannot fire.

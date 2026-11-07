@@ -12,7 +12,7 @@ project are referenced to the files that hold them.
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
 | Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex`, `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<Grid>` are branded (stage 2; conversions in `petra_ts/brands.ts`); commands are a union by `type` |
-| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1704 tests on the sources and the built bot, importing and typed by the port; 72 pin a bug of the original or a fix of stages 4-5 (the original failed the first 20 when it was last a target, stage 3) |
+| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1706 tests on the sources and the built bot, importing and typed by the port; 73 pin a bug of the original or a fix of stages 4-6 (the original failed the first 20 when it was last a target, stage 3) |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
 | Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |

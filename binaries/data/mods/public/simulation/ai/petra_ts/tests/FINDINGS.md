@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (47 tests in all; the
+Each is pinned by a test that only the port passes (48 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -70,6 +70,7 @@ whether a game can reach it.
 | `navalManager.shipPriority` (stage 5) | the ship queue's priority was 1: no transport was paid for with wood scarce, and the army waited at the shore (§37) | while a transport with units waits for ships, the queue goes just above the training queues | transportPlan: "goes just above the training queues while units wait for a ship, back to its own after" |
 | `researchManager.checkPhase` (stage 5) | asked for the town phase at 112 population, also in a saving town whose land had run dry of wood: the wood went into houses until less than the phase's 500 was left (§37) | a dry saving town asks for it at once | researchManager: "a saving town whose land has run dry of wood asks for the town phase without waiting for its population" |
 | `headquarters.constructTrainingBuildings` arsenal (stage 5) | a saving town returned before its arsenal: on islands no siege engine was ever trained (§37) | a saving town of the city phase with a market builds its arsenal | headquarters: "a saving town of the third phase with a market builds its arsenal; without one it does not" |
+| `defenseManager.garrisonUnitsInside` (stage 6) | a decaying holder asked for more men than it holds (a captured sentry tower: 4 to stop its decay, room for 3) took every soldier in reach out of his attack plan on every turn, the full tower refusing them: the HugeAttack churn and the army that never left (§50) | takes no more than the holder holds | defenseManager: "a captured tower too small to stop its decay takes three of the army, and the rest stay in their attack" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -2140,3 +2141,68 @@ funny". What the measurements so far say, none of it fixed:
   that moves without getting anywhere (circling, or shuttling between two
   points) is not caught, and nothing escalates when the same order fails
   again and again.
+
+## 50. Stage 6: the army held at its rally point, and the HugeAttack churn (2026-11-07)
+
+**The draft cap and an earlier start, tried and dropped.** PLAN §6.2's first
+item read the held army (§47) as an attack-plan problem: plans drafting far
+past their targets and waiting for a category they could not fill. Four
+variants against `petra_prev` (the stage 5 bot), pool seed 71 (10 seed pairs,
+both slots) unless said:
+
+| Variant | Games | `petra_out` won |
+|---|---|---|
+| draft cap at the plan's total size and start at it (`stage6-attacks`) | 20 | 6 (30%) |
+| start at the total size only (`stage6-A-aggonly`) | 20 | 10 (50%) |
+| the same, fresh pool seed 72 (`stage6-A2-aggonly-fresh`) | 40 | 12 (30%) |
+| draft cap only (`stage6-B-caponly`) | 20 | 6 (30%) |
+| draft cap at four times the targets (`stage6-C4-cap4x`) | 20 | 8 (40%) |
+| control: the code as at the tag (`stage6-control-head`, pool 72) | 40 | 20 (50%), every pair split: plays as `petra_prev` |
+
+None is worth having (each loses less units, gathers less and controls
+less of the map); a plan's drafting and start are left as at stage 5.
+Their records are in `build/petra_ts/batches/stage6-*`.
+
+**What held the army, found instead.** §47's game 19 (seeds
+1029525084/408937582, the same fingerprint `0acbe1aef30477e4` at the tag),
+replayed with a trace of each plan's units: every HQ turn from minute 16,
+`garrisonManager.update` asked `defenseManager.garrisonUnitsInside` to fill a
+**captured sentry tower** against its decay. Its minimum is
+`ceil((territoryDecayRate - defaultRegenRate) / garrisonRegenRate)` =
+ceil((20 - 10) / 2.5) = 4, and the tower holds 3. The loop stops only at the
+minimum: it takes the nearest soldier out of his plan and defense army
+(`withdrawToGarrison`: an attack's citizen soldier goes back to work) and
+then asks `GarrisonManager.garrison`, which refuses him, the tower being
+full; so on to the next, 109-138 soldiers a turn, the whole army. The
+original has the same loop (`petra/defenseManager.js` `garrisonUnitsInside`).
+
+So:
+
+- Rush 1 drafted 151 units on the turn it set off (`completing`) and had 6
+  on the next; it set off with 6 (§47's "set off at 17.3 with 6").
+- Every plan after it drafted the army (154 units) on its first turn, lost it
+  to the tower on the next and started with none: `StartAttack` ran on an
+  empty army, and `update` ended the plan at once (`unitCollection` empty).
+  The attack log books these as aborted in `completing` ("no target to start
+  on"), but they found a target; they had no army. 53 HugeAttacks in 90 s.
+- The army, sent to the rally point and back to work on every turn, made
+  the command flood (7754 `walk-to-range` at minute 18) and the slow turns.
+
+**Fixed** (the port, an original bug): the loop takes no more than the
+holder holds, `min(minimum, garrisonMax)`. The test harness's garrison
+manager now refuses a full holder as the real one does. Game 19 again:
+no plan aborted (55 before), Rush 1 set off with its army (138 units, the
+median of the two rushes at their start), the game decided at 20:26
+(21:59 before); player 1's script time per turn, 99th percentile 5.4 ms,
+99.9th 10.3, worst 23.4 (§47's whole batch: 15.8, 150, 489). The smoke test:
+19 of 24 games the same, the other five still won by `petra_out` and all
+decided sooner (games 4, 9, 18, 19, 20: 24:27 to 23:53, 21:16 to 19:05,
+26:37 to 22:02, 23:16 to 22:31, 28:59 to 28:17). The integration match:
+the same fingerprint twice (`42137e373adaee7f`).
+
+**Left, a quirk both share:** `garrisonAttackedUnit` in an emergency evicts a
+resident to make room (`unload`, an order the engine carries out after the
+turn) and garrisons the wounded unit at once, but the holder still reads
+full on that turn, so `garrison` refuses it; it returns true all the same.
+The harness used to accept him; its test now states what happens.
+

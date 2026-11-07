@@ -256,3 +256,23 @@ Seen in the notices the game sends the bots (`match.sh -l`, `notices.txt`).
   `unload-all-by-owner`: about 1500 bogus notifications in a 46-minute bot game.
   Fix: `CanControlUnit(entity, player, controlAll)`. Not in the patch: it is not
   Petra, and a human player may see the effect differently (not checked).
+
+## Part 4: found after the parity freeze, not in the patch
+
+The patch stays as stage 1 froze it, so that `petra_fixed` plays as
+`petra_parity`. These were found later in the port's games; each has a fix in
+the port and a test.
+
+### 16. `defenseManager.garrisonUnitsInside` empties every attack plan for a tower it cannot fill
+
+A captured structure that decays is filled with
+`ceil((territoryDecayRate - defaultRegenRate) / garrisonRegenRate)` units
+(`garrisonManager.addDecayingStructure`). For a captured sentry tower that is
+ceil((20 - 10) / 2.5) = 4, and the tower holds 3. The loop stops only at the
+minimum: each nearest unit is taken out of its attack plan and defense army
+first, then `GarrisonManager.garrison` refuses it (the tower is full), and the
+loop goes on through every unit in reach, on every turn the tower decays.
+In a game: 109-138 soldiers taken out of their plans per turn for minutes,
+each new plan starting empty and ending at once (53 HugeAttacks in 90 s).
+Fix: stop at `Math.min(minGarrison, target.garrisonMax())`.
+(`tests/FINDINGS.md` §50.)
