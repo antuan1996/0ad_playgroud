@@ -768,8 +768,7 @@ export class TransportPlan
 		turn: BoardingTurn,
 	): void
 	{
-		const shipId = ship.id();
-		const { time, boarding } = turn;
+		const { time } = turn;
 		let retry = false;
 		const state = unitState(ship);
 		if (stateIs(state, "INDIVIDUAL.WALKING") || stateIs(state, "INDIVIDUAL.PICKUP.APPROACHING"))
@@ -804,25 +803,44 @@ export class TransportPlan
 
 		if (retry)
 		{
-			if (!boarding.nTry[shipId])
-			{
-				boarding.nTry[shipId] = 1;
-			}
-			else
-			{
-				++boarding.nTry[shipId];
-			}
-			let bp = boardingPos;
-			if (boarding.nTry[shipId] > 1)
-			{ // we must have been blocked by something ... try with another boarding point
-				boarding.nTry[shipId] = 0;
-				debugWarn(this, 1, () => "ship " + shipId + " new attempt for a landing point ");
-				bp = this.retryBoardingPos(gameState, ship, boardingPos, this.startIndex, false);
-				boarding.boardingPos[shipId] = bp;
-			}
-			this.sailTo(gameState, ship, bp);
-			ship.setMetadata(PlayerID, "timeGarrison", time);
+			this.retryBoarding(gameState, ship, boardingPos, turn);
 		}
+	}
+
+	/** A ship stuck on its way to its boarding point: sent again; at the second try, to another point */
+	private retryBoarding(
+		gameState: CommonGameState,
+		ship: CommonPlacedEntity,
+		boardingPos: CommonPosition,
+		turn: BoardingTurn,
+	): void
+	{
+		const shipId = ship.id();
+		const { time, boarding } = turn;
+		if (!boarding.nTry[shipId])
+		{
+			boarding.nTry[shipId] = 1;
+		}
+		else
+		{
+			++boarding.nTry[shipId];
+		}
+		let bp = boardingPos;
+		if (boarding.nTry[shipId] > 1)
+		{ // we must have been blocked by something ... try with another boarding point
+			boarding.nTry[shipId] = 0;
+			debugWarn(this, 1, () => "ship " + shipId + " new attempt for a landing point ");
+			(this.failedPoints[shipId] ??= []).push(boardingPos);
+			bp = this.retryBoardingPos(gameState, ship, boardingPos, this.startIndex, false);
+			boarding.boardingPos[shipId] = bp;
+		}
+		// a wedged ship is nudged out first, as at sea: sent again from where it stood, one stayed there 46
+		// minutes, five units waiting for it on the shore (FINDINGS §54)
+		if (!this.wedged(gameState, ship, bp))
+		{
+			this.sailTo(gameState, ship, bp);
+		}
+		ship.setMetadata(PlayerID, "timeGarrison", time);
 	}
 
 	/** A unit that has not moved for 2 s on its way to its ship: get it out of a trap, or nearer the boarding point */
