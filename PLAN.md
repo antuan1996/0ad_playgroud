@@ -542,6 +542,120 @@ names b06a06459e.
 Then the build-order planner and the fight estimator (3.4), where the
 attack timing of §46 is decided.
 
+### 6.3 Stage 6's second half: the fight estimator and the build-order planner (design)
+
+§6.2's four items are done (`FINDINGS.md` §50-54): what is left is what
+§46 says decides a mainland game. The two sides are equal at minute 9; the
+winner has some 20 soldiers more at minute 13 and the loser has collapsed
+by 17. Two questions follow, one per tool (3.4: narrow search over a cheap
+model, run rarely, time-boxed):
+
+- **When to fight** (the fight estimator): does this army win against what
+  it will meet, and with how much left? Petra decides with fixed army sizes
+  (`rushSize`, the categories' `targetSize`) and fights a started attack
+  until its units run out.
+- **What to build to have the bigger army at minute 13** (the build-order
+  planner): which next item, of the few the managers choose between, brings
+  the most fighting strength by then without leaving the town open.
+
+The estimator comes first: it is the smaller piece, it acts directly on the
+lever, and the logs to calibrate it exist (`defense.txt`'s armies with their
+dead and killed). The planner is the riskier piece and is time-boxed (6.3.3).
+A lesson from §50: starting attacks *earlier* by a size rule lost (30-50%);
+the estimator makes a start *conditional* on winning, not earlier.
+
+#### 6.3.1 The fight estimator
+
+- **Model.** For each unit template, parsed once and cached
+  (`adapter/templateData.ts`): damage per second per damage type (attack
+  values over repeat time), resistances, hit points, range, speed, and the
+  class bonuses (counters). Damage of a against b is the engine's
+  `damage x 0.9^resistance x bonus`. A side's strength against another is
+  Lanchester's square law over the two compositions: each side's damage per
+  second against the other's mix, its total hit points, and the outcome is
+  the side whose `dps x hp` against the other is larger, with the fraction
+  left `sqrt(1 - weaker/stronger)`. Structures that shoot (towers, civic
+  centres, fortresses, with their garrisons' arrows) count as a fixed
+  damage-per-second side with their hit points. Melee against ranged reach is
+  a later refinement, only if calibration needs it.
+- **Where.** `decision/fightEstimate.ts`, pure (like `economyScore.ts`):
+  in, two lists of `{ template, count, hpFraction }` and the structures; out,
+  `{ winner, ourFractionLeft, seconds }`. Unit-tested on hand-made
+  compositions (equal armies tie; spearmen beat cavalry; a tower with five
+  archers inside holds off ten infantry).
+- **Calibration first, no play change.** A fight log in `bot-state.js`
+  (`fights.txt` with `match.sh -b`): each defense army and each started
+  attack's arrival, both sides' compositions at the start and the dead on
+  each side 60 s and 120 s later. `fight-log.ts` reports how often the
+  estimate names the side that lost fewer units, by size of fight. Exit:
+  right in at least 75% of fights with ten or more units a side, over a
+  20-game batch; otherwise refine the model (bonuses, ranges) before using
+  it.
+- **Uses, each a measured change of its own:**
+  1. *A started attack withdraws* when the estimate against the enemy
+     around it says it loses with less than a quarter left, instead of
+     fighting to the last unit (Abort's withdrawal exists).
+  2. *An Attack or HugeAttack sets off* when it wins against the enemy army
+     near its target (its towers and the soldiers within 80 m, and the
+     enemy's whole army as reinforcement after its walk time) with at least
+     a third left, its minimums met; the fixed target sizes stay as an upper
+     bound and the existing time limits stay. Rushes are left as they are.
+  3. *Defense*: a defense army engages only an attack it beats; otherwise
+     it garrisons, as against a bigger army now (later, only if 1-2 help).
+- **Budget.** Per plan in preparation and per started attack, at most
+  once per 5 game seconds, O(units of both sides) with the cached template
+  stats: a few tenths of a millisecond on the HQ turn. Checked with
+  `match.sh -P` and `ai-times.ts --compare` against `petra_prev`: the
+  mean and 99th percentile within 5%, the 99.9th within 10% (§4).
+- **Determinism.** Arithmetic over arrays in collection order, no
+  randomness, nothing saved (recomputed after a load).
+- **Measure.** Each use against `petra_prev` on fresh mainland pairs from
+  both slots, the SPRT against 55%; beside it, from the fight log, the
+  started attacks' losses per enemy unit killed, and the minute-13 soldier
+  gap of §46 (timeline, `-t`). Islands once at the end (no regression).
+
+#### 6.3.2 The build-order planner
+
+- **The question, narrowed.** Not a general build order: the managers keep
+  choosing what to build. The planner chooses the few settings §46 and
+  §24-29 found to matter in minutes 0-13: the women and soldier shares of
+  training, how many barracks, when to start the town phase, when to stop
+  workers. It picks the setting that maximises the estimated fighting
+  strength (6.3.1's) at minute 13, subject to a floor of soldiers at home
+  from minute 7 (the first fights).
+- **Model.** A resource-rate simulation in steps of 10 game seconds: the
+  gatherers per resource times the measured gather rates
+  (`world/gatherEconomy.ts`, the walk included), costs and train times
+  from the templates, the trainers' measured busyness (`world/production.ts`),
+  population room and houses, build times. It starts from the present state
+  each time it runs.
+- **Search.** At most 8 settings, each simulated to minute 13: no tree, a
+  rollout per setting, the best kept. Run once per 30 game seconds until
+  minute 13, spread over turns (one setting per turn), well under 1 ms a
+  turn.
+- **Calibration first.** Run in the state dump only: the model's forecast
+  for 60, 120 and 180 s ahead against what happened (`economy.txt`'s
+  income, the timeline's soldiers). Exit: resources gathered and soldiers
+  trained within 10% at 180 s on the median game. Then the early proxy
+  (`pair-score.ts`, minute 8) on 40 pairs picks whether the SPRT is worth
+  running.
+- **Time box.** If the forecast error stays above 15% after two rounds of
+  fixes, or the proxy shows nothing after 40 pairs, it stops there and is
+  written down in `FINDINGS.md`; the estimator does not depend on it.
+
+#### 6.3.3 Order and exit
+
+1. Template combat stats and `fightEstimate.ts` with unit tests (no play
+   change: smoke identical).
+2. The fight log and `fight-log.ts`; calibrate on a 20-game mainland batch
+   (with `--bot-state`); refine until 75%.
+3. Use 1 (withdraw), then use 2 (set off), each with its batch; then use 3
+   if 1-2 helped.
+4. The planner's model in the state dump; calibrate; then its use, with the
+   proxy, then the SPRT.
+5. Stage 6 closes on the stage's exit criterion (§6's table): a gain against
+   the stage 5 bot (`petra-ts-stage5`) by the SPRT, the turn budget kept.
+
 ## 7. Open questions
 
 - Answered in stage 3: the AI context offers no clock; the engine times the
