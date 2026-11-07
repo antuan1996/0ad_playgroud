@@ -1042,6 +1042,21 @@ export class AttackPlan
 	}
 
 	/**
+	 * The plan's army at most: its categories' targets. A plan that has as many
+	 * units in all (some categories over their target, others short) sets off
+	 * rather than wait for a category it may not fill (FINDINGS §47).
+	 */
+	private maxSize(): number
+	{
+		let size = 0;
+		for (const unitCat in this.unitStat)
+		{
+			size += this.unitStat[unitCat].targetSize;
+		}
+		return size;
+	}
+
+	/**
 	 * Returns true if the attack can be executed at the current time
 	 * Basically it checks we have enough units.
 	 */
@@ -1092,6 +1107,11 @@ export class AttackPlan
 		}
 
 		if (MaxReachedEverywhere)
+		{
+			return true;
+		}
+		// At the plan's size in all: enough units, even if their mix is not the targets'
+		if (MinReachedEverywhere && this.maxSize() && this.unitCollection.length >= this.maxSize())
 		{
 			return true;
 		}
@@ -1613,21 +1633,23 @@ export class AttackPlan
 			return this.enlistRaiders(gameState, available);
 		}
 
-		// Assign all units without specific role.
+		// Assign all units without specific role, but no more than the plan's size:
+		// drafting all the soldiers left Plan 2 empty and the army held at its rally
+		// point while a plan waited for a category it could not fill (FINDINGS §47)
 		for (const ent of gameState.getOwnEntitiesByRole(undefined, true).values())
 		{
 			if (ent.hasClasses(["!Unit", "Ship", "Support"]) || !available(ent) || ent.attackTypes() === undefined)
 			{
 				continue;
 			}
-			added = this.enlist(ent);
+			added = this.enlist(ent) || added;
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
 		for (const ent of hqOf(gameState).attackManager.outOfPlan.values())
 		{
 			if (available(ent))
 			{
-				added = this.enlist(ent);
+				added = this.enlist(ent) || added;
 			}
 		}
 
@@ -1647,7 +1669,7 @@ export class AttackPlan
 		{
 			if (!ent.getMetadata(PlayerID, "allied") && available(ent))
 			{
-				added = this.enlist(ent);
+				added = this.enlist(ent, false);
 			}
 		}
 		return added;
@@ -1668,14 +1690,15 @@ export class AttackPlan
 			{
 				continue;
 			}
-			added = this.enlist(ent);
+			added = this.enlist(ent, false);
 		}
 		return added;
 	}
 
-	/** The unit joins the plan: true */
-	private enlist(ent: CommonEntity): boolean
+	/** The unit joins the plan: true, unless the plan is at its size already */
+	private enlist(ent: CommonEntity, withinSize = true): boolean
 	{
+		void withinSize;
 		ent.setMetadata(PlayerID, "plan", this.name);
 		this.unitCollection.updateEnt(ent);
 		return true;
@@ -1719,7 +1742,7 @@ export class AttackPlan
 			{
 				continue;
 			}
-			added = this.enlist(ent);
+			added = this.enlist(ent) || added;
 		}
 		return added;
 	}

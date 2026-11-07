@@ -730,7 +730,9 @@ export class PetraBotState extends PetraBot
 		const cats = {};
 		for (const cat in plan.unitStat)
 			cats[cat] = [plan.unit[cat]?.length ?? 0, plan.unitStat[cat].minSize, plan.unitStat[cat].targetSize];
-		const queues = [plan.queue, plan.queueChamp, plan.queueSiege].filter(Boolean);
+		// the queues and build orders live on the preparation, not on the plan
+		const prep = plan.preparation();
+		const queues = prep ? [prep.queue, prep.queueChamp, prep.queueSiege].filter(Boolean) : [];
 		const account = this.queueManager.accounts["plan_" + plan.name];
 		const resources = gameState.getResources();
 		return {
@@ -741,7 +743,11 @@ export class PetraBotState extends PetraBot
 			"paused": queues.some(q => q.paused),
 			"account": account ? Object.fromEntries(Object.entries(account.Serialize().amounts).map(([k, v]) => [k, Math.round(v)])) : undefined,
 			"canStart": plan.canStart(),
-			"buildOrders": plan.buildOrders?.length ?? 0,
+			"buildOrders": prep ? prep.buildOrders.length : 0,
+			"orders": prep ? prep.buildOrders.map(order => ({
+				"name": order[4], "done": order[2].length,
+				"min": order[3].minSize, "target": order[3].targetSize, "batch": order[3].batchSize
+			})) : [],
 			"pop": gameState.getPopulation(),
 			"popMax": gameState.getPopulationMax(),
 			"workers": gameState.getOwnEntitiesByRole("worker", true).length,
