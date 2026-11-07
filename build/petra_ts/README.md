@@ -107,6 +107,10 @@ built in `binaries/system/pyrogenesis`.
     `pickMostNeededResources` order, gatherers by activity, trip lengths, start
     supply layout, trainer utilization, queue accounts); summarised beside replay
     stats by `node build/petra_ts/economy-log.ts <dir>`.
+  - `ships.txt`: every 5 s, each of our ships: position, angle, UnitAI state,
+    units aboard, transport plan, stage and goal; `node build/petra_ts/ship-log.ts
+    <match or batch dir>` finds ships with no headway toward their goal, still
+    away from it, or circling (PLAN.md §6.2, item 4).
   - `apiprobe.txt`: at minutes 6 and 20, read-only common-API accessor audit
     (`tests/FINDINGS.md` §23).
 - `-P`: script turn timing (`aitimes.txt` via `PYROGENESIS_AI_TIMES` in

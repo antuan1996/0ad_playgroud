@@ -22,6 +22,7 @@
 #   botstate.txt       with -b: Petra TS's own state every two game minutes, one
 #                      JSON line per player (bot-state.js)
 #   attacks.txt        with -b: the attack plans' lives, one JSON line per event
+#   ships.txt          with -b: our ships every 5 s (position, state, transport goal)
 #                      (created, started, aborted, finished, progress; bot-state.js,
 #                      read by attack-log.ts)
 #   economy.txt        with -b: Petra TS's economy every 30 game seconds, one JSON
@@ -512,6 +513,7 @@ if [ "$botState" = true ]; then
 	grep -oE 'ATTACKLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/attacks.txt" || true
 	grep -oE 'ECONLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/economy.txt" || true
 	grep -oE 'DEFENSELOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/defense.txt" || true
+	grep -oE 'SHIPLOG \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/ships.txt" || true
 	grep -oE 'APIPROBE \{.*\}$' "$out/game.log" | cut -d' ' -f2- >"$out/apiprobe.txt" || true
 fi
 

@@ -38,6 +38,14 @@
  * supply lists (count, amount and median distance per band), the start's layout.
  * economy-log.ts reads it with the replay's 30 s statistics (what was really
  * gathered).
+ * And our ships every 5 game seconds (ships.txt with match.sh -b, one line per
+ * sample and player), each ship as
+ *   SHIPLOG {"t":..,"player":..,"ships":[[id,kind,x,z,angle,state,carried,plan,stage,goalX,goalZ],..]}
+ * kind transport (in a transport plan), war, fish, trade or idle; state the
+ * UnitAI state without "INDIVIDUAL."; carried the units aboard; plan and stage
+ * the transport plan's ID and state, and the goal its stage gives the ship
+ * (boarding or landing point), or nulls; read by ship-log.ts for ships that
+ * sail without getting nearer their goal.
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
  * event: created, progress every 30 s, ended with its dead and killed):
  *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
@@ -69,6 +77,8 @@ const DUMP_EVERY = 120;
 const PROGRESS_EVERY = 60;
 /** seconds between two economy lines: the replay's statistics are sampled as often */
 const ECONOMY_EVERY = 30;
+// game seconds between two samples of our ships (ships.txt)
+const SHIP_EVERY = 5;
 /** game seconds at which the common API is probed (apiProbe) */
 const API_PROBE_AT = [360, 1200];
 /** entity methods that send a command or write metadata: the probe never calls them */
@@ -106,6 +116,13 @@ export class PetraBotState extends PetraBot
 		if (defense && "error" in defense)
 			print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...defense }) + "\n");
 		section(() => this.sampleProduction());
+		this.nextShipLine ??= SHIP_EVERY;
+		if (this.elapsedTime >= this.nextShipLine)
+		{
+			this.nextShipLine += SHIP_EVERY;
+			const ships = section(() => this.shipLine());
+			print("SHIPLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime * 10) / 10, "player": PlayerID, ...ships }) + "\n");
+		}
 		this.nextEconomyLine ??= ECONOMY_EVERY;
 		if (this.elapsedTime >= this.nextEconomyLine)
 		{
@@ -635,6 +652,42 @@ export class PetraBotState extends PetraBot
 	 * killed (gone from the game while it fought them; a foe that walked out
 	 * of sight counts as gone too, so "killed" is an upper bound).
 	 */
+	/** Our ships now: where each is, what it does, and the goal its transport plan gives it. */
+	shipLine()
+	{
+		const naval = this.HQ?.navalManager;
+		if (!naval)
+			return { "ships": [] };
+		const plans = new Map();
+		for (const plan of naval.transportPlans)
+			plans.set(plan.ID, plan);
+		const round = v => Math.round(v * 10) / 10;
+		const ships = [];
+		for (const ship of naval.ships.values())
+		{
+			const pos = ship.position();
+			if (!pos)
+				continue;
+			const plan = plans.get(ship.getMetadata(PlayerID, "transporter"));
+			let kind = "idle";
+			if (plan)
+				kind = "transport";
+			else if (ship.hasClass("FishingBoat"))
+				kind = "fish";
+			else if (ship.hasClass("Trader"))
+				kind = "trade";
+			else if (ship.hasClass("Warship"))
+				kind = "war";
+			const stage = plan?.stage;
+			const points = stage?.state == "boarding" ? stage.boardingPos : stage?.landingPos;
+			const goal = points?.[ship.id()];
+			ships.push([ship.id(), kind, round(pos[0]), round(pos[1]), Math.round((ship.angle() ?? 0) * 100) / 100,
+				(ship.unitAIState() ?? "").replace("INDIVIDUAL.", ""), ship.garrisoned()?.length ?? 0,
+				plan ? plan.ID : null, stage ? stage.state : null, goal ? round(goal[0]) : null, goal ? round(goal[1]) : null]);
+		}
+		return { ships };
+	}
+
 	logDefense()
 	{
 		const defenseManager = this.HQ?.defenseManager;
