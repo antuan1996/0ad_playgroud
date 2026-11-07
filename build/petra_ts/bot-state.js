@@ -46,6 +46,15 @@
  * the transport plan's ID and state, and the goal its stage gives the ship
  * (boarding or landing point), or nulls; read by ship-log.ts for ships that
  * sail without getting nearer their goal.
+ * And the fights (fights.txt with match.sh -b), for the fight estimator's
+ * calibration (PLAN.md §6.3.1): a started attack once it reached its target,
+ * against the enemy units within 80 m and the shooting structures there, or a
+ * defense army against its foes, both sides with 5 units or more; at the
+ * start each side's units and the estimate (decision/fightEstimate.js), then
+ * each side's losses (dead or taken) 60 and 120 s later, in one line:
+ *   FIGHTLOG {"t":..,"player":..,"kind":"attack"|"defense","id":..,"ours":n,"theirs":n,
+ *             "estimate":{..},"lost":{"60":[ours,theirs],"120":[ours,theirs]}}
+ * read by fight-log.ts.
  * And the defense armies' lives (defense.txt with match.sh -b, one line per
  * event: created, progress every 30 s, ended with its dead and killed):
  *   DEFENSELOG {"t":..,"player":..,"event":..,"army":..,"type":..,"age":..,..}
@@ -70,6 +79,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { VectorDistance } from "simulation/ai/common-api/utils.js";
 import { PetraBot } from "simulation/ai/petra_out/_petrabot.js";
 import { createObstructionMap } from "simulation/ai/petra_out/world/mapModule.js";
+import { estimateFight, fightSide } from "simulation/ai/petra_out/decision/fightEstimate.js";
 
 const DUMP_FIRST = 60;
 const DUMP_EVERY = 120;
@@ -79,6 +89,12 @@ const PROGRESS_EVERY = 60;
 const ECONOMY_EVERY = 30;
 // game seconds between two samples of our ships (ships.txt)
 const SHIP_EVERY = 5;
+// the fight log (fights.txt): seconds between two looks for fights, the fewest units a side, how near the enemy
+// must stand to an attack that reached its target, and when the losses are counted
+const FIGHT_EVERY = 10;
+const FIGHT_MIN = 5;
+const FIGHT_RANGE = 80;
+const FIGHT_AFTER = [60, 120];
 /** game seconds at which the common API is probed (apiProbe) */
 const API_PROBE_AT = [360, 1200];
 /** entity methods that send a command or write metadata: the probe never calls them */
@@ -116,6 +132,9 @@ export class PetraBotState extends PetraBot
 		if (defense && "error" in defense)
 			print("DEFENSELOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "event": "error", ...defense }) + "\n");
 		section(() => this.sampleProduction());
+		const fights = section(() => this.logFights());
+		if (fights && "error" in fights)
+			print("FIGHTLOG " + JSON.stringify({ "t": Math.round(this.elapsedTime), "player": PlayerID, "kind": "error", ...fights }) + "\n");
 		this.nextShipLine ??= SHIP_EVERY;
 		if (this.elapsedTime >= this.nextShipLine)
 		{
@@ -652,6 +671,102 @@ export class PetraBotState extends PetraBot
 	 * killed (gone from the game while it fought them; a foe that walked out
 	 * of sight counts as gone too, so "killed" is an upper bound).
 	 */
+	/** The fights started, followed to their losses 60 and 120 s on (see the head). */
+	logFights()
+	{
+		const hq = this.HQ;
+		if (!hq)
+			return undefined;
+		this.fights ??= new Map();
+		this.fightsDone ??= new Set();
+		this.nextFightLook ??= FIGHT_EVERY;
+		const now = this.elapsedTime;
+		if (now < this.nextFightLook)
+			return undefined;
+		this.nextFightLook += FIGHT_EVERY;
+		for (const type in hq.attackManager.startedAttacks)
+			for (const plan of hq.attackManager.startedAttacks[type])
+			{
+				// AttackPlan.STATE_ARRIVED and STATE_ATTACKING, the latter the empty string
+				if (plan.state != "arrived" && plan.state != "" || !plan.position)
+					continue;
+				const ours = plan.unitCollection.toEntityArray().filter(ent => ent.position());
+				const theirs = this.gameState.getEnemyUnits().filter(ent => this.near(ent, plan.position)).toEntityArray();
+				const towers = this.gameState.getEnemyStructures().filter(ent => this.near(ent, plan.position)).toEntityArray();
+				this.startFight("a" + plan.name, "attack", plan.name, ours, theirs, [], towers);
+			}
+		for (const army of hq.defenseManager.armies)
+		{
+			const ours = army.ownEntities.map(id => this.gameState.getEntityById(id)).filter(ent => ent?.position());
+			const theirs = army.foeEntities.map(id => this.gameState.getEntityById(id)).filter(ent => ent?.position());
+			const towers = army.foePosition ?
+				this.gameState.getOwnStructures().filter(ent => this.near(ent, army.foePosition)).toEntityArray() : [];
+			this.startFight("d" + army.ID, "defense", army.ID, ours, theirs, towers, []);
+		}
+		for (const [key, fight] of this.fights)
+		{
+			for (const after of FIGHT_AFTER)
+				if (fight.lost[after] === undefined && now - fight.t >= after)
+					fight.lost[after] = [this.lostOf(fight.ours), this.lostOf(fight.theirs)];
+			if (fight.lost[FIGHT_AFTER.at(-1)] === undefined)
+				continue;
+			print("FIGHTLOG " + JSON.stringify({ "t": Math.round(fight.t), "player": PlayerID, "kind": fight.kind,
+				"id": fight.id, "ours": fight.ours.length, "theirs": fight.theirs.length, "oursHp": fight.oursHp,
+				"theirsHp": fight.theirsHp, "estimate": fight.estimate, "lost": fight.lost }) + "\n");
+			this.fights.delete(key);
+		}
+		return undefined;
+	}
+
+	near(ent, pos)
+	{
+		const at = ent.position();
+		return !!at && VectorDistance(at, pos) <= FIGHT_RANGE;
+	}
+
+	/** A structure's arrows now: its default ones and those of the units inside, if it shoots. */
+	arrowsOf(structure)
+	{
+		if (!structure.attackTypes()?.includes("Ranged") || !structure.getDefaultArrow)
+			return 0;
+		return (structure.getDefaultArrow() || 0) + (structure.garrisoned()?.length ?? 0) * (structure.getArrowMultiplier() || 0);
+	}
+
+	startFight(key, kind, id, ours, theirs, ourTowers, theirTowers)
+	{
+		if (this.fights.has(key) || this.fightsDone.has(key) || ours.length < FIGHT_MIN || theirs.length < FIGHT_MIN)
+			return;
+		const shooters = list => list.map(structure => ({ structure, "arrows": this.arrowsOf(structure) }));
+		const estimate = estimateFight(fightSide(ours, shooters(ourTowers)), fightSide(theirs, shooters(theirTowers)));
+		const round = v => Number.isFinite(v) ? Math.round(v * 1000) / 1000 : String(v);
+		const hp = list => Math.round(list.reduce((sum, ent) => sum + ent.hitpoints(), 0));
+		this.fightsDone.add(key);
+		this.fights.set(key, {
+			"t": this.elapsedTime, kind, id,
+			"ours": ours.map(ent => [ent.id(), ent.owner()]),
+			"theirs": theirs.map(ent => [ent.id(), ent.owner()]),
+			"oursHp": hp(ours), "theirsHp": hp(theirs),
+			"estimate": { "winner": estimate.winner, "ourLeft": round(estimate.ourFractionLeft),
+				"theirLeft": round(estimate.theirFractionLeft), "seconds": round(estimate.seconds),
+				"ourTowers": ourTowers.filter(t => this.arrowsOf(t) > 0).length,
+				"theirTowers": theirTowers.filter(t => this.arrowsOf(t) > 0).length },
+			"lost": {}
+		});
+	}
+
+	/** How many of these units are gone or no longer their owner's. */
+	lostOf(units)
+	{
+		let lost = 0;
+		for (const [id, owner] of units)
+		{
+			const ent = this.gameState.getEntityById(id);
+			if (!ent || ent.owner() != owner)
+				++lost;
+		}
+		return lost;
+	}
+
 	/** Our ships now: where each is, what it does, and the goal its transport plan gives it. */
 	shipLine()
 	{

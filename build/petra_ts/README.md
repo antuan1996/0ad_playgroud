@@ -111,6 +111,11 @@ built in `binaries/system/pyrogenesis`.
     units aboard, transport plan, stage and goal; `node build/petra_ts/ship-log.ts
     <match or batch dir>` finds ships with no headway toward their goal, still
     away from it, or circling (PLAN.md §6.2, item 4).
+  - `fights.txt`: each fight (a started attack at its target, a defense army)
+    with 5 or more units a side: both sides, the fight estimator's answer
+    (`decision/fightEstimate.ts`) and each side's losses 60 and 120 s on;
+    `node build/petra_ts/fight-log.ts <match or batch dir>` scores the
+    estimator (PLAN.md §6.3.1).
   - `apiprobe.txt`: at minutes 6 and 20, read-only common-API accessor audit
     (`tests/FINDINGS.md` §23).
 - `-P`: script turn timing (`aitimes.txt` via `PYROGENESIS_AI_TIMES` in
