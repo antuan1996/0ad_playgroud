@@ -2456,3 +2456,43 @@ reinforcements (its army within reach in the next minute, not only the
 units at the fight), and a real winner that follows the fight (who holds
 the place at 120 s) rather than the starting units' losses.
 
+## 57. Stage 6: the fight estimator with reinforcements, and where it stops (2026-11-08)
+
+§56's two candidates, logged and scored. The log now has each side's
+reinforcements (its soldiers off the fight, on the fight's land, that can
+walk to its centre within 60 s, ships and women left out) and who holds the
+ground (each side's units within 60 m of the fight's centre at 120 s); the
+game is the same with it (§47's game 19, `77eb6671fec85cc7`).
+`fight-log.ts --variants` scores both yardsticks.
+
+Mirror games, both sides logging: 30 mainland (pool seed 82,
+`stage6-fights-reinf-mainland`, 665 fights, 260 of ten or more a side) and
+30 islands (pool seed 4246, `stage6-fights-reinf-islands`, 1106 fights, 596;
+12 games drawn at the time limit). Fights of ten or more a side, by the
+share lost at 30, 60 and 120 s, and by who holds the ground:
+
+| Who counts | Mainland | Islands |
+|---|---|---|
+| all units and towers (the estimator) | 75, 69, 69%; ground 71% | 71, 69, 68%; ground 61% |
+| the head count alone | 72, 65, 68%; 67% | 67, 66, 66%; 57% |
+| with the reinforcements | 62, 64, 64%; 67% | 73, 71, 69%; 70% |
+| with half the reinforcements | 68, 65, 65%; 69% | 74, 71, 69%; 68% |
+| within 80 m only | 68, 63, 59%; 62% | 54, 51, 47%; 47% |
+
+- The estimator is a little better than the head count (2-4 points), and
+  towers add a point.
+- The reinforcements help on islands (an army there cannot be fed from
+  other land: 61% to 70% by the ground) and hurt on mainland, where nearly
+  everything is within a minute's walk and the fight then reads as the two
+  whole armies.
+- No variant reaches the exit (75% of the fights of ten or more a side by
+  60 and 120 s): the best are 69-71%.
+
+So the estimate from the fight's start names the winner about seven times
+in ten, whatever is counted; what decides the rest is not in the start's
+compositions, positions or the units within reach. Stopped here, as §6.3.1
+asks of a model that does not pass its calibration: not used for the
+attacks' start or withdrawal. Kept: `fightEstimate.ts` and its tests, the
+fight log and `fight-log.ts`, for measuring fights (the started attacks'
+losses per enemy killed, which §6.3.1 names as a supporting metric).
+

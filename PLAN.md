@@ -589,7 +589,10 @@ the estimator makes a start *conditional* on winning, not earlier.
 - **Calibration first, no play change.** (First pass 2026-11-08,
   `FINDINGS.md` §56: the log and `fight-log.ts --variants` are in; the
   estimator names the winner in 67% of fights of ten or more a side by 60
-  and 120 s, as the head count does; not met.) A fight log in `bot-state.js`
+  and 120 s, as the head count does; not met. Second pass, §57, 30
+  mainland and 30 island games with reinforcements and who holds the
+  ground: at best 69-71%; not met, stopped. The estimator and the log stay
+  as measuring tools; uses 1-3 below are not made.) A fight log in `bot-state.js`
   (`fights.txt` with `match.sh -b`): each defense army and each started
   attack's arrival, both sides' compositions at the start and the dead on
   each side 60 s and 120 s later. `fight-log.ts` reports how often the
