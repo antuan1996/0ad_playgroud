@@ -2413,3 +2413,46 @@ points through it, which never count; Petra is the same. Not changed: the
 fix is common-api's (shared by every bot), and it would change the play;
 the estimator reads the bonuses itself.
 
+## 56. Stage 6: the fight estimator calibrated, first pass (2026-11-08)
+
+PLAN §6.3.1's step 2. `match.sh -b` now logs each fight (`fights.txt`,
+`bot-state.js` `logFights`): a started attack once it reached its target,
+against the enemy units within 80 m and the shooting structures there, or
+a defense army against its foes, 5 units a side or more; both sides by
+template and distance band, the estimate, and each side's losses (dead or
+taken) 30, 60 and 120 s on; each template's stats once (`fightstats.txt`).
+The game is the same with it (§47's game 19: `77eb6671fec85cc7` both ways).
+`fight-log.ts` scores the estimate (the real winner: the side that lost
+the smaller share of its starting units), and with `--variants`
+re-estimates the same fights with the port's estimator under other choices
+of who fights.
+
+20 mainland mirror games (pool seed 81, `stage6-fights-mainland2`, both
+sides logging): 379 fights, 139 of ten or more a side. Of those whose two
+sides did not lose the same share:
+
+| Who counts | 30 s | 60 s | 120 s | ten or more a side |
+|---|---|---|---|---|
+| all units and towers (the estimator) | 75% | 68% | 67% | 73, 67, 67% |
+| no towers | 75% | 68% | 67% | 72, 66, 66% |
+| within 80 m of the other side | 59% | 53% | 54% | 60, 54, 54% |
+| within 40 m | 47% | 42% | 43% | 47, 44, 43% |
+| the far weighed less (1, 1, 0.5, 0.25) | 74% | 67% | 66% | 70, 63, 63% |
+| the head count alone | 73% | 66% | 66% | 73, 67, 67% |
+
+- The estimator is no better than the head count. Every law over the sides'
+  totals names the same winner (the larger damage per second times hit
+  points), so only who is counted can change it.
+- Counting only those near the fight is worse: what decides it is not the
+  units standing there at its start.
+- Where it names our win, it leaves 85% of our army; 33% is left at 120 s
+  (126 fights). The fights are not closed: both sides' units keep coming
+  (in the largest misses both starting armies are dead by 120 s, "lost 193
+  and 175"), and a defense army's men come in one by one from the fields.
+
+Not met: the exit (75% of the fights of ten or more a side) by 60 and 120
+s; only just by 30 s. Next candidates, by what the data says: each side's
+reinforcements (its army within reach in the next minute, not only the
+units at the fight), and a real winner that follows the fight (who holds
+the place at 120 s) rather than the starting units' losses.
+

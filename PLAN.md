@@ -586,7 +586,10 @@ the estimator makes a start *conditional* on winning, not earlier.
   `{ winner, ourFractionLeft, seconds }`. Unit-tested on hand-made
   compositions (equal armies tie; spearmen beat cavalry; a tower with five
   archers inside holds off ten infantry).
-- **Calibration first, no play change.** A fight log in `bot-state.js`
+- **Calibration first, no play change.** (First pass 2026-11-08,
+  `FINDINGS.md` §56: the log and `fight-log.ts --variants` are in; the
+  estimator names the winner in 67% of fights of ten or more a side by 60
+  and 120 s, as the head count does; not met.) A fight log in `bot-state.js`
   (`fights.txt` with `match.sh -b`): each defense army and each started
   attack's arrival, both sides' compositions at the start and the dead on
   each side 60 s and 120 s later. `fight-log.ts` reports how often the
