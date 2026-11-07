@@ -1398,10 +1398,15 @@ export class DefenseManager
 			target.position(),
 		);
 
+		// No more than the holder holds: asked for more (a captured sentry tower
+		// holds 3, and its decay needs 4 to stop), the loop took every soldier in
+		// reach out of his attack plan on every turn, the tower refusing them, and
+		// the attack manager made and dropped plan after plan (FINDINGS §50)
+		const wanted = Math.min(minGarrison, target.garrisonMax());
 		let ret = false;
 		for (const ent of units.values())
 		{
-			if (garrisonManager.numberOfGarrisonedSlots(target) >= minGarrison)
+			if (garrisonManager.numberOfGarrisonedSlots(target) >= wanted)
 			{
 				break;
 			}
