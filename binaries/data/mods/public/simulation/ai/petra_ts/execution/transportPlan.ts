@@ -126,7 +126,8 @@ function onUnloadFailed(gameState: CommonGameState, ent: CommonEntity): void
 type TransportCrossing = TransportRoute & { id: TransportPlanId; sea: SeaIndex; ship?: CommonEntity; };
 
 /** A land's shore on a sea */
-type Shore = { land: AccessIndex; sea: SeaIndex; };
+/** A land seen from a sea; avoid: points a ship failed to reach, kept off when it looks for another (sailAgain) */
+type Shore = { land: AccessIndex; sea: SeaIndex; avoid?: readonly CommonPosition[]; };
 
 /** The boarding turn's time and the boarding stage */
 type BoardingTurn = { time: GameSeconds; boarding: Boarding; };
@@ -167,6 +168,9 @@ function since(ent: CommonEntity, time: GameSeconds): number
 
 /** Seconds a ship sailing to its boarding point must stand still, neither moving nor turning, to be sent again (onBoarding). */
 export const SHIP_STUCK = 5;
+/** A sailing ship that comes less than HEADWAY_GAIN metres nearer its landing point in HEADWAY_SECONDS is sent again (lostHeadway). */
+const HEADWAY_SECONDS = 60;
+const HEADWAY_GAIN = 20;
 /** Seconds between two checks of the sailing ships' routes against the threats (checkRoutes). */
 const ROUTE_CHECK = 3;
 /** The fewest seconds between two re-routings of a ship (checkRoutes). */
@@ -218,6 +222,11 @@ export class TransportPlan
 	 * sails on unchecked until it is sent again.
 	 */
 	routes: Record<number, { waypoints: CommonPosition[]; threats: number; sent: number; }> = {};
+	/** Each sailing ship's last headway toward its landing point: where, when, and how far it was (lostHeadway). */
+	headway: Record<number, { point: CommonPosition; time: GameSeconds; dist: number; }> = {};
+	/** Each ship's landing points it failed to reach (sailAgain), and where it stood when last sent (wedged). */
+	failedPoints: Record<number, CommonPosition[]> = {};
+	lastSent: Record<number, { pos: CommonPosition; time: GameSeconds; }> = {};
 	/** Game seconds of the last check of the routes. */
 	lastRouteCheck = 0;
 	sea: SeaIndex;
@@ -899,8 +908,13 @@ export class TransportPlan
 		avoidEnnemy: boolean,
 	): CommonPosition
 	{
-		return this.getBoardingPos(gameState, ship, { land: landIndex, sea: this.sea }, undefined, avoidEnnemy) ??
-			current;
+		return this.getBoardingPos(
+			gameState,
+			ship,
+			{ land: landIndex, sea: this.sea, avoid: this.failedPoints[ship.id()] },
+			undefined,
+			avoidEnnemy,
+		) ?? current;
 	}
 
 	/**
@@ -959,7 +973,13 @@ export class TransportPlan
 			filters.and(filters.byClass("Dock"), filters.byMetadata(PlayerID, "sea", seaIndex)),
 		).toEntityArray();
 		const shooters = avoidEnnemy ? shootersOf(gameState) : [];
-		const leg = { startPos, destination, shooters: avoidEnnemy ? shooters : undefined, alliedDocks };
+		const leg = {
+			startPos,
+			destination,
+			shooters: avoidEnnemy ? shooters : undefined,
+			alliedDocks,
+			avoid: shore.avoid,
+		};
 		for (const i of hqOf(gameState).navalManager.landingZones[landIndex][seaIndex])
 		{
 			let pos: CommonPosition = worldPos(i % width + 0.5, Math.floor(i / width) + 0.5);
@@ -988,6 +1008,7 @@ export class TransportPlan
 			destination: CommonPosition | undefined;
 			shooters: Parameters<typeof threatsAt>[1] | undefined;
 			alliedDocks: CommonPlacedEntity[];
+			avoid: readonly CommonPosition[] | undefined;
 		},
 	): number
 	{
@@ -1013,6 +1034,14 @@ export class TransportPlan
 		{
 			const point = points[shipId];
 			if (point !== undefined && SquareVectorDistance(point, pos) < this.boardingRange)
+			{
+				dist += 1000000;
+			}
+		}
+		// and away from the points this ship failed to reach, as from another ship's (FINDINGS §53)
+		for (const failed of leg.avoid ?? [])
+		{
+			if (SquareVectorDistance(failed, pos) < this.boardingRange)
 			{
 				dist += 1000000;
 			}
@@ -1154,7 +1183,7 @@ export class TransportPlan
 		// only a ship that has stopped: Petra took any ship not WALKING, one
 		// between two of its route's waypoints too, and sent it again by a new
 		// route every turn, a new landing point every third (FINDINGS §41)
-		if (!ship.isIdle() || !isPlaced(ship))
+		if (!isPlaced(ship))
 		{
 			return;
 		}
@@ -1163,6 +1192,14 @@ export class TransportPlan
 		const bp = sailing.landingPos[shipId] ??
 			this.getBoardingPos(gameState, ship, this.landingShore(), this.endPos, true);
 		sailing.landingPos[shipId] = bp;
+		if (!ship.isIdle())
+		{
+			if (this.lostHeadway(gameState, ship, bp))
+			{
+				this.sailAgain(gameState, ship, sailing, true);
+			}
+			return;
+		}
 		const dist = SquareVectorDistance(ship.position(), bp);
 		let remaining = 0;
 		for (const entId of ship.garrisoned())
@@ -1198,24 +1235,87 @@ export class TransportPlan
 		}
 		if (dist > this.boardingRange)
 		{
-			if (!sailing.nTry[shipId])
-			{
-				sailing.nTry[shipId] = 1;
-			}
-			else
-			{
-				++sailing.nTry[shipId];
-			}
-			let newBp = bp;
-			if (sailing.nTry[shipId] > 2)
-			{ // we must have been blocked by something ... try with another boarding point
-				sailing.nTry[shipId] = 0;
-				debugWarn(this, 1, () => shipId + " new attempt for a landing point ");
-				newBp = this.retryBoardingPos(gameState, ship, bp, this.endIndex, true);
-				sailing.landingPos[shipId] = newBp;
-			}
-			this.sailTo(gameState, ship, newBp);
+			this.sailAgain(gameState, ship, sailing);
 		}
+	}
+
+	/**
+	 * A ship short of its landing point is sent there again; at the third try, to another landing point. Straight
+	 * there when it has made no headway by its route: re-routed round the enemy's shooters as they moved, a ship
+	 * shuttled for minutes and never came nearer (FINDINGS §53).
+	 */
+	private sailAgain(gameState: CommonGameState, ship: CommonPlacedEntity, sailing: Sailing, straight = false): void
+	{
+		const shipId = ship.id();
+		// landShip sets it before it sends a ship again
+		const bp = requireValue(sailing.landingPos[shipId]);
+		if (this.wedged(gameState, ship, bp))
+		{
+			return;
+		}
+		sailing.nTry[shipId] = (sailing.nTry[shipId] ?? 0) + 1;
+		let newBp = bp;
+		if (sailing.nTry[shipId] > 2)
+		{ // we must have been blocked by something ... try with another boarding point
+			sailing.nTry[shipId] = 0;
+			debugWarn(this, 1, () => shipId + " new attempt for a landing point ");
+			(this.failedPoints[shipId] ??= []).push(bp);
+			newBp = this.retryBoardingPos(gameState, ship, bp, this.endIndex, true);
+		}
+		sailing.landingPos[shipId] = newBp;
+		if (straight)
+		{
+			delete this.routes[shipId];
+			ship.move(newBp[0], newBp[1]);
+			return;
+		}
+		this.sailTo(gameState, ship, newBp);
+	}
+
+	/**
+	 * Whether the ship stands where it stood when last sent, SHIP_STUCK seconds or more ago (within 2 m): wedged (against the shore, among other
+	 * ships), it is nudged 30 m out, away from its point, and sent again on a later turn; sent again where it stood,
+	 * a ship stayed idle at the same spot for 17 minutes, its plan swapping between two landing points it could
+	 * not reach (FINDINGS §53)
+	 */
+	private wedged(gameState: CommonGameState, ship: CommonPlacedEntity, point: CommonPosition): boolean
+	{
+		const pos = ship.position();
+		const time = gameState.ai.elapsedTime;
+		const last = this.lastSent[ship.id()];
+		this.lastSent[ship.id()] = { pos, time };
+		if (!last || time - last.time < SHIP_STUCK || SquareVectorDistance(last.pos, pos) >= 4)
+		{
+			return false;
+		}
+		delete this.lastSent[ship.id()];
+		delete this.routes[ship.id()];
+		ship.moveApart(point, 30);
+		return true;
+	}
+
+	/**
+	 * Whether a ship under way to its landing point has come less than HEADWAY_GAIN metres nearer it in
+	 * HEADWAY_SECONDS: the engine can keep a ship WALKING that no longer moves, and Petra looked only at ships that
+	 * had stopped (one stood 81 m from its landing point with 11 units aboard for the last 63 minutes of a game);
+	 * a ship re-routed again and again moves and gets nowhere (FINDINGS §53)
+	 */
+	private lostHeadway(gameState: CommonGameState, ship: CommonPlacedEntity, point: CommonPosition): boolean
+	{
+		const time = gameState.ai.elapsedTime;
+		const dist = VectorDistance(ship.position(), point);
+		const last = this.headway[ship.id()];
+		if (!last || last.point !== point || dist < last.dist - HEADWAY_GAIN)
+		{
+			this.headway[ship.id()] = { point, time, dist };
+			return false;
+		}
+		if (time - last.time < HEADWAY_SECONDS)
+		{
+			return false;
+		}
+		delete this.headway[ship.id()];
+		return true;
 	}
 
 	/**
