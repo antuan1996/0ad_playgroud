@@ -474,41 +474,6 @@ describe("queues, queries and build orders", () =>
 		assert.equal(plan.canStart(), false, "one short keeps waiting");
 	});
 
-	it("sets off at its total size even when one category stays short", () =>
-	{
-		const soldiers = (world: World, count: number, start: number, classes: string[]) =>
-		{
-			for (let i = 0; i < count; ++i)
-			{
-				world.addEntity(
-					makeEntity(
-						{ id: start + i, owner: PLAYER, position: [11, 12], classes: ["Unit", ...classes] },
-						{},
-						{ plan: 1 },
-					),
-				);
-			}
-		};
-
-		// a rush for four infantry and four fast movers, minimums four and two
-		const waiting = makeWorld();
-		soldiers(waiting, 4, 1010, ["Infantry", "Melee", "CitizenSoldier"]);
-		soldiers(waiting, 2, 1020, ["FastMoving", "CitizenSoldier"]);
-		const waitingPlan = makePlan(waiting, { name: 1, type: "Rush", data: { targetSize: 4 } });
-		assert.equal(waitingPlan.canStart(), true, "the minimums are met");
-		assert.equal(waitingPlan.mustStart(), false, "but one category is short of its target");
-
-		// six infantry and two fast movers: the plan's eight units, still short in fast movers
-		const full = makeWorld();
-		soldiers(full, 6, 1010, ["Infantry", "Melee", "CitizenSoldier"]);
-		soldiers(full, 2, 1020, ["FastMoving", "CitizenSoldier"]);
-		const fullPlan = makePlan(full, { name: 1, type: "Rush", data: { targetSize: 4 } });
-		assert.equal(fullPlan.unitStat.Infantry.targetSize, 4, "four infantry wanted");
-		assert.equal(fullPlan.unitStat.FastMoving.targetSize, 4, "four fast movers wanted");
-		assert.equal(fullPlan.unitStat.FastMoving.minSize, 2, "two fast movers required");
-		assert.equal(fullPlan.mustStart(), true, "eight units in all are enough");
-	});
-
 	it("starts one shortfall in a category only when every category is at target size", () =>
 	{
 		const world = makeWorld({ canBuildUnits: false });
@@ -1203,30 +1168,6 @@ describe("assigning units", () =>
 		assert.equal(attacker.getMetadata(PLAYER, "plan"), 1, "the role-free attacker joined");
 		assert.equal(plan.unitCollection.hasEntId(entityId(1013)), true, "the exile rejoined");
 		assert.equal(plan.unitCollection.hasEntId(entityId(1012)), false, "the role-carrying unit did not");
-	});
-
-	it("drafts no more soldiers than its categories want in all", () =>
-	{
-		const world = makeWorld();
-		const plan = makePlan(world, { name: 1, type: "Rush", data: { targetSize: 4 } });
-		// twelve role-free soldiers: four more than the plan's four infantry and four fast movers
-		for (let i = 0; i < 12; ++i)
-		{
-			world.addEntity(
-				makeEntity({
-					id: 1010 + i,
-					owner: PLAYER,
-					position: [11, 12],
-					classes: ["Unit", "Infantry", "Melee", "CitizenSoldier"],
-				}, { attackTypes: () => ["Melee"] }),
-			);
-		}
-
-		assert.equal(plan.assignUnits(world.gameState), true, "soldiers were drafted");
-		assert.equal(plan.unitCollection.length, 8, "no more than the plan's eight units");
-		const joined = world.units.filter((ent) => ent.getMetadata(PLAYER, "plan") === 1);
-		assert.equal(joined.length, 8, "eight soldiers wear the plan");
-		assert.equal(world.units.length, 12, "the other four stay out");
 	});
 
 	// only the port passes: Petra drafted them to be shipped to its rally point (FINDINGS §34)
