@@ -62,8 +62,10 @@ Do not merely inspect the formatter's diff: apply it.
     come from `adapter/brands.ts`.
   - Send commands only via `adapter/commands.ts` (`postCommand`, `debugShade`);
     read orders via `adapter/orders.ts` and unit states via `adapter/unitState.ts`.
-  - `execution/` reaches `Headquarters` only through `hqOf(gameState)`
-    (`execution/hq.ts`) and reads bases as `BaseView`s (`world/bases.ts`).
+  - `execution/` never reaches `Headquarters` or a decision manager: it uses
+    the interfaces of `execution/services.ts` on `gameState.ai` (`naval`,
+    `attacks`, `defense`, `victory`, `build`, `trade`, `town`), and reads bases
+    as `BaseView`s (`gameState.ai.bases`, `world/bases.ts`).
 - **Quality & structure gates:** No function over 96 lines, cyclomatic 15,
   cognitive 25, depth 4, or 5 params, and 0 clones (`quality:petra`). Keep all
   `structure:petra` violation counts and single-module-only exports at 0.

@@ -87,15 +87,15 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   extract-method keeping smoke games identical.
 - `structure:petra -- --check` enforces: no `as` cast outside `adapter/brands.ts`
   (`as const` apart), no `!`, `Engine.PostCommand` only in `adapter/commands.ts`,
-  `execution/` reaching the HQ only via `execution/hq.ts`, and holds baseline
+  no `execution/` code reaching the HQ (`gameState.ai.HQ`, importing
+  `decision/headquarters.ts`), and holds baseline
   counts in `build/petra_ts/structure-baseline.json` at **0** (layer violations
   across `adapter < world < execution < decision < root` including type-only
   imports, value-import cycles, `Engine` outside `adapter/`, unmarked dead
   exports/methods, stale `TODO never called` markers). No module may export what
-  only it uses. Two type-checked run-time counts: `layer-access` at **0** (a
-  higher layer's members reached without an import, e.g. `gameState.ai.HQ`
-  from `adapter/` or `world/`) and `hq-manager-access` (52, may only fall:
-  execution using members of the managers `hqOf` hands out).
+  only it uses. Also at **0**, type-checked: `layer-access` (a higher layer's
+  members reached without an import, however reached: `gameState.ai.HQ` from
+  `adapter/` or `world/`, a decision manager's method from `execution/`).
 - TypeScript configs are in `build/petra_ts/` (`tsconfig.json`,
   `tsconfig.build.json`, `tsconfig.tests.json`). **Never put a `.json` file
   under `simulation/ai/`** other than a bot's `data.json` (`ICmpAIManager.cpp`
@@ -139,8 +139,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   - `execution/`: `attackPlan.ts`, `transportPlan.ts`, `defenseArmy.ts`,
     `queue.ts`, `queueManager.ts`, `queueplan.ts`, `queueplanBuilding.ts`,
     `queueplanTraining.ts`, `queueplanResearch.ts`, `worker.ts`, `unitPlan.ts`,
-    `treasure.ts`, `hq.ts` (`hqOf`, the execution layer's view of the HQ, and
-    `basesOf`).
+    `treasure.ts`, `services.ts` (the interfaces of the decision layer's
+    services to execution: `NavalService`, `AttackRegistry`, `DefenseService`,
+    `VictoryService`, `BuildRules`, `TradeService`, `HeadquartersService`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 
@@ -227,12 +228,15 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   through `gameState.ai` (`PetraRuntime.AIState`, getters on the bot and in
   the harnesses): `geography`, `bases` (`world/bases.ts` `BasesView`),
   `treasures`, `captures` (`world/captureTally.ts`).
-- Execution code (`execution/`) reaches `Headquarters` only through
-  `hqOf(gameState)` (`execution/hq.ts`) for its decisions and searches (the
-  managers, the placement queries, its flags), reads bases through
-  `gameState.ai.bases` and `world/bases.ts` (`BaseView`), and mutates them only
-  through capability interfaces (`SupplyBooking`, `SupplyUpkeep`,
-  `IdleWorkers`).
+- Execution code (`execution/`) never reaches `Headquarters` or a decision
+  manager's class: it uses the decision layer through the interfaces it
+  declares in `execution/services.ts`, on `gameState.ai` (`naval`, `attacks`,
+  `defense`, `victory`, `build`, `trade`, `town` for the HQ's own searches,
+  flags and reports; the bot's getters return the managers, which satisfy
+  them as they are). It reads bases through `gameState.ai.bases` and
+  `world/bases.ts` (`BaseView`), and mutates them only through capability
+  interfaces (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`). A member
+  execution needs is added to its interface, never reached through the HQ.
 - Methods never called (in port and original) are marked
   `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
