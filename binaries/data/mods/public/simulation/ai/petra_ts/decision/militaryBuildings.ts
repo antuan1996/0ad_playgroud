@@ -22,7 +22,7 @@ export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queu
 	{
 		return;
 	}
-	const shoreOnly = saving || hq.towersByTrafficOnly(gameState);
+	const shoreOnly = saving || hq.placement.towersByTrafficOnly(gameState);
 
 	if (
 		!hq.saveResources && reachingCityPhase(hq, gameState) &&
@@ -93,7 +93,7 @@ function queueSentryTower(
 	const towerLapseTime = hq.saveResources ? (1 + 0.5 * numTowers) * hq.towerLapseTime : hq.towerLapseTime;
 	if (numTowers < hq.Config.Military.numSentryTowers && gameState.ai.elapsedTime > towerLapseTime + hq.fortStartTime)
 	{
-		if (shoreOnly && !hq.hasShoreTowerSpot(gameState, "structures/{civ}/sentry_tower"))
+		if (shoreOnly && !hq.placement.hasShoreTowerSpot(gameState, "structures/{civ}/sentry_tower"))
 		{
 			return;
 		}
@@ -119,7 +119,7 @@ function queueDefenseTower(
 		gameState.getOwnFoundationsByClass("Tower").length < 3
 	)
 	{
-		if (shoreOnly && !hq.hasShoreTowerSpot(gameState, "structures/{civ}/defense_tower"))
+		if (shoreOnly && !hq.placement.hasShoreTowerSpot(gameState, "structures/{civ}/defense_tower"))
 		{
 			return;
 		}

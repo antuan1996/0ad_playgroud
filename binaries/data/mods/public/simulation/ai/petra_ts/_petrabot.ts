@@ -12,6 +12,7 @@ import type {
 	DefenseService,
 	HeadquartersService,
 	NavalService,
+	PlacementService,
 	TradeService,
 	VictoryService,
 } from "./execution/services.ts";
@@ -230,6 +231,12 @@ export class PetraBot extends BaseAI
 	get bases(): BasesView
 	{
 		return requireValue(this.HQ).basesManager;
+	}
+
+	/** The placement searches, as `gameState.ai.placement` (PetraRuntime.AIState, execution/services.ts) */
+	get placement(): PlacementService
+	{
+		return requireValue(this.HQ).placement;
 	}
 
 	/** The headquarters' own services, as `gameState.ai.town` (PetraRuntime.AIState, execution/services.ts) */

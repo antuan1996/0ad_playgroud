@@ -59,8 +59,11 @@ interface PlacementHQ
 	readonly navalManager: { readonly transportShips: { readonly length: number; }; };
 	readonly tradeManager: { readonly minimalGain: number; };
 	readonly basesManager: { baseAtIndex(j: CellIndex<"territory">): BaseId; };
-	isAvoidedCCSpot(pos: CommonPosition): boolean;
-	isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean;
+	/** the searches' own judgement of a civic centre's spot (decision/placementSearches.ts) */
+	readonly placement: {
+		isAvoidedCCSpot(pos: CommonPosition): boolean;
+		isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean;
+	};
 	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean;
 }
 
@@ -671,7 +674,9 @@ export function findEconomicCCTile(
 			continue;
 		}
 		if (
-			(allowContested ? hq.isAvoidedCCSpot(pos) : hq.isContestedCCSpot(gameState, pos, index)) ||
+			(allowContested ?
+				hq.placement.isAvoidedCCSpot(pos) :
+				hq.placement.isContestedCCSpot(gameState, pos, index)) ||
 			hq.isDangerousLocation(gameState, pos, halfSize)
 		)
 		{
@@ -751,7 +756,7 @@ export function findStrategicCCTile(
 		{
 			continue;
 		}
-		if (hq.isContestedCCSpot(gameState, pos, index) || hq.isDangerousLocation(gameState, pos, halfSize))
+		if (hq.placement.isContestedCCSpot(gameState, pos, index) || hq.isDangerousLocation(gameState, pos, halfSize))
 		{
 			continue;
 		}

@@ -387,14 +387,13 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	 */
 	specialPosition(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
-		const HQ = gameState.ai.town;
 		if (template.hasClass("CivCentre"))
 		{
 			return this.civCentreSpot(gameState, template);
 		}
 		else if (template.hasClasses(["Tower", "Fortress", "ArmyCamp"]))
 		{
-			const pos = HQ.findDefensiveLocation(gameState, template);
+			const pos = gameState.ai.placement.findDefensiveLocation(gameState, template);
 			if (pos)
 			{
 				return { x: pos[0], z: pos[1], angle: 3 * Math.PI / 4, base: pos[2] };
@@ -418,20 +417,24 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	/** A civic centre where the plan wants it; with none, a dock in a not-enemy island is tried instead */
 	private civCentreSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition
 	{
-		const HQ = gameState.ai.town;
 		let pos;
 		if (this.metadata && this.metadata.room)
 		{
-			pos = HQ.findEconomicCCLocation(gameState, template, "wood", { fromStrategic: true, forRoom: true });
+			pos = gameState.ai.placement.findEconomicCCLocation(gameState, template, "wood", {
+				fromStrategic: true,
+				forRoom: true,
+			});
 		}
 		else if (this.metadata && this.metadata.resource)
 		{
 			const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
-			pos = HQ.findEconomicCCLocation(gameState, template, this.metadata.resource, { proximity });
+			pos = gameState.ai.placement.findEconomicCCLocation(gameState, template, this.metadata.resource, {
+				proximity,
+			});
 		}
 		else
 		{
-			pos = HQ.findStrategicCCLocation(gameState, template);
+			pos = gameState.ai.placement.findStrategicCCLocation(gameState, template);
 		}
 
 		if (pos)
@@ -458,7 +461,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	/** A market in a base of its own, with the gain expected; undefined to search as for any, false for none */
 	private marketSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
-		const pos = gameState.ai.town.findMarketLocation(gameState, template);
+		const pos = gameState.ai.placement.findMarketLocation(gameState, template);
 		const base = pos ? pos[2] : -1;
 		// a base of its own (not -1, nor a cell no base claims): there
 		if (pos && base !== -1 && base !== NO_BASE)
@@ -543,7 +546,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const disfavorBorder = gameState.currentPhase() > 1 && !template.hasDefensiveFire();
 		const favoredBase = this.metadata &&
 			(this.metadata.favoredBase ||
-				(this.metadata.militaryBase ? HQ.findBestBaseForMilitary(gameState) : undefined));
+				(this.metadata.militaryBase ? gameState.ai.placement.findBestBaseForMilitary(gameState) : undefined));
 		const base = this.metadata ? this.metadata.base : undefined;
 		for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 		{

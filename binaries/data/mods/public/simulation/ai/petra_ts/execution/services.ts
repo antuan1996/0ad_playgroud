@@ -102,7 +102,7 @@ type TrainableWeight = [string, number, ...string[]];
 /**
  * The headquarters' own services (decision/headquarters.ts, `gameState.ai.town`): the town's state of the moment,
  * the placement and economy searches, the sea between two lands, and what a plan reports back. Read-only to
- * execution code but for the reports.
+ * execution code but for the reports. Where to build is PlacementService.
  */
 export interface HeadquartersService
 {
@@ -115,25 +115,6 @@ export interface HeadquartersService
 	/** the turn's bookkeeping: whether a building was started this turn */
 	readonly turnCache: Readonly<{ buildingBuilt?: boolean; }>;
 
-	findBestBaseForMilitary(gameState: CommonGameState): number | undefined;
-	findDefensiveLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-	): [number, number, BaseId] | undefined;
-	findEconomicCCLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-		resource: string,
-		options?: { proximity?: CommonPosition; fromStrategic?: boolean; forRoom?: boolean; },
-	): false | CommonPosition;
-	findMarketLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-	): false | [number, number, BaseId | -1, number];
-	findStrategicCCLocation(
-		gameState: CommonGameState,
-		template: CommonStructureTemplate,
-	): false | CommonPosition | undefined;
 	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean;
 	isNearInvadingArmy(pos: CommonPosition): boolean;
 
@@ -159,4 +140,28 @@ export interface HeadquartersService
 	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void;
 	noteNothingToGather(resource: string, time: GameSeconds): void;
 	phaseResearched(gameState: CommonGameState, phase: number): void;
+}
+
+/** The placement searches (decision/placementSearches.ts, `gameState.ai.placement`): where to build. */
+export interface PlacementService
+{
+	findBestBaseForMilitary(gameState: CommonGameState): number | undefined;
+	findDefensiveLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): [number, number, BaseId] | undefined;
+	findEconomicCCLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+		resource: string,
+		options?: { proximity?: CommonPosition; fromStrategic?: boolean; forRoom?: boolean; },
+	): false | CommonPosition;
+	findMarketLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): false | [number, number, BaseId | -1, number];
+	findStrategicCCLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): false | CommonPosition | undefined;
 }

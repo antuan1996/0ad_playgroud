@@ -41,6 +41,8 @@ declare namespace PetraRuntime
 		trade: import("./execution/services.ts").TradeService;
 		/** The headquarters' own services to the execution layer (execution/services.ts's HeadquartersService). */
 		town: import("./execution/services.ts").HeadquartersService;
+		/** The placement searches (HQ.placement as execution/services.ts's PlacementService). */
+		placement: import("./execution/services.ts").PlacementService;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */

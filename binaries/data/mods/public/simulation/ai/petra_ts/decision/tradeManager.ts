@@ -1016,7 +1016,7 @@ export class TradeManager
 		// canBuild() above already verified that the template exists.
 		const template = requireStructureTemplate(gameState, gameState.applyCiv("structures/{civ}/market"));
 		this.checkRoutes(gameState);
-		const marketPos = gameState.ai.HQ.findMarketLocation(gameState, template);
+		const marketPos = gameState.ai.HQ.placement.findMarketLocation(gameState, template);
 		if (!marketPos || marketPos[3] === 0)
 		{ // marketPos[3] is the expected gain
 			// no position found
