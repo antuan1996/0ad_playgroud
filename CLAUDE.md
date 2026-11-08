@@ -92,7 +92,10 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   across `adapter < world < execution < decision < root` including type-only
   imports, value-import cycles, `Engine` outside `adapter/`, unmarked dead
   exports/methods, stale `TODO never called` markers). No module may export what
-  only it uses.
+  only it uses. Two type-checked run-time counts may only fall: `layer-access`
+  (12: a higher layer's members reached without an import, e.g.
+  `gameState.ai.HQ` from `adapter/` or `world/`) and `hq-manager-access` (52:
+  execution using members of the managers `hqOf` hands out).
 - TypeScript configs are in `build/petra_ts/` (`tsconfig.json`,
   `tsconfig.build.json`, `tsconfig.tests.json`). **Never put a `.json` file
   under `simulation/ai/`** other than a bot's `data.json` (`ICmpAIManager.cpp`

@@ -55,9 +55,20 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - No `!` non-null assertion.
   - `Engine.PostCommand` only in `adapter/commands.ts`.
   - Execution code reaching the HQ only through `execution/hq.ts`.
-- **Baseline counts (`structure-baseline.json`, all 0 — keep them 0)**:
+- **Baseline counts (`structure-baseline.json`; all 0 but the two run-time
+  access counts below, which may only fall)**:
   - Layer violations (`adapter < world < execution < decision < root`,
     `PLAN.md` §3.4; type-only imports included).
+  - `layer-access` (12): members of a higher layer reached at run time with no
+    import, through `gameState.ai.HQ` and the like: a property (read as
+    `x.name`, `x["name"]` or destructured) whose declaration, or the type of
+    the value it yields, lies in a higher layer, resolved by the type checker;
+    once a chain. Listed in full in the report.
+  - `hq-manager-access` (52): execution code using the members of the
+    decision objects the headquarters' view hands out (`hqOf(gs).navalManager
+    .requireTransport`, a manager held in a variable, `hqOf(gs).turnCache.x`).
+    The view's own members (83 reads) are the sanctioned way and are only
+    reported.
   - Modules in value-import cycles.
   - `Engine` uses outside `adapter/` (profiling apart).
   - Dead exports (unmarked) and dead methods (unmarked, not named in port or
