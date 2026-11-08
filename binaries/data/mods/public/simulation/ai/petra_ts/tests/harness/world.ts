@@ -439,6 +439,10 @@ export function makeWorld(options: WorldOptions = {}): World
 	// the managers' services to execution (execution/services.ts), as the bot's getters give them
 	Object.defineProperty(ai, "naval", { get: () => ai.HQ.navalManager, configurable: true });
 	Object.defineProperty(ai, "attacks", { get: () => ai.HQ.attackManager, configurable: true });
+	Object.defineProperty(ai, "defense", { get: () => ai.HQ.defenseManager, configurable: true });
+	Object.defineProperty(ai, "victory", { get: () => ai.HQ.victoryManager, configurable: true });
+	Object.defineProperty(ai, "build", { get: () => ai.HQ.buildManager, configurable: true });
+	Object.defineProperty(ai, "trade", { get: () => ai.HQ.tradeManager, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({
