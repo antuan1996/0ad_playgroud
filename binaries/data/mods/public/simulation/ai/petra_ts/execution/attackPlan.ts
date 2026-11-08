@@ -180,7 +180,7 @@ function besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand:
 	const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
 	// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
 	return land !== undefined && land > 1 && land !== rallyLand &&
-		hqOf(gameState).attackManager.enemiesByLand(gameState).has(land);
+		gameState.ai.attacks.enemiesByLand(gameState).has(land);
 }
 
 /**
@@ -1277,7 +1277,7 @@ export class AttackPlan
 		}
 		if (
 			this.type !== AttackPlan.TYPE_RAID &&
-			hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined
+			gameState.ai.attacks.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined
 		)
 		{
 			this.reassignFastUnit(gameState); // reassign some fast units (if any) to fasten raid preparations
@@ -1400,7 +1400,7 @@ export class AttackPlan
 		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
 			const i = playerId(iIndex);
-			if (!gameState.isPlayerEnemy(i) || hqOf(gameState).attackManager.defeated[i])
+			if (!gameState.isPlayerEnemy(i) || gameState.ai.attacks.defeated[i])
 			{
 				continue;
 			}
@@ -1417,7 +1417,7 @@ export class AttackPlan
 	gatherAtRallyPoint(gameState: CommonGameState): void
 	{
 		// Remove those units which were in a temporary bombing attack
-		for (const unitIds of hqOf(gameState).attackManager.bombingAttacks.values())
+		for (const unitIds of gameState.ai.attacks.bombingAttacks.values())
 		{
 			for (const entId of unitIds.values())
 			{
@@ -1623,7 +1623,7 @@ export class AttackPlan
 			added = this.enlist(ent);
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
-		for (const ent of hqOf(gameState).attackManager.outOfPlan.values())
+		for (const ent of gameState.ai.attacks.outOfPlan.values())
 		{
 			if (available(ent))
 			{
@@ -1758,7 +1758,7 @@ export class AttackPlan
 			{
 				continue;
 			}
-			const raid = hqOf(gameState).attackManager.getAttackInPreparation(AttackPlan.TYPE_RAID);
+			const raid = gameState.ai.attacks.getAttackInPreparation(AttackPlan.TYPE_RAID);
 			if (!raid)
 			{
 				return;
@@ -1815,7 +1815,7 @@ export class AttackPlan
 	{
 		if (this.targetPlayer === undefined)
 		{
-			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
 			{
 				return false;
@@ -1833,7 +1833,7 @@ export class AttackPlan
 		}
 
 		// may-be all our previous enemey target (if not recomputed here) have been destroyed ?
-		this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
+		this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
 		if (this.targetPlayer !== undefined)
 		{
 			this.target = this.getNearestTarget(gameState, this.rallyPoint);
@@ -1885,7 +1885,7 @@ export class AttackPlan
 		{
 			return undefined;
 		}
-		const buildings = (hqOf(gameState).attackManager.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
+		const buildings = (gameState.ai.attacks.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
 			enemy.hasClass("Structure")
 		);
 		if (!buildings.length)
@@ -1926,7 +1926,7 @@ export class AttackPlan
 	 */
 	leaveDisputedLands(gameState: CommonGameState, keptLand: AccessIndex | undefined): void
 	{
-		hqOf(gameState).attackManager.splitLocalFights(gameState, this, keptLand);
+		gameState.ai.attacks.splitLocalFights(gameState, this, keptLand);
 		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
 		for (const ent of this.unitCollection.values())
 		{
@@ -2661,7 +2661,7 @@ export class AttackPlan
 		// Then update the target if needed:
 		if (this.targetPlayer === undefined || !gameState.isPlayerEnemy(this.targetPlayer))
 		{
-			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
 			{
 				return undefined;
@@ -2734,7 +2734,7 @@ export class AttackPlan
 			}
 
 			// If not, let's look for another enemy
-			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer !== undefined)
 			{
 				this.target = this.getNearestTarget(gameState, pos, accessIndex);
@@ -2753,7 +2753,7 @@ export class AttackPlan
 	/** The target of another of our attacks on that land, still an enemy's: whether we take it */
 	private helpOtherAttack(gameState: CommonGameState, accessIndex: AccessIndex | undefined): boolean
 	{
-		const attackManager = hqOf(gameState).attackManager;
+		const attackManager = gameState.ai.attacks;
 		for (const attack of plansIn(attackManager.startedAttacks))
 		{
 			if (attack.name === this.name)
@@ -2936,7 +2936,7 @@ export class AttackPlan
 			{
 				continue;
 			}
-			this.targetPlayer = hqOf(gameState).attackManager.getEnemyPlayer(gameState, this);
+			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
 			this.target = undefined;
 		}
 	}

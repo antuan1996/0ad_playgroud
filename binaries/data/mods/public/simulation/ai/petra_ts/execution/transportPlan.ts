@@ -84,7 +84,7 @@ export function resetUnit(gameState: CommonGameState, ent: CommonEntity): void
 	const plan = ent.getMetadata(PlayerID, "plan");
 	if (plan !== undefined && plan >= 0)
 	{
-		const attackPlan = hqOf(gameState).attackManager.getPlan(plan);
+		const attackPlan = gameState.ai.attacks.getPlan(plan);
 		if (attackPlan)
 		{
 			attackPlan.removeUnit(ent, true);

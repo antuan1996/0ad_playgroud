@@ -32,6 +32,8 @@ declare namespace PetraRuntime
 		treasures: CommonEntityCollection<CommonPlacedEntity>;
 		/** The naval manager's services to the execution layer (HQ.navalManager as execution/services.ts's NavalService). */
 		naval: import("./execution/services.ts").NavalService;
+		/** The attack manager's services to the execution layer (HQ.attackManager as execution/services.ts's AttackRegistry). */
+		attacks: import("./execution/services.ts").AttackRegistry;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */

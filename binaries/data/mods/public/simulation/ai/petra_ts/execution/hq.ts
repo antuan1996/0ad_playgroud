@@ -17,7 +17,7 @@ import type { Headquarters } from "../decision/headquarters.ts";
 
 /** The managers an execution plan consults for decisions and world state. */
 type ExecutionManagers = Readonly<
-	Pick<Headquarters, "attackManager" | "buildManager" | "defenseManager" | "tradeManager" | "victoryManager">
+	Pick<Headquarters, "buildManager" | "defenseManager" | "tradeManager" | "victoryManager">
 >;
 
 /** The headquarters' per-turn bookkeeping execution code reads (its geography, bases and treasures are on gameState.ai). */
