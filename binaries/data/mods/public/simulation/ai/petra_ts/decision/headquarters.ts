@@ -363,7 +363,7 @@ export class Headquarters
 			this.gatherEconomy = GatherEconomy.restore(saved.gatherEconomy);
 
 			this.basesManager = new BasesManager(this.Config, gameState, saved.basesManager);
-			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager);
+			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager, this);
 			this.attackManager = AttackManager.restore(
 				this.Config,
 				gameState,
@@ -390,7 +390,7 @@ export class Headquarters
 		this.buildManager = BuildManager.start(gameState);
 		this.defenseManager = new DefenseManager(this.Config, geography);
 		this.tradeManager = new TradeManager(this.Config, gameState, geography);
-		this.navalManager = new NavalManager(this.Config, gameState, geography);
+		this.navalManager = new NavalManager(this.Config, gameState, geography, this);
 		this.researchManager = new ResearchManager(this.Config, this);
 		this.diplomacyManager = new DiplomacyManager(this.Config, false);
 		this.garrisonManager = new GarrisonManager(this.Config, this);

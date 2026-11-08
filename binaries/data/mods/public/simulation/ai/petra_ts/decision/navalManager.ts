@@ -34,6 +34,22 @@ import { plansIn } from "../execution/attackConstants.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
+import type { AttackManager } from "./attackManager.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { Headquarters } from "./headquarters.ts";
+import type { TradeManager } from "./tradeManager.ts";
+
+/**
+ * What the naval manager asks of the headquarters that owns it: whether the
+ * map is naval, the population and what it may build, for its docks; and of
+ * its sibling managers: the trader ships to keep out of the way, the attacks
+ * to ship, and the bases on the shore.
+ */
+export type NavalHQ = Pick<Headquarters, "navalMap" | "getAccountedPopulation" | "canBuild"> & {
+	readonly tradeManager: Pick<TradeManager, "traders">;
+	readonly attackManager: Pick<AttackManager, "upcomingAttacks">;
+	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers">;
+};
 
 /**
  * Naval Manager
@@ -102,9 +118,9 @@ function approachesSupply(ship: CommonEntity): boolean
 }
 
 /** Our merchant ships trading, which the trade manager steers */
-function tradingShips(gameState: CommonGameState): CommonEntity[]
+function tradingShips(hq: NavalHQ): CommonEntity[]
 {
-	return gameState.ai.HQ.tradeManager.traders.filter(filters.byClass("Ship")).toEntityArray().filter((ship) =>
+	return hq.tradeManager.traders.filter(filters.byClass("Ship")).toEntityArray().filter((ship) =>
 	{
 		const role = ship.getMetadata(PlayerID, "role");
 		return role !== undefined && role === Worker.ROLE_TRADER; // others already accounted before
@@ -473,10 +489,12 @@ export class NavalManager
 
 	// shore-line regions where we can load and unload units
 	landingZones: Record<number, Record<number, Set<number>>> = {};
+	readonly hq: NavalHQ;
 
-	constructor(Config: Config, gameState: CommonGameState, geography: Geography)
+	constructor(Config: Config, gameState: CommonGameState, geography: Geography, hq: NavalHQ)
 	{
 		this.Config = Config;
+		this.hq = hq;
 		// docks
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
 		this.docks.registerUpdates();
@@ -606,9 +624,10 @@ export class NavalManager
 		gameState: CommonGameState,
 		geography: Geography,
 		data: ReturnType<NavalManager["Serialize"]>,
+		hq: NavalHQ,
 	): NavalManager
 	{
-		const manager = new NavalManager(Config, gameState, geography);
+		const manager = new NavalManager(Config, gameState, geography, hq);
 		manager.resume(gameState, data);
 		return manager;
 	}
@@ -635,7 +654,7 @@ export class NavalManager
 	 */
 	fishByWhatIsLeft(gameState: CommonGameState): void
 	{
-		if (!gameState.ai.HQ.navalMap)
+		if (!this.hq.navalMap)
 		{
 			return;
 		}
@@ -1019,7 +1038,7 @@ export class NavalManager
 		const priorities = this.Config.priorities;
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
 		const waiting = this.transportPlans.some((plan) => plan.needTransportShips && plan.units.length > 0) ||
-			[...plansIn(gameState.ai.HQ.attackManager.upcomingAttacks)].some((plan) =>
+			[...plansIn(this.hq.attackManager.upcomingAttacks)].some((plan) =>
 				plan.overseas !== 0 && plan.unitCollection.hasEntities() &&
 				!this.fleet(plan.overseas)?.transports.length
 			);
@@ -1104,7 +1123,7 @@ export class NavalManager
 	 */
 	huntWithFleet(gameState: CommonGameState): void
 	{
-		if (!gameState.ai.HQ.navalMap)
+		if (!this.hq.navalMap)
 		{
 			return;
 		}
@@ -1218,7 +1237,7 @@ export class NavalManager
 			}
 		}
 
-		for (const ship of tradingShips(gameState))
+		for (const ship of tradingShips(this.hq))
 		{
 			if (!isPlaced(ship))
 			{
@@ -1264,7 +1283,7 @@ export class NavalManager
 			makeWay(blockingShip, shipPosition, atWork);
 		}
 
-		for (const blockingShip of tradingShips(gameState))
+		for (const blockingShip of tradingShips(this.hq))
 		{
 			if (blockingShip.getMetadata(PlayerID, "sea") !== sea)
 			{
@@ -1280,17 +1299,17 @@ export class NavalManager
 
 	buildNavalStructures(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		if (!gameState.ai.geography.navalMap || !gameState.ai.HQ.basesManager.hasPotentialBase())
+		if (!gameState.ai.geography.navalMap || !this.hq.basesManager.hasPotentialBase())
 		{
 			return;
 		}
 
 		if (
-			gameState.ai.HQ.getAccountedPopulation(gameState) > this.Config.Economy.popForDock &&
+			this.hq.getAccountedPopulation(gameState) > this.Config.Economy.popForDock &&
 			queues.dock.countQueuedUnitsWithClass("Dock") === 0 &&
 			!gameState.getOwnStructures().filter(filters.and(filters.byClass("Dock"), filters.isFoundation()))
 				.hasEntities() &&
-			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/dock")
+			this.hq.canBuild(gameState, "structures/{civ}/dock")
 		)
 		{
 			this.queueDock(gameState, queues);
@@ -1303,7 +1322,7 @@ export class NavalManager
 	{
 		if (
 			gameState.currentPhase() < 2 ||
-			gameState.ai.HQ.getAccountedPopulation(gameState) < this.Config.Economy.popPhase2 + 15 ||
+			this.hq.getAccountedPopulation(gameState) < this.Config.Economy.popPhase2 + 15 ||
 			queues.militaryBuilding.hasQueuedUnits()
 		)
 		{
@@ -1319,17 +1338,17 @@ export class NavalManager
 		// Use in priority resources to build a Market.
 		if (
 			!gameState.getOwnEntitiesByClass("Market", true).hasEntities() &&
-			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/market")
+			this.hq.canBuild(gameState, "structures/{civ}/market")
 		)
 		{
 			return;
 		}
 		let template;
-		if (gameState.ai.HQ.canBuild(gameState, "structures/{civ}/super_dock"))
+		if (this.hq.canBuild(gameState, "structures/{civ}/super_dock"))
 		{
 			template = "structures/{civ}/super_dock";
 		}
-		else if (gameState.ai.HQ.canBuild(gameState, "structures/{civ}/shipyard"))
+		else if (this.hq.canBuild(gameState, "structures/{civ}/shipyard"))
 		{
 			template = "structures/{civ}/shipyard";
 		}
@@ -1338,7 +1357,7 @@ export class NavalManager
 			return;
 		}
 		const wantedLand: Record<number, boolean> = {};
-		for (const base of gameState.ai.HQ.basesManager.baseManagers)
+		for (const base of this.hq.basesManager.baseManagers)
 		{
 			if (base.anchor)
 			{
@@ -1353,7 +1372,7 @@ export class NavalManager
 	/** A dock for the first built base with a sea we can sail and no dock of ours on it */
 	private queueDock(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		for (const base of gameState.ai.HQ.basesManager.baseManagers)
+		for (const base of this.hq.basesManager.baseManagers)
 		{
 			if (!base.anchor || base.constructing)
 			{
