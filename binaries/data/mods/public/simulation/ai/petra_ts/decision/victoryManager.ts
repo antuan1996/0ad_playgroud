@@ -1059,7 +1059,7 @@ export class VictoryManager
 				continue;
 			}
 			const relicPosition = relic.position();
-			const territoryOwner = gameState.ai.HQ.geography.territoryMap.getOwner(relicPosition);
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(relicPosition);
 			if (territoryOwner === PlayerID)
 			{
 				this.targetedGaiaRelics.set(relic.id(), []);

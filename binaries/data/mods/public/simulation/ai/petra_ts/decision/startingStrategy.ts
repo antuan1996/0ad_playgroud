@@ -441,7 +441,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		{
 			for (const sea of gameState.ai.accessibility.regionLinks[land])
 			{
-				if (gameState.ai.HQ.geography.navalRegions[sea])
+				if (gameState.ai.geography.navalRegions[sea])
 				{
 					HQ.navalManager.updateFishingBoats(seaRegion(sea), num);
 				}

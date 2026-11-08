@@ -196,7 +196,7 @@ export class ResearchManager
 			const increasePriority = wantedModification(
 				modifications,
 				this.CostSum(cost) < 400,
-				gameState.ai.HQ.geography.navalMap,
+				gameState.ai.geography.navalMap,
 			);
 			if (increasePriority !== undefined)
 			{

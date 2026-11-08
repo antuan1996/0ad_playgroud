@@ -681,7 +681,7 @@ export class BaseManager
 		const obstructionRadius = template.obstructionRadius();
 		const radius = Math.ceil(obstructionRadius.max / obstructions.cellSize);
 
-		const territoryMap = gameState.ai.HQ.geography.territoryMap;
+		const territoryMap = gameState.ai.geography.territoryMap;
 		const width = territoryMap.width;
 		const cellSize = territoryMap.cellSize;
 
@@ -1680,7 +1680,7 @@ export class BaseManager
 	/** A base being founded in enemy territory too near an enemy civic centre destroys its anchor */
 	private leaveIfTooNearEnemy(gameState: CommonGameState, anchor: CommonPlacedEntity): void
 	{
-		const owner = gameState.ai.HQ.geography.territoryMap.getOwner(anchor.position());
+		const owner = gameState.ai.geography.territoryMap.getOwner(anchor.position());
 		if (owner === 0 || gameState.isPlayerAlly(owner))
 		{
 			return;

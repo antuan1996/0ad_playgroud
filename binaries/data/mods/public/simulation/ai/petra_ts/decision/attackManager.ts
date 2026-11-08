@@ -135,7 +135,7 @@ function bombingSpot(
 		structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
 		structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
 	);
-	const owner = gameState.ai.HQ.geography.territoryMap.getOwner(safePos);
+	const owner = gameState.ai.geography.territoryMap.getOwner(safePos);
 	if (owner !== 0 && gameState.isPlayerEnemy(owner))
 	{
 		return undefined;
@@ -145,7 +145,7 @@ function bombingSpot(
 		structPos[1] + (entPos[1] - structPos[1]) * range / dist,
 	);
 	if (
-		gameState.ai.HQ.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
+		gameState.ai.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
 		gameState.ai.accessibility.getAccessValue(targetPos) !== from.access
 	)
 	{
@@ -420,7 +420,7 @@ export class AttackManager
 			{
 				if (
 					!struct.resourceSupplyNumGatherers() ||
-					!gameState.isPlayerEnemy(gameState.ai.HQ.geography.territoryMap.getOwner(structPos))
+					!gameState.isPlayerEnemy(gameState.ai.geography.territoryMap.getOwner(structPos))
 				)
 				{
 					continue;

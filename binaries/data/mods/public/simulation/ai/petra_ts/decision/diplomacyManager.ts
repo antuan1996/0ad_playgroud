@@ -87,7 +87,7 @@ function alliedDefence(gameState: CommonGameState, targetId: EntityId, attackerI
 	const target = gameState.getEntityById(targetId);
 	if (
 		!target || !isPlaced(target) ||
-		gameState.ai.HQ.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
+		gameState.ai.geography.territoryMap.getOwner(target.position()) !== PlayerID ||
 		!gameState.isPlayerEnemy(target.owner())
 	)
 	{

@@ -315,7 +315,7 @@ function fishIsSafe(gameState: CommonGameState, fish: CommonPlacedEntity): boole
 	{
 		return true;
 	}
-	const territoryMap = gameState.ai.HQ.geography.territoryMap;
+	const territoryMap = gameState.ai.geography.territoryMap;
 	return everyFishRay(territoryMap, fish.position(), 2, (cell) =>
 	{
 		const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
@@ -1280,7 +1280,7 @@ export class NavalManager
 
 	buildNavalStructures(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
-		if (!gameState.ai.HQ.geography.navalMap || !gameState.ai.HQ.basesManager.hasPotentialBase())
+		if (!gameState.ai.geography.navalMap || !gameState.ai.HQ.basesManager.hasPotentialBase())
 		{
 			return;
 		}
@@ -1362,7 +1362,7 @@ export class NavalManager
 			// set with the anchor
 			const baseAccessIndex = requireValue(base.accessIndex);
 			const sea = this.getUnconnectedSeas(gameState, baseAccessIndex).find((s) =>
-				gameState.ai.HQ.geography.navalRegions[s]
+				gameState.ai.geography.navalRegions[s]
 			);
 			if (sea === undefined)
 			{
