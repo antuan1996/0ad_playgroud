@@ -6346,7 +6346,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 	{
 		const { world, hq } = seat();
 		const base = hq.basesManager.baseManagers[0];
-		const reloaded = new BasesManager(hq.Config, world.gameState, hq.basesManager.Serialize());
+		const reloaded = new BasesManager(hq.Config, world.gameState, hq, hq.basesManager.Serialize());
 
 		for (const j of base.territoryIndices)
 		{

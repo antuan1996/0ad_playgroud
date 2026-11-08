@@ -17,7 +17,7 @@ import { assertRoundTrip } from "./harness/persistence.ts";
 
 import { AttackManager, type SerializedAttackManager } from "../decision/attackManager.ts";
 import { BaseManager, type SerializedBaseManager } from "../decision/baseManager.ts";
-import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
+import { BasesManager, type BasesHQ, type SerializedBasesManager } from "../decision/basesManager.ts";
 import { BuildManager, type SerializedBuildManager } from "../decision/buildManager.ts";
 import { DefenseManager, type DefenseHQ, type SerializedDefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager, type DiplomacyHQ, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
@@ -230,7 +230,7 @@ describe("save and reload", () =>
 		// resource lists live on the entity it is attached to. Only its own
 		// fields are compared here.
 		const world = emptyWorldWithMap();
-		const basesManager = () => new BasesManager(makeConfig(), world);
+		const basesManager = () => new BasesManager(makeConfig(), world, fake<BasesHQ>({}));
 		assertRoundTrip({
 			label: "BaseManager",
 			original: () => new BaseManager(world, basesManager(), BaseManager.STATE_WITH_ANCHOR),
@@ -245,7 +245,7 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		const build = () =>
 		{
-			const bases = new BasesManager(makeConfig(), world);
+			const bases = new BasesManager(makeConfig(), world, fake<BasesHQ>({}));
 			bases["baseManagers"] = [new BaseManager(world, bases, BaseManager.STATE_WITH_ANCHOR)];
 			return bases;
 		};
@@ -253,7 +253,7 @@ describe("save and reload", () =>
 			label: "BasesManager",
 			original: build,
 			fromSave: (data, gameState) =>
-				new BasesManager(makeConfig(), gameState, fake<SerializedBasesManager>(data)),
+				new BasesManager(makeConfig(), gameState, fake<BasesHQ>({}), fake<SerializedBasesManager>(data)),
 		}, world);
 	});
 

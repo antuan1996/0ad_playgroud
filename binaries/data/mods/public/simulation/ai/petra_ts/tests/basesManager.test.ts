@@ -172,7 +172,7 @@ describe("a city's grounds: what the board starts with and how grounds are reuse
 		const { world, hq } = seat();
 		// one centre standing, one still rising
 		foundation(world, undefined, 4002, [250, 250], ["CivCentre"]);
-		const fresh = new BasesManager(hq.Config, world.gameState);
+		const fresh = new BasesManager(hq.Config, world.gameState, hq);
 		fresh.createStartingBases(world.gameState);
 
 		assert.equal(fresh.baseManagers.length, 2, "the board has two grounds");
@@ -187,7 +187,12 @@ describe("a city's grounds: what the board starts with and how grounds are reuse
 		const store = storehouse(world, 4781, [40, 40]);
 		base.assignEntity(world.gameState, store);
 
-		const reloaded = new BasesManager(bs.Config, world.gameState, JSON.parse(JSON.stringify(bs.Serialize())));
+		const reloaded = new BasesManager(
+			bs.Config,
+			world.gameState,
+			bs.hq,
+			JSON.parse(JSON.stringify(bs.Serialize())),
+		);
 
 		assert.ok(reloaded.getBaseByID(base.ID), "the town still reads from the reloaded ground map");
 	});
