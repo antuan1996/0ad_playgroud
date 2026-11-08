@@ -357,6 +357,11 @@ imports, a loop the original also left doing nothing, unused test names).
   1.5 s with the whole army in them. This is stage 6's reference: its
   planner and estimator are measured against `petra_prev` (the stage 5
   bot) with `ai-times.ts --compare`, and the held army is fixed first.
+- **Stage 7's reference** (2026-11-08, `FINDINGS.md` §60): against the
+  stage-5 bot on the same 20 games, our script time per turn mean 0.44 ms
+  against 0.63, 99th 6.5 against 8.7, 99.9th 13.0 against 70.1, worst 55
+  against 404; against `petra_parity` on §47's seeds the whole turn's 99.9th
+  is 15.0 ms (stage 5: 150).
 - **Optimise only what the profile shows.** Likely candidates, from the code:
   `updatingCollection` filters re-evaluated per call, entity scans per turn,
   repeated territory/accessibility lookups. Object pooling is not planned:
@@ -741,9 +746,9 @@ measured change at a time, aimed at the soldiers by minute 13:
    the stage-6 bot, fights a little better; kept). The port's choice of prey
    read bonuses through `Template.counters()`, always false (§55); it reads
    them itself now. The common-api fix goes upstream.
-5. **The turn budget**: measure the stage 6 bot against stage 5's with
-   `match.sh -P` and `ai-times.ts --compare`, first, as the baseline of stage
-   7.
+5. **The turn budget** (done 2026-11-08, `FINDINGS.md` §60): head to head
+   with the stage-5 bot on 20 games, our time per turn 0.71 of its mean,
+   0.75 of its 99th percentile, 0.19 of its 99.9th; the budget kept.
 6. **Islands**: half the island games still draw at 90 minutes (§53-54's
    batches: 8 and 7 of 40, §52's 21 of 40 on another pool); finishing them
    (attacks across the sea once the home island is held) is a separate

@@ -2558,3 +2558,34 @@ fights a little better. The common-api fix (use the result of
 `mcounter.concat`) goes upstream; it is shared by every bot, and changing it
 here would change Petra and the baselines.
 
+## 60. Stage 7: the turn budget against stage 5 (2026-11-08)
+
+PLAN §6.5's fifth idea: the bot at the end of stage 6's work and the layer
+refactors (commit b4d03397fa) timed with `match.sh -P`, 20 mainland games
+each (pool seed 61, 10 seed pairs from both slots, 4 at a time):
+
+- **Head to head with the stage-5 bot** (`petra-ts-stage5`, built as
+  `petra_prev` for the measurement; `stage7-aitimes-vs-stage5`; 10 games
+  won each): each bot's own script time per turn on the same games, 161240
+  turns, `ai-times.ts --compare`:
+
+  | | mean | p90 | p99 | p99.9 | max |
+  |---|---|---|---|---|---|
+  | now | 0.44 | 1.67 | 6.47 | 12.99 | 55.2 |
+  | stage 5 | 0.63 | 1.55 | 8.68 | 70.08 | 404.5 |
+  | ratio | 0.71 | 1.08 | 0.75 | 0.19 | 0.14 |
+
+- **Stage 5's own setup** (against `petra_parity`, the same seeds as §47's
+  `stage5-aitimes`; `stage7-aitimes-vs-parity`; 17 won, as then): our
+  script time per turn, mean 1.30 to 0.40 ms, 99th 15.8 to 5.6, 99.9th 150 to
+  9.8, worst 489 to 32; the whole turn (shared component and both bots),
+  mean 2.75 to 1.78, 99th 20.8 to 9.7, 99.9th 150 to 15.0, worst 489 to 53.
+
+The budget (PLAN §4: the mean and 99th percentile at most 5% above the
+reference, the 99.9th at most 10%) is kept with room: below stage 5 on all
+three. The 90th percentile is 8% above: the bot does more each HQ turn
+(the gather economy, the production log, the fleets), each a little; the
+tail, which a player feels, is what §47-51 cut (the churn, the leaked
+collections, the arrival sort). The games differ, so this is no paired
+check of a refactor; the head-to-head times both bots on the same turns.
+
