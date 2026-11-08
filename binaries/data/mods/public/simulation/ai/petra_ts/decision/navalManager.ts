@@ -1,7 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import {
-	gatherTreasure,
 	getLandAccess,
 	getSeaAccess,
 	isSiegeUnit,
@@ -13,6 +12,7 @@ import { plansIn } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan, type SeaFleet } from "../execution/transportPlan.ts";
+import { gatherTreasure } from "../execution/treasure.ts";
 import { threatsAt } from "../world/seaRoute.ts";
 
 /** Warships wanted on a sea where the enemy fishes or trades (huntWithFleet). */

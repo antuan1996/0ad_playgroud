@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { GAIA, NO_BASE, NO_LAND, cellIndex, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import { getLandAccess, getSeaAccess, isLineInsideEnemyTerritory } from "../adapter/entityExtend.ts";
+import { getLandAccess, getSeaAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import type { Config } from "../world/config.ts";
@@ -10,6 +10,7 @@ import type { Geography } from "../world/geography.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap, type TerritoryMap } from "../world/mapModule.ts";
 import type { ShipTraffic } from "../world/shipTraffic.ts";
+import { isLineInsideEnemyTerritory } from "../world/territory.ts";
 
 /** What any free land is worth to a base sought for its room (findEconomicCCLocation's forRoom). */
 const ROOM_VALUE = 10;

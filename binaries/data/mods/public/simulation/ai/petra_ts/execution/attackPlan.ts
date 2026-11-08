@@ -14,7 +14,6 @@ import {
 import { debugShade, postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import {
-	allowCapture,
 	dumpEntity,
 	getHolder,
 	getLandAccess,
@@ -26,7 +25,7 @@ import {
 import { ordersOf } from "../adapter/orders.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { basesOf } from "../world/bases.ts";
+import { allowCapture } from "../world/capture.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import {
@@ -47,7 +46,7 @@ import {
 	rallyPoints,
 	targetDistance,
 } from "./attackTargets.ts";
-import { hqOf } from "./hq.ts";
+import { basesOf, hqOf } from "./hq.ts";
 import type { Queue } from "./queue.ts";
 import { type PlanMetadata } from "./queueplan.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";

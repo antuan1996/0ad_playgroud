@@ -6,8 +6,7 @@ import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { obstructionShape } from "../adapter/templateData.ts";
-import { basesOf } from "../world/bases.ts";
-import { hqOf } from "./hq.ts";
+import { basesOf, hqOf } from "./hq.ts";
 
 /** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
 const ECONOMIC_TARGET_WEIGHT = 0.25;

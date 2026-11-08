@@ -2,27 +2,31 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { GAIA, INVALID_ENTITY, NO_REGION, seconds } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import {
-	allowCapture,
-	gatherTreasure,
-	getBuiltEntity,
-	getLandAccess,
-	getSeaAccess,
-	isFastMoving,
-	isSupplyFull,
-	returnResources,
-} from "../adapter/entityExtend.ts";
+import { getBuiltEntity, getLandAccess, getSeaAccess, isFastMoving, returnResources } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced, isSupply, type PlacedEntity } from "../adapter/placed.ts";
 import { requireActivity, stateIs, unitState, type UnitState } from "../adapter/unitState.ts";
 import type { ResourceSupply } from "../world/baseResources.ts";
-import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
-import { hqOf } from "./hq.ts";
+import { type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
+import { allowCapture } from "../world/capture.ts";
+import { basesOf, hqOf } from "./hq.ts";
+import { gatherTreasure } from "./treasure.ts";
 import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 
 /**
  * This class makes a worker do as instructed by the economy manager
  */
+
+/**
+ * Whether a supply takes no more gatherers: full, or its gatherers and those on their way to it (the bases'
+ * tally of the turn, BasesManager.GetTCGatherer) at its maximum. (Moved from adapter/, which may read no AI state.)
+ */
+function isSupplyFull(gameState: CommonGameState, ent: CommonSupplyEntity): boolean
+{
+	return ent.isFull() === true ||
+		ent.resourceSupplyNumGatherers() + hqOf(gameState).basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+}
+
 export class Worker
 {
 	base: WorkerBase;

@@ -22,6 +22,10 @@ declare namespace PetraRuntime
 	{
 		Config: import("./world/config.ts").Config;
 		HQ: import("./decision/headquarters.ts").Headquarters;
+		/** The headquarters' capture tally (HQ.captures), for world/capture.ts, which may not reach the HQ. */
+		captures: import("./world/captureTally.ts").CaptureTally;
+		/** The headquarters' geography (HQ.geography), for world/ code, which may not reach the HQ. */
+		geography: import("./world/geography.ts").Geography;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */

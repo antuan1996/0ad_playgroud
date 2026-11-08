@@ -28,6 +28,8 @@ interface ExecutionBases
 	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId;
 	hasPotentialBase(): boolean;
 	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>;
+	/** the gatherers on their way to a supply this turn */
+	GetTCGatherer(supplyID: EntityId): number;
 }
 
 /** The managers an execution plan consults for decisions and world state. */
@@ -44,6 +46,8 @@ type ExecutionManagers =
 type ExecutionWorld = {
 	readonly turnCache: Readonly<Headquarters["turnCache"]>;
 	readonly geography: Readonly<Geography>;
+	/** the treasures left on the map, for the collectors (execution/treasure.ts) */
+	readonly treasures: Headquarters["treasures"];
 };
 
 /** The state of the moment: what a plan may afford and what the town still needs. */
@@ -97,4 +101,10 @@ type ExecutionHQ =
 export function hqOf(gameState: CommonGameState): ExecutionHQ
 {
 	return gameState.ai.HQ;
+}
+
+/** All our bases, for reading and for dropping gone supplies from their lists (moved from world/bases.ts, which may not reach the HQ). */
+export function basesOf(gameState: CommonGameState): ReadonlyArray<BaseView & SupplyUpkeep>
+{
+	return hqOf(gameState).basesManager.baseManagers;
 }

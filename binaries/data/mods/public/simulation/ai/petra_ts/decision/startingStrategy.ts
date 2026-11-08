@@ -3,10 +3,11 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
 import { NEW_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import { gatherTreasure, getHolder, getLandAccess, isFastMoving, requireTemplate } from "../adapter/entityExtend.ts";
+import { getHolder, getLandAccess, isFastMoving, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isStructure } from "../adapter/placed.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import { gatherTreasure } from "../execution/treasure.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import type { Headquarters } from "./headquarters.ts";
 

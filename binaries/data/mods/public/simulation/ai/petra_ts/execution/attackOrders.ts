@@ -1,10 +1,11 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import { allowCapture, getLandAccess, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
+import { getLandAccess, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { counterBonuses, counteredBy } from "../adapter/templateData.ts";
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
+import { allowCapture } from "../world/capture.ts";
 
 /** What an attacker's orders are chosen from, worked out once a turn (AttackPlan.updateAttacking). */
 export type AttackerContext = {

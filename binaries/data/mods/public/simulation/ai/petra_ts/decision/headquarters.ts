@@ -5,7 +5,6 @@ import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js"
 import { GAIA, NEW_BASE, NO_BASE, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import {
-	allowCapture,
 	getAttackBonus,
 	getLandAccess,
 	getMaxStrength,
@@ -22,6 +21,8 @@ import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
+import { allowCapture } from "../world/capture.ts";
+import { CaptureTally, type CaptureEntry } from "../world/captureTally.ts";
 import { censusOf } from "../world/census.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
@@ -605,8 +606,8 @@ export class Headquarters
 	/** whether we can train units at all, and expand: set by the first turn's analysis (startingStrategy) */
 	canBuildUnits = false;
 	canExpand = false;
-	capturableTargets: Map<EntityId, { strength: number; ents: Set<EntityId>; }>;
-	capturableTargetsTime: GameSeconds;
+	/** the capture strength our units set on each target (world/captureTally.ts), saved through the accessors below */
+	captures = new CaptureTally();
 	currentPhase: number;
 	decayingStructures: Set<EntityId> = new Set();
 	defenseManager: DefenseManager;
@@ -725,9 +726,6 @@ export class Headquarters
 		this.extraFortresses = Math.round(
 			Math.max(Math.min(this.Config.difficulty - 1, 2), 0) * this.Config.personality.defensive,
 		);
-
-		this.capturableTargets = new Map();
-		this.capturableTargetsTime = seconds(0);
 
 		this.treasures = gameState.getEntities().filter((ent): ent is CommonPlacedEntity =>
 			ent.isTreasure() && isPlaced(ent)
@@ -2939,6 +2937,27 @@ export class Headquarters
 			}
 		}
 		return false;
+	}
+
+	/** The capture tally's targets and time, as the save keeps them (HeadquartersSerializedData) */
+	get capturableTargets(): Map<EntityId, CaptureEntry>
+	{
+		return this.captures.targets;
+	}
+
+	set capturableTargets(targets: Map<EntityId, CaptureEntry>)
+	{
+		this.captures.targets = targets;
+	}
+
+	get capturableTargetsTime(): GameSeconds
+	{
+		return this.captures.time;
+	}
+
+	set capturableTargetsTime(time: GameSeconds)
+	{
+		this.captures.time = time;
 	}
 
 	/** Compute the capture strength of all units attacking a capturable target */

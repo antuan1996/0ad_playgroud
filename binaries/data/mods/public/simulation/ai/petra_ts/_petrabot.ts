@@ -1,12 +1,14 @@
 import { BaseAI } from "simulation/ai/common-api/baseAI.js";
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { seconds, secondsOf } from "./adapter/brands.ts";
+import { requireValue } from "./adapter/entityExtend.ts";
 import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
+import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
-import { analyseMap } from "./world/geography.ts";
+import { analyseMap, type Geography } from "./world/geography.ts";
 
 type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior?: string; };
 
@@ -213,6 +215,18 @@ export class PetraBot extends BaseAI
 	savedEvents: HeadquartersEvents;
 	turn: number = 0;
 	uniqueIDs: Record<string, number> = {};
+
+	/** The headquarters' geography, as `gameState.ai.geography` (PetraRuntime.AIState) */
+	get geography(): Geography
+	{
+		return requireValue(this.HQ).geography;
+	}
+
+	/** The headquarters' capture tally, as `gameState.ai.captures` (PetraRuntime.AIState) */
+	get captures(): CaptureTally
+	{
+		return requireValue(this.HQ).captures;
+	}
 
 	constructor(settings: PetraBotSettings)
 	{

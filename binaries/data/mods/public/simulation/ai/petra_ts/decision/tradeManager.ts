@@ -5,23 +5,18 @@ import { INVALID_ENTITY, landRegion } from "../adapter/brands.ts";
 import { newTradeRoute as chatNewTradeRoute } from "../adapter/chatHelper.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import {
-	gatherTreasure,
-	getLandAccess,
-	getSeaAccess,
-	isLineInsideEnemyTerritory,
-	requireMetadata,
-	requireStructureTemplate,
-} from "../adapter/entityExtend.ts";
+import { getLandAccess, getSeaAccess, requireMetadata, requireStructureTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { requiredStateWithin } from "../adapter/unitState.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { gatherTreasure } from "../execution/treasure.ts";
 import { Worker } from "../execution/worker.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import type { Geography } from "../world/geography.ts";
+import { isLineInsideEnemyTerritory } from "../world/territory.ts";
 import { getBestBase } from "./baseManager.ts";
 
 export type TradeRoute = { source: EntityId; target: EntityId; gain: number; land?: AccessIndex; sea?: SeaIndex; };

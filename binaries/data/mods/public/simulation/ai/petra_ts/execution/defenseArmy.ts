@@ -1,8 +1,9 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { armyId, playerId, worldPos } from "../adapter/brands.ts";
-import { allowCapture, getLandAccess, getMaxStrength, isSiegeUnit, returnResources } from "../adapter/entityExtend.ts";
+import { getLandAccess, getMaxStrength, isSiegeUnit, returnResources } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
 import { hqOf } from "./hq.ts";
 import { TransportPlan } from "./transportPlan.ts";

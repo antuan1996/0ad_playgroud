@@ -3,7 +3,7 @@ import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/comm
 import { GAIA, worldPos } from "../adapter/brands.ts";
 import * as chat from "../adapter/chatHelper.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import { allowCapture, getLandAccess, requireValue } from "../adapter/entityExtend.ts";
+import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import {
@@ -17,6 +17,7 @@ import {
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
+import { allowCapture } from "../world/capture.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import {

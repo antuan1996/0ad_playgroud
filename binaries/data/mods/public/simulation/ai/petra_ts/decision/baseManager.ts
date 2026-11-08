@@ -9,7 +9,6 @@ import {
 	getHolder,
 	getLandAccess,
 	isFastMoving,
-	isNotWorthBuilding,
 	requireStructureTemplate,
 	requireValue,
 } from "../adapter/entityExtend.ts";
@@ -24,6 +23,7 @@ import { BaseResources, type ResourceSupply } from "../world/baseResources.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
+import { isNotWorthBuilding } from "../world/territory.ts";
 import type { BasesManager } from "./basesManager.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
 import { nextField } from "./fields.ts";
