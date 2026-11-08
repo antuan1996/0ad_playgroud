@@ -182,9 +182,9 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "AttackManager",
-			original: () => new AttackManager(makeConfig(), world),
+			original: () => new AttackManager(makeConfig(), world, world.ai.HQ),
 			fromSave: (data, gameState) =>
-				AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), true),
+				AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), true, world.ai.HQ),
 			notSaved: {
 				enemyLandsTurn: "a cache of enemiesByLand, counted again on the turn it is asked",
 				enemyLands: "a cache of enemiesByLand, counted again on the turn it is asked",

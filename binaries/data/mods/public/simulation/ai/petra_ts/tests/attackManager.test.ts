@@ -45,10 +45,17 @@ function worldConfig(world: World, overrides: Partial<Config> = {}): Config
 	return Object.assign(new Config(world.ai.Config.difficulty), world.ai.Config, { chat: true, ...overrides });
 }
 
+/** A manager of a world of its own, its siblings that world's headquarters' */
+function freshManager(config: Config): AttackManager
+{
+	const world = makeWorld();
+	return new AttackManager(config, world.gameState, world.ai.HQ);
+}
+
 /** The manager wired to one world, as headquarters owns it. */
 function makeManager(world: World, config: Config): AttackManager
 {
-	const manager = new AttackManager(config, world.gameState);
+	const manager = new AttackManager(config, world.gameState, world.ai.HQ);
 	world.ai.HQ.attackManager = manager;
 	return manager;
 }
@@ -182,7 +189,7 @@ describe("attack manager", () =>
 	{
 		it("gives three heavy rushes to a very aggressive commander", () =>
 		{
-			const manager = new AttackManager(configFor(0.8), makeWorld().gameState);
+			const manager = freshManager(configFor(0.8));
 			manager.setRushes(3);
 			assert.equal(manager.maxRushes, 3);
 			assert.deepEqual(manager.rushSize, [16, 20, 24]);
@@ -190,7 +197,7 @@ describe("attack manager", () =>
 
 		it("gives two rushes to a strong-enough commander with room", () =>
 		{
-			const manager = new AttackManager(configFor(0.6), makeWorld().gameState);
+			const manager = freshManager(configFor(0.6));
 			manager.setRushes(2);
 			assert.equal(manager.maxRushes, 2);
 			assert.deepEqual(manager.rushSize, [18, 22]);
@@ -198,7 +205,7 @@ describe("attack manager", () =>
 
 		it("gives one rush to a mild commander", () =>
 		{
-			const manager = new AttackManager(configFor(0.4), makeWorld().gameState);
+			const manager = freshManager(configFor(0.4));
 			manager.setRushes(1);
 			assert.equal(manager.maxRushes, 1);
 			assert.deepEqual(manager.rushSize, [20]);
@@ -206,11 +213,11 @@ describe("attack manager", () =>
 
 		it("keeps the rush count when neither temper nor allowance allow them", () =>
 		{
-			const manager = new AttackManager(configFor(0.9), makeWorld().gameState);
+			const manager = freshManager(configFor(0.9));
 			manager.setRushes(0);
 			assert.equal(manager.maxRushes, 0, "no allowance for a strong temper");
 			assert.deepEqual(manager.rushSize, [], "and no rush sizes to spend");
-			const mild = new AttackManager(configFor(0.1), makeWorld().gameState);
+			const mild = freshManager(configFor(0.1));
 			mild.setRushes(2);
 			assert.equal(mild.maxRushes, 0, "no temper for a wide allowance");
 		});
@@ -342,7 +349,7 @@ describe("attack manager", () =>
 	{
 		it("renames a bombing aim whose target was rebuilt", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			manager.bombingAttacks.set(entityId(5001), new Set([entityId(1100)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ entity: entityId(5001), newentity: entityId(7001) });
@@ -354,7 +361,7 @@ describe("attack manager", () =>
 
 		it("renames each bomber inside a group whose unit was rebuilt", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			manager.bombingAttacks.set(entityId(5000), new Set([entityId(6001), entityId(6002)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ entity: entityId(6001), newentity: entityId(7001) });
@@ -1408,7 +1415,7 @@ describe("attack manager", () =>
 	{
 		it("finds a plan by its name in either roster", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			const preparing = planStub({ name: 3 });
 			const marching = planStub({ name: 9 });
 			manager.upcomingAttacks["Rush"].push(preparing);
@@ -1421,7 +1428,7 @@ describe("attack manager", () =>
 
 		it("pauses exactly the named plan, or every plan at once", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			const a = planStub({ name: 3 });
 			const b = planStub({ name: 4 });
 			const c = planStub({ name: 5 });
@@ -1445,7 +1452,7 @@ describe("attack manager", () =>
 
 		it("tells which attack is being prepared", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			const a = planStub({ name: 3 });
 			const b = planStub({ name: 4 });
 			manager.upcomingAttacks["Attack"].push(a, b);
@@ -1456,7 +1463,7 @@ describe("attack manager", () =>
 
 		it("unpauses exactly the named plan", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			const a = planStub({ name: 3 });
 			const b = planStub({ name: 4 });
 			manager.upcomingAttacks["Rush"].push(a, b);
@@ -1489,7 +1496,7 @@ describe("attack manager", () =>
 
 		it("counts the troops of our marching armies around a point", () =>
 		{
-			const manager = new AttackManager(configFor(0.5), makeWorld().gameState);
+			const manager = freshManager(configFor(0.5));
 			manager.startedAttacks["Attack"].push(
 				planStub({ name: 3, units: 4, position: [20, 20] }),
 				planStub({ name: 4, units: 2, position: [90, 90] }),
@@ -1711,6 +1718,7 @@ describe("attack manager", () =>
 				fresh.gameState,
 				saved,
 				fresh.ai.HQ.canBuildUnits,
+				fresh.ai.HQ,
 			);
 			fresh.ai.HQ.attackManager = restored;
 
