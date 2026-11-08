@@ -46,6 +46,15 @@ decision, and the port's types and structure finished (3.1, 3.5): 95.0%
 against `petra_parity` at the last checkpoint. What decides a mainland game
 now is the first big army and when it fights (`FINDINGS.md` §46): stage 6.
 
+Stage 6 is closed (2026-11-08, tag `petra-ts-stage6`, §6.4) without its
+exit criterion: the attacks' and ships' defects were found and fixed (the
+garrison loop that emptied every attack plan, the arrival turn's sort,
+towers letting workers in and out, ships stalled at sea and at boarding),
+each neutral in win-rate; the two narrow searches were built, calibrated
+and stopped (the fight estimator names a fight's winner seven times in ten,
+no better than a head count; the planner's forecast misses the soldiers 180
+s on by a median 36%). They stay as measuring tools. Stage 7's ideas: §6.5.
+
 ## 1. Constraints that shape every stage
 
 1. **Determinism, always.** The AI runs inside the lockstep simulation
@@ -466,7 +475,8 @@ Full details of completed Stages 0–5 live in `build/petra_ts/STAGE_HISTORY.md`
 | 3. Layers (**done** 2026-10-26, `FINDINGS.md` §15) | Reshape into `adapter/`, `world/`, `decision/`, `execution/`; `unitState.ts`, `commands.ts`, `hqOf`, `SAVE_VERSION` | Met: fingerprint unchanged; paired turn times within 5% mean/99th and 10% 99.9th budget (4) |
 | 4. Fix the known weaknesses (**done** 2026-10-27, `FINDINGS.md` §16) | Fix withdrawal footprint, mercenary workers, garrisoned units holding attacks, pop-cap attack churn, and 6 original bugs; type hygiene (3.5) | Met for tests (every fix pinned); win-rate 50.3–50.5% vs `petra_parity` (+12% gathered), carried to stage 5 |
 | 5. Utility decisions (**done** 2026-11-04, `FINDINGS.md` §§18–46, tag `petra-ts-stage5`) | Fix order reading, early fields/houses/queue funding/women share, research payback, barracks scaling, island/naval play, data-carrying stages (3.1), and constructor-only setup (3.5) | **Met** (§6.1): checkpoints 78.7%, 92.3%, and **95.0%** vs `petra_parity` (285/300, CI 91.9–96.9%) |
-| 6. Narrow search | First the attacks' and the ships' handling (§6.2: the army held at its rally point, the HugeAttack churn, a started attack's per-unit work, stuck ships); then the build-order planner and fight estimator (3.4), time-boxed | Gain vs stage 5 (SPRT); turn budget kept |
+| 6. Narrow search (**closed** 2026-11-08, `FINDINGS.md` §§50–58, tag `petra-ts-stage6`) | The attacks' and the ships' handling (§6.2), then the fight estimator and the build-order planner (§6.3), time-boxed | **Not met** (§6.4): the fixes neutral (50.0%, 53.1%, 48.5% against the version before each); the estimator (~70%) and the planner's forecast (36% off) stopped at their calibration; turn budget not re-measured against stage 5 |
+| 7. Soldiers by minute 13 (proposed, §6.5) | One measured change at a time aimed at §46's lever, with a minute-13 proxy; the fights' handling by the fight log | Gain vs stage 5 (SPRT); turn budget kept |
 
 Running throughout: determinism and save/load checks (5.2), `FINDINGS.md`
 for what each stage finds, and upstream reports for bugs that are the
@@ -668,6 +678,76 @@ the estimator makes a start *conditional* on winning, not earlier.
    proxy, then the SPRT.
 5. Stage 6 closes on the stage's exit criterion (§6's table): a gain against
    the stage 5 bot (`petra-ts-stage5`) by the SPRT, the turn budget kept.
+
+### 6.4 Stage 6: what it did, and what it leaves
+
+**Closed** 2026-11-08 (tag `petra-ts-stage6`, `FINDINGS.md` §§50–58), the
+exit criterion not met. In order:
+
+- **Attacks** (§50–51). The army held at its rally point and the HugeAttack
+  churn were one original bug: a captured sentry tower that needs 4 men to
+  stop its decay and holds 3 made `garrisonUnitsInside` take every soldier
+  out of his attack plan on every turn. Fixed (40 games vs `petra_prev`:
+  50.0%). A draft cap and a start at the plan's total size were tried first
+  and lost (30-50%). The arrival turn's sort read template data at every
+  comparison: values read once, the same games, the worst AI turn 97 to 40
+  ms.
+- **Towers and ships** (§52–54). The garrison orders the ships were blamed
+  for were mostly transport work; the repeats were towers by trade routes
+  taking workers in and out (fixed for unarmed targets; a 20 s threat memory
+  measured and dropped: 47.5% mainland, 47.4% islands). A 5 s ship log and
+  `ship-log.ts` found transports stalled up to an hour: a headway test, a
+  nudge for wedged ships and failed landing points kept off end them at sea
+  (53.1% on islands) and at boarding (48.5%).
+- **The fight estimator** (§55–57): stats from the templates, the square
+  law; a fight log and `fight-log.ts --variants`. On 2150 fights of 80
+  mirror games it names the winner in 69-71% of the fights of ten or more a
+  side (exit 75%), 2-4 points better than the head count; counting only the
+  near units is worse; the reinforcements help on islands only. Found:
+  common-api's `counters()` is always false.
+- **The planner's forecast** (§58), objective the soldiers' head count at
+  minute 13: three rounds of fixes, then 10 games: soldiers at 180 s off by
+  a median 36%; Petra's women level off below their cap and its soldiers
+  come from the attack plans and barracks it builds, which a narrow model
+  does not see.
+
+Left: the turn budget against stage 5 (`ai-times.ts --compare`) was not
+re-measured after §51; the boarding waits of ships at a shared point (a
+plan filling, not a stall); the circling the nudges add.
+
+### 6.5 Stage 7: ideas
+
+What stage 6 learned: games turn on some 20 soldiers more at minute 13
+(§46); a fight is decided at its start only seven times in ten (§57);
+Petra's own economy is too intricate for a separate forecast (§58), but it
+can be measured in games. So stage 7 goes back to stage 5's way, one
+measured change at a time, aimed at the soldiers by minute 13:
+
+1. **A minute-13 proxy.** Extend `pair-score.ts` to the citizen soldiers'
+   lead at minute 13 per seed pair (the timeline, `-t`), check how well it
+   predicts the winner (as the minute-8 resources lead was, 79%), and use
+   it to choose which variants deserve an SPRT.
+2. **The soldiers' levers, each on its own:** the second and third barracks
+   earlier (§29's rule waits for the barracks to be busy); a lower support
+   share once the women's work is covered (after minute 7); the town phase
+   started later, its 500 food and wood in soldiers first (§46: sides with
+   the town phase at minute 13 or later won 75%, but the cause is unclear);
+   champions or cavalry only after minute 13.
+3. **Fights fought together.** The fight log shows defense armies whose men
+   come in one by one from the fields; gathering them before engaging, and
+   an attack waiting for its stragglers before the first blow, measured by
+   the losses per enemy killed (`fight-log.ts`) and then the win-rate.
+4. **`counters()`.** The port's choice of prey reads bonuses through
+   `Template.counters()`, always false (§55); reading the bonuses itself
+   (`attackBonuses`) is a play change to measure. The common-api fix goes
+   upstream.
+5. **The turn budget**: measure the stage 6 bot against stage 5's with
+   `match.sh -P` and `ai-times.ts --compare`, first, as the baseline of stage
+   7.
+6. **Islands**: half the island games still draw at 90 minutes (§53-54's
+   batches: 8 and 7 of 40, §52's 21 of 40 on another pool); finishing them
+   (attacks across the sea once the home island is held) is a separate
+   track, measured on islands only.
 
 ## 7. Open questions
 
