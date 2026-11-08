@@ -8,8 +8,29 @@ import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
+import type { AttackManager } from "./attackManager.ts";
 import { getBestBase } from "./baseManager.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { DefenseManager } from "./defenseManager.ts";
+import type { GarrisonManager } from "./garrisonManager.ts";
+import type { Headquarters } from "./headquarters.ts";
+import type { NavalManager } from "./navalManager.ts";
 import { buildWonder } from "./townBuildings.ts";
+
+/**
+ * What the victory manager asks of the headquarters that owns it: what it
+ * may build (a wonder) and the economy plan (no healers while saving); and of
+ * its sibling managers: the attacks (relic raids, the reserve to guard from),
+ * the bases' wonder builders, the defense armies and garrisons to pull a
+ * critical unit out of, and the ships to carry its guards.
+ */
+export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
+	readonly attackManager: Pick<AttackManager, "getPlan" | "outOfPlan" | "raidTargetEntity">;
+	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers">;
+	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
+	readonly garrisonManager: Pick<GarrisonManager, "cancelGarrison">;
+	readonly navalManager: Pick<NavalManager, "requireTransport">;
+};
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -49,7 +70,13 @@ function addCaptureStrength(capture: number, units: CommonEntityCollection, reli
 }
 
 /** Whether a unit of ours may join a raid on the relic: free, on its land, in no plan but one still preparing. */
-function mayRaidRelic(gameState: CommonGameState, ent: CommonEntity, relic: CommonEntity, access: AccessIndex): boolean
+function mayRaidRelic(
+	gameState: CommonGameState,
+	attacks: VictoryHQ["attackManager"],
+	ent: CommonEntity,
+	relic: CommonEntity,
+	access: AccessIndex,
+): boolean
 {
 	if (!isPlaced(ent) || !ent.canCapture(relic))
 	{
@@ -70,7 +97,7 @@ function mayRaidRelic(gameState: CommonGameState, ent: CommonEntity, relic: Comm
 	}
 	if (plan !== undefined && plan >= 0)
 	{
-		const attack = gameState.ai.HQ.attackManager.getPlan(plan);
+		const attack = attacks.getPlan(plan);
 		if (attack && (attack.state !== AttackPlan.STATE_UNEXECUTED || attack.type === AttackPlan.TYPE_RAID))
 		{
 			return false;
@@ -104,15 +131,15 @@ function isGuardRole(role: WorkerRole | undefined): boolean
 }
 
 /** Let's get a few units from other bases to build the wonder. */
-function sendWonderBuilders(gameState: CommonGameState, ent: CommonEntity): void
+function sendWonderBuilders(gameState: CommonGameState, bases: VictoryHQ["basesManager"], ent: CommonEntity): void
 {
 	const baseID = ent.getMetadata(PlayerID, "base");
-	const base = baseID === undefined ? undefined : gameState.ai.HQ.basesManager.getBaseByID(baseID);
+	const base = baseID === undefined ? undefined : bases.getBaseByID(baseID);
 	if (!base)
 	{
 		return;
 	}
-	const builders = gameState.ai.HQ.basesManager.bulkPickWorkers(gameState, base, 10);
+	const builders = bases.bulkPickWorkers(gameState, base, 10);
 	if (builders)
 	{
 		for (const worker of builders.values())
@@ -125,13 +152,18 @@ function sendWonderBuilders(gameState: CommonGameState, ent: CommonEntity): void
 }
 
 /** A wounded critical entity stops and leaves its attack plan and its defense army. */
-function withdrawFromFight(gameState: CommonGameState, target: CommonPlacedEntity, plan: UnitPlan | undefined): void
+function withdrawFromFight(
+	gameState: CommonGameState,
+	hq: VictoryHQ,
+	target: CommonPlacedEntity,
+	plan: UnitPlan | undefined,
+): void
 {
 	target.stopMoving();
 
 	if (plan !== undefined && plan >= 0)
 	{
-		const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
+		const attackPlan = hq.attackManager.getPlan(plan);
 		if (attackPlan)
 		{
 			attackPlan.removeUnit(target, true);
@@ -141,7 +173,7 @@ function withdrawFromFight(gameState: CommonGameState, target: CommonPlacedEntit
 	const partOfArmy = target.getMetadata(PlayerID, "PartOfArmy");
 	if (partOfArmy)
 	{
-		const army = gameState.ai.HQ.defenseManager.getArmy(partOfArmy);
+		const army = hq.defenseManager.getArmy(partOfArmy);
 		if (army)
 		{
 			army.removeOwn(gameState, target.id());
@@ -192,10 +224,12 @@ export class VictoryManager
 	private targetedGaiaRelics: Map<EntityId, AttackPlanId[]>;
 	tryCaptureGaiaRelic: boolean;
 	tryCaptureGaiaRelicLapseTime: GameSeconds;
+	readonly hq: VictoryHQ;
 
-	constructor(Config: Config)
+	constructor(Config: Config, hq: VictoryHQ)
 	{
 		this.Config = Config;
+		this.hq = hq;
 		this.criticalEnts = new Map();
 		// Holds ids of all ents who are (or can be) guarding and if the ent is currently guarding
 		this.guardEnts = new Map();
@@ -426,7 +460,7 @@ export class VictoryManager
 				continue;
 			}
 
-			sendWonderBuilders(gameState, ent);
+			sendWonderBuilders(gameState, this.hq.basesManager, ent);
 		}
 
 		for (const evt of events.ConstructionFinished)
@@ -464,7 +498,7 @@ export class VictoryManager
 			const hero = this.criticalEnts.get(evt.target);
 			if (!isLent(plan))
 			{
-				withdrawFromFight(gameState, target, plan);
+				withdrawFromFight(gameState, this.hq, target, plan);
 				if (hero)
 				{
 					hero.garrisonEmergency = target.healthLevel() < this.Config.garrisonHealthLevel.low;
@@ -474,7 +508,7 @@ export class VictoryManager
 			else if (hero && target.healthLevel() < this.Config.garrisonHealthLevel.low && !hero.garrisonEmergency)
 			{
 				// the hero is severely wounded, try to retreat/garrison quicker
-				gameState.ai.HQ.garrisonManager.cancelGarrison(target);
+				this.hq.garrisonManager.cancelGarrison(target);
 				this.pickCriticalEntRetreatLocation(gameState, target, true);
 				hero.garrisonEmergency = true;
 			}
@@ -607,7 +641,7 @@ export class VictoryManager
 	manageCriticalEntHealers(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (
-			gameState.ai.HQ.economy.saveResources || queues.healer.hasQueuedUnits() ||
+			this.hq.economy.saveResources || queues.healer.hasQueuedUnits() ||
 			!gameState.getOwnEntitiesByClass("Temple", true).hasEntities() ||
 			this.guardEnts.size > Math.min(gameState.getPopulationMax() / 10, gameState.getPopulation() / 4)
 		)
@@ -750,7 +784,7 @@ export class VictoryManager
 			{
 				break;
 			}
-			recruit(gameState.ai.HQ.attackManager.outOfPlan, checkForSameAccess, true);
+			recruit(this.hq.attackManager.outOfPlan, checkForSameAccess, true);
 			if (enough())
 			{
 				break;
@@ -801,7 +835,7 @@ export class VictoryManager
 		emergency: boolean,
 	): void
 	{
-		gameState.ai.HQ.defenseManager.garrisonAttackedUnit(gameState, criticalEnt, emergency);
+		this.hq.defenseManager.garrisonAttackedUnit(gameState, criticalEnt, emergency);
 		const plan = criticalEnt.getMetadata(PlayerID, "plan");
 
 		if (isLent(plan))
@@ -957,7 +991,7 @@ export class VictoryManager
 			const criticalEntPos = criticalEnt.position();
 			if (guardEntAccess !== undefined && criticalEntAccess !== undefined)
 			{
-				gameState.ai.HQ.navalManager.requireTransport(
+				this.hq.navalManager.requireTransport(
 					gameState,
 					guardEnt,
 					guardEntAccess,
@@ -1000,7 +1034,7 @@ export class VictoryManager
 
 		if (gameState.getVictoryConditions().has("wonder"))
 		{
-			buildWonder(gameState.ai.HQ, gameState, queues, true);
+			buildWonder(this.hq, gameState, queues, true);
 		}
 
 		if (gameState.getVictoryConditions().has("regicide"))
@@ -1093,7 +1127,7 @@ export class VictoryManager
 		const plans = this.targetedGaiaRelics.get(relic.id()) ?? [];
 		for (const plan of plans)
 		{
-			const attack = gameState.ai.HQ.attackManager.getPlan(plan);
+			const attack = this.hq.attackManager.getPlan(plan);
 			if (attack)
 			{
 				capture = addCaptureStrength(capture, attack.unitCollection, relic);
@@ -1106,8 +1140,9 @@ export class VictoryManager
 		}
 		const relicPosition = relic.position();
 		const access = getLandAccess(gameState, relic);
-		const units = gameState.getOwnUnits().filter((ent) => mayRaidRelic(gameState, ent, relic, access))
-			.filterNearest(relicPosition);
+		const units = gameState.getOwnUnits().filter((ent) =>
+			mayRaidRelic(gameState, this.hq.attackManager, ent, relic, access)
+		).filterNearest(relicPosition);
 		const expedition = [];
 		for (const ent of units.values())
 		{
@@ -1132,7 +1167,7 @@ export class VictoryManager
 	/** A raid on the relic with the expedition, rallied where its first unit stands, started at once */
 	private raidRelic(gameState: CommonGameState, relic: CommonPlacedEntity, expedition: CommonEntity[]): void
 	{
-		const attack = gameState.ai.HQ.attackManager.raidTargetEntity(gameState, relic);
+		const attack = this.hq.attackManager.raidTargetEntity(gameState, relic);
 		if (!attack)
 		{
 			return;
@@ -1181,7 +1216,7 @@ export class VictoryManager
 		const relicPlans = this.targetedGaiaRelics.get(relicId) ?? [];
 		for (const plan of relicPlans)
 		{
-			const attack = gameState.ai.HQ.attackManager.getPlan(plan);
+			const attack = this.hq.attackManager.getPlan(plan);
 			if (attack)
 			{
 				attack.Abort(gameState);
@@ -1203,9 +1238,9 @@ export class VictoryManager
 	}
 
 	/** A saved victory manager: its critical entities, their guards and the relics it goes for */
-	static restore(Config: Config, data: SerializedVictoryManager): VictoryManager
+	static restore(Config: Config, data: SerializedVictoryManager, hq: VictoryHQ): VictoryManager
 	{
-		const manager = new VictoryManager(Config);
+		const manager = new VictoryManager(Config, hq);
 		manager.resume(data);
 		return manager;
 	}

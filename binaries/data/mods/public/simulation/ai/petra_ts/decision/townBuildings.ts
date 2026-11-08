@@ -143,7 +143,7 @@ export function buildFarmstead(hq: Headquarters, gameState: CommonGameState, que
  * force = true when called from the victoryManager in case of Wonder victory condition.
  */
 export function buildWonder(
-	hq: Headquarters,
+	hq: Pick<Headquarters, "canBuild">,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	force: boolean = false,
