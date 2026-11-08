@@ -22,8 +22,28 @@ import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
+import type { AttackManager } from "./attackManager.ts";
 import type { BaseManager } from "./baseManager.ts";
+import type { BasesManager } from "./basesManager.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
+import type { Headquarters } from "./headquarters.ts";
+import type { VictoryManager } from "./victoryManager.ts";
+
+/** What the defense asks of the garrison manager: the room in a holder, to garrison there, and who may */
+type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garrison" | "allowMelee">;
+
+/**
+ * What the defense manager asks of the headquarters that owns it: whether a
+ * building can be defended, the emergency units to train; and of its sibling
+ * managers: the victory's critical units, the bases, the attacks its units
+ * belong to or switch to, and the garrisons.
+ */
+export type DefenseHQ = Pick<Headquarters, "isDefendable" | "trainEmergencyUnits"> & {
+	readonly victoryManager: Pick<VictoryManager, "criticalEnts">;
+	readonly basesManager: Pick<BasesManager, "hasActiveBase" | "getBaseByID" | "baseManagers">;
+	readonly attackManager: Pick<AttackManager, "getPlan" | "switchDefenseToAttack">;
+	readonly garrisonManager: DefenseGarrison;
+};
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
 	Attacked: Array<{ target: EntityId; attacker: EntityId; }>;
@@ -216,7 +236,7 @@ function abortsCapture(gameState: CommonGameState, army: DefenseArmy, target: Co
 type ArmyNeed = { army: DefenseArmy; access: AccessIndex | undefined; need: number; };
 
 /** Whether a unit of ours may defend: a fighter on the map, free, neither shipped, critical nor marching with an attack */
-function mayDefend(gameState: CommonGameState, ent: CommonEntity): boolean
+function mayDefend(victory: DefenseHQ["victoryManager"], ent: CommonEntity): boolean
 {
 	if (!isPlaced(ent))
 	{
@@ -238,7 +258,7 @@ function mayDefend(gameState: CommonGameState, ent: CommonEntity): boolean
 	{
 		return false;
 	}
-	if (gameState.ai.HQ.victoryManager.criticalEnts.has(ent.id()))
+	if (victory.criticalEnts.has(ent.id()))
 	{
 		return false;
 	}
@@ -331,7 +351,7 @@ function keepsTask(
 	{
 		return true;
 	}
-	const capturableTarget = gameState.ai.HQ.capturableTargets.get(orderId);
+	const capturableTarget = gameState.ai.captures.targets.get(orderId);
 	if (unitAIStateOrder === "COMBAT" && !isSiegeUnit(currentTarget) && capturableTarget)
 	{
 		// Take the nearest unit also attacking this structure to help us.
@@ -347,9 +367,12 @@ function keepsTask(
 }
 
 /** Garrison an attacked siege ranged unit inside the nearest fortress. */
-export function garrisonSiegeUnit(gameState: CommonGameState, unit: CommonPlacedEntity): boolean
+export function garrisonSiegeUnit(
+	gameState: CommonGameState,
+	garrisonManager: DefenseGarrison,
+	unit: CommonPlacedEntity,
+): boolean
 {
-	const garrisonManager = gameState.ai.HQ.garrisonManager;
 	const nearest = nearestHolder(
 		gameState,
 		unit,
@@ -403,9 +426,11 @@ export class DefenseManager
 	targetList: EntityId[];
 	/** The headquarters' map of the world: the territory map is the turn's own */
 	geography: Geography;
+	readonly hq: DefenseHQ;
 
-	constructor(Config: Config, geography: Geography)
+	constructor(Config: Config, geography: Geography, hq: DefenseHQ)
 	{
+		this.hq = hq;
 		this.geography = geography;
 		// Array of "army" Objects.
 		this.armies = [];
@@ -612,7 +637,7 @@ export class DefenseManager
 			{
 				continue;
 			}
-			if (!this.geography.territoryMap.isBlinking(building.position()) || gameState.ai.HQ.isDefendable(building))
+			if (!this.geography.territoryMap.isBlinking(building.position()) || this.hq.isDefendable(building))
 			{
 				return true;
 			}
@@ -754,7 +779,7 @@ export class DefenseManager
 			}
 		}
 
-		if (i === 0 && this.armies.length <= 1 && gameState.ai.HQ.basesManager.hasActiveBase())
+		if (i === 0 && this.armies.length <= 1 && this.hq.basesManager.hasActiveBase())
 		{
 			this.captureGaiaStructures(gameState);
 		}
@@ -984,9 +1009,10 @@ export class DefenseManager
 
 		// Let's get our potential units.
 		const potentialDefenders: Array<EntityId | undefined> = [];
+		const victory = this.hq.victoryManager;
 		gameState.getOwnUnits().forEach(function(ent: CommonEntity): void
 		{
-			if (mayDefend(gameState, ent))
+			if (mayDefend(victory, ent))
 			{
 				potentialDefenders.push(ent.id());
 			}
@@ -1009,7 +1035,7 @@ export class DefenseManager
 		{
 			armiesPos.push(armiesNeeding[a].army.foePosition);
 		}
-		gameState.ai.HQ.trainEmergencyUnits(gameState, armiesPos);
+		this.hq.trainEmergencyUnits(gameState, armiesPos);
 	}
 
 	/** The armies that need defenders, with their land and the strength they lack */
@@ -1205,7 +1231,7 @@ export class DefenseManager
 
 		// If a building on a blinking tile is attacked, check if it can be defended.
 		// Same thing for a building in an isolated base (not connected to a base with anchor).
-		if (target.hasClass("Structure") && this.isIndefensible(gameState, target))
+		if (target.hasClass("Structure") && this.isIndefensible(target))
 		{
 			destroyBeforeCapture(target);
 			return;
@@ -1215,7 +1241,7 @@ export class DefenseManager
 		const plan = target.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan >= 0)
 		{
-			const attack = gameState.ai.HQ.attackManager.getPlan(plan);
+			const attack = this.hq.attackManager.getPlan(plan);
 			if (attack && attack.state !== AttackPlan.STATE_UNEXECUTED)
 			{
 				return;
@@ -1277,12 +1303,12 @@ export class DefenseManager
 	}
 
 	/** Whether a structure cannot be defended: on a blinking tile, or in a base not connected to a base with anchor */
-	private isIndefensible(gameState: CommonGameState, target: CommonPlacedEntity): boolean
+	private isIndefensible(target: CommonPlacedEntity): boolean
 	{
 		const baseId = target.getMetadata(PlayerID, "base");
-		const base = baseId === undefined ? undefined : gameState.ai.HQ.basesManager.getBaseByID(baseId);
-		return this.geography.territoryMap.isBlinking(target.position()) && !gameState.ai.HQ.isDefendable(target) ||
-			!base || gameState.ai.HQ.basesManager.baseManagers.every((b: BaseManager): boolean =>
+		const base = baseId === undefined ? undefined : this.hq.basesManager.getBaseByID(baseId);
+		return this.geography.territoryMap.isBlinking(target.position()) && !this.hq.isDefendable(target) ||
+			!base || this.hq.basesManager.baseManagers.every((b: BaseManager): boolean =>
 				!b.anchor || b.accessIndex !== base.accessIndex
 			);
 	}
@@ -1304,7 +1330,7 @@ export class DefenseManager
 		}
 		if (target.hasClass("StoneThrower"))
 		{
-			garrisonSiegeUnit(gameState, target);
+			garrisonSiegeUnit(gameState, this.hq.garrisonManager, target);
 			return true;
 		}
 		return false;
@@ -1343,7 +1369,7 @@ export class DefenseManager
 				// One of our cc has been captured.
 				if (ent && ent.hasClass("CivCentre"))
 				{
-					gameState.ai.HQ.attackManager.switchDefenseToAttack(gameState, ent, { range: 150 });
+					this.hq.attackManager.switchDefenseToAttack(gameState, ent, { range: 150 });
 				}
 			}
 		}
@@ -1368,7 +1394,7 @@ export class DefenseManager
 			return false;
 		}
 		const minGarrison = data.min || target.garrisonMax();
-		if (gameState.ai.HQ.garrisonManager.numberOfGarrisonedSlots(target) >= minGarrison)
+		if (this.hq.garrisonManager.numberOfGarrisonedSlots(target) >= minGarrison)
 		{
 			return false;
 		}
@@ -1376,9 +1402,9 @@ export class DefenseManager
 		{
 			return false;
 		}
-		const garrisonManager = gameState.ai.HQ.garrisonManager;
+		const garrisonManager = this.hq.garrisonManager;
 		const typeGarrison = data.type || GarrisonManager.TYPE_PROTECTION;
-		let allowMelee = gameState.ai.HQ.garrisonManager.allowMelee(target);
+		let allowMelee = this.hq.garrisonManager.allowMelee(target);
 		if (allowMelee === undefined)
 		{
 			// Should be kept in sync with garrisonManager to avoid garrisoning-ungarrisoning some units.
@@ -1470,7 +1496,7 @@ export class DefenseManager
 		const plan = ent.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan >= 0)
 		{
-			const attackPlan = gameState.ai.HQ.attackManager.getPlan(plan);
+			const attackPlan = this.hq.attackManager.getPlan(plan);
 			if (attackPlan)
 			{
 				attackPlan.removeUnit(ent, true);
@@ -1491,7 +1517,7 @@ export class DefenseManager
 	 */
 	garrisonAttackedUnit(gameState: CommonGameState, unit: CommonPlacedEntity, emergency: boolean = false): boolean
 	{
-		const garrisonManager = gameState.ai.HQ.garrisonManager;
+		const garrisonManager = this.hq.garrisonManager;
 		const nearest = nearestHolder(
 			gameState,
 			unit,
@@ -1566,10 +1592,7 @@ export class DefenseManager
 				{
 					continue;
 				}
-				gameState.ai.HQ.attackManager.switchDefenseToAttack(gameState, target, {
-					armyID: army.ID,
-					uniqueTarget: true,
-				});
+				this.hq.attackManager.switchDefenseToAttack(gameState, target, { armyID: army.ID, uniqueTarget: true });
 				return;
 			}
 		}
@@ -1594,9 +1617,10 @@ export class DefenseManager
 		gameState: CommonGameState,
 		geography: Geography,
 		data: SerializedDefenseManager,
+		hq: DefenseHQ,
 	): DefenseManager
 	{
-		const manager = new DefenseManager(Config, geography);
+		const manager = new DefenseManager(Config, geography, hq);
 		manager.resume(gameState, data);
 		return manager;
 	}

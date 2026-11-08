@@ -373,7 +373,7 @@ export class Headquarters
 			);
 
 			this.buildManager = BuildManager.restore(saved.buildManager);
-			this.defenseManager = DefenseManager.restore(this.Config, gameState, geography, saved.defenseManager);
+			this.defenseManager = DefenseManager.restore(this.Config, gameState, geography, saved.defenseManager, this);
 
 			this.tradeManager = TradeManager.restore(this.Config, gameState, geography, saved.tradeManager, this);
 
@@ -388,7 +388,7 @@ export class Headquarters
 		this.basesManager = new BasesManager(this.Config, gameState);
 		this.attackManager = new AttackManager(this.Config, gameState, this);
 		this.buildManager = BuildManager.start(gameState);
-		this.defenseManager = new DefenseManager(this.Config, geography);
+		this.defenseManager = new DefenseManager(this.Config, geography, this);
 		this.tradeManager = new TradeManager(this.Config, gameState, geography, this);
 		this.navalManager = new NavalManager(this.Config, gameState, geography, this);
 		this.researchManager = new ResearchManager(this.Config, this);
