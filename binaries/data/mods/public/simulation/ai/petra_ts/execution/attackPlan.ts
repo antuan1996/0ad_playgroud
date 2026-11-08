@@ -25,6 +25,7 @@ import {
 import { ordersOf } from "../adapter/orders.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { basesOf } from "../world/bases.ts";
 import { allowCapture } from "../world/capture.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
@@ -46,7 +47,7 @@ import {
 	rallyPoints,
 	targetDistance,
 } from "./attackTargets.ts";
-import { basesOf, hqOf } from "./hq.ts";
+import { hqOf } from "./hq.ts";
 import type { Queue } from "./queue.ts";
 import { type PlanMetadata } from "./queueplan.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
@@ -710,7 +711,7 @@ export class AttackPlan
 		}
 		const { rallyPoint, rallyAccess, allAccesses } = rally;
 		let start: AttackStart = { rallyPoint, overseas: 0 };
-		if (!hqOf(gameState).geography.navalMap)
+		if (!gameState.ai.geography.navalMap)
 		{
 			return start;
 		}
@@ -2104,7 +2105,7 @@ export class AttackPlan
 	{
 		for (let i = 0; i < path.length; ++i)
 		{
-			if (hqOf(gameState).geography.territoryMap.getOwner(path[i]) === PlayerID)
+			if (gameState.ai.geography.territoryMap.getOwner(path[i]) === PlayerID)
 			{
 				continue;
 			}
@@ -2567,7 +2568,7 @@ export class AttackPlan
 			}
 		}
 		return attackedNB > 1 && (attackedUnitNB > 0 || this.hasSiegeUnits()) &&
-			(hqOf(gameState).geography.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3);
+			(gameState.ai.geography.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3);
 	}
 
 	/**

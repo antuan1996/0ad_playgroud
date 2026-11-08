@@ -26,6 +26,10 @@ declare namespace PetraRuntime
 		captures: import("./world/captureTally.ts").CaptureTally;
 		/** The headquarters' geography (HQ.geography), for world/ code, which may not reach the HQ. */
 		geography: import("./world/geography.ts").Geography;
+		/** The headquarters' bases as a world view (HQ.basesManager through world/bases.ts's BasesView). */
+		bases: import("./world/bases.ts").BasesView;
+		/** The treasures left on the map (HQ.treasures), for the collectors. */
+		treasures: CommonEntityCollection<CommonPlacedEntity>;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */

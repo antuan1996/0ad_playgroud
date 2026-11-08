@@ -101,7 +101,7 @@ function influenceOf(
 /** A farmstead goes away from the wood, and from the map border: we need space around it */
 function awayFromWood(gameState: CommonGameState, placement: InfoMap<"territory">): void
 {
-	const borderMap = hqOf(gameState).geography.borderMap;
+	const borderMap = gameState.ai.geography.borderMap;
 	for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 	{
 		const j = cellIndex(placement, jIndex);
@@ -118,6 +118,13 @@ function awayFromWood(gameState: CommonGameState, placement: InfoMap<"territory"
  * Defines a construction plan, ie a building.
  * We'll try to fing a good position if non has been provided
  */
+
+/** Whether a territory cell belongs to the base named, or to any base of ours when none is */
+function inBase(gameState: CommonGameState, cell: CellIndex<"territory">, base: BaseId | undefined): boolean
+{
+	const at = gameState.ai.bases.baseAtIndex(cell);
+	return base !== undefined ? at === base : at !== 0;
+}
 
 export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "building">
 {
@@ -273,7 +280,6 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			return findDockPosition(gameState, template, this.metadata);
 		}
 
-		const HQ = hqOf(gameState);
 		if (template.hasClass("Storehouse") && this.metadata && this.metadata.base)
 		{
 			const storehouse = this.storehouseSpot(gameState, this.metadata.base);
@@ -337,13 +343,13 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const territorypos = placement.gamePosToMapPos(worldPos(x, z));
 		const territoryIndex = cellIndex(placement, territorypos[0] + territorypos[1] * placement.width);
 		// default angle = 3*Math.PI/4;
-		return { x: x, z: z, angle: 3 * Math.PI / 4, base: HQ.basesManager.baseAtIndex(territoryIndex) };
+		return { x: x, z: z, angle: 3 * Math.PI / 4, base: gameState.ai.bases.baseAtIndex(territoryIndex) };
 	}
 
 	/** recompute the best dropsite location in case some conditions have changed */
 	private storehouseSpot(gameState: CommonGameState, baseId: BaseId): BuildingPosition | undefined
 	{
-		const base = requireValue(hqOf(gameState).basesManager.getBaseByID(baseId));
+		const base = requireValue(gameState.ai.bases.getBaseByID(baseId));
 		const type = this.metadata && this.metadata.type ? this.metadata.type : "wood";
 		const newpos = base.findBestDropsiteLocation(gameState, type, this.template.templateName());
 		if (!newpos || !(newpos.quality > 0))
@@ -498,7 +504,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 			{
 				const j = cellIndex(placement, jIndex);
-				if (base !== undefined ? HQ.basesManager.baseAtIndex(j) === base : HQ.basesManager.baseAtIndex(j) !== 0)
+				if (inBase(gameState, j, base))
 				{
 					placement.set(j, 45);
 				}
@@ -543,7 +549,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 		{
 			const j = cellIndex(placement, jIndex);
-			if (base !== undefined ? HQ.basesManager.baseAtIndex(j) !== base : HQ.basesManager.baseAtIndex(j) === 0)
+			if (!inBase(gameState, j, base))
 			{
 				placement.map[j] = 0;
 				continue;
@@ -552,7 +558,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			{
 				continue;
 			}
-			borderBonus(placement, j, HQ.geography.borderMap.map[j], { favorBorder, disfavorBorder });
+			borderBonus(placement, j, gameState.ai.geography.borderMap.map[j], { favorBorder, disfavorBorder });
 
 			const x = (j % placement.width + 0.5) * cellSize;
 			const z = (Math.floor(j / placement.width) + 0.5) * cellSize;
@@ -560,7 +566,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			{
 				placement.map[j] = 0;
 			}
-			else if (base === undefined && favoredBase && HQ.basesManager.baseAtIndex(j) === favoredBase)
+			else if (base === undefined && favoredBase && gameState.ai.bases.baseAtIndex(j) === favoredBase)
 			{
 				placement.set(j, placement.map[j] + 100);
 			}

@@ -7,9 +7,9 @@ import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced, isSupply, type PlacedEntity } from "../adapter/placed.ts";
 import { requireActivity, stateIs, unitState, type UnitState } from "../adapter/unitState.ts";
 import type { ResourceSupply } from "../world/baseResources.ts";
-import { type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
+import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
 import { allowCapture } from "../world/capture.ts";
-import { basesOf, hqOf } from "./hq.ts";
+import { hqOf } from "./hq.ts";
 import { gatherTreasure } from "./treasure.ts";
 import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 
@@ -24,7 +24,7 @@ import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 function isSupplyFull(gameState: CommonGameState, ent: CommonSupplyEntity): boolean
 {
 	return ent.isFull() === true ||
-		ent.resourceSupplyNumGatherers() + hqOf(gameState).basesManager.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		ent.resourceSupplyNumGatherers() + gameState.ai.bases.GetTCGatherer(ent.id()) >= ent.maxGatherers();
 }
 
 export class Worker
@@ -73,7 +73,7 @@ export class Worker
 
 		const entAccess = getLandAccess(gameState, ent);
 		// Base for unassigned entities has no accessIndex, so take the one from the entity.
-		const baseAccess = this.baseID === hqOf(gameState).basesManager.baselessBase().ID ?
+		const baseAccess = this.baseID === gameState.ai.bases.baselessBase().ID ?
 			entAccess :
 			this.base.accessIndex ?? NO_REGION;
 
@@ -270,7 +270,7 @@ export class UnitWork
 		// if we have drifted towards ennemy territory during the fishing, go home
 		else
 		{
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(ent.position());
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(ent.position());
 			if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			{ // player is its own ally
 				this.startFishing(gameState);
@@ -298,7 +298,7 @@ export class UnitWork
 		else if (unitAIStateOrder === "GATHER")
 		{ // Perform some sanity checks
 			// we may have drifted towards ennemy territory during the hunt, if yes go home
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(ent.position());
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(ent.position());
 			if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			{ // player is its own ally
 				this.startHunting(gameState);
@@ -379,7 +379,7 @@ export class UnitWork
 			{
 				this.worker.moveToGatherer(gameState, ent, true);
 			}
-			else if (this.baseID !== hqOf(gameState).basesManager.baselessBase().ID)
+			else if (this.baseID !== gameState.ai.bases.baselessBase().ID)
 			{
 				// reassign it to something useful
 				this.base.reassignIdleWorkers(gameState, [ent]);
@@ -432,7 +432,7 @@ export class UnitWork
 			ent.setMetadata(PlayerID, "target-foundation", undefined);
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
 			ent.stopMoving();
-			if (this.baseID !== hqOf(gameState).basesManager.baselessBase().ID)
+			if (this.baseID !== gameState.ai.bases.baselessBase().ID)
 			{
 				// reassign it to something useful
 				this.base.reassignIdleWorkers(gameState, [ent]);
@@ -766,7 +766,7 @@ export class UnitWork
 				continue;
 			}
 			// not in ennemy territory
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(entity.position());
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(entity.position());
 			if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			{ // player is its own ally
 				continue;
@@ -1560,7 +1560,7 @@ function preyTooFar(gameState: CommonGameState, ent: PlacedEntity): boolean
 	{
 		return false;
 	}
-	const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(targetPos);
+	const territoryOwner = gameState.ai.geography.territoryMap.getOwner(targetPos);
 	if (gameState.isPlayerEnemy(territoryOwner))
 	{
 		return true;
@@ -1591,7 +1591,7 @@ function huntableThere(
 ): boolean
 {
 	// Avoid enemy territory.
-	const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(supplyPos);
+	const territoryOwner = gameState.ai.geography.territoryMap.getOwner(supplyPos);
 	if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 	{ // Player is its own ally.
 		return false;

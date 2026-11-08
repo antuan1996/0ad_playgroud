@@ -143,7 +143,7 @@ function pausedForWorkers(
 	workersMin: number,
 ): boolean
 {
-	if (!hqOf(gameState).basesManager.hasPotentialBase())
+	if (!gameState.ai.bases.hasPotentialBase())
 	{
 		return !RUN_WITHOUT_BASE.has(q);
 	}
@@ -326,7 +326,7 @@ export class QueueManager
 		aiWarn("Current Resources: " + uneval(gameState.getResources()));
 		aiWarn("Available Resources: " + uneval(this.getAvailableResources(gameState)));
 		aiWarn("Wanted Gather Rates: " + uneval(hqOf(gameState).GetWantedGatherRates(gameState)));
-		aiWarn("Current Gather Rates: " + uneval(hqOf(gameState).basesManager.GetCurrentGatherRates(gameState)));
+		aiWarn("Current Gather Rates: " + uneval(gameState.ai.bases.GetCurrentGatherRates(gameState)));
 		aiWarn("Most needed resources: " + uneval(hqOf(gameState).pickMostNeededResources(gameState)));
 		aiWarn("------------------------------------");
 	}

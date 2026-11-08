@@ -5,7 +5,6 @@
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, getSeaAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { hqOf } from "./hq.ts";
 
 export function gatherTreasure(
 	gameState: CommonGameState,
@@ -13,7 +12,7 @@ export function gatherTreasure(
 	water: boolean = false,
 ): boolean
 {
-	if (!hqOf(gameState).treasures.hasEntities())
+	if (!gameState.ai.treasures.hasEntities())
 	{
 		return false;
 	}
@@ -28,7 +27,7 @@ export function gatherTreasure(
 	let treasureFound;
 	let distmin = Math.min();
 	const access = water ? getSeaAccess(gameState, ent) : getLandAccess(gameState, ent);
-	for (const treasure of hqOf(gameState).treasures.values())
+	for (const treasure of gameState.ai.treasures.values())
 	{
 		const dist = treasureDistance(gameState, ent, treasure, access, water);
 		if (dist === undefined || dist > distmin)
@@ -71,7 +70,7 @@ function treasureDistance(
 	{
 		return undefined;
 	}
-	const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(treasure.position());
+	const territoryOwner = gameState.ai.geography.territoryMap.getOwner(treasure.position());
 	if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 	{
 		return undefined;

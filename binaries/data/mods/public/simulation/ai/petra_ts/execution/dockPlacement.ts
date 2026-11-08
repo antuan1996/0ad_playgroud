@@ -186,7 +186,7 @@ export function constructOnShore(
 	// adjust a bit the position if needed
 	const cosa = Math.cos(pos.angle);
 	const sina = Math.sin(pos.angle);
-	const shiftMax = hqOf(gameState).geography.territoryMap.cellSize;
+	const shiftMax = gameState.ai.geography.territoryMap.cellSize;
 	for (let shift = 0; shift <= shiftMax; shift += 2)
 	{
 		builder.construct(type, pos.x - shift * sina, pos.z - shift * cosa, pos.angle, metadata);
@@ -219,8 +219,8 @@ function dockSearch(
 	return {
 		dockProximity: metadata.proximity,
 		obstructions,
-		width: hqOf(gameState).geography.territoryMap.width,
-		cellSize: hqOf(gameState).geography.territoryMap.cellSize,
+		width: gameState.ai.geography.territoryMap.width,
+		cellSize: gameState.ai.geography.territoryMap.cellSize,
 		wantedLand,
 		wantedSea,
 		proxyAccess,
@@ -249,8 +249,8 @@ function isDockLocation(
 	wantedSea: SeaIndex | undefined,
 ): boolean
 {
-	const width = hqOf(gameState).geography.territoryMap.width;
-	const cellSize = hqOf(gameState).geography.territoryMap.cellSize;
+	const width = gameState.ai.geography.territoryMap.width;
+	const cellSize = gameState.ai.geography.territoryMap.cellSize;
 	const dimLand = dimension + 1.5 * cellSize;
 	const dimSea = dimension + 2 * cellSize;
 
@@ -294,14 +294,14 @@ function isDockLocation(
 function getFrontierProximity(gameState: CommonGameState, j: CellIndex<"territory">): number
 {
 	const alliedVictory = gameState.getAlliedVictory();
-	const territoryMap = hqOf(gameState).geography.territoryMap;
+	const territoryMap = gameState.ai.geography.territoryMap;
 	let territoryOwner = territoryMap.getOwnerIndex(j);
 	if (territoryOwner === PlayerID || alliedVictory && gameState.isPlayerAlly(territoryOwner))
 	{
 		return 0;
 	}
 
-	const borderMap = hqOf(gameState).geography.borderMap;
+	const borderMap = gameState.ai.geography.borderMap;
 	const width = territoryMap.width;
 	const step = Math.round(24 / territoryMap.cellSize);
 	const ix = j % width;
@@ -459,7 +459,7 @@ function dockCellScore(
 	}
 
 	// Add a penalty if on the map border as ship movement will be difficult
-	if (hqOf(gameState).geography.borderMap.map[cell.j] & mapMask.fullBorder)
+	if (gameState.ai.geography.borderMap.map[cell.j] & mapMask.fullBorder)
 	{
 		score += 20;
 	}
@@ -632,7 +632,7 @@ function placeDock(
 		return undefined;
 	}
 	const ret = checkDockPlacement(gameState, { x, z, angle }, { halfDepth, halfWidth });
-	if (!ret || !hqOf(gameState).geography.landRegions[ret.land] || search.wantedLand && !search.wantedLand[ret.land])
+	if (!ret || !gameState.ai.geography.landRegions[ret.land] || search.wantedLand && !search.wantedLand[ret.land])
 	{
 		return undefined;
 	}
@@ -676,7 +676,7 @@ function dockSpotAt(
 		}
 		score *= search.factor;
 	}
-	const territoryMap = hqOf(gameState).geography.territoryMap;
+	const territoryMap = gameState.ai.geography.territoryMap;
 	const i = territoryMap.getNonObstructedTile(j, search.radius, search.obstructions);
 	if (i < 0)
 	{
@@ -717,7 +717,7 @@ export function findDockPosition(
 ): BuildingPosition
 {
 	const search = dockSearch(gameState, template, metadata);
-	const territoryMap = hqOf(gameState).geography.territoryMap;
+	const territoryMap = gameState.ai.geography.territoryMap;
 	let best: DockSpot | undefined;
 	for (let jIndex = 0; jIndex < territoryMap.length; ++jIndex)
 	{
@@ -743,7 +743,7 @@ export function findDockPosition(
 	const z = (Math.floor(best.idx / obstructions.width) + 0.5) * obstructions.cellSize;
 
 	// Assign this dock to a base
-	let baseIndex = hqOf(gameState).basesManager.baseAtIndex(best.jdx);
+	let baseIndex = gameState.ai.bases.baseAtIndex(best.jdx);
 	if (!baseIndex)
 	{
 		baseIndex = NEW_ANCHORLESS_BASE; // We'll do an anchorless base around it
@@ -789,7 +789,7 @@ export function buildOverseaDock(gameState: CommonGameState, template: CommonStr
 	{
 		return;
 	}
-	if (!hqOf(gameState).geography.navalMap)
+	if (!gameState.ai.geography.navalMap)
 	{
 		aiWarn("petra.findOverseaLand on a non-naval map??? we should never go there ");
 	}

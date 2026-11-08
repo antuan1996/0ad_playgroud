@@ -6,6 +6,7 @@ import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
+import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
 import { analyseMap, type Geography } from "./world/geography.ts";
@@ -215,6 +216,18 @@ export class PetraBot extends BaseAI
 	savedEvents: HeadquartersEvents;
 	turn: number = 0;
 	uniqueIDs: Record<string, number> = {};
+
+	/** The headquarters' bases, as `gameState.ai.bases` (PetraRuntime.AIState), through their world view */
+	get bases(): BasesView
+	{
+		return requireValue(this.HQ).basesManager;
+	}
+
+	/** The treasures left on the map, as `gameState.ai.treasures` (PetraRuntime.AIState) */
+	get treasures(): CommonEntityCollection<CommonPlacedEntity>
+	{
+		return requireValue(this.HQ).treasures;
+	}
 
 	/** The headquarters' geography, as `gameState.ai.geography` (PetraRuntime.AIState) */
 	get geography(): Geography

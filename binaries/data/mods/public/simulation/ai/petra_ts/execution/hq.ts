@@ -2,7 +2,8 @@
  * The headquarters as the execution layer sees it (PLAN.md §3.4).
  *
  * Plans and workers carry out what the managers decide; they read the HQ's
- * maps, flags and managers and ask it for searches, but they do not set its
+ * flags and managers and ask it for searches (its geography, bases and
+ * treasures are world data, read on gameState.ai), but they do not set its
  * state: everything below is read-only to them, and the things they report (a
  * phase researched, a foundation laid, nothing left to gather) are named
  * together in ExecutionReports. The view is the HQ itself (hqOf returns
@@ -13,42 +14,17 @@
  * it reads, the state it weighs, and the searches and reports it has.
  */
 import type { Headquarters } from "../decision/headquarters.ts";
-import type { BaseView, SupplyUpkeep } from "../world/bases.ts";
-import type { Geography } from "../world/geography.ts";
-
-/**
- * The bases as plans may read them: their view (world/bases.ts) keeps the
- * lists read-only, though BasesManager itself is wider.
- */
-interface ExecutionBases
-{
-	readonly baseManagers: ReadonlyArray<BaseView & SupplyUpkeep>;
-	getBaseByID(baseID: BaseId): BaseView | undefined;
-	baselessBase(): BaseView;
-	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId;
-	hasPotentialBase(): boolean;
-	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>;
-	/** the gatherers on their way to a supply this turn */
-	GetTCGatherer(supplyID: EntityId): number;
-}
 
 /** The managers an execution plan consults for decisions and world state. */
-type ExecutionManagers =
-	& Readonly<
-		Pick<
-			Headquarters,
-			"attackManager" | "buildManager" | "defenseManager" | "navalManager" | "tradeManager" | "victoryManager"
-		>
+type ExecutionManagers = Readonly<
+	Pick<
+		Headquarters,
+		"attackManager" | "buildManager" | "defenseManager" | "navalManager" | "tradeManager" | "victoryManager"
 	>
-	& { readonly basesManager: ExecutionBases; };
+>;
 
-/** The maps and the regions execution code reads (world/geography.ts). */
-type ExecutionWorld = {
-	readonly turnCache: Readonly<Headquarters["turnCache"]>;
-	readonly geography: Readonly<Geography>;
-	/** the treasures left on the map, for the collectors (execution/treasure.ts) */
-	readonly treasures: Headquarters["treasures"];
-};
+/** The headquarters' per-turn bookkeeping execution code reads (its geography, bases and treasures are on gameState.ai). */
+type ExecutionWorld = { readonly turnCache: Readonly<Headquarters["turnCache"]>; };
 
 /** The state of the moment: what a plan may afford and what the town still needs. */
 type ExecutionState = Readonly<
@@ -101,10 +77,4 @@ type ExecutionHQ =
 export function hqOf(gameState: CommonGameState): ExecutionHQ
 {
 	return gameState.ai.HQ;
-}
-
-/** All our bases, for reading and for dropping gone supplies from their lists (moved from world/bases.ts, which may not reach the HQ). */
-export function basesOf(gameState: CommonGameState): ReadonlyArray<BaseView & SupplyUpkeep>
-{
-	return hqOf(gameState).basesManager.baseManagers;
 }

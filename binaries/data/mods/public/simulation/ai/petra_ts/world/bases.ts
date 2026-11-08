@@ -56,3 +56,25 @@ interface IdleWorkers
 
 /** A worker's own base: read, book its supplies, hand back the idle. */
 export type WorkerBase = BaseView & SupplyBooking & SupplyUpkeep & IdleWorkers;
+
+/**
+ * The bases as the layers below decision read them (`gameState.ai.bases`, the headquarters' BasesManager): their
+ * views (BaseView) keep the lists read-only, though BasesManager itself is wider.
+ */
+export interface BasesView
+{
+	readonly baseManagers: ReadonlyArray<BaseView & SupplyUpkeep>;
+	getBaseByID(baseID: BaseId): BaseView | undefined;
+	baselessBase(): BaseView;
+	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId;
+	hasPotentialBase(): boolean;
+	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>;
+	/** the gatherers on their way to a supply this turn */
+	GetTCGatherer(supplyID: EntityId): number;
+}
+
+/** All our bases, for reading and for dropping gone supplies from their lists. */
+export function basesOf(gameState: CommonGameState): ReadonlyArray<BaseView & SupplyUpkeep>
+{
+	return gameState.ai.bases.baseManagers;
+}

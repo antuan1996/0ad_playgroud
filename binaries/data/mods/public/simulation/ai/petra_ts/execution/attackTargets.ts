@@ -6,7 +6,8 @@ import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { obstructionShape } from "../adapter/templateData.ts";
-import { basesOf, hqOf } from "./hq.ts";
+import { basesOf } from "../world/bases.ts";
+import { hqOf } from "./hq.ts";
 
 /** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
 const ECONOMIC_TARGET_WEIGHT = 0.25;
@@ -259,7 +260,7 @@ export function defaultTargetFinder(
 	);
 	// on a naval map the docks too, which the nearest pick favours (FINDINGS §42)
 	targets = validTargets.filter(
-		filters.byClasses(hqOf(gameState).geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]),
+		filters.byClasses(gameState.ai.geography.navalMap ? ["CivCentre", "Dock"] : ["CivCentre"]),
 	);
 	if (!targets.hasEntities())
 	{
@@ -397,7 +398,7 @@ export function targetDistance(
 	// is worth more than the hall of its home island, and Petra's attacks
 	// landed under the towers of civic centres for little (FINDINGS §42)
 	if (
-		type !== "Raid" && hqOf(gameState).geography.navalMap &&
+		type !== "Raid" && gameState.ai.geography.navalMap &&
 		(ent.hasClass("Dock") || ent.foundationProgress() !== undefined)
 	)
 	{

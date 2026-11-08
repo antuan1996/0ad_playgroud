@@ -305,7 +305,7 @@ export class DefenseArmy
 				continue;
 			}
 			const pos = ent.position();
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(pos);
 			const sum = territoryOwner === PlayerID ?
 				sums.own :
 				gameState.isPlayerMutualAlly(territoryOwner) ?
@@ -341,10 +341,7 @@ export class DefenseArmy
 			return;
 		}
 
-		if (
-			destination &&
-			!gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(ent.position()))
-		)
+		if (destination && !gameState.isPlayerMutualAlly(gameState.ai.geography.territoryMap.getOwner(ent.position())))
 		{
 			ent.moveToRange(destination[0], destination[1], radius, radius + 5);
 		}
@@ -510,7 +507,7 @@ export class DefenseArmy
 	needsDefenders(gameState: CommonGameState): number | false
 	{
 		let defenseRatio;
-		const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(this.foePosition);
+		const territoryOwner = gameState.ai.geography.territoryMap.getOwner(this.foePosition);
 		if (territoryOwner === PlayerID)
 		{
 			defenseRatio = this.Config.Defense.defenseRatio.own;
@@ -877,7 +874,7 @@ function nearestAllyStructure(
 	for (const struct of gameState.getAllyStructures().values())
 	{
 		const pos = struct.position();
-		if (!pos || !gameState.isPlayerMutualAlly(hqOf(gameState).geography.territoryMap.getOwner(pos)))
+		if (!pos || !gameState.isPlayerMutualAlly(gameState.ai.geography.territoryMap.getOwner(pos)))
 		{
 			continue;
 		}

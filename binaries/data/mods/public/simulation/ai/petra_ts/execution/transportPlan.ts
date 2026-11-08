@@ -587,10 +587,10 @@ export class TransportPlan
 	{
 		const ent = this.units.toEntityArray()[0];
 		const baseID = ent.getMetadata(PlayerID, "base");
-		let base = baseID === undefined ? undefined : hqOf(gameState).basesManager.getBaseByID(baseID);
+		let base = baseID === undefined ? undefined : gameState.ai.bases.getBaseByID(baseID);
 		if (!base || !base.anchor || !isPlaced(base.anchor))
 		{
-			for (const newbase of hqOf(gameState).basesManager.baseManagers)
+			for (const newbase of gameState.ai.bases.baseManagers)
 			{
 				if (!newbase.anchor || !isPlaced(newbase.anchor))
 				{
@@ -1037,7 +1037,7 @@ export class TransportPlan
 		}
 		if (leg.shooters)
 		{
-			const territoryOwner = hqOf(gameState).geography.territoryMap.getOwner(pos);
+			const territoryOwner = gameState.ai.geography.territoryMap.getOwner(pos);
 			if (territoryOwner !== 0 && !gameState.isPlayerAlly(territoryOwner))
 			{
 				dist += 100000000;
@@ -1124,7 +1124,7 @@ export class TransportPlan
 			debugWarn(this, 1, () => ">>> transport " + this.ID + " reloading failed ... <<<");
 			// destroy the unit if inaccessible otherwise leave it there
 			const index = getLandAccess(gameState, ent);
-			if (hqOf(gameState).geography.landRegions[index])
+			if (gameState.ai.geography.landRegions[index])
 			{
 				debugWarn(this, 1, () => " recovered entity kept " + ent.id());
 				resetUnit(gameState, ent);
