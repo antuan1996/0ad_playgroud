@@ -75,7 +75,7 @@ function makeDefender(
 /** A manager wired to one world as headquarters owns it. */
 function makeDefenseManager(world: World): DefenseManager
 {
-	return new DefenseManager(world.ai.Config, world.ai.HQ.geography);
+	return new DefenseManager(world.ai.Config, world.ai.HQ.geography, world.ai.HQ);
 }
 
 /** A manager that has run one quiet startup tick on an empty world, so it
@@ -1876,7 +1876,7 @@ describe("garrisoning by hand", () =>
 		near.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(near);
 
-		assert.equal(garrisonSiegeUnit(world.gameState, placed(ram)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(ram)), true);
 		assert.deepEqual(
 			world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]),
 			[[3000, 5001]],
@@ -1903,7 +1903,11 @@ describe("garrisoning by hand", () =>
 		world.addEntity(fortress);
 		world.garrisonCounts.set(5000, 4);
 
-		assert.equal(garrisonSiegeUnit(world.gameState, placed(ram)), false, "the fortress is full");
+		assert.equal(
+			garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(ram)),
+			false,
+			"the fortress is full",
+		);
 		assert.equal(world.garrisonCalls.length, 0);
 	});
 
@@ -2144,7 +2148,13 @@ describe("the office itself", () =>
 		manager.attackedAllies[3] = 2;
 
 		const data = manager.Serialize();
-		const fresh = DefenseManager.restore(world.ai.Config, world.gameState, world.ai.HQ.geography, data);
+		const fresh = DefenseManager.restore(
+			world.ai.Config,
+			world.gameState,
+			world.ai.HQ.geography,
+			data,
+			world.ai.HQ,
+		);
 
 		assert.equal(fresh.armies.length, 1, "one army restored");
 		assert.deepEqual(
@@ -2415,7 +2425,7 @@ describe("rarer turns of the defence", () =>
 			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "StoneThrower"] }),
 		);
 
-		assert.equal(garrisonSiegeUnit(world.gameState, placed(catapult)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(catapult)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
 	});
 

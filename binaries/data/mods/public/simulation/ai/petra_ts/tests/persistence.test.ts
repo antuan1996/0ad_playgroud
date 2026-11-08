@@ -19,7 +19,7 @@ import { AttackManager, type SerializedAttackManager } from "../decision/attackM
 import { BaseManager, type SerializedBaseManager } from "../decision/baseManager.ts";
 import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
 import { BuildManager, type SerializedBuildManager } from "../decision/buildManager.ts";
-import { DefenseManager, type SerializedDefenseManager } from "../decision/defenseManager.ts";
+import { DefenseManager, type DefenseHQ, type SerializedDefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager, type DiplomacyHQ, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
 import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
@@ -168,13 +168,14 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "DefenseManager",
-			original: () => new DefenseManager(makeConfig(), bareGeography(world)),
+			original: () => new DefenseManager(makeConfig(), bareGeography(world), fake<DefenseHQ>({})),
 			fromSave: (data, gameState) =>
 				DefenseManager.restore(
 					makeConfig(),
 					gameState,
 					bareGeography(gameState),
 					fake<SerializedDefenseManager>(data),
+					fake<DefenseHQ>({}),
 				),
 		}, world);
 	});
