@@ -131,17 +131,24 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     (`allowCapture`), `territory.ts` (territory helpers over
     `gameState.ai.geography`, the HQ's geography). World code reaches AI
     state only through such exposed world objects, never `gameState.ai.HQ`.
-  - `decision/`: `headquarters.ts`, `startingStrategy.ts`, managers (`attack`,
-    `base`, `bases`, `build`, `defense`, `diplomacy`, `emergency`, `garrison`,
-    `naval`, `research`, `trade`, `victory`), `placement.ts`, `enemySelection.ts`,
-    and pure/utility modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`,
-    `fields.ts`, `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
+  - `decision/`: `headquarters.ts` (the HQ: its update, saves, and the queries
+    other managers and execution use), the HQ's parts as functions taking it
+    (`hqEvents.ts`, `phasing.ts`, `workforceTraining.ts`, `houseBuilding.ts`,
+    `townBuildings.ts`, `militaryBuildings.ts`, `expansion.ts`) and
+    `placementSearches.ts` (`PlacementSearches`, `HQ.placement`),
+    `startingStrategy.ts`, managers (`attack`, `base`, `bases`, `build`,
+    `defense`, `diplomacy`, `emergency`, `garrison`, `naval`, `research`,
+    `trade`, `victory`), `placement.ts`, `enemySelection.ts`, and pure/utility
+    modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`, `fields.ts`,
+    `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
   - `execution/`: `attackPlan.ts`, `transportPlan.ts`, `defenseArmy.ts`,
     `queue.ts`, `queueManager.ts`, `queueplan.ts`, `queueplanBuilding.ts`,
     `queueplanTraining.ts`, `queueplanResearch.ts`, `worker.ts`, `unitPlan.ts`,
-    `treasure.ts`, `services.ts` (the interfaces of the decision layer's
+    `treasure.ts`, `captureOrders.ts` (capture or destroy, every 3 s),
+    `services.ts` (the interfaces of the decision layer's
     services to execution: `NavalService`, `AttackRegistry`, `DefenseService`,
-    `VictoryService`, `BuildRules`, `TradeService`, `HeadquartersService`).
+    `VictoryService`, `BuildRules`, `TradeService`, `HeadquartersService`,
+    `PlacementService`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 
@@ -231,8 +238,8 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
 - Execution code (`execution/`) never reaches `Headquarters` or a decision
   manager's class: it uses the decision layer through the interfaces it
   declares in `execution/services.ts`, on `gameState.ai` (`naval`, `attacks`,
-  `defense`, `victory`, `build`, `trade`, `town` for the HQ's own searches,
-  flags and reports; the bot's getters return the managers, which satisfy
+  `defense`, `victory`, `build`, `trade`, `placement`, `town` for the HQ's own
+  queries, flags and reports; the bot's getters return the managers, which satisfy
   them as they are). It reads bases through `gameState.ai.bases` and
   `world/bases.ts` (`BaseView`), and mutates them only through capability
   interfaces (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`). A member
