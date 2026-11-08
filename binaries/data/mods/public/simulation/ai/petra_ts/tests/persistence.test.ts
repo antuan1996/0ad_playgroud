@@ -11,7 +11,7 @@ import { Geography } from "../world/geography.ts";
 import { createBorderMap, createTerritoryMap } from "../world/mapModule.ts";
 import { fake } from "./harness/fakes.ts";
 
-import { seconds, techName } from "../adapter/brands.ts";
+import { techName } from "../adapter/brands.ts";
 import { makeFakeGameState } from "./harness/bareState.ts";
 import { assertRoundTrip } from "./harness/persistence.ts";
 
@@ -264,6 +264,8 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "Headquarters",
+			// the economy plan and the defense schedule, saved under their own names
+			nested: ["economy", "defenses"],
 			original: () => new Headquarters(makeConfig(), world, bareGeography(world)),
 			fromSave: (data, gameState) =>
 				Headquarters.restore(makeConfig(), gameState, fake<HeadquartersSerializedData>(data)),
@@ -271,10 +273,14 @@ describe("save and reload", () =>
 			// (the defense schedule's lapses and extras, derived from Config,
 			// are not saved either: a reload recomputes the same numbers).
 			notSaved: {
+				towerLapseTime: "derived from Config.Military at construction",
+				fortressLapseTime: "derived from Config.Military at construction",
+				extraTowers: "derived from Config difficulty and personality at construction",
+				extraFortresses: "derived from Config difficulty and personality at construction",
 				canBarter: "read from the built markets at the start of each update",
 				currentPhase: "read from the game when the headquarters is made, a reload's too",
 			},
-			// the managers' new plans reach back for the headquarters they belong to
+			// the managers' new plans reach their services through gameState.ai, the bot's getters over it
 			prepare: (hq) =>
 			{
 				world.ai["HQ"] = hq;
@@ -289,10 +295,15 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "Headquarters with learnt state",
+			nested: ["economy", "defenses"],
 			original: () => new Headquarters(makeConfig(), world, bareGeography(world)),
 			fromSave: (data, gameState) =>
 				Headquarters.restore(makeConfig(), gameState, fake<HeadquartersSerializedData>(data)),
 			notSaved: {
+				towerLapseTime: "derived from Config.Military at construction",
+				fortressLapseTime: "derived from Config.Military at construction",
+				extraTowers: "derived from Config difficulty and personality at construction",
+				extraFortresses: "derived from Config difficulty and personality at construction",
 				canBarter: "read from the built markets at the start of each update",
 				currentPhase: "read from the game when the headquarters is made, a reload's too",
 			},
@@ -309,20 +320,8 @@ describe("save and reload", () =>
 			prepare: (hq) =>
 			{
 				world.ai["HQ"] = hq;
-				// when the last sentry tower, defense tower and fortress were started
-				hq.defenses.fortStartTime = seconds(410);
-				hq.defenses.towerStartTime = seconds(620);
-				hq.defenses.fortressStartTime = seconds(930);
-				// a poor start on little land, fed by corrals and fishing, with few fields
-				Object.assign(hq.economy, {
-					saveResources: true,
-					saveSpace: true,
-					needFarm: true,
-					needCorral: true,
-					needFish: true,
-					maxFields: 4,
-					firstBaseConfig: true,
-				});
+				// a poor start on little land (both unset at first: populate leaves them)
+				Object.assign(hq.economy, { saveResources: true, saveSpace: true });
 			},
 		}, world);
 	});

@@ -317,10 +317,8 @@ export function makeWorld(options: WorldOptions = {}): World
 		{
 			return HQ;
 		},
-		baseManagers: () => bases,
 		navalMap: knobs.navalMap,
 		canBuildUnits: knobs.canBuildUnits,
-		hasPotentialBase: () => knobs.hasPotentialBase,
 		getSeaBetweenIndices: () => knobs.sea,
 		navalManager: {
 			// the fleet per sea: none on sea 4
@@ -348,7 +346,6 @@ export function makeWorld(options: WorldOptions = {}): World
 		// the houses have room (AttackPlan.cannotGrow reads it)
 		buildManager: { isUnbuildable: () => false },
 		attackManager: {
-			upcomingAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] },
 			startedAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] },
 			defeated: {},
 			bombingAttacks: new Map<string, Set<number>>(),
@@ -416,7 +413,6 @@ export function makeWorld(options: WorldOptions = {}): World
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
 		capturableTargets: captures.targets,
-		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
 		basesManager: {
 			baseManagers: bases,
 			getBaseByID: (id: number) => bases.find((b) => b.ID === id),
@@ -424,7 +420,6 @@ export function makeWorld(options: WorldOptions = {}): World
 			hasActiveBase: () => true,
 		},
 		isDefendable: () => false,
-		hasActiveBase: () => true,
 		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>
 			emergencyCalls.push([gs, positions]),
 	};

@@ -39,6 +39,12 @@ export interface RoundTrip<T>
 	/** Fields left at their constructed value (see `populate`). */
 	keep?: readonly string[];
 	/**
+	 * Fields holding an object of the instance's own state (the headquarters'
+	 * `economy`, `defenses`), whose scalars are filled too and must reach the
+	 * save under their own names.
+	 */
+	nested?: readonly string[];
+	/**
 	 * Fields that are deliberately not saved, each with the reason. A field that
 	 * is set but absent from the save is a bug unless it is listed here, so this
 	 * list is the whole record of what a manager chooses not to remember.
@@ -48,7 +54,8 @@ export interface RoundTrip<T>
 	set?: Record<string, unknown>;
 	/**
 	 * Run on the original before it is saved, for a world that has to point
-	 * at it (its managers' new plans reach for `gameState.ai.HQ`).
+	 * at it (its managers' new plans reach their services through
+	 * `gameState.ai`, the bot's getters over the seated headquarters).
 	 */
 	prepare?: (instance: T) => void;
 }
@@ -212,6 +219,12 @@ export function assertRoundTrip<T extends object>(rt: RoundTrip<T>, gameState: C
 {
 	const original = rt.original();
 	const touched = populate(original, { keep: rt.keep });
+	for (const name of rt.nested ?? [])
+	{
+		const inner: unknown = Reflect.get(original, name);
+		assert.ok(inner && typeof inner === "object", `${rt.label}: ${name} holds no object`);
+		touched.push(...populate(inner, { keep: rt.keep }));
+	}
 	if (rt.set)
 	{
 		Object.assign(original, rt.set);
