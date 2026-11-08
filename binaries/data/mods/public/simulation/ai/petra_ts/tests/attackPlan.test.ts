@@ -1437,7 +1437,7 @@ describe("updatePreparation: the completing step", () =>
 		const target = makeTarget(world);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.state = "completing";
-		plan.maxCompletingTime = seconds(150);
+		prepOf(plan).maxCompletingTime = seconds(150);
 		const blocked = world.addEntity(
 			makeEntity({ id: 1010, owner: PLAYER, position: [11, 12], classes: ["Unit", "Melee"] }, {
 				unitAIOrderData: () => orders({ target: entityId(5), targetPos: [5, 5], force: true }),
@@ -1821,7 +1821,7 @@ describe("updatePreparation: unexecuted plans", () =>
 			assert.equal(plan.updatePreparation(world.gameState), 1, "the raid starts completing");
 		});
 		assert.equal(plan.state, "completing", "the raid is completing");
-		assert.equal(plan.maxCompletingTime, 100 + 20, "a raid has twenty seconds to complete");
+		assert.equal(prepOf(plan).maxCompletingTime, 100 + 20, "a raid has twenty seconds to complete");
 		assert.ok(marches.length > 0, "the fighters marched");
 	});
 
@@ -2416,7 +2416,7 @@ describe("walks and transports during execution", () =>
 		assert.equal(plan.update(world.gameState, events), 2, "the cohort is kept");
 		assert.equal(plan.state, "transporting", "still shipping");
 		assert.deepEqual(strikes, [[hunter.id(), false]], "the shore unit struck back");
-		assert.deepEqual(plan.lastPosition, [12, 13], "the position was remembered");
+		assert.deepEqual(plan.march.lastPosition, [12, 13], "the position was remembered");
 	});
 
 	it("declares itself at the destination once all transports land", () =>
@@ -2461,7 +2461,7 @@ describe("walks and transports during execution", () =>
 		const path = [worldPos(11, 12), worldPos(20, 20), worldPos(30, 118)];
 		plan.stage = { state: "walking", target: plan.stage.target, path };
 		plan.targetPos = worldPos(30, 120); // far enough to keep marching
-		plan.lastPosition = worldPos(50, 50);
+		plan.march.lastPosition = worldPos(50, 50);
 
 		const result = plan.update(world.gameState, emptyEvents());
 		assert.equal(result, 1, "the unit is kept");
@@ -2488,8 +2488,8 @@ describe("walks and transports during execution", () =>
 		const destroyed: number[] = [];
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(12, 12)] };
-		plan.lastPosition = worldPos(11, 12);
-		plan.position5TurnsAgo = worldPos(11, 12);
+		plan.march.lastPosition = worldPos(11, 12);
+		plan.march.position5TurnsAgo = worldPos(11, 12);
 		world.ai.playedTurn = 5;
 
 		const result = plan.update(world.gameState, emptyEvents());
@@ -2519,7 +2519,7 @@ describe("walks and transports during execution", () =>
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
-		plan.lastPosition = worldPos(11, 12);
+		plan.march.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 1, "the unit is kept");
@@ -2543,7 +2543,7 @@ describe("walks and transports during execution", () =>
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
-		plan.lastPosition = worldPos(11, 12);
+		plan.march.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 
 		assert.equal(plan.update(world.gameState, emptyEvents()), 0, "the plan dissolved");
@@ -2564,7 +2564,7 @@ describe("walks and transports during execution", () =>
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(30, 120)] };
 		plan.targetPos = worldPos(30, 120);
 		// walking, the plan has the way StartAttack made it
-		plan.lastPosition = worldPos(50, 50);
+		plan.march.lastPosition = worldPos(50, 50);
 		const events = emptyEvents();
 		for (let i = 0; i < 4; ++i)
 		{
@@ -3030,6 +3030,30 @@ describe("wrapping up a plan", () =>
 			revived.stage.state === "walking" ? revived.stage.path : undefined,
 			[[10, 10], [30, 40]],
 			"on its path",
+		);
+	});
+
+	it("comes back completing with its deadline, and with where its army stood", () =>
+	{
+		const world = makeWorld();
+		const plan = makePlan(world, { name: 1 });
+		plan.state = "completing";
+		prepOf(plan).maxCompletingTime = seconds(150);
+		plan.march = { position5TurnsAgo: worldPos(11, 12), lastPosition: worldPos(13, 14) };
+
+		const revived = AttackPlan.restore(
+			world.gameState,
+			world.ai.Config,
+			plan.Serialize(),
+			world.ai.HQ.canBuildUnits,
+		);
+
+		assert.equal(revived.state, "completing");
+		assert.equal(prepOf(revived).maxCompletingTime, 150, "it waits for its units' orders as long as before");
+		assert.deepEqual(
+			revived.march,
+			{ position5TurnsAgo: [11, 12], lastPosition: [13, 14] },
+			"it tells if it is stuck",
 		);
 	});
 });
@@ -4339,7 +4363,7 @@ describe("when walls and orders scatter the plan", () =>
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
-		plan.lastPosition = worldPos(11, 12);
+		plan.march.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 		resetRecorder();
 
@@ -4360,7 +4384,7 @@ describe("when walls and orders scatter the plan", () =>
 		);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(11, 12), worldPos(20, 20)] };
-		plan.lastPosition = worldPos(11, 12);
+		plan.march.lastPosition = worldPos(11, 12);
 		plan.targetPos = worldPos(30, 120);
 		resetRecorder();
 
@@ -5400,8 +5424,8 @@ describe("second pass: the army at work", () =>
 		}
 		const plan = makePlan(world, { name: 1, data: { target } });
 		plan.stage = { state: "walking", target: plan.stage.target, path: [worldPos(12, 12)] };
-		plan.lastPosition = worldPos(12, 12);
-		plan.position5TurnsAgo = worldPos(12, 12);
+		plan.march.lastPosition = worldPos(12, 12);
+		plan.march.position5TurnsAgo = worldPos(12, 12);
 		world.ai.playedTurn = 5;
 		plan.update(world.gameState, emptyEvents());
 		assert.deepEqual(destroyed, [1011]);

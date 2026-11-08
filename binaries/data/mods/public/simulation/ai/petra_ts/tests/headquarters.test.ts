@@ -5331,7 +5331,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		hq.Config.Military.numSentryTowers = 1;
 		world.templates[SENTRY] = structureTemplate(SENTRY, { classes: ["Structure", "Tower"] });
 		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
-		world.ai.elapsedTime = seconds(hq.towerLapseTime + hq.fortStartTime + 1);
+		world.ai.elapsedTime = seconds(hq.defenses.towerLapseTime + hq.defenses.fortStartTime + 1);
 
 		buildDefenses(hq, world.gameState, world.ai.queues);
 
@@ -5346,7 +5346,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		hq.Config.Military.numSentryTowers = 1;
 		world.templates[SENTRY] = structureTemplate(SENTRY, { classes: ["Structure", "Tower"] });
 		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
-		world.ai.elapsedTime = seconds(hq.towerLapseTime + hq.fortStartTime - 1);
+		world.ai.elapsedTime = seconds(hq.defenses.towerLapseTime + hq.defenses.fortStartTime - 1);
 
 		buildDefenses(hq, world.gameState, world.ai.queues);
 
@@ -5372,7 +5372,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		const { world, hq } = seat({ phase: 3, population: 100 });
 		world.templates[FORTRESS] = structureTemplate(FORTRESS, { classes: ["Structure", "Fortress", "Defensive"] });
 		bookBuilder(world, hq, ["structures/{civ}/fortress"]);
-		world.ai.elapsedTime = seconds(hq.fortressLapseTime + hq.fortressStartTime + 1);
+		world.ai.elapsedTime = seconds(hq.defenses.fortressLapseTime + hq.defenses.fortressStartTime + 1);
 
 		buildDefenses(hq, world.gameState, world.ai.queues);
 
@@ -5441,7 +5441,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		});
 		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 		// the quota is two towers per base, three more, and the difficulty's extras
-		const quota = 2 * hq.basesManager.numActiveBases() + 3 + hq.extraTowers;
+		const quota = 2 * hq.basesManager.numActiveBases() + 3 + hq.defenses.extraTowers;
 		for (let i = 0; i < quota; ++i)
 		{
 			standing(world, 2710 + i, ["Structure", "StoneTower", "Defensive", "Tower"], TOWER, [30 + 4 * i, 30]);
