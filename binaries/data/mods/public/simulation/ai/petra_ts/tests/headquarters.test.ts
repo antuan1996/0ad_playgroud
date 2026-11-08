@@ -66,9 +66,11 @@ import {
 	STALLED_IDLE,
 	type Headquarters,
 } from "../decision/headquarters.ts";
+import { checkEvents, handleNewBase } from "../decision/hqEvents.ts";
 import { SHORE_TOWER_TRAFFIC } from "../decision/placement.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
+import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
@@ -165,7 +167,8 @@ describe("checkEvents: diplomacy waves", () =>
 	it("a change we are party to resets the diplomacy-bound collections", () =>
 	{
 		const { world, hq } = seat();
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ DiplomacyChanged: [{ player: playerId(1), otherPlayer: playerId(2) }] }),
 		);
@@ -175,7 +178,7 @@ describe("checkEvents: diplomacy waves", () =>
 	it("a change far away deals with other tables", () =>
 	{
 		const { world, hq } = seat();
-		hq.checkEvents(world.gameState, eventsWith({ DiplomacyChanged: [{ player: GAIA, otherPlayer: ENEMY }] }));
+		checkEvents(hq, world.gameState, eventsWith({ DiplomacyChanged: [{ player: GAIA, otherPlayer: ENEMY }] }));
 		assert.deepEqual(world.diplomacyResets, []);
 	});
 });
@@ -195,7 +198,8 @@ describe("checkEvents: a finished market frees the fields", () =>
 				templateName: "structures/athen/market",
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(999), newentity: entityId(31) }] }),
 		);
@@ -215,7 +219,8 @@ describe("checkEvents: a finished market frees the fields", () =>
 				templateName: "structures/athen/market",
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(31), newentity: entityId(31) }] }),
 		);
@@ -235,7 +240,8 @@ describe("checkEvents: a finished market frees the fields", () =>
 				templateName: "structures/athen/market",
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(999), newentity: entityId(31) }] }),
 		);
@@ -261,7 +267,8 @@ describe("checkEvents: what a captured unit carries into town", () =>
 				{ role: "trader", subrole: "trading", plan: 7, PartOfArmy: true },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(51), from: ENEMY, to: PLAYER }] }),
 		);
@@ -288,7 +295,8 @@ describe("checkEvents: what a captured unit carries into town", () =>
 				{ plan: 3 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(54), from: ENEMY, to: PLAYER }] }),
 		);
@@ -313,7 +321,8 @@ describe("checkEvents: what a captured unit carries into town", () =>
 				{ plan: 3 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(52), from: ENEMY, to: PLAYER }] }),
 		);
@@ -340,7 +349,8 @@ describe("checkEvents: what a captured unit carries into town", () =>
 				{ plan: 4, route: [1, 2] },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(53), from: ENEMY, to: PLAYER }] }),
 		);
@@ -374,7 +384,8 @@ describe("checkEvents: the wall that decays (captured or fading)", () =>
 				defaultRegenRate: () => 1,
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(61), from: GAIA, to: PLAYER }] }),
 		);
@@ -396,7 +407,8 @@ describe("checkEvents: the wall that decays (captured or fading)", () =>
 				templateName: "structures/athen/wall",
 			}, { decaying: () => true }),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(62), from: GAIA, to: PLAYER }] }),
 		);
@@ -439,7 +451,7 @@ describe("checkEvents: rally points when training starts", () =>
 		const { world, hq } = seat();
 		calls = [];
 		const barracks = world.addEntity(trainer(71, [{ metadata: { garrisonType: "Tower" } }]));
-		hq.checkEvents(world.gameState, eventsWith({ TrainingStarted: [{ entity: entityId(71) }] }));
+		checkEvents(hq, world.gameState, eventsWith({ TrainingStarted: [{ entity: entityId(71) }] }));
 		assert.deepEqual(calls, [["setRallyPoint", [barracks, "garrison"]]]);
 	});
 
@@ -448,7 +460,7 @@ describe("checkEvents: rally points when training starts", () =>
 		const { world, hq } = seat();
 		calls = [];
 		world.addEntity(trainer(72, [{ metadata: {} }]));
-		hq.checkEvents(world.gameState, eventsWith({ TrainingStarted: [{ entity: entityId(72) }] }));
+		checkEvents(hq, world.gameState, eventsWith({ TrainingStarted: [{ entity: entityId(72) }] }));
 		assert.deepEqual(calls, [["unsetRallyPoint", []]]);
 	});
 
@@ -476,7 +488,8 @@ describe("checkEvents: rally points when training starts", () =>
 				},
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingStarted: [{ entity: entityId(73) }, { entity: entityId(74) }] }),
 		);
@@ -503,7 +516,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				garrisonHolderID: () => 81,
 			}, { garrisonType: "protection" }),
 		); // no position: garrisoned inside the holder
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(82)], owner: PLAYER }] }),
 		);
@@ -535,7 +549,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				{ plan: 4 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(86)], owner: PLAYER }] }),
 		);
@@ -560,7 +575,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				{ garrisonType: "Tower" },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(83)], owner: PLAYER }] }),
 		);
@@ -583,7 +599,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				{ plan: 12 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(84)], owner: PLAYER }] }),
 		);
@@ -610,7 +627,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				{ plan: 12 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(85)], owner: PLAYER }] }),
 		);
@@ -633,7 +651,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 				{ plan: 12 },
 			),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TrainingFinished: [{ entities: [entityId(86)], owner: PLAYER }] }),
 		);
@@ -670,7 +689,8 @@ describe("checkEvents: territory decay events", () =>
 				defaultRegenRate: () => 1,
 			}),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({
 				TerritoryDecayChanged: [{ entity: entityId(91), to: true, rate: 1 }, {
@@ -704,7 +724,8 @@ describe("checkEvents: territory decay events", () =>
 			}),
 		);
 		hq.garrisonManager.decayingStructures.set(entityId(92), 3);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({ TerritoryDecayChanged: [{ entity: entityId(92), to: false, rate: 1 }] }),
 		);
@@ -732,7 +753,8 @@ describe("checkEvents: territory decay events", () =>
 				templateName: "structures/athen/wall",
 			}, { decaying: () => true }),
 		);
-		hq.checkEvents(
+		checkEvents(
+			hq,
 			world.gameState,
 			eventsWith({
 				TerritoryDecayChanged: [{ entity: entityId(93), to: true, rate: 1 }, {
@@ -773,7 +795,7 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 				}),
 			);
 			hq.decayingStructures.add(entityId(101));
-			hq.checkEvents(world.gameState, eventsWith({ Attacked: [] }));
+			checkEvents(hq, world.gameState, eventsWith({ Attacked: [] }));
 			// we still hold three quarters: above the 0.7 surrender line
 			assert.deepEqual(destroyed, []);
 			// the book keeps the entry — the office keeps watching a standing wall
@@ -810,7 +832,8 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 			);
 			hq.decayingStructures.add(entityId(102));
 			// the same capture ratio (0.75), but with someone shooting at it
-			hq.checkEvents(
+			checkEvents(
+				hq,
 				world.gameState,
 				eventsWith({ Attacked: [{ target: entityId(102), attacker: entityId(900) }] }),
 			);
@@ -865,7 +888,7 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 			);
 			hq.decayingStructures.add(entityId(103));
 			hq.decayingStructures.add(entityId(104));
-			hq.checkEvents(world.gameState, eventsWith({ Attacked: [] }));
+			checkEvents(hq, world.gameState, eventsWith({ Attacked: [] }));
 			assert.deepEqual(destroyed, []);
 		}
 		finally
@@ -898,7 +921,7 @@ describe("checkEvents: the wall that gives in is torn down", () =>
 				}),
 			);
 			hq.decayingStructures.add(entityId(105));
-			hq.checkEvents(world.gameState, eventsWith({ Attacked: [] }));
+			checkEvents(hq, world.gameState, eventsWith({ Attacked: [] }));
 			assert.deepEqual(destroyed, []);
 		}
 		finally
@@ -1007,7 +1030,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		Object.assign(world.ai.accessibility.regionSize, { 2: 20000, 3: 400 });
 		const hq = seatHQ(world, { stubs: doorManagers });
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		// the day-one policy for a rich continent
 		assert.equal(hq.firstBaseConfig, true);
@@ -1040,7 +1063,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		builder(world, 17, ["structures/athen/corral"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		assert.equal(hq.saveSpace, true);
 		// targetNumFishers 1 → at least two boats requested on the sea reaching us
@@ -1068,7 +1091,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		builder(world, 17, ["structures/athen/corral"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		// under 800 food the continent plants farms; under 2000 wood there is
 		// nothing to harvest the farms with, so the plan flips to corrals
@@ -1087,7 +1110,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 				stubs: doorManagers,
 				config: makeHQConfig({ personality: { aggressive: 0.8 } }),
 			});
-			hq.handleNewBase(world.gameState);
+			handleNewBase(hq, world.gameState);
 			// allowed = ceil(7500/3000) = 3, but the truce lasts
 			assert.equal(hq.attackManager.maxRushes, 0);
 		}
@@ -1099,7 +1122,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 				stubs: doorManagers,
 				config: makeHQConfig({ personality: { aggressive: 0.8 } }),
 			});
-			hq.handleNewBase(world.gameState);
+			handleNewBase(hq, world.gameState);
 			assert.equal(hq.attackManager.maxRushes, 1);
 			assert.deepEqual(hq.attackManager.rushSize, [20]);
 		}
@@ -1111,7 +1134,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 				stubs: doorManagers,
 				config: makeHQConfig({ personality: { aggressive: 0.8 } }),
 			});
-			hq.handleNewBase(world.gameState);
+			handleNewBase(hq, world.gameState);
 			assert.equal(hq.attackManager.maxRushes, 3);
 			assert.deepEqual(hq.attackManager.rushSize, [16, 20, 24]);
 		}
@@ -1152,7 +1175,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		// the scanner saw the forest inside the town square's radius (medium band)
 		assert.ok(hq.basesManager.baseManagers[0].dropsiteSupplies.wood.medium.length >= 1);
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		const plans = world.ai.queues.dropsites.plans;
 		assert.equal(plans.length, 1);
@@ -1195,7 +1218,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		hq.buildManager = BuildManager.start(world.gameState);
 		hq.basesManager.baseManagers[0].assignResourceToDropsite(world.gameState, seedCC, false);
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		assert.equal(world.ai.queues.dropsites.plans.length, 1);
 		// the houses will need the wood: the storehouse's price is set aside now
@@ -1217,7 +1240,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		builder(world, 17, ["structures/athen/storehouse"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		// the gather-estimation maps are flat: the depot-scanner finds a quality
 		// of 0 everywhere and plans nothing
@@ -1256,7 +1279,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		hq.saveSpace = true;
 		hq.maxFields = 1;
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		// the code clears the flags by writing them away (undefined): the
 		// second settlement resets the starting scarcity to nothing at all
@@ -4028,7 +4051,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// 20 capture strength against a thousand capture points: quietly out
 		// of the running, so the order that stands needs no correction
@@ -4050,7 +4073,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// ten against the 1000/80 = 12.5 floor: the capture cannot carry, and
 		// the unit is ordered off capture to plain attack
@@ -4077,7 +4100,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		assert.deepEqual(ledger(hq, 2601), { strength: 17, ents: new Set([2611, 2612]) });
 		assert.deepEqual(commands, [], "seventeen over the floor carries; no correction");
@@ -4092,7 +4115,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		const fighter = capturer(world, 2612, { strength: 9 });
 		override(fighter, { attack: () => undefined });
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		assert.deepEqual(ledger(hq, 2601)?.ents, new Set([2612]), "only the fighting capturer is booked");
 	});
@@ -4113,7 +4136,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// five strength doubled against a structure: ten booked, under floor
 		assert.deepEqual(ledger(hq, 2601), { strength: 10, ents: new Set([2611]) });
@@ -4133,7 +4156,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 		// a capturer whose order carries no target at all
 		capturer(world, 2614, { strength: 30, orderData: [{ attackType: "Capture" }] });
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		assert.equal(ledger(hq, 2601), undefined, "no unit among them faces the target in combat");
 		assert.equal(hq.capturableTargetsTime, 100, "the walk still stamps its time even with an empty book");
@@ -4162,7 +4185,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// 17 falls under the 6 regen + 12.5 floor, so the capture is dropped
 		assert.deepEqual(commands, [[2601, false]]);
@@ -4190,7 +4213,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// firing walls halve the grace: 6 + 1000/50 = 26 over the 25
 		assert.deepEqual(commands, [[2601, false]]);
@@ -4212,7 +4235,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		assert.deepEqual(ledger(hq, 2601), { strength: 1, ents: new Set([2611]) });
 		assert.deepEqual(commands, [], "allied ground is always charged for recapture");
@@ -4233,7 +4256,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		// recapture is the standing order, but decaying ground is not worth it
 		assert.deepEqual(commands, [[2601, false]]);
@@ -4252,7 +4275,7 @@ describe("the capture ledger: who may storm the tokens of ground", () =>
 			},
 		});
 
-		hq.updateCaptureStrength(world.gameState);
+		updateCaptureStrength(world.gameState, hq.captures);
 
 		assert.deepEqual(ledger(hq, 2601), { strength: 1, ents: new Set([2611]) });
 		assert.deepEqual(commands, [], "no anti-capture read against a shielded target");
@@ -4708,7 +4731,7 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 		// the office has not yet seen its first town's ground
 		hq.firstBaseConfig = false;
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		assert.equal(hq.firstBaseConfig, true, "the landing is configured once");
 		assert.equal(hq.saveSpace, true, "the small starting ground of a fresh town keeps the buildings packed");
@@ -4724,7 +4747,7 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 		hq.saveSpace = true;
 		hq.maxFields = 1;
 
-		hq.handleNewBase(world.gameState);
+		handleNewBase(hq, world.gameState);
 
 		assert.equal(
 			hq.saveResources,

@@ -148,16 +148,21 @@ function rawSupply(world: HqWorld, id: number, position: [number, number], gener
 	}));
 }
 
-/** swaps the office's answer to a new ground for a recorder; the real one is
- * verified in the headquarters' own campaign */
-function watchHandleNewBase(hq: Headquarters): number[]
+/**
+ * the office's answer to a new ground, seen in its effect (decision/hqEvents.ts handleNewBase): a town that has
+ * its first base and was saving for another stops saving once one is founded; the real answer is verified in the
+ * headquarters' own campaign
+ */
+function watchHandleNewBase(hq: Headquarters): { readonly length: number; }
 {
-	const calls: number[] = [];
-	hq.handleNewBase = () =>
-	{
-		calls.push(1);
+	hq.firstBaseConfig = true;
+	hq.saveResources = true;
+	return {
+		get length()
+		{
+			return hq.saveResources === undefined ? 1 : 0;
+		},
 	};
-	return calls;
 }
 
 describe("a city's grounds: what the board starts with and how grounds are reused", () =>
