@@ -777,7 +777,9 @@ describe("markets built, lost, renamed: checkEvents and checkTrader", () =>
 describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 {
 	/** a town that can build markets, with one already standing */
-	function prospecting(options: { route?: boolean; position?: ReturnType<Headquarters["findMarketLocation"]>; } = {})
+	function prospecting(
+		options: { route?: boolean; position?: ReturnType<Headquarters["placement"]["findMarketLocation"]>; } = {},
+	)
 	{
 		const s = seat();
 		s.world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
@@ -791,7 +793,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 			market(s.world, 401, [280, 40]);
 			s.manager.checkRoutes(s.world.gameState);
 		}
-		s.hq.findMarketLocation = () => options.position ?? [200, 200, baseId(2), 50000];
+		s.hq.placement.findMarketLocation = () => options.position ?? [200, 200, baseId(2), 50000];
 		s.manager.routeProspection = true;
 		return s;
 	}
@@ -824,7 +826,7 @@ describe("a new market: prospectForNewMarket and isNewMarketWorth", () =>
 			classes: ["Structure", "Market"],
 		});
 		market(noMarket.world, 400, [40, 40], { dock: 5 }); // a trading dock, no market
-		noMarket.hq.findMarketLocation = () => [200, 200, baseId(2), 0];
+		noMarket.hq.placement.findMarketLocation = () => [200, 200, baseId(2), 0];
 		noMarket.manager.routeProspection = true;
 		noMarket.manager.prospectForNewMarket(noMarket.world.gameState, noMarket.queues);
 		assert.equal(noMarket.manager.routeProspection, false);
@@ -877,7 +879,7 @@ describe("the trade office through its turn: update", () =>
 		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
 		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
 		hq.pickMostNeededResources = () => [{ type: "metal", wanted: 10, current: 0 }];
-		hq.findMarketLocation = () => false;
+		hq.placement.findMarketLocation = () => false;
 		hq.canBuild = () => false;
 		manager.targetNumTraders = 6;
 		world.ai.playedTurn = 60;

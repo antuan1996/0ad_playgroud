@@ -444,6 +444,7 @@ export function makeWorld(options: WorldOptions = {}): World
 	Object.defineProperty(ai, "build", { get: () => ai.HQ.buildManager, configurable: true });
 	Object.defineProperty(ai, "trade", { get: () => ai.HQ.tradeManager, configurable: true });
 	Object.defineProperty(ai, "town", { get: () => ai.HQ, configurable: true });
+	Object.defineProperty(ai, "placement", { get: () => ai.HQ.placement, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({

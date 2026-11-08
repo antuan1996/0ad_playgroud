@@ -374,7 +374,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
-		hq.findStrategicCCLocation = () => worldPos(120, 240);
+		hq.placement.findStrategicCCLocation = () => worldPos(120, 240);
 
 		assert.deepEqual(new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState), {
 			x: 120,
@@ -389,7 +389,12 @@ describe("where the special buildings go: findGoodPosition", () =>
 		const { world, hq } = seat();
 		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
 		const asked: unknown[] = [];
-		hq.findEconomicCCLocation = (_g: unknown, _t: unknown, resource: unknown, options: EconomicCCOptions = {}) =>
+		hq.placement.findEconomicCCLocation = (
+			_g: unknown,
+			_t: unknown,
+			resource: unknown,
+			options: EconomicCCOptions = {},
+		) =>
 		{
 			asked.push([resource, options.proximity]);
 			return worldPos(250, 60);
@@ -406,7 +411,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const cc = card(world, "civil_centre", { classes: ["Structure", "CivCentre"] });
-		hq.findStrategicCCLocation = () => undefined;
+		hq.placement.findStrategicCCLocation = () => undefined;
 
 		assert.equal(new ConstructionPlan(world.gameState, cc).findGoodPosition(world.gameState), false);
 	});
@@ -415,7 +420,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const tower = card(world, "defense_tower", { classes: ["Structure", "Tower"] });
-		hq.findDefensiveLocation = () => [96, 160, baseId(2)];
+		hq.placement.findDefensiveLocation = () => [96, 160, baseId(2)];
 
 		assert.deepEqual(new ConstructionPlan(world.gameState, tower).findGoodPosition(world.gameState), {
 			x: 96,
@@ -429,7 +434,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const tower = card(world, "defense_tower", { classes: ["Structure", "Tower"] });
-		hq.findDefensiveLocation = () => undefined;
+		hq.placement.findDefensiveLocation = () => undefined;
 
 		assert.equal(new ConstructionPlan(world.gameState, tower).findGoodPosition(world.gameState), false);
 	});
@@ -438,7 +443,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const fortress = card(world, "fortress", { classes: ["Structure", "Fortress"] });
-		hq.findDefensiveLocation = () => undefined;
+		hq.placement.findDefensiveLocation = () => undefined;
 
 		const pos = new ConstructionPlan(world.gameState, fortress).findGoodPosition(world.gameState);
 		assert.ok(pos, "the standard placement finds room");
@@ -455,7 +460,7 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
-		hq.findMarketLocation = () => [280, 40, baseId(2), 17];
+		hq.placement.findMarketLocation = () => [280, 40, baseId(2), 17];
 		const plan = new ConstructionPlan(world.gameState, market);
 
 		assert.deepEqual(plan.findGoodPosition(world.gameState), { x: 280, z: 40, angle: 3 * Math.PI / 4, base: 2 });
@@ -466,10 +471,10 @@ describe("where the special buildings go: findGoodPosition", () =>
 	{
 		const { world, hq } = seat();
 		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
-		hq.findMarketLocation = () => false;
+		hq.placement.findMarketLocation = () => false;
 		assert.equal(new ConstructionPlan(world.gameState, market).findGoodPosition(world.gameState), false);
 
-		hq.findMarketLocation = () => [280, 40, NO_BASE, 17];
+		hq.placement.findMarketLocation = () => [280, 40, NO_BASE, 17];
 		const pos = new ConstructionPlan(world.gameState, market).findGoodPosition(world.gameState);
 		assert.ok(pos && pos.base === 2, "the standard placement puts it in the town");
 	});
@@ -594,7 +599,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 	it("a military building goes to the town the office picks for its army", () =>
 	{
 		const { world, hq, colony } = colonyBoard();
-		hq.findBestBaseForMilitary = () => colony.ID;
+		hq.placement.findBestBaseForMilitary = () => colony.ID;
 		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 
 		const pos = new ConstructionPlan(world.gameState, barracks, { militaryBase: true }).findGoodPosition(
@@ -612,7 +617,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		// past the first phase, where other buildings keep off the border
 		const { world, hq } = seat({ phase: 2 });
 		const market = card(world, "market", { classes: ["Structure", "Trade", "Market"] });
-		hq.findMarketLocation = () => [280, 40, NO_BASE, 17];
+		hq.placement.findMarketLocation = () => [280, 40, NO_BASE, 17];
 
 		const pos = new ConstructionPlan(world.gameState, market, { base: baseId(2) }).findGoodPosition(
 			world.gameState,
@@ -683,7 +688,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		structure(world, 9431, [60, 60], ["House"]);
 		// the game's fortress template carries the GarrisonFortress class
 		const fortress = card(world, "fortress", { classes: ["Structure", "Fortress", "GarrisonFortress"] });
-		hq.findDefensiveLocation = () => undefined;
+		hq.placement.findDefensiveLocation = () => undefined;
 
 		const pos = new ConstructionPlan(world.gameState, fortress).findGoodPosition(world.gameState);
 
@@ -989,7 +994,7 @@ describe("a town out of ground sends a dock to an island: buildOverseaDock", () 
 			);
 		}
 		const cc = card(s.world, "civil_centre", { classes: ["Structure", "CivCentre"] });
-		s.hq.findStrategicCCLocation = () => undefined;
+		s.hq.placement.findStrategicCCLocation = () => undefined;
 		const { laid } = builder(s.world, s.hq, [s.dock]);
 		return { ...s, cc, laid };
 	}
