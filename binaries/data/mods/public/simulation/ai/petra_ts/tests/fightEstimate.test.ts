@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 
 import { makeEntity, makeTemplate } from "./harness/fakes.ts";
 
-import { combatStats, type CombatStats } from "../adapter/templateData.ts";
+import { combatStats, counterBonuses, counteredBy, type CombatStats } from "../adapter/templateData.ts";
 import {
 	damagePerSecond,
 	estimateFight,
@@ -233,5 +233,43 @@ describe("an army as it stands: fightSide", () =>
 			1,
 		]]);
 		assert.deepEqual(army.shooters.map((g) => g.count), [4], "a tower shooting no arrow is left out");
+	});
+});
+
+describe("whom a unit counters: counterBonuses, counteredBy", () =>
+{
+	it("a spearman counters cavalry, not infantry", () =>
+	{
+		const bonuses = counterBonuses(spearmanTemplate);
+		assert.equal(counteredBy(bonuses, horsemanTemplate), true);
+		assert.equal(counteredBy(bonuses, archerTemplate), false);
+	});
+
+	it("a unit with no bonus counters nobody", () =>
+	{
+		assert.deepEqual(counterBonuses(archerTemplate), []);
+		assert.equal(counteredBy(counterBonuses(archerTemplate), horsemanTemplate), false);
+	});
+
+	it("a bonus below one is a penalty, not a counter; one named for a civ counters only its units", () =>
+	{
+		const odd = makeTemplate("units/pers/champion", {
+			attackTypes: ["Melee"],
+			getPaths: {
+				Attack: {
+					Melee: {
+						Bonuses: {
+							Weak: { Classes: "Infantry", Multiplier: "0.5" },
+							Hatred: { Civ: "athen", Multiplier: "1.5" },
+						},
+					},
+				},
+			},
+		});
+		const bonuses = counterBonuses(odd);
+		assert.deepEqual(bonuses.map((b) => b.Multiplier), [1.5], "the penalty is left out");
+		assert.equal(counteredBy(bonuses, archerTemplate), true, "an Athenian");
+		const persian = makeTemplate("units/pers/infantry_archer_b", { classes: ["Unit", "Infantry"], civ: "pers" });
+		assert.equal(counteredBy(bonuses, persian), false);
 	});
 });

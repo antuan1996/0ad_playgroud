@@ -5271,15 +5271,19 @@ describe("second pass: the army at work", () =>
 		assert.equal(engine.marches.length, 1);
 	});
 
+	// only the port passes: Petra asked common-api's counters(), always false, and went for the nearer swordsman (FINDINGS §59)
 	it("a spearman goes for the horseman it counters before a nearer swordsman", () =>
 	{
 		const world = makeWorld();
 		const target = makeTarget(world, { position: () => [200, 200] }, 2005);
 		foe(world, 3000, [30, 20], ["Unit", "Infantry", "Melee"]);
 		const horse = foe(world, 3001, [50, 20], ["Unit", "Cavalry", "Melee"]);
+		// template_unit_infantry_melee_spearman.xml's bonus, as a parsed template holds it
+		const melee = { Bonuses: { BonusCavMelee: { Classes: "Cavalry", Multiplier: "2.5" } } };
 		const spearman = fighter(world, 1010, [20, 20], ["Infantry", "Melee", "Spearman"], {
 			isIdle: () => true,
-			counters: (enemy: CommonEntity) => enemy.hasClass("Cavalry"),
+			get: (path: string) =>
+				path === "Attack/Melee" ? melee : path === "Attack/Melee/Bonuses" ? melee.Bonuses : undefined,
 		});
 		attacking(world, target).update(world.gameState, emptyEvents());
 		assert.deepEqual(spearman.strikes, [[horse.id(), false]]);
