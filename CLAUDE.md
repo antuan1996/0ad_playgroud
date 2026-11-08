@@ -87,8 +87,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   extract-method keeping smoke games identical.
 - `structure:petra -- --check` enforces: no `as` cast outside `adapter/brands.ts`
   (`as const` apart), no `!`, `Engine.PostCommand` only in `adapter/commands.ts`,
-  no `execution/` code reaching the HQ (`gameState.ai.HQ`, importing
-  `decision/headquarters.ts`), and holds baseline
+  no code below the root reading `gameState.ai.HQ`, no `execution/` code
+  importing `decision/headquarters.ts`, and holds baseline
   counts in `build/petra_ts/structure-baseline.json` at **0** (layer violations
   across `adapter < world < execution < decision < root` including type-only
   imports, value-import cycles, `Engine` outside `adapter/`, unmarked dead
@@ -253,6 +253,14 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   `world/bases.ts` (`BaseView`), and mutates them only through capability
   interfaces (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`). A member
   execution needs is added to its interface, never reached through the HQ.
+- Decision managers never read `gameState.ai.HQ` either: each takes, when
+  built (and in its `restore`), a view of the HQ typed as what it uses
+  (`GarrisonSiblings`, `AttackSiblings`, `ResearchHQ`, `NavalHQ`, `TradeHQ`,
+  `DiplomacyHQ`, `DefenseHQ`, `VictoryHQ`, `BasesHQ`/`BaseHQ`: `Pick`s of
+  `Headquarters` and of its other managers); the HQ passes itself. Its module
+  functions take the one manager they ask. A member a manager needs is added
+  to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
+  `expandFor`).
 - Methods never called (in port and original) are marked
   `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with

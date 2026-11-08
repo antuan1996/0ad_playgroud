@@ -20,10 +20,11 @@
  *   adapter/brands.ts, the port's only sanctioned casts;
  * - non-null: a `!` non-null assertion;
  * - post-command: Engine.PostCommand outside adapter/commands.ts;
- * - hq-access: execution code reaching the headquarters: importing
- *   decision/headquarters.ts, or reading `.ai.HQ` (the decision layer's
- *   services come through the interfaces of execution/services.ts, on
- *   gameState.ai).
+ * - hq-access: code below the bot's root reading `.ai.HQ` (each manager
+ *   is given a view of the headquarters it uses when it is built, and the
+ *   decision layer's services reach execution through the interfaces of
+ *   execution/services.ts, on gameState.ai), or execution code importing
+ *   decision/headquarters.ts.
  *
  * Tracked counts (the check fails when one rises above the baseline; lower
  * them, then --update-baseline):
@@ -503,7 +504,7 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				}
 			}
 			if (
-				node.name.text === "HQ" && layer === "execution" &&
+				node.name.text === "HQ" && layer !== "root" &&
 				ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "ai"
 			)
 			{

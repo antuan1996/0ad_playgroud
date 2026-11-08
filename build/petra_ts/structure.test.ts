@@ -82,7 +82,7 @@ test("only commands.ts posts commands, and only adapter/ uses Engine (profiling 
 	assert.deepEqual(rules("execution/b.ts", "Engine.ComputePath(a, b, c);"), ["engine"]);
 });
 
-test("no execution code reaches the headquarters: its services come through execution/services.ts", () =>
+test("only the bot reads gameState.ai.HQ, and no execution code imports the headquarters", () =>
 {
 	assert.deepEqual(
 		rules(
@@ -91,7 +91,12 @@ test("no execution code reaches the headquarters: its services come through exec
 		),
 		["hq-access", "hq-access"],
 	);
-	assert.deepEqual(rules("decision/b.ts", "const h = gameState.ai.HQ;"), []);
+	assert.deepEqual(
+		rules("decision/b.ts", "import type { Headquarters } from \"./headquarters.ts\"; const h = gameState.ai.HQ;"),
+		["hq-access"],
+		"a manager is given its view of the headquarters; its type it may import",
+	);
+	assert.deepEqual(rules("_petrabot.ts", "const h = this.ai.HQ;"), [], "the bot owns the headquarters");
 });
 
 test("imports against the layers' order are counted, type-only ones too", () =>
