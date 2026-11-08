@@ -126,7 +126,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `mapMask.ts`, `geography.ts` (territory/border maps and land/sea regions,
     owned by HQ), `gatherEconomy.ts` (measured gather rates including walk,
     owned by HQ), `production.ts` (measured trainer busyness, owned by HQ, not
-    saved), `census.ts` (population vs room), `seaRoute.ts` (ship routing round
+    saved), `census.ts` (population vs room), `economyPlan.ts` (what the town saves for and where its
+    food comes from, `HQ.economy`), `seaRoute.ts` (ship routing round
     enemy shooters), `shipTraffic.ts` (fading enemy ship heatmap on naval maps,
     places towers), `baseResources.ts` (dropsite supplies per base), `bases.ts`
     (read-only `BaseView`), `captureTally.ts` (our units' capture strength per
