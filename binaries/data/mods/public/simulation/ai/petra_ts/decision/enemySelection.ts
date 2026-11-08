@@ -4,9 +4,17 @@ import { playerId } from "../adapter/brands.ts";
 import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
+import type { VictoryManager } from "./victoryManager.ts";
 
 /** The attack manager's memory of whom it fights: the defeated, and the foe it last chose. */
-export type EnemyTargeting = { defeated: Record<number, boolean>; currentEnemyPlayer: PlayerId | undefined; };
+export type EnemyTargeting = {
+	defeated: Record<number, boolean>;
+	currentEnemyPlayer: PlayerId | undefined;
+	/** the victory manager, for the gaia relics it hunts */
+	readonly siblings: {
+		readonly victoryManager: Pick<VictoryManager, "tryCaptureGaiaRelic" | "resetCaptureGaiaRelic">;
+	};
+};
 
 /** The enemy civic centre nearest to one of ours on its land, of a player not vetoed */
 function nearestEnemyCivCentre(gameState: CommonGameState, veto: Record<number, boolean>): CommonEntity | undefined
@@ -268,7 +276,7 @@ export function getRelicEnemyPlayer(
 		const i = playerId(iIndex);
 		if (
 			!gameState.isPlayerEnemy(i) || targeting.defeated[i] ||
-			i === 0 && !gameState.ai.HQ.victoryManager.tryCaptureGaiaRelic
+			i === 0 && !targeting.siblings.victoryManager.tryCaptureGaiaRelic
 		)
 		{
 			continue;
@@ -290,7 +298,7 @@ export function getRelicEnemyPlayer(
 		}
 		if (enemyPlayer === 0)
 		{
-			gameState.ai.HQ.victoryManager.resetCaptureGaiaRelic(gameState);
+			targeting.siblings.victoryManager.resetCaptureGaiaRelic(gameState);
 		}
 	}
 	return enemyPlayer;

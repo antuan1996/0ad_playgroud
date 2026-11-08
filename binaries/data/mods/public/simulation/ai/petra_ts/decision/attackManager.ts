@@ -14,10 +14,13 @@ import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { allowCapture } from "../world/capture.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { DefenseManager } from "./defenseManager.ts";
 import {
 	getEnemyPlayer as getEnemyPlayerFor,
 	getRelicEnemyPlayer as getRelicEnemyPlayerFor,
 } from "./enemySelection.ts";
+import type { VictoryManager } from "./victoryManager.ts";
 
 export type SerializedAttackManager = {
 	properties: {
@@ -154,9 +157,21 @@ function bombingSpot(
 	return targetPos;
 }
 
+/**
+ * What the attack manager asks of its sibling managers, through the
+ * headquarters that owns them all: the defense's targets and armies, whether
+ * a base can still be founded, and the victory manager's gaia relics.
+ */
+export type AttackSiblings = {
+	readonly defenseManager: Pick<DefenseManager, "targetList" | "armies">;
+	readonly basesManager: Pick<BasesManager, "hasPotentialBase">;
+	readonly victoryManager: Pick<VictoryManager, "tryCaptureGaiaRelic" | "resetCaptureGaiaRelic">;
+};
+
 export class AttackManager
 {
 	Config: Config;
+	readonly siblings: AttackSiblings;
 	/** Our units held in reserve, out of any plan */
 	outOfPlan: CommonEntityCollection;
 
@@ -176,9 +191,10 @@ export class AttackManager
 	enemyLands = new Map<AccessIndex, CommonPlacedEntity[]>();
 	enemyLandsTurn = -1;
 
-	constructor(config: Config, gameState: CommonGameState)
+	constructor(config: Config, gameState: CommonGameState, siblings: AttackSiblings)
 	{
 		this.Config = config;
+		this.siblings = siblings;
 		this.outOfPlan = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", PLAN_RESERVE));
 		this.outOfPlan.registerUpdates();
 	}
@@ -189,9 +205,10 @@ export class AttackManager
 		gameState: CommonGameState,
 		data: SerializedAttackManager,
 		canBuildUnits: boolean,
+		siblings: AttackSiblings,
 	): AttackManager
 	{
-		const manager = new AttackManager(config, gameState);
+		const manager = new AttackManager(config, gameState, siblings);
 		manager.resume(gameState, data, canBuildUnits);
 		return manager;
 	}
@@ -484,10 +501,10 @@ export class AttackManager
 		this.createAttacks(gameState, unexecutedAttacks);
 		Engine.ProfileStop();
 
-		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 && gameState.ai.HQ.defenseManager.targetList.length)
+		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 && this.siblings.defenseManager.targetList.length)
 		{
 			let target;
-			for (const targetId of gameState.ai.HQ.defenseManager.targetList)
+			for (const targetId of this.siblings.defenseManager.targetList)
 			{
 				target = gameState.getEntityById(targetId);
 				if (!target)
@@ -687,7 +704,7 @@ export class AttackManager
 			if (
 				barracksNb >= 1 &&
 					(gameState.currentPhase() > 1 || (phase2 !== undefined && gameState.isResearching(phase2))) ||
-				!gameState.ai.HQ.basesManager.hasPotentialBase()
+				!this.siblings.basesManager.hasPotentialBase()
 			)
 			{ // if we have no base ... nothing else to do than attack
 				this.createMainAttack(gameState);
@@ -1039,7 +1056,7 @@ export class AttackManager
 		this.startedAttacks[attackType].push(attackPlan);
 
 		const targetAccess = getLandAccess(gameState, target);
-		for (const army of gameState.ai.HQ.defenseManager.armies)
+		for (const army of this.siblings.defenseManager.armies)
 		{
 			if (data.range)
 			{
