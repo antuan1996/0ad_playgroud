@@ -18,6 +18,27 @@ import * as difficulty from "../world/difficultyLevel.ts";
 import type { Geography } from "../world/geography.ts";
 import { isLineInsideEnemyTerritory } from "../world/territory.ts";
 import { getBestBase } from "./baseManager.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { Headquarters } from "./headquarters.ts";
+import type { NavalManager } from "./navalManager.ts";
+import type { ResearchManager } from "./researchManager.ts";
+
+/**
+ * What the trade manager asks of the headquarters that owns it: the
+ * resources most needed and their wanted rates, the markets it may build and
+ * where, and whether it can barter; and of its sibling managers: the ships
+ * to sail merchants and traders, the bases' stocks and rates, the buildable
+ * market and dock, and the trade bonus research.
+ */
+export type TradeHQ =
+	& Pick<Headquarters, "pickMostNeededResources" | "GetWantedGatherRates" | "canBuild" | "canBarter" | "placement">
+	& {
+		readonly navalManager: Pick<NavalManager, "fleet" | "requireTransport">;
+		readonly basesManager: Pick<BasesManager, "getTotalResourceLevel" | "GetCurrentGatherRates">;
+		readonly buildManager: Pick<BuildManager, "setBuildable" | "setUnbuildable">;
+		readonly researchManager: Pick<ResearchManager, "researchTradeBonus">;
+	};
 
 export type TradeRoute = { source: EntityId; target: EntityId; gain: number; land?: AccessIndex; sea?: SeaIndex; };
 
@@ -173,11 +194,11 @@ function keepForIndex(
  * May-be, there were produced at an early stage when no other ship were available
  * and the naval manager will train now more appropriate ships.
  */
-function switchMerchantShip(gameState: CommonGameState, sea: SeaIndex): boolean
+function switchMerchantShip(gameState: CommonGameState, hq: TradeHQ, sea: SeaIndex): boolean
 {
 	let already = false;
 	let shipToSwitch: CommonEntity | undefined;
-	gameState.ai.HQ.navalManager.fleet(sea)?.transports.forEach(function(ship: CommonEntity): void
+	hq.navalManager.fleet(sea)?.transports.forEach(function(ship: CommonEntity): void
 	{
 		if (already || !ship.hasClass("Trader"))
 		{
@@ -230,10 +251,12 @@ export class TradeManager
 	tradeRoute: TradeRoute | undefined;
 	traders: CommonEntityCollection;
 	warnedAllies: Record<number, boolean>;
+	readonly hq: TradeHQ;
 
-	constructor(config: Config, gameState: CommonGameState, geography: Geography)
+	constructor(config: Config, gameState: CommonGameState, geography: Geography, hq: TradeHQ)
 	{
 		this.Config = config;
+		this.hq = hq;
 		this.tradeRoute = undefined;
 		this.potentialTradeRoute = undefined;
 		this.routeProspection = false;
@@ -250,9 +273,10 @@ export class TradeManager
 		gameState: CommonGameState,
 		geography: Geography,
 		data: SerializedTradeManager,
+		hq: TradeHQ,
 	): TradeManager
 	{
-		const manager = new TradeManager(config, gameState, geography);
+		const manager = new TradeManager(config, gameState, geography, hq);
 		manager.resume(data);
 		return manager;
 	}
@@ -295,7 +319,7 @@ export class TradeManager
 		const metadata: PlanMetadata = { role: Worker.ROLE_TRADER };
 		if (route.sea)
 		{
-			if (switchMerchantShip(gameState, route.sea))
+			if (switchMerchantShip(gameState, this.hq, route.sea))
 			{
 				return;
 			}
@@ -420,7 +444,7 @@ export class TradeManager
 			// not a ship: access is the land the trader stands on
 			const land = landRegion(access);
 			const destination = nearerSource ? routeSource.position() : routeTarget.position();
-			gameState.ai.HQ.navalManager.requireTransport(gameState, ent, land, route.land, destination);
+			this.hq.navalManager.requireTransport(gameState, ent, land, route.land, destination);
 			return;
 		}
 
@@ -448,9 +472,9 @@ export class TradeManager
 			tradingGoods[res] = 0;
 		}
 		// first, try to anticipate future needs
-		const stocks = gameState.ai.HQ.basesManager.getTotalResourceLevel(gameState);
-		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState, resTradeCodes);
-		const wantedRates = gameState.ai.HQ.GetWantedGatherRates(gameState);
+		const stocks = this.hq.basesManager.getTotalResourceLevel(gameState);
+		const mostNeeded = this.hq.pickMostNeededResources(gameState, resTradeCodes);
+		const wantedRates = this.hq.GetWantedGatherRates(gameState);
 		let remaining = 100;
 		let targetNum = this.Config.Economy.targetNumTraders;
 		for (const res of resTradeCodes)
@@ -519,7 +543,7 @@ export class TradeManager
 			// Available resources after account substraction
 			available: gameState.ai.queueManager.getAvailableResources(gameState),
 			needs: gameState.ai.queueManager.currentNeeds(gameState),
-			rates: gameState.ai.HQ.basesManager.GetCurrentGatherRates(gameState),
+			rates: this.hq.basesManager.GetCurrentGatherRates(gameState),
 			prices: gameState.getBarterPrices(),
 		};
 
@@ -738,8 +762,8 @@ export class TradeManager
 	activateProspection(gameState: CommonGameState): void
 	{
 		this.routeProspection = true;
-		gameState.ai.HQ.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/market"));
-		gameState.ai.HQ.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/dock"));
+		this.hq.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/market"));
+		this.hq.buildManager.setBuildable(gameState.applyCiv("structures/{civ}/dock"));
 	}
 
 	/**
@@ -997,7 +1021,7 @@ export class TradeManager
 		{
 			return;
 		}
-		if (!gameState.ai.HQ.canBuild(gameState, "structures/{civ}/market"))
+		if (!this.hq.canBuild(gameState, "structures/{civ}/market"))
 		{
 			return;
 		}
@@ -1016,13 +1040,13 @@ export class TradeManager
 		// canBuild() above already verified that the template exists.
 		const template = requireStructureTemplate(gameState, gameState.applyCiv("structures/{civ}/market"));
 		this.checkRoutes(gameState);
-		const marketPos = gameState.ai.HQ.placement.findMarketLocation(gameState, template);
+		const marketPos = this.hq.placement.findMarketLocation(gameState, template);
 		if (!marketPos || marketPos[3] === 0)
 		{ // marketPos[3] is the expected gain
 			// no position found
 			if (gameState.getOwnEntitiesByClass("Market", true).hasEntities())
 			{
-				gameState.ai.HQ.buildManager.setUnbuildable(gameState, gameState.applyCiv("structures/{civ}/market"));
+				this.hq.buildManager.setUnbuildable(gameState, gameState.applyCiv("structures/{civ}/market"));
 			}
 			else
 			{
@@ -1085,7 +1109,7 @@ export class TradeManager
 
 	update(gameState: CommonGameState, events: EngineAIEvents, queues: PetraRuntime.QueueCollection): void
 	{
-		if (gameState.ai.HQ.canBarter && Resources.GetBarterableCodes().length)
+		if (this.hq.canBarter && Resources.GetBarterableCodes().length)
 		{
 			this.performBarter(gameState);
 		}
@@ -1116,7 +1140,7 @@ export class TradeManager
 			}
 			if (gameState.ai.playedTurn % 20 === 0 && this.traders.length >= 2)
 			{
-				gameState.ai.HQ.researchManager.researchTradeBonus(gameState, queues);
+				this.hq.researchManager.researchTradeBonus(gameState, queues);
 			}
 			if (gameState.ai.playedTurn % 60 === 0)
 			{
