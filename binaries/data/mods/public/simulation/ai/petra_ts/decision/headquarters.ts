@@ -2,12 +2,11 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, NEW_BASE, NO_BASE, cellIndex, seconds, worldPos } from "../adapter/brands.ts";
+import { GAIA, NEW_BASE, cellIndex, seconds, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isStructureTemplate } from "../adapter/templateData.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -34,6 +33,7 @@ import { GarrisonManager } from "./garrisonManager.ts";
 import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
 import { checkEvents } from "./hqEvents.ts";
 import { NavalManager } from "./navalManager.ts";
+import { checkPhaseRequirements, notePhase } from "./phasing.ts";
 import {
 	findDefensiveSpot,
 	findEconomicCCTile,
@@ -46,14 +46,8 @@ import { ResearchManager } from "./researchManager.ts";
 import { buildFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
-import {
-	batchSize,
-	soldierRequirements,
-	supportAlpha,
-	supportShare,
-	trainingStopped,
-	type TrainableRequirement,
-} from "./workforce.ts";
+import { type TrainableRequirement } from "./workforce.ts";
+import { trainMoreWorkers } from "./workforceTraining.ts";
 
 type HeadquartersTurnCache = {
 	buildingBuilt?: boolean;
@@ -64,8 +58,8 @@ type HeadquartersTurnCache = {
 	accountedPopulation?: number;
 	accountedWorkers?: number;
 };
-type HeadquartersQueues = PetraRuntime.QueueCollection;
-type HeadquartersTrainableRequirement = TrainableRequirement;
+export type HeadquartersQueues = PetraRuntime.QueueCollection;
+export type HeadquartersTrainableRequirement = TrainableRequirement;
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {
 	/** the fields a save keeps (the regions and naval flag through the geography's accessors) */
@@ -129,9 +123,6 @@ export const DRY_WOOD = 500;
 const BUSY_TRAINERS = 0.85;
 /** The most infantry trainers that rule builds up to. */
 const MAX_MILITARY_TRAINERS = 5;
-
-/** Idle workers from which a dry town stops training more (workforceStalled). */
-export const STALLED_IDLE = 10;
 
 /** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
 export const CC_ORDER_WAIT = 20;
@@ -326,116 +317,6 @@ function corralAnimal(
 		return trainable;
 	}
 	return undefined;
-}
-
-/** A plan for the next phase and its queue */
-type PhasePlan = { plan: ConstructionPlan; queue: PetraRuntime.ConfiguredQueueName; };
-
-/** Counting the workers that aren't part of a plan, those in training included: all, the support ones, and all units in training */
-function countWorkers(
-	gameState: CommonGameState,
-): { numberOfWorkers: number; numberOfSupports: number; numberInTraining: number; }
-{
-	let numberOfWorkers = 0; // all workers
-	let numberOfSupports = 0; // only support workers (i.e. non fighting)
-	gameState.getOwnUnits().forEach((ent) =>
-	{
-		if (ent.getMetadata(PlayerID, "role") === Worker.ROLE_WORKER && ent.getMetadata(PlayerID, "plan") === undefined)
-		{
-			++numberOfWorkers;
-			if (ent.hasClass("Support"))
-			{
-				++numberOfSupports;
-			}
-		}
-	});
-	let numberInTraining = 0;
-	gameState.getOwnTrainingFacilities().forEach(function(ent: CommonEntity): void
-	{
-		const trainingQueue = ent.trainingQueue();
-		if (!trainingQueue)
-		{
-			return;
-		}
-		for (const item of trainingQueue)
-		{
-			numberInTraining += item.count;
-			if (
-				item.metadata && item.metadata.role && item.metadata.role === Worker.ROLE_WORKER &&
-				item.metadata.plan === undefined
-			)
-			{
-				numberOfWorkers += item.count;
-				if (item.metadata.support)
-				{
-					numberOfSupports += item.count;
-				}
-			}
-		}
-	});
-	return { numberOfWorkers, numberOfSupports, numberInTraining };
-}
-
-/** Queue a support worker, or the citizen soldier found to train instead. */
-function queueWorkerTraining(
-	gameState: CommonGameState,
-	queues: HeadquartersQueues,
-	templateDef: TemplateName | undefined,
-	template: TemplateName | undefined,
-	size: number,
-): void
-{
-	// If the template variable is empty, the default unit (Support unit) will be used
-	// base "0" means automatic choice of base
-	if (!template && templateDef)
-	{
-		queues.villager.addPlan(
-			new TrainingPlan(
-				gameState,
-				templateDef,
-				{ role: Worker.ROLE_WORKER, base: NO_BASE, support: true },
-				size,
-				size,
-			),
-		);
-	}
-	else if (template)
-	{
-		queues.citizenSoldier.addPlan(
-			new TrainingPlan(gameState, template, { role: Worker.ROLE_WORKER, base: NO_BASE }, size, size),
-		);
-	}
-}
-
-/** The first two batches queued no bigger than size */
-function capFirstBatches(queue: { plans: Array<{ number: number; }>; }, size: number): void
-{
-	if (!queue.plans[0])
-	{
-		return;
-	}
-	queue.plans[0].number = Math.min(queue.plans[0].number, size);
-	if (queue.plans[1])
-	{
-		queue.plans[1].number = Math.min(queue.plans[1].number, size);
-	}
-}
-
-/** A plan for the next phase goes first in its queue, raised meanwhile (the major techs' for a wonder) */
-function queuePhasePlan(gameState: CommonGameState, queues: HeadquartersQueues, phasePlan: PhasePlan): void
-{
-	const { plan, queue } = phasePlan;
-	if (queue === "wonder")
-	{
-		gameState.ai.queueManager.changePriority("majorTech", 400);
-		plan.queueToReset = "majorTech";
-	}
-	else
-	{
-		gameState.ai.queueManager.changePriority(queue, 1000);
-		plan.queueToReset = queue;
-	}
-	queues[queue].addPlan(plan);
 }
 
 /** Find the base nearest to an enemy civic centre, for military buildings. */
@@ -709,85 +590,6 @@ export class Headquarters
 		return seaBetween(gameState, index1, index2, this.Config.debug);
 	}
 
-	/** Ensure that all requirements are met when phasing up*/
-	checkPhaseRequirements(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (gameState.getNumberOfPhases() === this.currentPhase)
-		{
-			return;
-		}
-
-		const requirements = gameState.getPhaseEntityRequirements(this.currentPhase + 1);
-		for (const entityReq of requirements)
-		{
-			// Village requirements are met elsewhere by constructing more houses
-			if (entityReq.class === "Village" || entityReq.class === "NotField")
-			{
-				continue;
-			}
-			if (gameState.getOwnEntitiesByClass(entityReq.class, true).length >= entityReq.count)
-			{
-				continue;
-			}
-			const phasePlan = entityReq.class === "Town" ?
-				this.townPhasePlan(gameState, queues) :
-				this.phasePlanWithClass(gameState, queues, entityReq.class);
-			if (phasePlan)
-			{
-				queuePhasePlan(gameState, queues, phasePlan);
-				return;
-			}
-		}
-	}
-
-	/** A market, else a temple, else a forge for the town phase, unless an economic or military building is queued */
-	private townPhasePlan(gameState: CommonGameState, queues: HeadquartersQueues): PhasePlan | undefined
-	{
-		if (queues.economicBuilding.hasQueuedUnits() || queues.militaryBuilding.hasQueuedUnits())
-		{
-			return undefined;
-		}
-		const options: Array<[string, string, PetraRuntime.ConfiguredQueueName]> = [
-			["Market", "structures/{civ}/market", "economicBuilding"],
-			["Temple", "structures/{civ}/temple", "economicBuilding"],
-			["Forge", "structures/{civ}/forge", "militaryBuilding"],
-		];
-		for (const [className, templateName, queue] of options)
-		{
-			if (
-				!gameState.getOwnEntitiesByClass(className, true).hasEntities() &&
-				this.canBuild(gameState, templateName)
-			)
-			{
-				return { plan: new ConstructionPlan(gameState, templateName, { phaseUp: true }), queue };
-			}
-		}
-		return undefined;
-	}
-
-	/**
-	 * A structure of a class the phase requires, not dealt with inside vanilla game: for the time being on the
-	 * economic queue, except if wonder; none while that queue has one
-	 */
-	private phasePlanWithClass(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		className: string,
-	): PhasePlan | undefined
-	{
-		const queue = className === "Wonder" ? "wonder" : "economicBuilding";
-		if (queues[queue].hasQueuedUnits())
-		{
-			return undefined;
-		}
-		const structure = this.buildManager.findStructureWithClass(gameState, [className]);
-		if (structure && this.canBuild(gameState, structure))
-		{
-			return { plan: new ConstructionPlan(gameState, structure, { phaseUp: true }), queue };
-		}
-		return undefined;
-	}
-
 	/** A phase research started: we no longer phase towards it, and we are in it. */
 	phaseResearched(gameState: CommonGameState, phase: number): void
 	{
@@ -821,89 +623,6 @@ export class Headquarters
 	/** Called by any "phase" research plan once it's started */
 	OnPhaseUp(gameState: CommonGameState, phase: number): void
 	{
-	}
-
-	/** This code trains citizen workers, trying to keep close to a ratio of worker/soldiers */
-	trainMoreWorkers(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		// default template
-		const requirementsDef: HeadquartersTrainableRequirement[] = [["costsResource", 1, "food"]];
-		const classesDef = ["Support+Worker"];
-		const templateDef = this.findBestTrainableUnit(gameState, classesDef, requirementsDef);
-
-		const { numberOfWorkers, numberOfSupports, numberInTraining } = countWorkers(gameState);
-
-		// Anticipate the optimal batch size when this queue will start
-		// and adapt the batch size of the first and second queued workers to the present population
-		// to ease a possible recovery if our population was drastically reduced by an attack
-		// (need to go up to second queued as it is accounted in queueManager)
-		const size = batchSize(numberOfWorkers);
-		capFirstBatches(queues.villager, size);
-		capFirstBatches(queues.citizenSoldier, size);
-
-		const numberOfQueuedSupports = queues.villager.countQueuedUnits();
-		const numberOfQueuedSoldiers = queues.citizenSoldier.countQueuedUnits();
-		const numberTotal = numberOfWorkers + numberOfQueuedSupports + numberOfQueuedSoldiers;
-
-		// with the land run dry and many hands idle, no more of them, and those queued let go (FINDINGS §40)
-		const stalled = this.workforceStalled(gameState);
-		if (stalled)
-		{
-			queues.villager.empty();
-			queues.citizenSoldier.empty();
-		}
-		// getPhaseName(2) is optional: preserve original semantics (isResearching(undefined) === false)
-		const phaseName2 = gameState.getPhaseName(2);
-		if (
-			trainingStopped({
-				workers: numberOfWorkers,
-				queuedSupports: numberOfQueuedSupports,
-				queuedSoldiers: numberOfQueuedSoldiers,
-				inTraining: numberInTraining,
-				target: this.targetNumWorkers,
-				popPhase2: this.Config.Economy.popPhase2,
-				waitingForTown: this.currentPhase === 1 &&
-					(phaseName2 === undefined || !gameState.isResearching(phaseName2)),
-				saving: !!this.saveResources,
-				stalled,
-			})
-		)
-		{
-			return;
-		}
-
-		// soldiers or support units (decision/workforce.ts)
-		const alpha = supportAlpha(
-			this.attackManager.rushNumber < this.attackManager.maxRushes ||
-				this.attackManager.upcomingAttacks[AttackPlan.TYPE_RUSH].length > 0,
-			gameState.isCeasefireActive() ? gameState.ceasefireTimeRemaining : undefined,
-		);
-		const supportNum = supportShare(
-			numberTotal,
-			this.supportRatio,
-			this.targetNumWorkers,
-			alpha,
-			!!gameState.isTemplateAvailable(gameState.applyCiv("structures/{civ}/field")),
-		);
-
-		const template = !templateDef || numberOfSupports + numberOfQueuedSupports > supportNum ?
-			this.citizenSoldierTemplate(gameState, numberTotal) :
-			undefined;
-
-		queueWorkerTraining(gameState, queues, templateDef, template, size);
-	}
-
-	/** A citizen soldier to train: at least 33% ranged and 33% melee; only units that gather (a mercenary, Athens' archers, is a citizen soldier by its classes) */
-	private citizenSoldierTemplate(gameState: CommonGameState, numberTotal: number): TemplateName | undefined
-	{
-		const requirements = soldierRequirements(numberTotal);
-		const classes = [["CitizenSoldier", "Infantry"]];
-		const pickedClass = pickRandom(["Ranged", "Melee", "Infantry"]);
-		if (pickedClass !== undefined)
-		{
-			classes[0].push(pickedClass);
-		}
-		return this.findBestTrainableUnit(gameState, classes, requirements, true);
 	}
 
 	/** picks the best template based on parameters and classes */
@@ -1180,21 +899,6 @@ export class Headquarters
 			}
 		}
 		return true;
-	}
-
-	/**
-	 * Whether the land has run dry (landRunDry) with more than a fifth of the
-	 * workers, and at least STALLED_IDLE, standing idle: in a 4-player
-	 * Dodecanese match a town went on training soldiers and women from 163 to
-	 * 264 population while 200 stood idle, nothing left to gather on its
-	 * islands, and the food they took was what its ships and attacks lacked
-	 * (FINDINGS §40).
-	 */
-	workforceStalled(gameState: CommonGameState): boolean
-	{
-		const workers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true);
-		const idle = workers.filter(filters.byMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE)).length;
-		return idle >= STALLED_IDLE && idle > workers.length / 5 && this.landRunDry(gameState);
 	}
 
 	/**
@@ -2691,14 +2395,14 @@ export class Headquarters
 	{
 		Engine.ProfileStart("Headquarters update");
 		this.updateWorld(gameState, queues);
-		this.notePhase(gameState);
+		notePhase(this, gameState);
 
 		profiled("HQ checkEvents", () => checkEvents(this, gameState, events));
 		profiled("HQ naval checkEvents", () => this.navalManager.checkEvents(gameState, queues, events));
 
 		if (this.phasing)
 		{
-			this.checkPhaseRequirements(gameState, queues);
+			checkPhaseRequirements(this, gameState, queues);
 		}
 		else
 		{
@@ -2772,38 +2476,13 @@ export class Headquarters
 		this.canBarter = gameState.getOwnEntitiesByClass("Market", true).filter(filters.isBuilt()).hasEntities();
 	}
 
-	/** A phase reached (TODO find a better way to update) */
-	private notePhase(gameState: CommonGameState): void
-	{
-		if (this.currentPhase === gameState.currentPhase())
-		{
-			return;
-		}
-		debugWarn(
-			this.Config,
-			0,
-			() =>
-				" civ " + gameState.getPlayerCiv() + " has phasedUp from " + this.currentPhase +
-				" to " + gameState.currentPhase() + " at time " + gameState.ai.elapsedTime +
-				" phasing " + this.phasing,
-		);
-		this.currentPhase = gameState.currentPhase();
-
-		// In principle, this.phasing should be already reset to 0 when starting the research
-		// but this does not work in case of an autoResearch tech
-		if (this.phasing)
-		{
-			this.phasing = 0;
-		}
-	}
-
 	/** A town's turn, one task in four: workers, houses, a farmstead, a corral; research one turn in five */
 	private updateTown(gameState: CommonGameState, queues: HeadquartersQueues): void
 	{
 		const turn = gameState.ai.playedTurn;
 		if (turn % 4 === 0)
 		{
-			profiled("HQ trainMoreWorkers", () => this.trainMoreWorkers(gameState, queues));
+			profiled("HQ trainMoreWorkers", () => trainMoreWorkers(this, gameState, queues));
 		}
 		if (turn % 4 === 1)
 		{
