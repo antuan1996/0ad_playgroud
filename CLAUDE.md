@@ -96,6 +96,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   only it uses. Also at **0**, type-checked: `layer-access` (a higher layer's
   members reached without an import, however reached: `gameState.ai.HQ` from
   `adapter/` or `world/`, a decision manager's method from `execution/`).
+  It also reports, untracked (`build/petra_ts/coupling.ts`): each class with its
+  parts (functions taking it) as one LCOM4 graph plus the fields only one module
+  uses, and the types other modules read narrowly (≤ a quarter of their members).
 - TypeScript configs are in `build/petra_ts/` (`tsconfig.json`,
   `tsconfig.build.json`, `tsconfig.tests.json`). **Never put a `.json` file
   under `simulation/ai/`** other than a bot's `data.json` (`ICmpAIManager.cpp`

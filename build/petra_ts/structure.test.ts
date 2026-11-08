@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import ts from "typescript";
+import { partCohesion, typeWidth } from "./coupling.ts";
 import {
 	analyse,
 	analyseModule,
@@ -277,5 +278,70 @@ test("execution reaches decision only through the interfaces it declares itself"
 		found.map((v) => `${v.line} ${v.text}`),
 		["2 ai.HQ", "3 ai.HQ", "4 manager.total"],
 		"the service is execution's own; the HQ and its manager are decision's, however reached",
+	);
+});
+
+test("a class with its parts: methods and the functions taking it, the saves and the constructor apart", () =>
+{
+	const found = partCohesion(
+		programOf({
+			"/port/execution/plan.ts": "export class Plan {\n" +
+				"\ta = 0; b = 0; c = 0; d = 0; e = 0; f = 0;\n" +
+				"\tconstructor() { this.a = 1; this.b = 1; this.c = 1; this.d = 1; this.e = 1; this.f = 1; }\n" +
+				"\tgrowA(): void { this.a++; }\n" +
+				"\tgrowB(): number { return this.b + this.f; }\n" +
+				"\tsave(): number[] { return [this.a, this.b, this.c, this.d]; }\n}",
+			// two parts linked by a call, a third linked to growB by the field f
+			"/port/execution/march.ts": "import type { Plan } from \"./plan.ts\";\n" +
+				"export function walk(plan: Plan): number { return plan.c + step(plan); }\n" +
+				"function step(plan: Plan): number { return plan.d; }\n" +
+				"export const halt = (plan: Plan): number => plan.f;",
+			// a reader, not a part: its uses tell who owns e
+			"/port/decision/manager.ts": "import type { Plan } from \"../execution/plan.ts\";\n" +
+				"export class Manager { plan: Plan | undefined; total(): number { return this.plan?.e ?? 0; } }",
+		}),
+		"/port",
+	);
+	const plan = found.find((c) => c.name === "Plan");
+	assert.ok(plan);
+	assert.deepEqual(plan.parts, [{ file: "execution/march.ts", functions: ["walk", "step", "halt"] }]);
+	assert.equal(plan.units, 6);
+	assert.deepEqual(plan.whole, ["save"], "save uses four of the six fields");
+	assert.deepEqual(plan.groups.map((g) => [...g].sort()), [["growB", "march.ts:halt"], [
+		"march.ts:step",
+		"march.ts:walk",
+	], ["growA"]]);
+	assert.equal(plan.lcom4, 3);
+	assert.deepEqual(
+		plan.ownedFields,
+		[{ file: "execution/march.ts", fields: ["c", "d"] }, { file: "execution/plan.ts", fields: ["a", "b"] }, {
+			file: "decision/manager.ts",
+			fields: ["e"],
+		}],
+		"f is used by the class and the march; the constructor and save count for none",
+	);
+});
+
+test("a type's width: the members each other module reads, its own module and this apart", () =>
+{
+	const members = "abcdefgh".split("").map((m) => `${m}: number;`).join(" ");
+	const found = typeWidth(
+		programOf({
+			"/port/execution/services.ts": `export interface Wide { ${members} }\n` +
+				"export class Small { x = 0; private y = 0; get z(): number { return this.y; } static s = 0; }\n" +
+				"export function own(w: Wide): number { return w.a; }",
+			"/port/decision/narrow.ts": "import type { Wide } from \"../execution/services.ts\";\n" +
+				"export function f(w: Wide): number { const { b } = w; return w.a + b; }",
+			"/port/decision/broad.ts": "import type { Wide, Small } from \"../execution/services.ts\";\n" +
+				"export function g(w: Wide, s: Small): number { return w.a + w.c + w.d + s.z + s.x; }",
+		}),
+		"/port",
+	);
+	assert.deepEqual(
+		found.map((t) => [t.name, t.members, t.usedOutside, t.narrow, t.consumers.map((c) => `${c.file} ${c.used}`)]),
+		[["Wide", 8, 4, 1, ["decision/narrow.ts a,b", "decision/broad.ts a,c,d"]], ["Small", 2, 2, 0, [
+			"decision/broad.ts x,z",
+		]]],
+		"two of eight is narrow, three is not; Small's private and static members are not its width",
 	);
 });

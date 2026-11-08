@@ -63,10 +63,15 @@
  * functions, really). Calls link methods too, so a class whose update calls
  * its steps stays one group: a large LCOM4 says a split is easy, a small
  * one in a large class only that its methods call one another.
+ *
+ * Reported from coupling.ts (type-checked): each class with its parts (the
+ * functions taking it), their LCOM4 and the fields only one module uses, and
+ * the types other modules use narrowly (a quarter of their members or less).
  */
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { partCohesion, typeWidth, visitMemberAccesses } from "./coupling.ts";
 
 export type Layer = "adapter" | "world" | "execution" | "decision" | "root";
 
@@ -908,30 +913,7 @@ export function layerAccesses(program: ts.Program, port: string): LayerAccess[]
 			flagged.add(node);
 			violations.push(found);
 		};
-		const visit = (node: ts.Node): void =>
-		{
-			ts.forEachChild(node, visit);
-			if (ts.isPropertyAccessExpression(node))
-			{
-				access(node, checker.getSymbolAtLocation(node.name), node.expression);
-			}
-			// x["name"]: as x.name
-			else if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression))
-			{
-				access(node, checker.getSymbolAtLocation(node.argumentExpression), node.expression);
-			}
-			// const { name } = x: as x.name, the object the pattern's
-			else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent) && !node.dotDotDotToken)
-			{
-				const key = node.propertyName ?? node.name;
-				const name = ts.isIdentifier(key) || ts.isStringLiteralLike(key) ? key.text : undefined;
-				const symbol = name === undefined ?
-					undefined :
-					checker.getTypeAtLocation(node.parent).getProperty(name);
-				access(node.name, symbol, node.parent);
-			}
-		};
-		visit(source);
+		visitMemberAccesses(source, checker, access);
 	}
 	return violations;
 }
@@ -1198,6 +1180,82 @@ function main(args: string[]): void
 			out.push(`  ${c.name}, using no field nor method: ${c.thisless.join(", ")}`);
 		}
 	}
+	const parts = partCohesion(program, port);
+	out.push(
+		"\nclasses with their parts (methods and the functions taking the class, linked by the members they share " +
+			"or call; hubs and whole-state units apart):",
+	);
+	out.push(
+		table(
+			["class", "where", "units", "parts", "fields", "lcom4", "groups (sizes)"],
+			parts.slice(0, top).map((
+				c,
+			) => [
+				c.name,
+				`${c.file}:${c.line}`,
+				c.units,
+				c.units - c.methods,
+				c.fields,
+				c.lcom4,
+				c.groups.filter((g) => g.length > 1).map((g) => g.length).join(" "),
+			]),
+			[2, 3, 4, 5],
+		),
+	);
+	for (const c of parts.slice(0, top))
+	{
+		out.push(`  ${c.name}, parts: ${c.parts.map((p) => `${p.file} ${p.functions.length}`).join(", ")}`);
+		if (c.whole.length)
+		{
+			out.push(`  ${c.name}, whole-state (more than half the fields): ${c.whole.join(", ")}`);
+		}
+		if (c.hubs.length)
+		{
+			out.push(`  ${c.name}, hubs: ${c.hubs.join(", ")}`);
+		}
+		for (const group of c.groups.filter((g) => g.length > 1).slice(1, 4))
+		{
+			out.push(
+				`  ${c.name}, a group of ${group.length}: ${group.slice(0, 8).join(", ")}${
+					group.length > 8 ? ", ..." : ""
+				}`,
+			);
+		}
+		for (const owned of c.ownedFields)
+		{
+			const who = owned.file === c.file ? "its own module" : owned.file;
+			out.push(
+				`  ${c.name}, fields only ${who} uses: ${owned.fields.slice(0, 8).join(", ")}${
+					owned.fields.length > 8 ? `, ... ${owned.fields.length - 8} more` : ""
+				}`,
+			);
+		}
+	}
+	const widths = typeWidth(program, port);
+	out.push(
+		"\ntypes used narrowly (public members, those other modules read, the modules reading a quarter or less):",
+	);
+	const narrowTypes = widths.filter((w) => w.narrow > 0);
+	out.push(
+		narrowTypes.length ?
+			table(
+				["type", "where", "members", "read outside", "consumers", "narrow"],
+				narrowTypes.slice(0, top).map((
+					w,
+				) => [w.name, `${w.file}:${w.line}`, w.members, w.usedOutside, w.consumers.length, w.narrow]),
+				[2, 3, 4, 5],
+			) :
+			"  none",
+	);
+	for (const w of narrowTypes.slice(0, top))
+	{
+		const narrow = w.consumers.slice(0, w.narrow).slice(0, 4);
+		out.push(
+			`  ${w.name}: ` + narrow.map((c) =>
+				`${c.file} ${c.used.length} (${c.used.slice(0, 5).join(", ")}` + `${c.used.length > 5 ? ", ..." : ""})`
+			).join("; ") + (w.narrow > narrow.length ? `; ... ${w.narrow - narrow.length} more` : ""),
+		);
+	}
 	console.log(out.join("\n"));
 
 	const jsonFile = option(args, "--json");
@@ -1216,6 +1274,8 @@ function main(args: string[]): void
 					dead: structure.dead,
 					fan: structure.fan,
 					classes: structure.classes,
+					parts,
+					widths,
 				},
 				null,
 				"\t",

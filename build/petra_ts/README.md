@@ -75,6 +75,16 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
 - **Also reports**: exports used only by their own module (keep at 0) or only by
   tests, module fan-in/fan-out, and per-class methods, fields, and LCOM4
   cohesion.
+- **Coupling and cohesion** (`coupling.ts`, type-checked, report-only):
+  - Classes with their parts: LCOM4 over a class's methods and the port's
+    functions taking the class (`walkTo(plan: AttackPlan)`), `this.x` and
+    `plan.x` alike. Hubs and whole-state units (more than half the fields: the
+    saves) are set apart. It also lists the fields only one module uses, the
+    constructor and the saves apart: state a part could hold.
+  - Types used narrowly: for each class, interface or object type of the
+    port, the members other modules read out of its public ones, and the
+    modules reading a quarter or less of a type of 8 members or more. Those
+    could take an interface of what they use, as `execution/services.ts` does.
 
 ## Matches (`match.sh` / `npm run match:petra`)
 
