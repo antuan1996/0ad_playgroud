@@ -345,3 +345,28 @@ test("a type's width: the members each other module reads, its own module and th
 		"two of eight is narrow, three is not; Small's private and static members are not its width",
 	);
 });
+
+test("a member read through an interface the class is given as is a read of the class's member", () =>
+{
+	const program = programOf({
+		"/port/execution/services.ts": "export interface Service { flag: boolean; count(): number; }",
+		"/port/decision/hq.ts": "import type { Service } from \"../execution/services.ts\";\n" +
+			"export class Hq { flag = false; other = 0; count(): number { return this.other; } }\n" +
+			"export function grow(hq: Hq): void { hq.other++; }\n" +
+			// the instance given as the service, as the bot's getters do
+			"export function serve(hq: Hq): Service { return hq; }",
+		"/port/execution/user.ts": "import type { Service } from \"./services.ts\";\n" +
+			"export function use(s: Service): boolean { return s.flag && s.count() > 0; }",
+	});
+	const hq = partCohesion(program, "/port").find((c) => c.name === "Hq");
+	assert.ok(hq);
+	assert.deepEqual(hq.ownedFields, [{ file: "decision/hq.ts", fields: ["other"] }, {
+		file: "execution/user.ts",
+		fields: ["flag"],
+	}], "flag is read by the service's user, not by nobody");
+	const width = typeWidth(program, "/port").find((t) => t.name === "Hq");
+	assert.ok(width);
+	assert.deepEqual(width.through, [{ type: "Service", used: ["count", "flag"] }]);
+	assert.equal(width.usedOutside, 2, "both are read outside its module, through the service");
+	assert.deepEqual(width.consumers, [], "no module reads the class itself");
+});

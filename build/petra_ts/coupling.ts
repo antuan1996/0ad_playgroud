@@ -17,6 +17,12 @@
  *   instance members. A module using a few members of a wide type could take
  *   an interface of them (as execution/services.ts does for the decision
  *   layer), and a member no other module reads need not be public.
+ *
+ * Both see through the interfaces a class is given as (implementations):
+ * where the port returns, passes or assigns a class's instance as an
+ * interface or object type it declares (`get town(): HeadquartersService {
+ * return this.HQ; }`), a member read through that type is a read of the
+ * class's member of that name too.
  */
 import { basename, relative } from "node:path";
 import ts from "typescript";
@@ -61,8 +67,10 @@ export interface TypeWidth
 	line: number;
 	/** public instance members */
 	members: number;
-	/** members another port module reads */
+	/** members another port module reads, directly or through an interface the class is given as */
 	usedOutside: number;
+	/** the members read through each interface the class is given as */
+	through: Array<{ type: string; used: string[]; }>;
 	/** the modules reading its members, the narrowest first */
 	consumers: Array<{ file: string; used: string[]; }>;
 	/** the consumers using a NARROW_SHARE-th of the members or less (a type of WIDE_MIN_MEMBERS members or more) */
@@ -271,21 +279,110 @@ function addParts(program: ts.Program, port: string, classes: Map<ts.Node, Class
 	}
 }
 
-/** The class member a symbol names, if it is one of `info`'s fields or methods */
-function memberOf(symbol: ts.Symbol | undefined, info: ClassInfo): string | undefined
+/** Interfaces and object types, each with the port's classes whose instances are given as one of them */
+export type Implementations = Map<ts.Node, Set<ts.ClassDeclaration>>;
+
+/** The positions where a value is given as a type: returned, passed, assigned, initialised, set as a property */
+function flowsIntoType(node: ts.Node): node is ts.Expression
 {
+	const parent = node.parent;
+	return ts.isExpression(node) &&
+		(ts.isReturnStatement(parent) && parent.expression === node ||
+			ts.isArrowFunction(parent) && parent.body === node ||
+			(ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+				(parent.arguments ?? []).some((a) => a === node) ||
+			(ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent)) && parent.initializer === node ||
+			ts.isPropertyAssignment(parent) && parent.initializer === node ||
+			ts.isShorthandPropertyAssignment(parent) && parent.name === node ||
+			ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+				parent.right === node);
+}
+
+/**
+ * Where the port gives a class's instance as an interface or object type it declares (`get town():
+ * HeadquartersService { return this.HQ; }`, a manager passed as a PlacementHQ): a member read through that type
+ * is a read of the class's member of that name, wherever the instance is reached through it.
+ */
+export function implementations(program: ts.Program, port: string): Implementations
+{
+	const checker = program.getTypeChecker();
+	const found: Implementations = new Map();
+	const inPort = (decl: ts.Node): boolean =>
+	{
+		const rel = relative(port, decl.getSourceFile().fileName).replace(/\\/g, "/");
+		return !rel.startsWith("..") && !rel.startsWith("tests/") && !FOREIGN_DECLARATIONS.has(rel);
+	};
+	for (const source of program.getSourceFiles())
+	{
+		if (portModule(port, source.fileName) === undefined && !source.fileName.endsWith("_petrabot.ts"))
+		{
+			continue;
+		}
+		const visit = (node: ts.Node): void =>
+		{
+			ts.forEachChild(node, visit);
+			if (!flowsIntoType(node))
+			{
+				return;
+			}
+			const given = checker.getNonNullableType(checker.getTypeAtLocation(node)).getSymbol()?.declarations ?? [];
+			const cls = given.find((d): d is ts.ClassDeclaration => ts.isClassDeclaration(d) && inPort(d));
+			const target = cls && checker.getContextualType(node);
+			if (!cls || !target)
+			{
+				return;
+			}
+			const nonNull = checker.getNonNullableType(target);
+			const parts = nonNull.isUnionOrIntersection() ? nonNull.types : [nonNull];
+			for (const part of parts)
+			{
+				const aliased = part.aliasSymbol?.declarations?.flatMap((d) =>
+					ts.isTypeAliasDeclaration(d) ? [d.type] : []
+				) ?? [];
+				for (const decl of [...part.getSymbol()?.declarations ?? [], ...aliased])
+				{
+					if ((ts.isInterfaceDeclaration(decl) || ts.isTypeLiteralNode(decl)) && inPort(decl))
+					{
+						found.set(decl, (found.get(decl) ?? new Set()).add(cls));
+					}
+				}
+			}
+		};
+		visit(source);
+	}
+	return found;
+}
+
+/** The classes whose member a symbol names: its own class, or those given as the interface declaring it */
+function classesNamed(symbol: ts.Symbol | undefined, impl: Implementations): Array<[ts.Node, string]>
+{
+	const named: Array<[ts.Node, string]> = [];
 	for (const decl of symbol?.declarations ?? [])
 	{
-		if (decl.parent === info.node && !isStatic(decl))
+		const name = isStatic(decl) ? undefined : nameOf(decl);
+		if (name === undefined)
 		{
-			const name = nameOf(decl);
-			if (name !== undefined && (info.fields.has(name) || info.methods.has(decl)))
-			{
-				return name;
-			}
+			continue;
+		}
+		if (ts.isClassDeclaration(decl.parent))
+		{
+			named.push([decl.parent, name]);
+		}
+		for (const cls of impl.get(decl.parent) ?? [])
+		{
+			named.push([cls, name]);
 		}
 	}
-	return undefined;
+	return named;
+}
+
+/** The class member a symbol names, if it is one of `info`'s fields or methods */
+function memberOf(symbol: ts.Symbol | undefined, info: ClassInfo, impl: Implementations): string | undefined
+{
+	const methods = new Set(info.methods.values());
+	return classesNamed(symbol, impl).find(([cls, name]) =>
+		cls === info.node && (info.fields.has(name) || methods.has(name))
+	)?.[1];
 }
 
 /** What one unit uses of its class: members, and the other units it names */
@@ -293,6 +390,7 @@ function unitUses(
 	checker: ts.TypeChecker,
 	node: ts.Node,
 	info: ClassInfo,
+	impl: Implementations,
 ): { members: Set<string>; units: Set<string>; }
 {
 	const members = new Set<string>();
@@ -300,7 +398,7 @@ function unitUses(
 	const self = info.units.get(node)?.id;
 	visitMemberAccesses(node, checker, (_, symbol) =>
 	{
-		const member = memberOf(symbol, info);
+		const member = memberOf(symbol, info, impl);
 		if (member !== undefined && member !== self)
 		{
 			members.add(member);
@@ -337,7 +435,12 @@ interface FieldRead
 }
 
 /** Every read of the classes' fields in the port, by class */
-function fieldReads(program: ts.Program, port: string, classes: Map<ts.Node, ClassInfo>): Map<ClassInfo, FieldRead[]>
+function fieldReads(
+	program: ts.Program,
+	port: string,
+	classes: Map<ts.Node, ClassInfo>,
+	impl: Implementations,
+): Map<ClassInfo, FieldRead[]>
 {
 	const checker = program.getTypeChecker();
 	const reads = new Map<ClassInfo, FieldRead[]>();
@@ -350,11 +453,10 @@ function fieldReads(program: ts.Program, port: string, classes: Map<ts.Node, Cla
 		}
 		visitMemberAccesses(source, checker, (node, symbol) =>
 		{
-			for (const decl of symbol?.declarations ?? [])
+			for (const [cls, field] of classesNamed(symbol, impl))
 			{
-				const info = classes.get(decl.parent);
-				const field = info && !isStatic(decl) ? nameOf(decl) : undefined;
-				if (!info || field === undefined || !info.fields.has(field))
+				const info = classes.get(cls);
+				if (!info || !info.fields.has(field))
 				{
 					continue;
 				}
@@ -378,7 +480,8 @@ export function partCohesion(program: ts.Program, port: string): PartCohesion[]
 	const checker = program.getTypeChecker();
 	const classes = portClasses(program, port);
 	addParts(program, port, classes);
-	const reads = fieldReads(program, port, classes);
+	const impl = implementations(program, port);
+	const reads = fieldReads(program, port, classes, impl);
 	const result: PartCohesion[] = [];
 	for (const info of classes.values())
 	{
@@ -391,7 +494,7 @@ export function partCohesion(program: ts.Program, port: string): PartCohesion[]
 		const uses = new Map<string, { members: Set<string>; units: Set<string>; file: string; }>();
 		for (const [node, unit] of info.units)
 		{
-			const use = unitUses(checker, node, info);
+			const use = unitUses(checker, node, info, impl);
 			const known = uses.get(unit.id);
 			uses.set(unit.id, {
 				members: new Set([...known?.members ?? [], ...use.members]),
@@ -492,6 +595,8 @@ interface TypeInfo
 	line: number;
 	members: Set<string>;
 	consumers: Map<string, Set<string>>;
+	/** members other modules read through an interface it is given as, by that interface */
+	through: Map<string, Set<string>>;
 }
 
 /** The type a member declaration belongs to (a class, an interface, an aliased object type), with its name */
@@ -528,10 +633,25 @@ function publicMembers(owner: ts.Node): Set<string>
 	return members;
 }
 
+/** A type's record, made on its first read, with its public members (each declaration of a merged interface adds its own) */
+function typeInfo(types: Map<string, TypeInfo>, owner: [ts.Node, string], file: string): TypeInfo
+{
+	const key = `${file}#${owner[1]}`;
+	const type = types.get(key) ??
+		{ file, name: owner[1], line: lineOf(owner[0]), members: new Set(), consumers: new Map(), through: new Map() };
+	for (const member of publicMembers(owner[0]))
+	{
+		type.members.add(member);
+	}
+	types.set(key, type);
+	return type;
+}
+
 /** For each type the port declares, the members each other module of the port reads of it */
 export function typeWidth(program: ts.Program, port: string): TypeWidth[]
 {
 	const checker = program.getTypeChecker();
+	const impl = implementations(program, port);
 	const types = new Map<string, TypeInfo>();
 	const declaringModule = (decl: ts.Node): string | undefined =>
 	{
@@ -560,22 +680,18 @@ export function typeWidth(program: ts.Program, port: string): TypeWidth[]
 				{
 					continue;
 				}
-				const key = `${declared}#${owner[1]}`;
-				const type = types.get(key) ??
-					{
-						file: declared,
-						name: owner[1],
-						line: lineOf(owner[0]),
-						members: new Set(),
-						consumers: new Map(),
-					};
-				// interfaces merge: each declaration adds its members
-				for (const member of publicMembers(owner[0]))
-				{
-					type.members.add(member);
-				}
+				const type = typeInfo(types, owner, declared);
 				type.consumers.set(file, (type.consumers.get(file) ?? new Set()).add(name));
-				types.set(key, type);
+				// read through an interface: a read of the class given as it, too
+				for (const cls of impl.get(owner[0]) ?? [])
+				{
+					const clsFile = declaringModule(cls);
+					if (clsFile !== undefined && clsFile !== file && cls.name && publicMembers(cls).has(name))
+					{
+						const of = typeInfo(types, [cls, cls.name.text], clsFile);
+						of.through.set(owner[1], (of.through.get(owner[1]) ?? new Set()).add(name));
+					}
+				}
 			}
 		});
 	}
@@ -590,7 +706,13 @@ export function typeWidth(program: ts.Program, port: string): TypeWidth[]
 			name: t.name,
 			line: t.line,
 			members: t.members.size,
-			usedOutside: new Set(consumers.flatMap((c) => c.used)).size,
+			usedOutside: new Set([
+				...consumers.flatMap((c) => c.used),
+				...[...t.through.values()].flatMap((u) => [...u]),
+			]).size,
+			through: [...t.through].map(([type, used]) => ({ type, used: [...used].sort() })).sort((a, b) =>
+				a.type.localeCompare(b.type)
+			),
 			consumers,
 			narrow: wide ? consumers.filter((c) => c.used.length * NARROW_SHARE <= t.members.size).length : 0,
 		};

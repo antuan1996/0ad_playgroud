@@ -85,6 +85,9 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
     port, the members other modules read out of its public ones, and the
     modules reading a quarter or less of a type of 8 members or more. Those
     could take an interface of what they use, as `execution/services.ts` does.
+  - Both count a member read through an interface or object type the class
+    is given as (returned, passed or assigned as `HeadquartersService`,
+    `PlacementHQ`, ...) as a read of the class's member.
 
 ## Matches (`match.sh` / `npm run match:petra`)
 
