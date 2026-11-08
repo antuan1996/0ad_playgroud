@@ -12,6 +12,7 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { byClass } from "simulation/ai/common-api/filters.js";
 
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
+import type { ArmyRelease } from "../../decision/attackManager.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
@@ -120,8 +121,8 @@ export interface World
 	decayGarrisonCalls: Array<[CommonEntity, Record<string, unknown>]>;
 	/** trainEmergencyUnits calls, as the army positions asked for */
 	emergencyCalls: Array<[CommonGameState, [number, number][]]>;
-	/** switchDefenseToAttack calls, as [target, data] */
-	switchCalls: Array<[CommonEntity | undefined, Record<string, unknown> | undefined]>;
+	/** switchDefenseToAttack calls, as [target, the defense's release of its armies, uniqueTarget] */
+	switchCalls: Array<[CommonEntity | undefined, ArmyRelease, boolean | undefined]>;
 	/** transport calls the navalManager saw, as [ent, from, to, toPos] */
 	transportCalls: Array<[CommonEntity, number, number, [number, number] | undefined]>;
 	/** setMinimalTransportShips calls, as [sea, needed] */
@@ -353,9 +354,14 @@ export function makeWorld(options: WorldOptions = {}): World
 			getEnemyPlayer: () => knobs.enemyPlayer,
 			getAttackInPreparation: () => undefined,
 			getPlan: () => undefined,
-			switchDefenseToAttack: (_gs: CommonGameState, target: CommonEntity, data?: Record<string, unknown>) =>
+			switchDefenseToAttack: (
+				_gs: CommonGameState,
+				target: CommonEntity,
+				release: ArmyRelease,
+				uniqueTarget?: boolean,
+			) =>
 			{
-				switchCalls.push([target, data]);
+				switchCalls.push([target, release, uniqueTarget]);
 				return true;
 			},
 			splitLocalFights: (_gs: CommonGameState, plan: { name: number; }, targetLand: number | undefined) =>

@@ -15,10 +15,10 @@ import { logs, resetRecorder, sent } from "./harness/engine.ts";
 import { emptyEvents, fake, makeEntity, orders, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import { ENEMY, GAIA, PLAYER, makeWorld, type World, type WorldOptions } from "./harness/world.ts";
 
-import { armyId, attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
-import { AttackManager } from "../decision/attackManager.ts";
+import { attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
+import { requireValue } from "../adapter/entityExtend.ts";
+import { AttackManager, type ArmyRelease } from "../decision/attackManager.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
-import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { QueueManager } from "../execution/queueManager.ts";
 import { Config } from "../world/config.ts";
 import { MEDIUM, SANDBOX } from "../world/difficultyLevel.ts";
@@ -141,35 +141,6 @@ function planStub(
 		},
 	};
 	return fake<AttackPlan & PlanCalls>(stub);
-}
-
-/** A defense army as switchDefenseToAttack walks it: its foes and defenders, around [20, 20]. */
-function armyStub(id: number, foes: number[], owns: number[]): DefenseArmy
-{
-	const army = {
-		ID: id,
-		foeEntities: foes,
-		ownEntities: owns,
-		foePosition: [20, 20],
-		recalculatePosition: () => undefined,
-		removeFoe: (_gameState: CommonGameState, foe: number) =>
-		{
-			const index = army.foeEntities.indexOf(foe);
-			if (index !== -1)
-			{
-				army.foeEntities.splice(index, 1);
-			}
-		},
-		removeOwn: (_gameState: CommonGameState, own: number) =>
-		{
-			const index = army.ownEntities.indexOf(own);
-			if (index !== -1)
-			{
-				army.ownEntities.splice(index, 1);
-			}
-		},
-	};
-	return fake<DefenseArmy>(army);
 }
 
 /** The world game state's roster tables for a player that players 0-2 lack. */
@@ -1510,19 +1481,17 @@ describe("attack manager", () =>
 
 	describe("switching defense armies over", () =>
 	{
-		/** the default defense setup: one target, one army, a draggable unit list */
+		/** the default defense setup: one target on land 2 */
 		function defenseWorld(
 			options: WorldOptions = {},
-		): { world: World; manager: AttackManager; target: CommonEntity; army: DefenseArmy; }
+		): { world: World; manager: AttackManager; target: CommonEntity; }
 		{
 			const world = makeWorld(options);
 			const manager = makeManager(world, worldConfig(world));
 			const target = world.addEntity(
 				makeEntity({ id: 5000, owner: ENEMY, position: [30, 40], classes: ["Structure"] }),
 			);
-			const army = armyStub(5, [3100], []);
-			world.ai.HQ.defenseManager.armies.push(army);
-			return { world, manager, target, army };
+			return { world, manager, target };
 		}
 
 		/** a defender standing near the threat */
@@ -1531,30 +1500,38 @@ describe("attack manager", () =>
 			return world.addEntity(makeEntity({ id, owner: PLAYER, position: [19, 19], classes: ["Unit"] }));
 		}
 
-		it("refuses a call without a target, without a position, or without a plan of action", () =>
+		/** the defense's release of these defenders (decision/defenseManager.ts releaseArmies), and where it was aimed */
+		function handing(world: World, ...ids: number[]): { release: ArmyRelease; aimedAt: CommonPosition[]; }
 		{
-			const { world, manager, target } = defenseWorld();
+			const aimedAt: CommonPosition[] = [];
+			const release: ArmyRelease = (_gameState, targetPos, enlist) =>
+			{
+				aimedAt.push(targetPos);
+				for (const id of ids)
+				{
+					enlist(requireValue(world.gameState.getEntityById(entityId(id))));
+				}
+			};
+			return { release, aimedAt };
+		}
+
+		it("refuses a call without a target or without a position, releasing no army", () =>
+		{
+			const { world, manager } = defenseWorld();
 			const blur = makeWorld().addEntity(makeEntity({ id: 5001, owner: ENEMY, classes: ["Structure"] }));
+			const { release, aimedAt } = handing(world);
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, fake<CommonEntity>(undefined), { range: 5 }),
+				manager.switchDefenseToAttack(world.gameState, fake<CommonEntity>(undefined), release),
 				false,
 				"no target, no attack",
 			);
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, blur, { range: 5 }),
+				manager.switchDefenseToAttack(world.gameState, blur, release),
 				false,
 				"no position, no attack",
 			);
-			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, {}),
-				false,
-				"neither range nor army id",
-			);
-			assert.ok(
-				logs.some((entry) => /inconsistent data/.test(entry)),
-				`the misuse was logged: ${logs.join(" | ")}`,
-			);
+			assert.deepEqual(aimedAt, [], "the defense kept its armies");
 		});
 
 		// artificial world: defense plans carry no target, so only the rally-point
@@ -1565,95 +1542,67 @@ describe("attack manager", () =>
 			const { world, manager, target } = defenseWorld();
 			world.bases[0].anchor = undefined;
 			world.removeEntity(1000);
+			const { release, aimedAt } = handing(world);
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { range: 70 }),
+				manager.switchDefenseToAttack(world.gameState, target, release),
 				false,
 				"no base, no rallying",
 			);
 			assert.equal(manager.startedAttacks["Attack"].length, 0, "no plan was kept either");
+			assert.deepEqual(aimedAt, [], "and no army was released to it");
 		});
 
-		it("marches a nearby army off to the threat as a new attack", () =>
+		it("marches the defenders it is handed off to the threat as a new attack", () =>
 		{
-			const { world, manager, target, army } = defenseWorld();
+			const { world, manager, target } = defenseWorld();
 			const joiner = defender(world, 1200);
-			army.ownEntities = [entityId(1200)];
+			const { release, aimedAt } = handing(world, 1200);
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { range: 70 }),
+				manager.switchDefenseToAttack(world.gameState, target, release),
 				true,
 				"the army was handed over",
 			);
 			const plan = manager.startedAttacks["Attack"][0];
+			assert.deepEqual(aimedAt, [[30, 40]], "the armies were released for the raider's spot");
 			assert.equal(plan.name, 0, "named by the running counter");
 			assert.equal(plan.targetPlayer, ENEMY, "aimed at the raider");
 			assert.deepEqual(plan.targetPos, [30, 40], "aimed at the raider's spot");
 			assert.equal(plan.target, target, "and at the raider itself");
+			assert.equal(plan.uniqueTargetId, undefined, "free to go on past it");
 			assert.equal(plan.state, "arrived", "the army stands ready");
 			assert.equal(plan.unitCollection.hasEntId(entityId(1200)), true, "the defender joined the plan");
 			assert.equal(joiner.getMetadata(PLAYER, "plan"), 0, "marked by the plan");
 			assert.equal(joiner.getMetadata(PLAYER, "role"), "attack", "and role-attacked");
-			assert.equal(army.foeEntities.length, 0, "the foes were handed over too");
-			assert.equal(army.ownEntities.length, 0, "and the army was emptied");
 			assert.equal(manager.totalNumber, 1, "the counter moved on");
 		});
 
-		it("keeps armies beyond the call at home", () =>
+		it("holds an attack on a unique target to it", () =>
 		{
-			const { world, manager, target, army } = defenseWorld();
-			army.foePosition = worldPos(90, 90);
-			army.ownEntities = [entityId(1200)];
-			defender(world, 1200);
-
-			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { range: 5 }),
-				false,
-				"out of reach, no handover",
-			);
-			assert.deepEqual(army.foeEntities, [3100], "the foes were untouched");
-			assert.deepEqual(army.ownEntities, [1200], "the defenders were untouched");
-		});
-
-		it("hands over exactly the army the call named", () =>
-		{
-			const { world, manager, target, army } = defenseWorld();
-			army.ownEntities = [entityId(1200)];
-			defender(world, 1200);
-			const neighbour = armyStub(6, [3200], [1300]);
-			world.ai.HQ.defenseManager.armies.push(neighbour);
+			const { world, manager, target } = defenseWorld();
 			defender(world, 1300);
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { armyID: armyId(6), uniqueTarget: true }),
+				manager.switchDefenseToAttack(world.gameState, target, handing(world, 1300).release, true),
 				true,
-				"the named army was handed over",
 			);
-			const plan = manager.startedAttacks["Attack"][0];
-			assert.equal(plan.uniqueTargetId, 5000, "the attack holds only this target");
-			assert.deepEqual(neighbour.foeEntities, [], "the named army was drained");
-			assert.equal(neighbour.ownEntities.length, 0, "its defenders joined");
-			assert.deepEqual(army.foeEntities, [3100], "the other army stands untouched");
-			assert.deepEqual(army.ownEntities, [1200], "with its defenders at home");
+			assert.equal(manager.startedAttacks["Attack"][0].uniqueTargetId, 5000, "the attack holds only this target");
 		});
 
-		// only the port passes: it skips units that left the world mid-drain
-		// (the original dereferences the missing unit and throws)
 		it("enlists only joinable defenders", () =>
 		{
-			const { world, manager, target, army } = defenseWorld();
-			army.ownEntities = [entityId(1200), entityId(1202), entityId(1203), entityId(1204)];
+			const { world, manager, target } = defenseWorld();
 			defender(world, 1200);
-			// 1202 carries a transport mark: the code drains it but never enlists it
+			// 1202 carries a transport mark: released, but never enlisted
 			world.addEntity(
 				makeEntity({ id: 1202, owner: PLAYER, position: [19, 19], classes: ["Unit"] }, {}, { transport: 4 }),
 			);
 			// 1203 rides inside a transport and has no position of its own
 			world.addEntity(makeEntity({ id: 1203, owner: PLAYER, classes: ["Unit"] }));
-			// 1204 has left the world by the time the plan asks for it
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { range: 70 }),
+				manager.switchDefenseToAttack(world.gameState, target, handing(world, 1200, 1202, 1203).release),
 				true,
 				"the joinable defender made the attack",
 			);
@@ -1662,22 +1611,20 @@ describe("attack manager", () =>
 			assert.equal(
 				plan.unitCollection.hasEntId(entityId(1202)),
 				false,
-				"the transport-marked defender was drained but stayed home",
+				"the transport-marked defender stayed home",
 			);
 			assert.equal(plan.unitCollection.hasEntId(entityId(1203)), false, "the positionless defender stayed home");
-			assert.equal(plan.unitCollection.hasEntId(entityId(1204)), false, "the vanished defender was skipped");
 		});
 
 		it("bails out when no defender can join", () =>
 		{
-			const { world, manager, target, army } = defenseWorld();
+			const { world, manager, target } = defenseWorld();
 
 			assert.equal(
-				manager.switchDefenseToAttack(world.gameState, target, { range: 70 }),
+				manager.switchDefenseToAttack(world.gameState, target, handing(world).release),
 				false,
 				"nobody to hand over",
 			);
-			assert.equal(army.foeEntities.length, 0, "the foes were still handed back");
 			// an artifact worth knowing: the aborted plan stays in the started roster
 			assert.equal(manager.startedAttacks["Attack"].length, 1, "the aborted plan was kept in the roster");
 		});

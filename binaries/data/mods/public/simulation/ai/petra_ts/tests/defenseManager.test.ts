@@ -16,12 +16,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, eventsWith, makeEntity, orders, placed, type Methods } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, fake, makeEntity, orders, placed, type Methods } from "./harness/fakes.ts";
 import { ENEMY, GAIA, PLAYER, makeWorld, type World } from "./harness/world.ts";
 
 import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
-import { DefenseManager, garrisonSiegeUnit } from "../decision/defenseManager.ts";
+import { DefenseManager, garrisonSiegeUnit, releaseArmies } from "../decision/defenseManager.ts";
 import { GarrisonManager } from "../decision/garrisonManager.ts";
+import type { DefenseArmy } from "../execution/defenseArmy.ts";
 
 /** reads the diplomacy row the engine keeps, to name an ally per test */
 function allyRow(world: World): { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[]; }
@@ -92,6 +93,31 @@ function assembledWorld(): { world: World; manager: DefenseManager; }
 function makeWatchedBase(id = 4000): CommonEntity
 {
 	return makeStructure(id, [50, 50], ENEMY);
+}
+
+/** A defense army as releaseArmies walks it: its foes and defenders, around [20, 20], counting its recalculations. */
+function armyStub(id: number, foes: number[], owns: number[]): DefenseArmy & { recalculated: number; }
+{
+	const army = {
+		ID: id,
+		foeEntities: foes,
+		ownEntities: owns,
+		foePosition: [20, 20],
+		recalculated: 0,
+		recalculatePosition: () =>
+		{
+			army.recalculated++;
+		},
+		removeFoe: (_gameState: CommonGameState, foe: number) =>
+		{
+			army.foeEntities.splice(army.foeEntities.indexOf(foe), 1);
+		},
+		removeOwn: (_gameState: CommonGameState, own: number) =>
+		{
+			army.ownEntities.splice(army.ownEntities.indexOf(own), 1);
+		},
+	};
+	return fake<DefenseArmy & { recalculated: number; }>(army);
 }
 
 describe("watching the field", () =>
@@ -1493,7 +1519,19 @@ describe("when our own are hit", () =>
 		);
 
 		assert.equal(world.switchCalls.length, 1, "one order went to the attack office");
-		assert.deepEqual(world.switchCalls[0][1], { range: 150 }, "the hunters go for the seized centre itself");
+		const [target, release, uniqueTarget] = world.switchCalls[0];
+		assert.equal(target, centre, "the hunters go for the seized centre itself");
+		assert.equal(uniqueTarget, undefined, "and on past it");
+		// the armies it takes: those whose foes stand within 150 of the centre
+		const near = armyStub(7, [], [3000]);
+		const far = armyStub(8, [], [3001]);
+		far.foePosition = worldPos(300, 300);
+		manager.armies.push(near, far);
+		world.addEntity(makeDefender(3000, [60, 61]));
+		world.addEntity(makeDefender(3001, [300, 301]));
+		const enlisted: number[] = [];
+		release(world.gameState, worldPos(60, 60), (unit) => enlisted.push(unit.id()));
+		assert.deepEqual(enlisted, [3000], "the army near the centre goes, the far one stays");
 	});
 
 	it("enlists the raider who struck from unclaimed ground but not from his homeland", () =>
@@ -2037,6 +2075,69 @@ describe("garrisoning by hand", () =>
 	});
 });
 
+describe("handing armies to an attack: releaseArmies", () =>
+{
+	it("by range, recalculates each army's position and releases those whose foes stand within it", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeDefender(3000, [20, 21]));
+		world.addEntity(makeDefender(3001, [90, 91]));
+		const near = armyStub(5, [3100], [3000]);
+		const far = armyStub(6, [3200], [3001]);
+		far.foePosition = worldPos(90, 90);
+		const enlisted: number[] = [];
+
+		releaseArmies([near, far], { range: 70 })(
+			world.gameState,
+			worldPos(30, 40),
+			(unit) => enlisted.push(unit.id()),
+		);
+
+		assert.deepEqual(enlisted, [3000], "the near army's defender was offered");
+		assert.deepEqual([near.recalculated, far.recalculated], [1, 1], "both positions were brought up to date");
+		assert.deepEqual([near.foeEntities, near.ownEntities], [[], []], "the near army was emptied");
+		assert.deepEqual([far.foeEntities, far.ownEntities], [[3200], [3001]], "the far one stands untouched");
+	});
+
+	it("by id, releases exactly the army named", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeDefender(3000, [20, 21]));
+		world.addEntity(makeDefender(3001, [20, 22]));
+		const other = armyStub(5, [3100], [3000]);
+		const named = armyStub(6, [3200], [3001]);
+		const enlisted: number[] = [];
+
+		releaseArmies([other, named], { armyID: armyId(6) })(
+			world.gameState,
+			worldPos(30, 40),
+			(unit) => enlisted.push(unit.id()),
+		);
+
+		assert.deepEqual(enlisted, [3001], "the named army's defender was offered");
+		assert.deepEqual([named.foeEntities, named.ownEntities], [[], []], "the named army was drained");
+		assert.deepEqual([other.foeEntities, other.ownEntities], [[3100], [3000]], "the other stands untouched");
+		assert.deepEqual([other.recalculated, named.recalculated], [0, 0], "no position needed");
+	});
+
+	// only the port passes: it skips units that left the world mid-drain
+	// (the original dereferences the missing unit and throws)
+	it("lets the foes go and offers each defender still in the world, in order", () =>
+	{
+		const world = makeWorld();
+		world.addEntity(makeDefender(3000, [20, 21]));
+		world.addEntity(makeDefender(3002, [20, 22]));
+		// 3001 has left the world by the time the attack asks for it
+		const army = armyStub(5, [3100, 3101], [3000, 3001, 3002]);
+		const enlisted: number[] = [];
+
+		releaseArmies([army], { range: 70 })(world.gameState, worldPos(30, 40), (unit) => enlisted.push(unit.id()));
+
+		assert.deepEqual(enlisted, [3000, 3002], "the vanished defender was skipped");
+		assert.deepEqual([army.foeEntities, army.ownEntities], [[], []], "and the army was emptied");
+	});
+});
+
 describe("the office itself", () =>
 {
 	it("joins the standing army when the raider fits, opens a new one for captures", () =>
@@ -2100,7 +2201,7 @@ describe("the office itself", () =>
 		world.addEntity(makeDefender(3000, [55, 50]));
 		world.addEntity(makeDefender(3001, [56, 50]));
 		manager.update(world.gameState, emptyEvents());
-		const armyID = manager.armies[0].ID;
+
 		assert.equal(manager.armies.length, 1, "the raid was under watch");
 
 		// the raid party fell to the towers; the freed men get next orders
@@ -2110,9 +2211,9 @@ describe("the office itself", () =>
 
 		assert.equal(manager.armies.length, 0, "the army dissolved after the roll-out");
 		assert.equal(world.switchCalls.length, 1, "and the freed men were rolled out");
-		const roll = world.switchCalls[0] as [CommonEntity, Record<string, unknown>];
-		assert.equal(roll[0].id(), 4000, "against the tracked base");
-		assert.deepEqual(roll[1], { armyID: armyID, uniqueTarget: true });
+		const [target, , uniqueTarget] = world.switchCalls[0];
+		assert.equal(target?.id(), 4000, "against the tracked base");
+		assert.equal(uniqueTarget, true, "and that base only");
 	});
 
 	it("keeps the freed men at rest when a tracked base is farther than any of us", () =>
