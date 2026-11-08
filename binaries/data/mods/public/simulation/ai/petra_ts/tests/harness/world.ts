@@ -14,6 +14,7 @@ import { byClass } from "simulation/ai/common-api/filters.js";
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
+import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
 
 /** A base as the stub HQ hands them out: an anchor structure and the land it sits on. */
@@ -237,7 +238,10 @@ export function makeWorld(options: WorldOptions = {}): World
 	config.chat = false;
 
 	const queues = configuredQueues();
+	// the HQ's capture tally, as the bot exposes it (gameState.ai.captures) and the HQ saves it (capturableTargets)
+	const captures = new CaptureTally();
 	const ai = fake<PetraRuntime.AIState>({
+		captures,
 		playedTurn: 0,
 		elapsedTime: 100,
 		uniqueIDs: { plans: 1, bases: 1, armies: 1 },
@@ -411,7 +415,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		},
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
-		capturableTargets: new Map(),
+		capturableTargets: captures.targets,
 		getBaseByID: (id: number) => bases.find((b) => b.ID === id),
 		basesManager: {
 			baseManagers: bases,
@@ -427,6 +431,8 @@ export function makeWorld(options: WorldOptions = {}): World
 	// the stub HQ is its own geography: a test that sets `HQ.navalMap` or
 	// `HQ.territoryMap` sets what the port reads through `HQ.geography`
 	ai.HQ = fake<Headquarters>(HQ);
+	// as the bot's getter (PetraBot.geography): the HQ's geography, the stub HQ itself here
+	Object.defineProperty(ai, "geography", { get: () => ai.HQ.geography, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({

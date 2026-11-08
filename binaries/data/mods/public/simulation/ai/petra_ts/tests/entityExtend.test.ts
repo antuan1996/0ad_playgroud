@@ -10,12 +10,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { logs, resetRecorder } from "./harness/engine.ts";
-import { makeEntity, makeTemplate, override, placed, type Methods } from "./harness/fakes.ts";
-import { ENEMY, GAIA, PLAYER, collectionOf, makeWorld, type World } from "./harness/world.ts";
+import { makeEntity, makeTemplate, override, type Methods } from "./harness/fakes.ts";
+import { ENEMY, PLAYER, collectionOf, makeWorld, type World } from "./harness/world.ts";
 
-import { entityId, seaRegion, templateName } from "../adapter/brands.ts";
+import { templateName } from "../adapter/brands.ts";
 import * as ext from "../adapter/entityExtend.ts";
-import { isPlaced } from "../adapter/placed.ts";
 import { getBestBase } from "../decision/baseManager.ts";
 
 /** the real Config's damage weights */
@@ -205,52 +204,6 @@ describe("the require helpers: values Petra relies on", () =>
 	});
 });
 
-describe("allowCapture: capture or destroy", () =>
-{
-	/** an enemy house of 500 capture points, at full health */
-	function house(world: World, extra: Record<string, unknown> = {}): CommonEntity
-	{
-		return world.addEntity(
-			makeEntity({ id: 30, owner: ENEMY, position: [100, 100], classes: ["Structure", "House"] }, {
-				isCapturable: () => true,
-				capturePoints: () => [0, 0, 500],
-				...extra,
-			}),
-		);
-	}
-	function capturer(world: World, id: number, strength: number): CommonEntity
-	{
-		return world.addEntity(
-			makeEntity({ id, owner: PLAYER, position: [100, 90], classes: ["Unit", "Infantry"] }, {
-				canCapture: () => true,
-				captureStrength: () => strength,
-			}),
-		);
-	}
-
-	it("a lone soldier is too weak for a full house; a second one tips the balance, and counts once", () =>
-	{
-		const world = makeWorld();
-		const target = house(world);
-		const first = capturer(world, 31, 2.5);
-		const second = capturer(world, 32, 4);
-		// 2.5 against 500 / 80 = 6.25
-		assert.equal(ext.allowCapture(world.gameState, first, target), false);
-		// 2.5 + 4 = 6.5
-		assert.equal(ext.allowCapture(world.gameState, second, target), true);
-		assert.equal(ext.allowCapture(world.gameState, first, target), true);
-		assert.deepEqual(world.ai.HQ.capturableTargets.get(entityId(30)), { strength: 6.5, ents: new Set([31, 32]) });
-	});
-
-	it("a decaying building gives way faster", () =>
-	{
-		const world = makeWorld();
-		const target = house(world, { decaying: () => true, territoryDecayRate: () => 5 });
-		// 2.5 against 6.25 - 5
-		assert.equal(ext.allowCapture(world.gameState, capturer(world, 33, 2.5), target), true);
-	});
-});
-
 describe("getAttackBonus", () =>
 {
 	it("a bonus restricted to another civilization does not apply", () =>
@@ -416,137 +369,6 @@ describe("getBestBase (decision/baseManager.ts): the base an entity belongs to",
 		const lost = world.addEntity(makeEntity({ id: 91, owner: PLAYER, classes: ["Unit"] }));
 		assert.equal(getBestBase(world.gameState, lost), baseless);
 		assert.ok(logs.some((line) => line.includes("entity without position, but not garrisoned")));
-	});
-});
-
-describe("isNotWorthBuilding: foundations outside our territory", () =>
-{
-	it("an own-territory-only foundation on lost ground is not worth finishing; one that may stand anywhere is", () =>
-	{
-		const world = makeWorld();
-		world.territory.set("100,100", 0);
-		const house = makeEntity({ id: 100, owner: PLAYER, position: [100, 100], classes: ["Structure"] }, {
-			buildTerritories: () => ["own"],
-		});
-		const camp = makeEntity({ id: 101, owner: PLAYER, position: [100, 100], classes: ["Structure"] }, {
-			buildTerritories: () => ["own", "neutral"],
-		});
-		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(house)), true);
-		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(camp)), false);
-		// in our territory the house is fine
-		const home = makeEntity({ id: 102, owner: PLAYER, position: [10, 10], classes: ["Structure"] }, {
-			buildTerritories: () => ["own"],
-		});
-		assert.equal(ext.isNotWorthBuilding(world.gameState, placed(home)), false);
-	});
-});
-
-describe("gatherTreasure: sending a unit for treasure", () =>
-{
-	/** a world with the given treasures on the map, and the HQ's treasure collection over them */
-	function treasureWorld(
-		spots: Array<{ id: number; position: [number, number]; lastGathered?: number; access?: number; }>,
-	): World
-	{
-		const world = makeWorld();
-		const treasures = spots.map((spot) =>
-			world.addEntity(
-				makeEntity({ id: spot.id, owner: GAIA, position: spot.position, classes: ["Treasure"] }, {}, {
-					...(spot.lastGathered === undefined ? {} : { lastGathered: spot.lastGathered }),
-				}),
-			)
-		);
-		for (const spot of spots)
-		{
-			if (spot.access)
-			{
-				world.accessAt.set(`${spot.position[0]},${spot.position[1]}`, spot.access);
-			}
-		}
-		world.ai.HQ.treasures = collectionOf(world, treasures).filter(isPlaced);
-		return world;
-	}
-	function collector(
-		world: World,
-		id: number,
-		position: [number, number] | undefined,
-		collects = true,
-	): { ent: CommonEntity; went: number[]; }
-	{
-		const went: number[] = [];
-		const ent = world.addEntity(
-			makeEntity({ id, owner: PLAYER, position, classes: ["Unit", "Cavalry"] }, {
-				isTreasureCollector: () => collects,
-				collectTreasure: (t: CommonEntity) => went.push(t.id()),
-			}),
-		);
-		return { ent, went };
-	}
-
-	it("the nearest treasure in our land goes to the unit, and is booked for 20 seconds", () =>
-	{
-		const world = treasureWorld([{ id: 110, position: [150, 100] }, { id: 111, position: [120, 100] }, {
-			id: 112,
-			position: [200, 100],
-		}]);
-		const { ent, went } = collector(world, 113, [100, 100]);
-
-		assert.equal(ext.gatherTreasure(world.gameState, ent), true);
-		assert.deepEqual(went, [111]);
-		assert.equal(ent.getMetadata(PLAYER, "treasure"), 111);
-		assert.equal(world.ents.get(111)!.getMetadata(PLAYER, "lastGathered"), world.ai.elapsedTime);
-
-		// a second unit right after does not chase the same treasure
-		const other = collector(world, 114, [100, 100]);
-		ext.gatherTreasure(world.gameState, other.ent);
-		assert.deepEqual(other.went, [110]);
-	});
-
-	it("treasures across the water, in enemy land or too far out of sight are left alone", () =>
-	{
-		const world = treasureWorld([
-			{ id: 120, position: [110, 100], access: 4 },
-			{ id: 121, position: [130, 100] },
-			// neutral ground at 130 map units: past the 14000 sight cut
-			{ id: 122, position: [100, 230] },
-			// a treasure booked 10 seconds ago
-			{ id: 123, position: [105, 105], lastGathered: 90 },
-		]);
-		world.territory.set("130,100", ENEMY);
-		world.territory.set("100,230", 0);
-		const { ent, went } = collector(world, 124, [100, 100]);
-
-		assert.equal(ext.gatherTreasure(world.gameState, ent), false);
-		assert.deepEqual(went, []);
-	});
-
-	it("in our own territory a treasure up to about 346 map units away is still worth it", () =>
-	{
-		const world = treasureWorld([{ id: 130, position: [100, 400] }, { id: 131, position: [100, 460] }]);
-		const { ent, went } = collector(world, 132, [100, 100]);
-		assert.equal(ext.gatherTreasure(world.gameState, ent), true);
-		assert.deepEqual(went, [130]);
-	});
-
-	it("a unit that cannot carry treasure, is garrisoned, or has no treasure on the map goes for nothing", () =>
-	{
-		const world = treasureWorld([{ id: 140, position: [110, 100] }]);
-		assert.equal(ext.gatherTreasure(world.gameState, collector(world, 141, [100, 100], false).ent), false);
-		assert.equal(ext.gatherTreasure(world.gameState, collector(world, 142, undefined).ent), false);
-		assert.equal(ext.gatherTreasure(world.gameState, undefined), false);
-		const empty = treasureWorld([]);
-		assert.equal(ext.gatherTreasure(empty.gameState, collector(empty, 143, [100, 100]).ent), false);
-	});
-
-	it("a ship goes for treasure floating on its own sea only", () =>
-	{
-		const world = treasureWorld([{ id: 150, position: [110, 100] }, { id: 151, position: [130, 100] }]);
-		world.ents.get(150)!.setMetadata(PLAYER, "sea", seaRegion(6));
-		world.ents.get(151)!.setMetadata(PLAYER, "sea", seaRegion(5));
-		const { ent, went } = collector(world, 152, [100, 100]);
-		ent.setMetadata(PLAYER, "sea", seaRegion(5));
-		assert.equal(ext.gatherTreasure(world.gameState, ent, true), true);
-		assert.deepEqual(went, [151]);
 	});
 });
 
