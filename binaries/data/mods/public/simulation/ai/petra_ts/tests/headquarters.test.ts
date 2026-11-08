@@ -203,7 +203,7 @@ describe("checkEvents: a finished market frees the fields", () =>
 	it("a market finishing sets maxFields off", () =>
 	{
 		const { world, hq } = seat();
-		hq.maxFields = 5; // fields are still being limited (configFirstBase's small map case)
+		hq.economy.maxFields = 5; // fields are still being limited (configFirstBase's small map case)
 		world.addEntity(
 			makeHqEntity({
 				id: 31,
@@ -218,13 +218,13 @@ describe("checkEvents: a finished market frees the fields", () =>
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(999), newentity: entityId(31) }] }),
 		);
-		assert.equal(hq.maxFields, false);
+		assert.equal(hq.economy.maxFields, false);
 	});
 
 	it("a repaired building is not the finished market", () =>
 	{
 		const { world, hq } = seat();
-		hq.maxFields = 5;
+		hq.economy.maxFields = 5;
 		world.addEntity(
 			makeHqEntity({
 				id: 31,
@@ -239,13 +239,13 @@ describe("checkEvents: a finished market frees the fields", () =>
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(31), newentity: entityId(31) }] }),
 		);
-		assert.equal(hq.maxFields, 5);
+		assert.equal(hq.economy.maxFields, 5);
 	});
 
 	it("an enemy market finishing is none of our business", () =>
 	{
 		const { world, hq } = seat();
-		hq.maxFields = 5;
+		hq.economy.maxFields = 5;
 		world.addEntity(
 			makeHqEntity({
 				id: 31,
@@ -260,7 +260,7 @@ describe("checkEvents: a finished market frees the fields", () =>
 			world.gameState,
 			eventsWith({ ConstructionFinished: [{ entity: entityId(999), newentity: entityId(31) }] }),
 		);
-		assert.equal(hq.maxFields, 5);
+		assert.equal(hq.economy.maxFields, 5);
 	});
 });
 
@@ -1048,15 +1048,15 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		handleNewBase(hq, world.gameState);
 
 		// the day-one policy for a rich continent
-		assert.equal(hq.firstBaseConfig, true);
-		assert.notEqual(hq.saveResources, true);
-		assert.notEqual(hq.saveSpace, true);
-		assert.notEqual(hq.maxFields, 1);
-		assert.equal(hq.maxFields, false);
+		assert.equal(hq.economy.firstBaseConfig, true);
+		assert.notEqual(hq.economy.saveResources, true);
+		assert.notEqual(hq.economy.saveSpace, true);
+		assert.notEqual(hq.economy.maxFields, 1);
+		assert.equal(hq.economy.maxFields, false);
 		// enough wood over the 6000 cut: no corral, no farm, no fish
-		assert.ok(!hq.needCorral);
-		assert.ok(!hq.needFarm);
-		assert.ok(!hq.needFish);
+		assert.ok(!hq.economy.needCorral);
+		assert.ok(!hq.economy.needFarm);
+		assert.ok(!hq.economy.needFish);
 		// (9000 - 8500)/3000 = a single rush wave for this personality
 		assert.equal(hq.attackManager.maxRushes, 1);
 	});
@@ -1080,18 +1080,18 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 
 		handleNewBase(hq, world.gameState);
 
-		assert.equal(hq.saveSpace, true);
+		assert.equal(hq.economy.saveSpace, true);
 		// targetNumFishers 1 → at least two boats requested on the sea reaching us
 		assert.deepEqual(doorCalls(hq.navalManager)[0], ["updateFishingBoats", [4, 2]]);
-		assert.equal(hq.maxFields, 1);
+		assert.equal(hq.economy.maxFields, 1);
 		// almost no food on the island: the plans dock fishing over farms
-		assert.equal(hq.needFish, true);
+		assert.equal(hq.economy.needFish, true);
 		assert.equal(hq.Config.Economy.popForDock, 1);
 		// almost no wood: save up until the town phase, and floors popPhase2
-		assert.equal(hq.saveResources, true);
+		assert.equal(hq.economy.saveResources, true);
 		assert.equal(hq.Config.Economy.popPhase2, 112); // floor(0.75 * 150)
 		// the corral is raised right away (no fields without feed for them)
-		assert.equal(hq.needCorral, true);
+		assert.equal(hq.economy.needCorral, true);
 		assert.equal(world.ai.queues.corral.plans.length, 1);
 	});
 
@@ -1110,9 +1110,9 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 
 		// under 800 food the continent plants farms; under 2000 wood there is
 		// nothing to harvest the farms with, so the plan flips to corrals
-		assert.equal(hq.maxFields, false);
-		assert.equal(hq.needCorral, true);
-		assert.ok(!hq.needFarm);
+		assert.equal(hq.economy.maxFields, false);
+		assert.equal(hq.economy.needCorral, true);
+		assert.ok(!hq.economy.needFarm);
 	});
 
 	it("a rich wood pile forgives rushes by the ceasefire weather", () =>
@@ -1277,7 +1277,7 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		);
 
 		configFirstBase(hq, world.gameState);
-		assert.equal(hq.needCorral, true);
+		assert.equal(hq.economy.needCorral, true);
 		// the queue stays unparked: one corral already rises
 		const corral = world.ai.queues.corral;
 		assert.ok(!corral || corral.plans.length === 0);
@@ -1289,18 +1289,18 @@ describe("headquarters and first arrival: what a new civilization counts on day 
 		const hq = seatHQ(world, { stubs: doorManagers });
 
 		// a town expanded once: the scarcity day-one is already written
-		hq.firstBaseConfig = true;
-		hq.saveResources = true;
-		hq.saveSpace = true;
-		hq.maxFields = 1;
+		hq.economy.firstBaseConfig = true;
+		hq.economy.saveResources = true;
+		hq.economy.saveSpace = true;
+		hq.economy.maxFields = 1;
 
 		handleNewBase(hq, world.gameState);
 
 		// the code clears the flags by writing them away (undefined): the
 		// second settlement resets the starting scarcity to nothing at all
-		assert.notEqual(hq.saveResources, true);
-		assert.notEqual(hq.saveSpace, true);
-		assert.equal(hq.maxFields, false);
+		assert.notEqual(hq.economy.saveResources, true);
+		assert.notEqual(hq.economy.saveSpace, true);
+		assert.equal(hq.economy.maxFields, false);
 		// and the rushes table was not touched a second time
 		assert.equal(hq.attackManager.maxRushes, 0);
 	});
@@ -1927,7 +1927,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		{
 			hand(world, 500 + i, false);
 		}
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 
 		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
@@ -3078,7 +3078,7 @@ describe("a dry town on a naval map", () =>
 		for (const naval of [true, false])
 		{
 			const { world, hq } = seat({ territoryOwner: () => PLAYER });
-			hq.saveResources = false;
+			hq.economy.saveResources = false;
 			hq.geography.navalMap = naval;
 			override(hq.basesManager, { getTotalResourceLevel: () => ({ wood: DRY_WOOD - 1 }) });
 			world.templates["structures/athen/market"] = structureTemplate("structures/athen/market", {
@@ -3131,14 +3131,14 @@ describe("a town whose land ran dry", () =>
 	it("lifts the field limit; with wood left the limit stands", () =>
 	{
 		const { world, hq } = dryTown(true, 0, 0);
-		hq.maxFields = 2;
+		hq.economy.maxFields = 2;
 		provideForDryLand(hq, world.gameState, world.ai.queues);
-		assert.equal(hq.maxFields, false);
+		assert.equal(hq.economy.maxFields, false);
 
 		const wet = dryTown(false, 0, 0);
-		wet.hq.maxFields = 2;
+		wet.hq.economy.maxFields = 2;
 		provideForDryLand(wet.hq, wet.world.gameState, wet.world.ai.queues);
-		assert.equal(wet.hq.maxFields, 2, "wood left: the limit stands");
+		assert.equal(wet.hq.economy.maxFields, 2, "wood left: the limit stands");
 	});
 
 	it("raises its civic centre's queue while one is queued, and lowers it once the land has wood again or none is queued", () =>
@@ -4573,7 +4573,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 	{
 		const { world, hq } = seat({ phase: 2, stock: { food: 500, wood: 500, stone: 500, metal: 500 } });
 		seatCards(world, hq);
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		seatPopulation(world, 55);
 
 		checkBaseExpansion(hq, world.gameState, world.ai.queues);
@@ -4770,33 +4770,37 @@ describe("the first town's landing and the later ground: handleNewBase", () =>
 	{
 		const { world, hq } = seat();
 		// the office has not yet seen its first town's ground
-		hq.firstBaseConfig = false;
+		hq.economy.firstBaseConfig = false;
 
 		handleNewBase(hq, world.gameState);
 
-		assert.equal(hq.firstBaseConfig, true, "the landing is configured once");
-		assert.equal(hq.saveSpace, true, "the small starting ground of a fresh town keeps the buildings packed");
-		assert.equal(hq.maxFields, 1, "and its fields stay few");
+		assert.equal(hq.economy.firstBaseConfig, true, "the landing is configured once");
+		assert.equal(
+			hq.economy.saveSpace,
+			true,
+			"the small starting ground of a fresh town keeps the buildings packed",
+		);
+		assert.equal(hq.economy.maxFields, 1, "and its fields stay few");
 	});
 
 	it("but a later ground clears the thrift of the early town", () =>
 	{
 		const { world, hq } = seat();
 		// stale thrift carried from the first town's landing
-		hq.firstBaseConfig = true;
-		hq.saveResources = true;
-		hq.saveSpace = true;
-		hq.maxFields = 1;
+		hq.economy.firstBaseConfig = true;
+		hq.economy.saveResources = true;
+		hq.economy.saveSpace = true;
+		hq.economy.maxFields = 1;
 
 		handleNewBase(hq, world.gameState);
 
 		assert.equal(
-			hq.saveResources,
+			hq.economy.saveResources,
 			undefined,
 			"the funds are spent freely again: the new ground may fix the shortage",
 		);
-		assert.equal(hq.saveSpace, undefined, "the buildings spread again");
-		assert.equal(hq.maxFields, false, "the fields are not numbered anymore");
+		assert.equal(hq.economy.saveSpace, undefined, "the buildings spread again");
+		assert.equal(hq.economy.maxFields, false, "the fields are not numbered anymore");
 	});
 });
 
@@ -5315,7 +5319,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		hq.Config.Military.numSentryTowers = 1;
 		world.templates[SENTRY] = structureTemplate(SENTRY, { classes: ["Structure", "Tower"] });
 		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		hq.canBarter = false;
 		world.ai.elapsedTime = seconds(10000);
 
@@ -5414,7 +5418,7 @@ describe("the frontier's defences: buildDefenses", () =>
 				{ attackRange: () => ({ min: 0, max: 60 }) },
 			);
 			bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
-			hq.saveResources = true;
+			hq.economy.saveResources = true;
 			hq.canBarter = false;
 			const map = hq.geography.territoryMap;
 			hq.shipTraffic = new ShipTraffic(map.width * map.cellSize, map.height * map.cellSize);
@@ -5632,7 +5636,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
 		armed(world, 1, 0, 0);
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		// a built market licences the barter; update() books it each turn
 		hq.canBarter = true;
 
@@ -5675,7 +5679,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 			card(world, BARRACKS, ["Structure", "Barracks"]);
 			bookBuilder(world, hq, ["structures/{civ}/arsenal", "structures/{civ}/barracks"]);
 			armed(world, 1, 0, 0);
-			hq.saveResources = true;
+			hq.economy.saveResources = true;
 			hq.canBarter = canBarter;
 
 			constructTrainingBuildings(hq, world.gameState, world.ai.queues);
@@ -5826,7 +5830,7 @@ describe("the temple, the market and the farmstead", () =>
 		{
 			const { world, hq } = seat({ stock: { food: 100, wood: 1800, stone: 3000, metal: 3000 } });
 			world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
-			hq.saveResources = saving ? true : undefined;
+			hq.economy.saveResources = saving ? true : undefined;
 			hq.basesManager.getTotalResourceLevel = () => ({ wood: woodLeft });
 			buildEarlyMarket(hq, world.gameState, world.ai.queues);
 			return { world, hq };
@@ -5858,7 +5862,7 @@ describe("the temple, the market and the farmstead", () =>
 	{
 		const { world, hq } = seat({ stock: { food: 600, wood: 600 } });
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		const queueManager = world.ai.queueManager;
 		buildEarlyMarket(hq, world.gameState, world.ai.queues);
@@ -5878,7 +5882,7 @@ describe("the temple, the market and the farmstead", () =>
 	{
 		const { world, hq } = seat();
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		buildEarlyMarket(hq, world.gameState, world.ai.queues);
 		buildEarlyMarket(hq, world.gameState, world.ai.queues);
@@ -5886,7 +5890,7 @@ describe("the temple, the market and the farmstead", () =>
 
 		const standing = seat();
 		standing.world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
-		standing.hq.saveResources = true;
+		standing.hq.economy.saveResources = true;
 		standing.hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		standing.world.addEntity(
 			makeHqEntity({

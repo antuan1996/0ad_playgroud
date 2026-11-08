@@ -416,9 +416,9 @@ describe("game start: what the first turn books", () =>
 
 		assert.equal(hq.canBuildUnits, true);
 		assert.equal(hq.basesManager.baseManagers.length, 1);
-		assert.equal(hq.firstBaseConfig, true);
+		assert.equal(hq.economy.firstBaseConfig, true);
 		// the land is 20000 cells of 4 square map units: a big start, no field cap
-		assert.equal(hq.maxFields, false);
+		assert.equal(hq.economy.maxFields, false);
 	});
 
 	it("a land of 25000 to 60000 square map units caps the town at two fields", () =>
@@ -428,8 +428,8 @@ describe("game start: what the first turn books", () =>
 
 		gameAnalysis(hq, world.gameState);
 
-		assert.equal(hq.maxFields, 2);
-		assert.notEqual(hq.saveSpace, true);
+		assert.equal(hq.economy.maxFields, 2);
+		assert.notEqual(hq.economy.saveSpace, true);
 	});
 
 	it("land traders go to the trade manager at once; merchant ships wait (they may carry troops)", () =>
@@ -599,7 +599,7 @@ describe("game start without a civil centre", () =>
 		assert.deepEqual(moves, []);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 		// no town: no day-one policy either
-		assert.notEqual(hq.firstBaseConfig, true);
+		assert.notEqual(hq.economy.firstBaseConfig, true);
 	});
 
 	it("an army without a base sends a share to guard the allied civil centre, ranged and melee first, all support with them", () =>

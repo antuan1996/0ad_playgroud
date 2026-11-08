@@ -472,7 +472,7 @@ describe("healers and guards for the critical entities", () =>
 	it("no healer is trained while saving, while one is queued, with no temple, with guards enough, or for a hero fully healed", () =>
 	{
 		const saving = regicide();
-		saving.hq.saveResources = true;
+		saving.hq.economy.saveResources = true;
 		saving.manager.manageCriticalEntHealers(saving.world.gameState, saving.queues);
 		assert.equal(saving.queues.healer.plans.length, 0, "saving");
 

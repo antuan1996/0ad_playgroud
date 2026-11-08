@@ -303,6 +303,16 @@ describe("save and reload", () =>
 				hq.defenses.fortStartTime = seconds(410);
 				hq.defenses.towerStartTime = seconds(620);
 				hq.defenses.fortressStartTime = seconds(930);
+				// a poor start on little land, fed by corrals and fishing, with few fields
+				Object.assign(hq.economy, {
+					saveResources: true,
+					saveSpace: true,
+					needFarm: true,
+					needCorral: true,
+					needFish: true,
+					maxFields: 4,
+					firstBaseConfig: true,
+				});
 			},
 		}, world);
 	});

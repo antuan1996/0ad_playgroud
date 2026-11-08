@@ -501,7 +501,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.field.plans.length, 0, "the bushes feed the town for now");
-		assert.ok(!hq.needFarm, "no field asked for while the bushes last");
+		assert.ok(!hq.economy.needFarm, "no field asked for while the bushes last");
 	});
 
 	it("a town with little fruit in reach plants its first field, favoured to its base", () =>
@@ -516,7 +516,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		assert.equal(plans.length, 1);
 		assert.equal(plans[0]?.type, FIELD);
 		assert.equal(plans[0]?.metadata?.favoredBase, base.ID);
-		assert.equal(hq.needFarm, true);
+		assert.equal(hq.economy.needFarm, true);
 	});
 
 	// only the port passes: Petra waits until the berries in reach fall below
@@ -533,7 +533,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.field.plans.length, 1);
-		assert.equal(hq.needFarm, true);
+		assert.equal(hq.economy.needFarm, true);
 	});
 
 	it("berries that still pay, or too few on them to tell, plant no field", () =>
@@ -559,7 +559,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			const { world, hq, base } = seat();
 			farmCards(world, hq);
 			berries(world, base, 0);
-			hq.maxFields = false;
+			hq.economy.maxFields = false;
 			world.addEntity(
 				makeHqEntity({
 					id: 2702,
@@ -598,7 +598,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		const { world, hq, base } = seat();
 		farmCards(world, hq);
 		berries(world, base, 0);
-		hq.maxFields = false;
+		hq.economy.maxFields = false;
 		world.addEntity(
 			makeHqEntity({
 				id: 2702,
@@ -619,7 +619,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		const { world, hq, base } = seat();
 		farmCards(world, hq);
 		berries(world, base, 0);
-		hq.maxFields = false;
+		hq.economy.maxFields = false;
 		world.addEntity(
 			makeHqEntity({
 				id: 2702,
@@ -656,8 +656,8 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 			const { world, hq, base } = seat();
 			farmCards(world, hq);
 			berries(world, base, 0);
-			hq.maxFields = false;
-			hq.saveResources = saving || undefined;
+			hq.economy.maxFields = false;
+			hq.economy.saveResources = saving || undefined;
 			world.addEntity(
 				makeHqEntity({
 					id: 2702,
@@ -699,8 +699,8 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 				templateName: FIELD,
 			}),
 		);
-		hq.maxFields = 1;
-		hq.needCorral = true;
+		hq.economy.maxFields = 1;
+		hq.economy.needCorral = true;
 
 		base.checkResourceLevels(world.gameState, world.ai.queues);
 
@@ -717,7 +717,7 @@ describe("the town's food and its gatherers: checkResourceLevels", () =>
 		base.checkResourceLevels(world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.corral.plans.length, 1);
-		assert.equal(hq.needCorral, true);
+		assert.equal(hq.economy.needCorral, true);
 	});
 
 	it("a storehouse rising resets the gatherers' tally for that resource", () =>

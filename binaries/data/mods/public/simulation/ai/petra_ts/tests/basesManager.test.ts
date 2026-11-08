@@ -155,12 +155,12 @@ function rawSupply(world: HqWorld, id: number, position: [number, number], gener
  */
 function watchHandleNewBase(hq: Headquarters): { readonly length: number; }
 {
-	hq.firstBaseConfig = true;
-	hq.saveResources = true;
+	hq.economy.firstBaseConfig = true;
+	hq.economy.saveResources = true;
 	return {
 		get length()
 		{
-			return hq.saveResources === undefined ? 1 : 0;
+			return hq.economy.saveResources === undefined ? 1 : 0;
 		},
 	};
 }

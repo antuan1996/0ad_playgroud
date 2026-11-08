@@ -121,7 +121,7 @@ describe("the next phase: checkPhase", () =>
 			const { world, hq, manager, queues } = seat({ population: 60, phaseName: "phase_town_generic" }, [
 				"phase_town_generic",
 			]);
-			hq.saveResources = true;
+			hq.economy.saveResources = true;
 			hq.basesManager.getTotalResourceLevel = () => ({ wood: woodLeft });
 
 			manager.checkPhase(world.gameState, queues);

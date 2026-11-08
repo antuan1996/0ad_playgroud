@@ -26,6 +26,7 @@ import { QueueManager, configuredQueues, isQueueName } from "../execution/queueM
 import type { HeadquartersService, NavalService } from "../execution/services.ts";
 import type { BasesView } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
+import { EconomyPlan } from "../world/economyPlan.ts";
 
 function food(amount: number): ResourcesManager
 {
@@ -1208,7 +1209,8 @@ describe("QueueManager", () =>
 		 */
 		function workerWorld(
 			numWorkers: number,
-			hq: Record<string, unknown> = {},
+			/** the town's economy plan: which food it relies on */
+			economy: Partial<EconomyPlan> = {},
 			stateOptions: Parameters<typeof makeFakeGameState>[0] = {},
 			bases: Record<string, unknown> = { hasPotentialBase: () => true },
 		): CommonGameState
@@ -1216,7 +1218,7 @@ describe("QueueManager", () =>
 			const { gameState } = makeFakeGameState(stateOptions);
 			override(gameState, { getResources: () => new ResourcesManager({}) });
 			gameState.ai.bases = fake<BasesView>(bases);
-			gameState.ai.town = fake<HeadquartersService>({ ...hq });
+			gameState.ai.town = fake<HeadquartersService>({ economy: Object.assign(new EconomyPlan(), economy) });
 			gameState.countOwnEntitiesAndQueuedWithRole = () => numWorkers;
 			return gameState;
 		}

@@ -222,7 +222,7 @@ describe("a house plan asked whether the town needs it: isGo", () =>
 	it("a town saving its resources holds back to ten free slots", () =>
 	{
 		const { world, hq, plan } = town(60, 75);
-		hq.saveResources = true;
+		hq.economy.saveResources = true;
 		assert.equal(plan.isGo(world.gameState), false, "15 free is enough while saving");
 	});
 });
