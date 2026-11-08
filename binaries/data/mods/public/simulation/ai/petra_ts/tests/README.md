@@ -65,7 +65,7 @@ port's folders and names, so that target is gone. The parity of the port as it
 was frozen is shown in games instead (stage 1, `FINDINGS.md` §14). A test with
 an `// only the port passes: ...` comment pins one of the original's bugs
 (`FINDINGS.md` §1); the original failed exactly the first 20 of them when it was last
-run; eight more pin stage-4 fixes and forty-four stage 5's and seven stage 6's (79 in all).
+run; eight more pin stage-4 fixes and forty-four stage 5's, seven stage 6's and one stage 7's (80 in all).
 
 Type checking:
 

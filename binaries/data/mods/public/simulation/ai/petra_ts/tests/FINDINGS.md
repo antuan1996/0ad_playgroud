@@ -19,7 +19,7 @@ Coverage is the real figure from `npm run coverage:petra` (see README).
 
 ## 1. Bugs in the original that the port fixes
 
-Each is pinned by a test that only the port passes (54 tests in all; the
+Each is pinned by a test that only the port passes (55 tests in all; the
 original failed exactly the first 20 when last run, the seven stage-4 rows
 and the stage-5 ones were fixed after the original stopped being a test
 target). Each row says
@@ -74,6 +74,7 @@ whether a game can reach it.
 | `defenseManager.garrisonToShoot`, `garrisonManager` threats (stage 6) | a tower shooting at an enemy merchant ship (no weapon) took five workers in; the next review let them out, the ship gone by: every 15 s for nine minutes by a trade route (§52) | no garrison against, and no threat from, a unit that cannot attack | defenseManager: "takes nobody into the tower that shoots at an enemy merchant ship sailing by"; garrisonManager: "an enemy merchant ship sailing by in bowshot keeps nobody in the tower" |
 | `transportPlan.landShip` sailing (stage 6) | a ship the engine kept WALKING without moving was never sent again (one stood 81 m from its landing point with 11 aboard for 63 minutes); a ship re-routed again and again got nowhere; a wedged ship was sent again from where it stood, the plan swapping between two points it never reached (§53) | no headway in 60 s: sent straight; a ship that has not moved since its last send is nudged out; failed points avoided | transportPlan: "a loaded ship under way that comes no nearer its landing point in a minute is sent there straight", "a ship stopped short and sent again, still where it stood seconds later, is nudged out to sea", "a ship that failed at two landing points tries a third, not the first again" |
 | `transportPlan.checkBoardingShip` (stage 6) | a ship stuck on its way to its boarding point was sent again from where it stood, every few seconds, and never went: one stayed 46 minutes, five units waiting on the shore (§54) | nudged out when it has not moved since its last send; failed boarding points avoided | transportPlan: "a ship that makes no headway to the shore is sent again, then nudged out and sent to another landing spot" |
+| `attackOrders` prey sort (stage 7) | asked common-api's `Template.counters()`, always false (it drops the class list it builds): a unit's bonus against its prey never counted (§55, §59) | reads the attack bonuses itself (`counterBonuses`, `counteredBy`) | attackPlan: "a spearman goes for the horseman it counters before a nearer swordsman" |
 
 ## 2. Bugs in the port, fixed (separate commits)
 
@@ -2535,4 +2536,25 @@ it. What would be needed is a model of Petra's own decisions (which queues
 it funds, when it builds barracks and houses, what the attack plans train),
 in effect a second copy of the bot's economy, which is not the narrow model
 §3.4 meant. Kept: the module and its tests, the log and `forecast-log.ts`.
+
+## 59. Stage 7: the prey a unit counters (2026-11-08)
+
+PLAN §6.5's fourth idea. An attack's soldiers choose their prey among the
+enemy units in reach (`attackOrders.ts` `sortByAttackValue`): civilians
+first, then those they counter (100 points), the nearer, those not swarmed.
+The countering came from common-api's `Template.counters()`, always false
+(§55), so a spearman went for the nearest unit, a horseman or not. The
+port now reads the attack bonuses itself: `counterBonuses` (the bonuses of
+its attacks above x1) and `counteredBy` (the target has the bonus's
+classes, and its civ when one is named), in `adapter/templateData.ts`.
+
+The smoke test: 10 of 24 games moved, the same winners (reference recorded
+anew). Against the stage-6 bot (`petra-ts-prev` at `petra-ts-stage6`,
+2ab1f56601), 40 mainland games (20 fresh pairs from both slots, pool seed
+84, `stage7-counters-mainland`): 20 won, 20 lost (50.0%, CI 35-65%; 18 of
+20 pairs split by the slot); units lost against killed 387 to 400 (the
+stage-6 bot: 400 to 386), gathered 2% less. Kept as a fix: no loss, the
+fights a little better. The common-api fix (use the result of
+`mcounter.concat`) goes upstream; it is shared by every bot, and changing it
+here would change Petra and the baselines.
 

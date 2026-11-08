@@ -12,7 +12,7 @@ project are referenced to the files that hold them.
 | The port | `simulation/ai/petra_ts/*.ts` | One file per original `petra/*.js`; strict TypeScript, no `as` casts or `!` (`requireValue` where a value is guaranteed) |
 | In-game bot | `simulation/ai/petra_out/` (generated) | `npm run build:petra:out`; bot id `petra_out`, "Petra TS" |
 | Engine-facing types | `engine-api.d.ts`, `common-api.d.ts`, `globalscripts.d.ts`, `petra-runtime.d.ts` | `EntityId`, `PlayerId`, `WorldPos`, `MapPos`, `AccessIndex`/`SeaIndex`, `GameMs`/`GameSeconds`, `TemplateName`, `CellIndex<Grid>` are branded (stage 2; conversions in `petra_ts/brands.ts`); commands are a union by `type` |
-| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1712 tests on the sources and the built bot, importing and typed by the port; 79 pin a bug of the original or a fix of stages 4-6 (the original failed the first 20 when it was last a target, stage 3) |
+| Behaviour tests | `petra_ts/tests/`, harness in `tests/harness/` | 1734 tests on the sources and the built bot, importing and typed by the port; 80 pin a bug of the original or a fix of stages 4-7 (the original failed the first 20 when it was last a target, stage 3) |
 | Findings | `tests/FINDINGS.md` | Bugs, port/original differences, shared quirks, unreachable code, match findings (§10–12) |
 | Matches | `build/petra_ts/match.sh` | Deterministic headless or visual matches; records: statistics, timeline, commands, notices, bot state (`-b`), fingerprint, rerun line |
 | Baselines | `build/petra_ts/baselines.ts`, tag `petra-ts-parity` | `petra_parity` (the port at the tag) and `petra_fixed` (original + patch), built as bots; with the 15-fix patch they play the same games (stage 1) |
@@ -737,10 +737,10 @@ measured change at a time, aimed at the soldiers by minute 13:
    come in one by one from the fields; gathering them before engaging, and
    an attack waiting for its stragglers before the first blow, measured by
    the losses per enemy killed (`fight-log.ts`) and then the win-rate.
-4. **`counters()`.** The port's choice of prey reads bonuses through
-   `Template.counters()`, always false (§55); reading the bonuses itself
-   (`attackBonuses`) is a play change to measure. The common-api fix goes
-   upstream.
+4. **`counters()`** (done 2026-11-08, `FINDINGS.md` §59: 50.0% against
+   the stage-6 bot, fights a little better; kept). The port's choice of prey
+   read bonuses through `Template.counters()`, always false (§55); it reads
+   them itself now. The common-api fix goes upstream.
 5. **The turn budget**: measure the stage 6 bot against stage 5's with
    `match.sh -P` and `ai-times.ts --compare`, first, as the baseline of stage
    7.

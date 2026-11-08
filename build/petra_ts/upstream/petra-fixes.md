@@ -276,3 +276,12 @@ In a game: 109-138 soldiers taken out of their plans per turn for minutes,
 each new plan starting empty and ending at once (53 HugeAttacks in 90 s).
 Fix: stop at `Math.min(minGarrison, target.garrisonMax())`.
 (`tests/FINDINGS.md` §50.)
+
+### 17. common-api `Template.counters()` is always false
+
+`counters(target)` collects the classes of its attacks' bonuses with
+`mcounter.concat(bonusClasses.split(" "))` and drops the result, then asks
+`target.hasClasses(mcounter)` of the empty list, which `MatchesClassList`
+answers false. Petra's attack plans give a countered unit 100 points through
+it when choosing their prey; none ever gets them. Fix: `mcounter =
+mcounter.concat(...)` (or push the classes). (`tests/FINDINGS.md` §55, §59.)
