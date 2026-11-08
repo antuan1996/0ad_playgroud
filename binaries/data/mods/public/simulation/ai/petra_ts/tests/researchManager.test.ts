@@ -61,7 +61,7 @@ function seat(options: Partial<HqWorldOptions> = {}, techs: string[] = [])
 	gs.findResearchers = () => undefined;
 	gs.hasResearchers = () => true;
 	gs.hasAllies = () => false;
-	const manager = new ResearchManager(hq.Config);
+	const manager = new ResearchManager(hq.Config, hq);
 	return { world, hq, manager, queues: world.ai.queues };
 }
 
@@ -506,6 +506,6 @@ describe("the research manager's bookkeeping", () =>
 		const { manager } = seat();
 		assert.equal(manager.CostSum({ food: 100, metal: 50 }), 150);
 		assert.deepEqual(manager.Serialize(), {});
-		assert.deepEqual(ResearchManager.restore(manager.Config, {}).Serialize(), {});
+		assert.deepEqual(ResearchManager.restore(manager.Config, {}, manager.hq).Serialize(), {});
 	});
 });

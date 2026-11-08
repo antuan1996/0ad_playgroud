@@ -25,7 +25,7 @@ import { EmergencyManager, type SerializedEmergencyManager } from "../decision/e
 import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
 import { NavalManager } from "../decision/navalManager.ts";
-import { ResearchManager } from "../decision/researchManager.ts";
+import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager } from "../decision/victoryManager.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
@@ -139,8 +139,8 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "ResearchManager",
-			original: () => new ResearchManager(makeConfig()),
-			fromSave: () => ResearchManager.restore(makeConfig(), {}),
+			original: () => new ResearchManager(makeConfig(), fake<ResearchHQ>({})),
+			fromSave: () => ResearchManager.restore(makeConfig(), {}, fake<ResearchHQ>({})),
 		}, makeFakeGameState().gameState);
 	});
 
