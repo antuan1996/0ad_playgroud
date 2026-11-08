@@ -20,9 +20,10 @@
  *   adapter/brands.ts, the port's only sanctioned casts;
  * - non-null: a `!` non-null assertion;
  * - post-command: Engine.PostCommand outside adapter/commands.ts;
- * - hq-access: execution code reaching the headquarters other than through
- *   execution/hq.ts (hqOf): importing decision/headquarters.ts, or reading
- *   `.ai.HQ`.
+ * - hq-access: execution code reaching the headquarters: importing
+ *   decision/headquarters.ts, or reading `.ai.HQ` (the decision layer's
+ *   services come through the interfaces of execution/services.ts, on
+ *   gameState.ai).
  *
  * Tracked counts (the check fails when one rises above the baseline; lower
  * them, then --update-baseline):
@@ -34,13 +35,9 @@
  *   yields, lies in a higher layer than the module's (`gameState.ai.HQ` in
  *   world/ yields decision/'s headquarters), resolved by the type checker
  *   (layerAccesses), whether read as x.name, x["name"] or destructured
- *   (`const { name } = x`); one finding a chain. Execution code reaching decision/
- *   through the headquarters' view of execution/hq.ts (hqOf) is the
- *   sanctioned way and is reported apart, not counted;
- * - hq-manager-access: execution code using the members of the decision
- *   objects that view hands out (the managers' methods and fields, however
- *   reached): sanctioned by the view, but a dependency on decision/'s
- *   classes, held from growing;
+ *   (`const { name } = x`); one finding a chain. Execution code uses the
+ *   decision layer's services only through interfaces declared in
+ *   execution/services.ts, whose members are execution's own;
  * - cycle: modules in a cycle of value imports (type-only imports leave
  *   nothing at run time);
  * - engine: uses of Engine outside adapter/ (profiling apart);
@@ -49,7 +46,7 @@
  * - dead-method: methods (and accessors) no code of the port (nor the
  *   build's bot-state.js) names, not marked `TODO never called`; matched by
  *   name, as a class is often reached through a type of its methods
- *   (execution/hq.ts): a method `update` is never dead, so a finding is
+ *   (execution/services.ts): a method `update` is never dead, so a finding is
  *   certain and the count a lower bound;
  * - stale-todo: methods marked `TODO never called` that a call of the port
  *   reaches, resolved by the type checker (the program of
@@ -501,7 +498,7 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				}
 			}
 			if (
-				node.name.text === "HQ" && layer === "execution" && file !== "execution/hq.ts" &&
+				node.name.text === "HQ" && layer === "execution" &&
 				ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "ai"
 			)
 			{
@@ -536,7 +533,7 @@ export function analyseModule(file: string, text: string): ModuleInfo
 
 	for (const edge of info.imports)
 	{
-		if (layer === "execution" && file !== "execution/hq.ts" && edge.to === "decision/headquarters.ts")
+		if (layer === "execution" && edge.to === "decision/headquarters.ts")
 		{
 			info.findings.push({ rule: "hq-access", file, line: edge.line, text: "imports decision/headquarters.ts" });
 		}
@@ -613,7 +610,7 @@ export function importCycles(modules: ModuleInfo[]): string[][]
 	return cycles.sort((a, b) => b.length - a.length);
 }
 
-/** The imports against the layers' order (execution/hq.ts's view of the headquarters apart) */
+/** The imports against the layers' order */
 export function layerViolations(modules: ModuleInfo[]): ImportEdge[]
 {
 	const violations: ImportEdge[] = [];
@@ -621,10 +618,6 @@ export function layerViolations(modules: ModuleInfo[]): ImportEdge[]
 	{
 		for (const edge of mod.imports)
 		{
-			if (mod.file === "execution/hq.ts" && edge.to === "decision/headquarters.ts")
-			{
-				continue;
-			}
 			if (LAYER_RANK[layerOf(edge.to)] > LAYER_RANK[mod.layer])
 			{
 				violations.push(edge);
@@ -822,25 +815,16 @@ export interface LayerAccess
 	declared: string;
 }
 
-/** The function through which execution code reaches the headquarters (execution/hq.ts) */
-const HQ_GATEWAY = "hqOf";
-
 /**
  * The accesses of members of a higher layer than the accessing module's, resolved by the type checker: a property
  * whose declaration, or the declaration of the type of the value it yields, lies in a module of a higher layer
  * (`gameState.ai.HQ` in world/ yields the headquarters of decision/). The declarations (*.d.ts) belong to no layer;
- * a value they type is judged by its type. Each chain of violations is reported once, at its first access over
- * the line. Execution code reaches decision/ in two ways apart: the members of the headquarters' view
- * (execution/hq.ts, hqOf: ExecutionHQ), the sanctioned way (`viaHq`); and the members of the decision objects the
- * view hands out, the managers (`viaManagers`), whatever the way they are reached (a chain or a variable). The view
- * itself (execution/hq.ts) is the gateway and is not looked at.
+ * a value they type is judged by its type. Each chain is reported once, at its first access over the line.
  */
-export function layerAccesses(program: ts.Program, port: string): LayerAccesses
+export function layerAccesses(program: ts.Program, port: string): LayerAccess[]
 {
 	const checker = program.getTypeChecker();
 	const violations: LayerAccess[] = [];
-	const viaHq: LayerAccess[] = [];
-	const viaManagers: LayerAccess[] = [];
 	const portFile = (file: string): string | undefined =>
 	{
 		const rel = relative(port, file).replace(/\\/g, "/");
@@ -877,36 +861,6 @@ export function layerAccesses(program: ts.Program, port: string): LayerAccesses
 		}
 		return best;
 	};
-	// the headquarters' view: the type hqOf returns (execution/hq.ts), which every value it gives shares
-	const hqSource = program.getSourceFiles().find((f) => portFile(f.fileName) === "execution/hq.ts");
-	let hqView: ts.Type | undefined;
-	hqSource?.forEachChild((node) =>
-	{
-		if (ts.isFunctionDeclaration(node) && node.name?.text === HQ_GATEWAY)
-		{
-			const signature = checker.getSignatureFromDeclaration(node);
-			hqView = signature && checker.getReturnTypeOfSignature(signature);
-		}
-	});
-	const isHqView = (node: ts.Node): boolean =>
-		!!hqView && checker.getNonNullableType(checker.getTypeAtLocation(node)) === hqView;
-	/** Whether a chain passes through the view: `hqOf(gs).turnCache.x`, the turnCache a Readonly of the HQ's */
-	const throughHqView = (node: ts.Node): boolean =>
-	{
-		let at: ts.Node = node;
-		while (
-			ts.isPropertyAccessExpression(at) || ts.isElementAccessExpression(at) || ts.isCallExpression(at) ||
-			ts.isParenthesizedExpression(at) || ts.isNonNullExpression(at)
-		)
-		{
-			if (isHqView(at))
-			{
-				return true;
-			}
-			at = at.expression;
-		}
-		return isHqView(at);
-	};
 	for (const source of program.getSourceFiles())
 	{
 		const file = portFile(source.fileName);
@@ -915,7 +869,7 @@ export function layerAccesses(program: ts.Program, port: string): LayerAccesses
 			continue;
 		}
 		const from = layerOf(file);
-		if (from === "root" || file === "execution/hq.ts")
+		if (from === "root")
 		{
 			continue;
 		}
@@ -951,20 +905,6 @@ export function layerAccesses(program: ts.Program, port: string): LayerAccesses
 				to: over[0],
 				declared: over[1],
 			};
-			// the view's own members, or those of a decision object it handed out (a manager); not the HQ itself
-			if (from === "execution" && over[0] === "decision")
-			{
-				if (isHqView(object))
-				{
-					viaHq.push(found);
-					return;
-				}
-				if (typeLayer(object)?.[0] === "decision" || throughHqView(object))
-				{
-					viaManagers.push(found);
-					return;
-				}
-			}
 			flagged.add(node);
 			violations.push(found);
 		};
@@ -993,11 +933,8 @@ export function layerAccesses(program: ts.Program, port: string): LayerAccesses
 		};
 		visit(source);
 	}
-	return { violations, viaHq, viaManagers };
+	return violations;
 }
-
-/** The accesses of higher layers' members (layerAccesses), by kind */
-export type LayerAccesses = { violations: LayerAccess[]; viaHq: LayerAccess[]; viaManagers: LayerAccess[]; };
 
 /** The program of the port and its tests, as tsconfig.tests.json makes it */
 function portProgram(configPath: string): ts.Program
@@ -1028,8 +965,6 @@ export interface Structure
 	classes: ClassCohesion[];
 	/** members of a higher layer reached at run time (layerAccesses), and those through the headquarters' view */
 	access: LayerAccess[];
-	viaHq: LayerAccess[];
-	viaManagers: LayerAccess[];
 }
 
 /** The counts the baseline holds */
@@ -1038,7 +973,6 @@ export function trackedCounts(structure: Structure): Record<string, number>
 	return {
 		"layer": structure.layer.length,
 		"layer-access": structure.access.length,
-		"hq-manager-access": structure.viaManagers.length,
 		"cycle": structure.cycles.reduce((sum, c) => sum + c.length, 0),
 		"engine": structure.engine.length,
 		"dead-export": structure.dead.deadExports.length,
@@ -1052,7 +986,7 @@ export function analyse(
 	modules: ModuleInfo[],
 	users: ModuleInfo[],
 	called?: Set<string>,
-	accesses: LayerAccesses = { violations: [], viaHq: [], viaManagers: [] },
+	accesses: LayerAccess[] = [],
 ): Structure
 {
 	const findings = modules.flatMap((m) => m.findings);
@@ -1079,9 +1013,7 @@ export function analyse(
 			fanOut: new Set(m.imports.map((e) => e.to)).size,
 		})),
 		classes: modules.flatMap((m) => m.classes),
-		access: accesses.violations,
-		viaHq: accesses.viaHq,
-		viaManagers: accesses.viaManagers,
+		access: accesses,
 	};
 }
 
@@ -1191,25 +1123,6 @@ function main(args: string[]): void
 			) :
 			"  none",
 	);
-	const members = (list: LayerAccess[]): string =>
-	{
-		const by = new Map<string, number>();
-		for (const a of list)
-		{
-			const name = a.text.split(".").at(-1)?.replace(/\W.*$/, "") ?? a.text;
-			const key = `${a.declared.replace(/^decision\//, "")} ${name}`;
-			by.set(key, (by.get(key) ?? 0) + 1);
-		}
-		return [...by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ");
-	};
-	out.push(
-		`\nexecution reaching decision through the headquarters' view (execution/hq.ts, sanctioned): ` +
-			`${structure.viaHq.length} accesses: ${members(structure.viaHq)}`,
-	);
-	out.push(
-		`\nexecution using the members of the managers the view hands out (decision/ classes, tracked): ` +
-			`${structure.viaManagers.length} accesses: ${members(structure.viaManagers)}`,
-	);
 	out.push("\nvalue-import cycles:");
 	out.push(
 		structure.cycles.length ? structure.cycles.map((c) => `  ${c.length}: ${c.join(" ")}`).join("\n") : "  none",
@@ -1298,8 +1211,6 @@ function main(args: string[]): void
 					rules: structure.rules,
 					layer: structure.layer,
 					layerAccess: structure.access,
-					viaHq: structure.viaHq,
-					viaManagers: structure.viaManagers,
 					cycles: structure.cycles,
 					engine: structure.engine,
 					dead: structure.dead,

@@ -81,7 +81,7 @@ test("only commands.ts posts commands, and only adapter/ uses Engine (profiling 
 	assert.deepEqual(rules("execution/b.ts", "Engine.ComputePath(a, b, c);"), ["engine"]);
 });
 
-test("execution code reaches the headquarters through hq.ts only", () =>
+test("no execution code reaches the headquarters: its services come through execution/services.ts", () =>
 {
 	assert.deepEqual(
 		rules(
@@ -90,17 +90,10 @@ test("execution code reaches the headquarters through hq.ts only", () =>
 		),
 		["hq-access", "hq-access"],
 	);
-	assert.deepEqual(
-		rules(
-			"execution/hq.ts",
-			"import type { Headquarters } from \"../decision/headquarters.ts\"; const h = gameState.ai.HQ;",
-		),
-		[],
-	);
 	assert.deepEqual(rules("decision/b.ts", "const h = gameState.ai.HQ;"), []);
 });
 
-test("imports against the layers' order are counted, type-only ones too; hq.ts's view is allowed", () =>
+test("imports against the layers' order are counted, type-only ones too", () =>
 {
 	const modules = [
 		analyseModule("adapter/a.ts", "import { B } from \"../world/b.ts\";"),
@@ -108,17 +101,17 @@ test("imports against the layers' order are counted, type-only ones too; hq.ts's
 			"world/b.ts",
 			"import type { C } from \"../decision/c.ts\"; import { D } from \"../adapter/d.ts\";",
 		),
-		analyseModule("execution/hq.ts", "import type { Headquarters } from \"../decision/headquarters.ts\";"),
+		analyseModule("execution/view.ts", "import type { Headquarters } from \"../decision/headquarters.ts\";"),
 		analyseModule(
 			"decision/c.ts",
 			"import { E } from \"../execution/e.ts\"; import { F } from \"simulation/ai/common-api/f.js\";",
 		),
 	];
-	assert.deepEqual(layerViolations(modules).map((e) => [e.from, e.to, e.typeOnly]), [[
-		"adapter/a.ts",
-		"world/b.ts",
-		false,
-	], ["world/b.ts", "decision/c.ts", true]]);
+	assert.deepEqual(layerViolations(modules).map((e) => [e.from, e.to, e.typeOnly]), [
+		["adapter/a.ts", "world/b.ts", false],
+		["world/b.ts", "decision/c.ts", true],
+		["execution/view.ts", "decision/headquarters.ts", true],
+	]);
 });
 
 test("cycles are found among value imports only", () =>
@@ -236,15 +229,13 @@ test("in a class of nine methods or more, a member used by more than an eighth o
 /** The port of the layer-access tests: the headquarters reached through a global the declarations type, as the AI's */
 const layered: Record<string, string> = {
 	"/port/runtime.d.ts": "declare const ai: { HQ: import(\"./decision/headquarters.ts\").Headquarters; " +
-		"Config: import(\"./world/config.ts\").Config; };",
+		"Config: import(\"./world/config.ts\").Config; " +
+		"attacks: import(\"./execution/services.ts\").AttackRegistry; };",
 	"/port/world/config.ts": "export class Config { debug = 0; }",
 	"/port/decision/attackManager.ts": "export class AttackManager { total = 0; getPlan(): number { return 1; } }",
 	"/port/decision/headquarters.ts": "import { AttackManager } from \"./attackManager.ts\";\n" +
-		"export class Headquarters { attackManager = new AttackManager(); needFarm = false; " +
-		"turnCache: { built: boolean } = { built: false }; }",
-	"/port/execution/hq.ts": "import type { Headquarters } from \"../decision/headquarters.ts\";\n" +
-		"export type ExecutionHQ = Readonly<Pick<Headquarters, \"attackManager\" | \"needFarm\" | \"turnCache\">>;\n" +
-		"export function hqOf(): ExecutionHQ { return ai.HQ; }",
+		"export class Headquarters { attackManager = new AttackManager(); needFarm = false; }",
+	"/port/execution/services.ts": "export interface AttackRegistry { getPlan(): number; }",
 };
 
 test("a lower layer reaching a higher one's object with no import: once a chain, every way it is read", () =>
@@ -262,41 +253,29 @@ test("a lower layer reaching a higher one's object with no import: once a chain,
 		}),
 		"/port",
 	);
-	assert.deepEqual(found.violations.map((v) => `${v.file}:${v.line} ${v.from}->${v.to} ${v.text}`), [
+	assert.deepEqual(found.map((v) => `${v.file}:${v.line} ${v.from}->${v.to} ${v.text}`), [
 		"world/bases.ts:1 world->decision ai.HQ",
 		"world/bases.ts:2 world->decision ai.HQ",
 		"adapter/read.ts:1 adapter->decision ai[\"HQ\"]",
 		"adapter/read.ts:2 adapter->decision HQ",
 		"adapter/debug.ts:1 adapter->world ai.Config",
 	]);
-	assert.deepEqual(found.viaHq, []);
-	assert.deepEqual(found.viaManagers, []);
 });
 
-test("execution through the headquarters' view is sanctioned; the managers it hands out are counted apart", () =>
+test("execution reaches decision only through the interfaces it declares itself", () =>
 {
 	const found = layerAccesses(
 		programOf({
 			...layered,
-			"/port/execution/plan.ts": "import { hqOf } from \"./hq.ts\";\n" +
-				"export const farm = hqOf().needFarm;\n" +
-				"export const plan = hqOf().attackManager.getPlan();\n" +
-				"const manager = hqOf().attackManager;\nexport const total = manager.total;\n" +
-				"export const raw = ai.HQ;\n" +
-				"export const built = hqOf().turnCache.built;",
+			"/port/execution/plan.ts": "export const plan = ai.attacks.getPlan();\n" +
+				"export const raw = ai.HQ.attackManager.getPlan();\n" +
+				"const manager = ai.HQ.attackManager;\nexport const total = manager.total;",
 		}),
 		"/port",
 	);
-	assert.deepEqual(found.viaHq.map((v) => `${v.line} ${v.text}`), [
-		"2 hqOf().needFarm",
-		"3 hqOf().attackManager",
-		"4 hqOf().attackManager",
-		"7 hqOf().turnCache",
-	]);
-	assert.deepEqual(found.viaManagers.map((v) => `${v.line} ${v.text}`), [
-		"3 hqOf().attackManager.getPlan",
-		"5 manager.total",
-		"7 hqOf().turnCache.built",
-	], "the members of what the view hands out, through the chain or a variable");
-	assert.deepEqual(found.violations.map((v) => `${v.line} ${v.text}`), ["6 ai.HQ"], "the HQ not through its view");
+	assert.deepEqual(
+		found.map((v) => `${v.line} ${v.text}`),
+		["2 ai.HQ", "3 ai.HQ", "4 manager.total"],
+		"the service is execution's own; the HQ and its manager are decision's, however reached",
+	);
 });
