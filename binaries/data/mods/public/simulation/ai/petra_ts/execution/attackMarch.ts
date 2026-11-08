@@ -10,6 +10,12 @@ import { STATE_ARRIVED, STATE_TRANSPORTING, STATE_WALKING } from "./attackConsta
 import { destroyFarthestSiege } from "./attackOrders.ts";
 import type { AttackAim, AttackPlan } from "./attackPlan.ts";
 
+/**
+ * Where a plan's army stood, to tell when it is stuck: at the end of its
+ * last turn, and five turns ago while it walks (both saved).
+ */
+export type MarchTrack = { lastPosition: CommonPosition; position5TurnsAgo: CommonPosition; };
+
 /** The plan walks to its target on its land, along its path (made now if none); false without one */
 export function walkTo(plan: AttackPlan, gameState: CommonGameState, aim: AttackAim): boolean
 {
@@ -74,7 +80,7 @@ export function UpdateWalking(
 	{
 		return false;
 	}
-	const pos5TurnsAgo = plan.position5TurnsAgo;
+	const pos5TurnsAgo = plan.march.position5TurnsAgo;
 	const targetPos = plan.targetPos;
 	// we're marching towards the target
 	// Are we arrived at destination ?
@@ -94,10 +100,10 @@ export function UpdateWalking(
 	}
 	if (gameState.ai.playedTurn % 5 === 0)
 	{
-		plan.position5TurnsAgo = clone(pos);
+		plan.march.position5TurnsAgo = clone(pos);
 	}
 
-	const lastPos = plan.lastPosition;
+	const lastPos = plan.march.lastPosition;
 	if (lastPos && SquareVectorDistance(pos, lastPos) < 16 && path.length > 0)
 	{
 		const walls = unstick(plan, gameState, pos, path);

@@ -31,7 +31,11 @@ import { Worker } from "./worker.ts";
  * A completing plan starts once its units are done with their transport and their forced orders (or its time is
  * up); undefined when its target is gone: it is unexecuted again
  */
-export function completingStep(plan: AttackPlan, gameState: CommonGameState): number | undefined
+export function completingStep(
+	plan: AttackPlan,
+	gameState: CommonGameState,
+	prep: AttackPreparation,
+): number | undefined
 {
 	// if our target was destroyed, go back to "unexecuted" state
 	if (plan.targetPlayer === undefined || !plan.target || !gameState.getEntityById(plan.target.id()))
@@ -46,7 +50,7 @@ export function completingStep(plan: AttackPlan, gameState: CommonGameState): nu
 		return PREPARATION_KEEP_GOING;
 	}
 	// bloqued units which cannot finish their order should not stop the attack
-	if (gameState.ai.elapsedTime < plan.maxCompletingTime && plan.hasForceOrder())
+	if (gameState.ai.elapsedTime < prep.maxCompletingTime && plan.hasForceOrder())
 	{
 		return PREPARATION_KEEP_GOING;
 	}
@@ -140,7 +144,7 @@ export function trainingStep(plan: AttackPlan, gameState: CommonGameState, prep:
 }
 
 /** The plan sets off: completing, with its target and path, its units gathering, its queues reset */
-export function setOff(plan: AttackPlan, gameState: CommonGameState): number
+export function setOff(plan: AttackPlan, gameState: CommonGameState, prep: AttackPreparation): number
 {
 	plan.changeState(STATE_UNEXECUTED, STATE_COMPLETING);
 
@@ -158,17 +162,17 @@ export function setOff(plan: AttackPlan, gameState: CommonGameState): number
 
 	if (plan.type === TYPE_RAID)
 	{
-		plan.maxCompletingTime = seconds(plan.forced ? 0 : gameState.ai.elapsedTime + 20);
+		prep.maxCompletingTime = seconds(plan.forced ? 0 : gameState.ai.elapsedTime + 20);
 	}
 	else
 	{
 		if (plan.type === TYPE_RUSH || plan.forced)
 		{
-			plan.maxCompletingTime = seconds(gameState.ai.elapsedTime + 40);
+			prep.maxCompletingTime = seconds(gameState.ai.elapsedTime + 40);
 		}
 		else
 		{
-			plan.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
+			prep.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
 		}
 		// warn our allies so that they can help if possible
 		if (!plan.requested && plan.targetPlayer !== undefined)

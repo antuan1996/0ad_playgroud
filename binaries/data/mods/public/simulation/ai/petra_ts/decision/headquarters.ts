@@ -2,7 +2,7 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { cellIndex, seconds } from "../adapter/brands.ts";
+import { cellIndex } from "../adapter/brands.ts";
 import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
@@ -31,7 +31,7 @@ import { GarrisonManager } from "./garrisonManager.ts";
 import { buildMoreHouses } from "./houseBuilding.ts";
 import { houseNeeded } from "./housing.ts";
 import { checkEvents } from "./hqEvents.ts";
-import { buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
+import { DefenseSchedule, buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
 import { NavalManager } from "./navalManager.ts";
 import { checkPhaseRequirements, notePhase } from "./phasing.ts";
 import { PlacementSearches } from "./placementSearches.ts";
@@ -64,32 +64,31 @@ export type HeadquartersTrainableRequirement = TrainableRequirement;
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {
 	/** the fields a save keeps (the regions and naval flag through the geography's accessors) */
-	properties: Pick<
-		Headquarters,
-		| "phasing"
-		| "lastFailedGather"
-		| "firstBaseConfig"
-		| "supportRatio"
-		| "targetNumWorkers"
-		| "fortStartTime"
-		| "towerStartTime"
-		| "fortressStartTime"
-		| "bAdvanced"
-		| "saveResources"
-		| "saveSpace"
-		| "needCorral"
-		| "needFarm"
-		| "needFish"
-		| "maxFields"
-		| "canExpand"
-		| "canBuildUnits"
-		| "navalMap"
-		| "landRegions"
-		| "navalRegions"
-		| "decayingStructures"
-		| "capturableTargets"
-		| "capturableTargetsTime"
-	>;
+	properties:
+		& Pick<
+			Headquarters,
+			| "phasing"
+			| "lastFailedGather"
+			| "firstBaseConfig"
+			| "supportRatio"
+			| "targetNumWorkers"
+			| "bAdvanced"
+			| "saveResources"
+			| "saveSpace"
+			| "needCorral"
+			| "needFarm"
+			| "needFish"
+			| "maxFields"
+			| "canExpand"
+			| "canBuildUnits"
+			| "navalMap"
+			| "landRegions"
+			| "navalRegions"
+			| "decayingStructures"
+			| "capturableTargets"
+			| "capturableTargetsTime"
+		>
+		& Pick<DefenseSchedule, "fortStartTime" | "towerStartTime" | "fortressStartTime">;
 	basesManager: ReturnType<BasesManager["Serialize"]>;
 	attackManager: ReturnType<AttackManager["Serialize"]>;
 	buildManager: ReturnType<BuildManager["Serialize"]>;
@@ -259,14 +258,11 @@ export class Headquarters
 	currentPhase: number;
 	decayingStructures: Set<EntityId> = new Set();
 	defenseManager: DefenseManager;
+	/** When to build the next sentry tower, defense tower and fortress (militaryBuildings.ts) */
+	readonly defenses: DefenseSchedule;
 	diplomacyManager: DiplomacyManager;
 	emergencyManager: EmergencyManager;
-	extraFortresses: number;
-	extraTowers: number;
 	firstBaseConfig: boolean;
-	fortStartTime: GameSeconds;
-	fortressLapseTime: GameSeconds;
-	fortressStartTime: GameSeconds;
 	garrisonManager: GarrisonManager;
 	/** When a worker last found nothing left to gather, per resource. */
 	lastFailedGather: Record<string, GameSeconds>;
@@ -283,8 +279,6 @@ export class Headquarters
 	saveSpace: boolean | undefined;
 	supportRatio: number;
 	targetNumWorkers: number;
-	towerLapseTime: GameSeconds;
-	towerStartTime: GameSeconds;
 	tradeManager: TradeManager;
 	treasures: CommonEntityCollection<CommonPlacedEntity>;
 	turnCache: HeadquartersTurnCache;
@@ -365,15 +359,7 @@ export class Headquarters
 		this.targetNumWorkers = this.Config.Economy.targetNumWorkers;
 		this.supportRatio = this.Config.Economy.supportRatio;
 
-		this.fortStartTime = seconds(180); // Sentry towers, will start at fortStartTime + towerLapseTime.
-		this.towerStartTime = seconds(0); // Stone towers, will start as soon as available (town phase).
-		this.towerLapseTime = seconds(this.Config.Military.towerLapseTime);
-		this.fortressStartTime = seconds(0); // Fortresses, will start as soon as available (city phase).
-		this.fortressLapseTime = seconds(this.Config.Military.fortressLapseTime);
-		this.extraTowers = Math.round(Math.min(this.Config.difficulty, 3) * this.Config.personality.defensive);
-		this.extraFortresses = Math.round(
-			Math.max(Math.min(this.Config.difficulty - 1, 2), 0) * this.Config.personality.defensive,
-		);
+		this.defenses = new DefenseSchedule(this.Config);
 
 		this.treasures = gameState.getEntities().filter((ent): ent is CommonPlacedEntity =>
 			ent.isTreasure() && isPlaced(ent)
@@ -424,9 +410,9 @@ export class Headquarters
 		this.firstBaseConfig = properties.firstBaseConfig;
 		this.supportRatio = properties.supportRatio;
 		this.targetNumWorkers = properties.targetNumWorkers;
-		this.fortStartTime = properties.fortStartTime;
-		this.towerStartTime = properties.towerStartTime;
-		this.fortressStartTime = properties.fortressStartTime;
+		this.defenses.fortStartTime = properties.fortStartTime;
+		this.defenses.towerStartTime = properties.towerStartTime;
+		this.defenses.fortressStartTime = properties.fortressStartTime;
 		this.bAdvanced = properties.bAdvanced;
 		this.saveResources = properties.saveResources;
 		this.saveSpace = properties.saveSpace;
@@ -1240,9 +1226,9 @@ export class Headquarters
 			firstBaseConfig: this.firstBaseConfig,
 			supportRatio: this.supportRatio,
 			targetNumWorkers: this.targetNumWorkers,
-			fortStartTime: this.fortStartTime,
-			towerStartTime: this.towerStartTime,
-			fortressStartTime: this.fortressStartTime,
+			fortStartTime: this.defenses.fortStartTime,
+			towerStartTime: this.defenses.towerStartTime,
+			fortressStartTime: this.defenses.fortressStartTime,
 			bAdvanced: this.bAdvanced,
 			saveResources: this.saveResources,
 			saveSpace: this.saveSpace,

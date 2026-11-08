@@ -3,9 +3,41 @@
  * stables, ...), one more while those there are busy, and the city phase's advanced buildings.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
+import { seconds } from "../adapter/brands.ts";
 import { requireTemplate } from "../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import type { Config } from "../world/config.ts";
 import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
+
+/**
+ * When the headquarters builds its next defenses: the start of each kind's
+ * last building (saved), the lapse between two and the extra towers and
+ * fortresses its difficulty and personality allow (both derived from the
+ * configuration, not saved).
+ */
+export class DefenseSchedule
+{
+	/** Sentry towers, will start at fortStartTime + towerLapseTime. */
+	fortStartTime = seconds(180);
+	/** Stone towers, will start as soon as available (town phase). */
+	towerStartTime = seconds(0);
+	/** Fortresses, will start as soon as available (city phase). */
+	fortressStartTime = seconds(0);
+	readonly towerLapseTime: GameSeconds;
+	readonly fortressLapseTime: GameSeconds;
+	readonly extraTowers: number;
+	readonly extraFortresses: number;
+
+	constructor(config: Config)
+	{
+		this.towerLapseTime = seconds(config.Military.towerLapseTime);
+		this.fortressLapseTime = seconds(config.Military.fortressLapseTime);
+		this.extraTowers = Math.round(Math.min(config.difficulty, 3) * config.personality.defensive);
+		this.extraFortresses = Math.round(
+			Math.max(Math.min(config.difficulty - 1, 2), 0) * config.personality.defensive,
+		);
+	}
+}
 
 /** Deals with building fortresses and towers along our border with enemies. */
 export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
@@ -61,13 +93,14 @@ function queueFortress(hq: Headquarters, gameState: CommonGameState, queues: Hea
 	const numFortresses = gameState.getOwnEntitiesByClass("Fortress", true).length;
 	if (
 		(!numFortresses ||
-			gameState.ai.elapsedTime > (1 + 0.10 * numFortresses) * hq.fortressLapseTime + hq.fortressStartTime) &&
-		numFortresses < hq.basesManager.numActiveBases() + 1 + hq.extraFortresses &&
+			gameState.ai.elapsedTime >
+				(1 + 0.10 * numFortresses) * hq.defenses.fortressLapseTime + hq.defenses.fortressStartTime) &&
+		numFortresses < hq.basesManager.numActiveBases() + 1 + hq.defenses.extraFortresses &&
 		numFortresses < Math.floor(gameState.getPopulation() / 25) &&
 		gameState.getOwnFoundationsByClass("Fortress").length < 2
 	)
 	{
-		hq.fortressStartTime = gameState.ai.elapsedTime;
+		hq.defenses.fortressStartTime = gameState.ai.elapsedTime;
 		if (!numFortresses)
 		{
 			gameState.ai.queueManager.changePriority("defenseBuilding", 2 * hq.Config.priorities.defenseBuilding);
@@ -90,14 +123,19 @@ function queueSentryTower(
 {
 	const numTowers = gameState.getOwnEntitiesByClass("Tower", true).length +
 		gameState.getOwnEntitiesByClass("WallTower", true).length;
-	const towerLapseTime = hq.saveResources ? (1 + 0.5 * numTowers) * hq.towerLapseTime : hq.towerLapseTime;
-	if (numTowers < hq.Config.Military.numSentryTowers && gameState.ai.elapsedTime > towerLapseTime + hq.fortStartTime)
+	const towerLapseTime = hq.saveResources ?
+		(1 + 0.5 * numTowers) * hq.defenses.towerLapseTime :
+		hq.defenses.towerLapseTime;
+	if (
+		numTowers < hq.Config.Military.numSentryTowers &&
+		gameState.ai.elapsedTime > towerLapseTime + hq.defenses.fortStartTime
+	)
 	{
 		if (shoreOnly && !hq.placement.hasShoreTowerSpot(gameState, "structures/{civ}/sentry_tower"))
 		{
 			return;
 		}
-		hq.fortStartTime = gameState.ai.elapsedTime;
+		hq.defenses.fortStartTime = gameState.ai.elapsedTime;
 		queues.defenseBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/sentry_tower"));
 	}
 }
@@ -111,10 +149,11 @@ function queueDefenseTower(
 ): void
 {
 	const numTowers = gameState.getOwnEntitiesByClass("StoneTower", true).length;
-	const towerLapseTime = hq.saveResources ? (1 + numTowers) * hq.towerLapseTime : hq.towerLapseTime;
+	const towerLapseTime = hq.saveResources ? (1 + numTowers) * hq.defenses.towerLapseTime : hq.defenses.towerLapseTime;
 	if (
-		(!numTowers || gameState.ai.elapsedTime > (1 + 0.1 * numTowers) * towerLapseTime + hq.towerStartTime) &&
-		numTowers < 2 * hq.basesManager.numActiveBases() + 3 + hq.extraTowers &&
+		(!numTowers ||
+			gameState.ai.elapsedTime > (1 + 0.1 * numTowers) * towerLapseTime + hq.defenses.towerStartTime) &&
+		numTowers < 2 * hq.basesManager.numActiveBases() + 3 + hq.defenses.extraTowers &&
 		numTowers < Math.floor(gameState.getPopulation() / 8) &&
 		gameState.getOwnFoundationsByClass("Tower").length < 3
 	)
@@ -123,7 +162,7 @@ function queueDefenseTower(
 		{
 			return;
 		}
-		hq.towerStartTime = gameState.ai.elapsedTime;
+		hq.defenses.towerStartTime = gameState.ai.elapsedTime;
 		if (numTowers > 2 * hq.basesManager.numActiveBases() + 3)
 		{
 			gameState.ai.queueManager.changePriority(

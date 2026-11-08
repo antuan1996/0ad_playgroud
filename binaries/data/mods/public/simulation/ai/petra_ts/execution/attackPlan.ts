@@ -39,7 +39,7 @@ import {
 	startAttacking,
 	withdrawPoint,
 } from "./attackFight.ts";
-import { UpdateTransporting, UpdateWalking, walkTo } from "./attackMarch.ts";
+import { UpdateTransporting, UpdateWalking, walkTo, type MarchTrack } from "./attackMarch.ts";
 import {
 	answerAttackers,
 	answersBlow,
@@ -550,6 +550,8 @@ export type AttackPreparation = {
 	queueSiege: Queue;
 	buildOrders: AttackBuildOrder[];
 	siegeState: number;
+	/** Until when a completing plan waits for its units' forced orders (attackPreparation.ts) */
+	maxCompletingTime: GameSeconds;
 };
 
 export class AttackPlan
@@ -558,14 +560,13 @@ export class AttackPlan
 	canBuildUnits: boolean;
 	forced: boolean;
 	isBlocked: boolean;
-	lastPosition: CommonPosition;
-	maxCompletingTime: GameSeconds;
+	/** Where the army stood, to tell when it is stuck (attackMarch.ts) */
+	march: MarchTrack;
 	name: AttackPlanId;
 	neededShips: number;
 	overseas: SeaIndex | 0;
 	paused: boolean;
 	position: CommonPosition | undefined;
-	position5TurnsAgo: CommonPosition;
 	rallyPoint: CommonPosition;
 	/** Set when an ally asked for this attack: it does not ask its allies in turn */
 	requested: boolean | undefined = undefined;
@@ -774,11 +775,12 @@ export class AttackPlan
 			this.rallyPoint = saved.properties.rallyPoint;
 			this.overseas = saved.properties.overseas;
 			this.paused = saved.properties.paused;
-			this.maxCompletingTime = saved.properties.maxCompletingTime;
 			this.neededShips = saved.properties.neededShips;
 			this.unitStat = saved.properties.unitStat;
-			this.position5TurnsAgo = saved.properties.position5TurnsAgo;
-			this.lastPosition = saved.properties.lastPosition;
+			this.march = {
+				position5TurnsAgo: saved.properties.position5TurnsAgo,
+				lastPosition: saved.properties.lastPosition,
+			};
 			this.position = saved.properties.position;
 			this.isBlocked = saved.properties.isBlocked;
 			this.unitCollUpdateArray = saved.properties.unitCollUpdateArray;
@@ -808,7 +810,6 @@ export class AttackPlan
 			this.rallyPoint = setup.start.rallyPoint;
 			this.overseas = setup.start.overseas;
 			this.paused = false;
-			this.maxCompletingTime = seconds(0);
 
 			// the army this type aims at (see attackComposition), sized by difficulty and population
 			const sizes = planSizes(this.Config, setup.type, data, setup.variation);
@@ -817,8 +818,7 @@ export class AttackPlan
 			makeStage = this.newStage(gameState, sizes.priority);
 
 			// some variables used during the attack
-			this.position5TurnsAgo = worldPos(0, 0);
-			this.lastPosition = worldPos(0, 0);
+			this.march = { position5TurnsAgo: worldPos(0, 0), lastPosition: worldPos(0, 0) };
 			this.position = worldPos(0, 0);
 			this.isBlocked = false; // true when this attack faces walls
 		}
@@ -864,7 +864,14 @@ export class AttackPlan
 		const queueSiege = gameState.ai.queueManager.addQueue(`plan_${this.name}_siege`, priority);
 		return (buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage => ({
 			state: AttackPlan.STATE_UNEXECUTED,
-			prep: { queue, queueChamp, queueSiege, buildOrders, siegeState: AttackPlan.SIEGE_NOT_TESTED },
+			prep: {
+				queue,
+				queueChamp,
+				queueSiege,
+				buildOrders,
+				siegeState: AttackPlan.SIEGE_NOT_TESTED,
+				maxCompletingTime: seconds(0),
+			},
 			target,
 		});
 	}
@@ -886,7 +893,12 @@ export class AttackPlan
 			const queues = this.savedQueues(gameState);
 			return (buildOrders: AttackBuildOrder[], target: AttackTarget): AttackStage => ({
 				state: prepState,
-				prep: { ...queues, buildOrders, siegeState: saved.properties.siegeState },
+				prep: {
+					...queues,
+					buildOrders,
+					siegeState: saved.properties.siegeState,
+					maxCompletingTime: saved.properties.maxCompletingTime,
+				},
 				target,
 				path: savedPath,
 			});
@@ -1162,9 +1174,10 @@ export class AttackPlan
 	{
 		// the completing step is used to return resources and regroup the units
 		// so we check that we have no more forced order before starting the attack
-		if (this.state === AttackPlan.STATE_COMPLETING)
+		const completing = this.state === AttackPlan.STATE_COMPLETING ? this.preparation() : undefined;
+		if (completing)
 		{
-			const step = completingStep(this, gameState);
+			const step = completingStep(this, gameState, completing);
 			if (step !== undefined)
 			{
 				return step;
@@ -1195,7 +1208,7 @@ export class AttackPlan
 		}
 
 		// if we're here, it means we must start
-		return setOff(this, gameState);
+		return setOff(this, gameState, prep);
 	}
 
 	trainMoreUnits(gameState: CommonGameState, prep: AttackPreparation): void
@@ -1647,7 +1660,7 @@ export class AttackPlan
 
 			this.updateAttacking(gameState, events, aim);
 		}
-		this.lastPosition = clone(this.position);
+		this.march.lastPosition = clone(this.position);
 		return this.unitCollection.length;
 	}
 
@@ -1989,12 +2002,12 @@ export class AttackPlan
 			rallyPoint: clone(this.rallyPoint),
 			overseas: this.overseas,
 			paused: this.paused,
-			maxCompletingTime: this.maxCompletingTime,
+			maxCompletingTime: this.preparation()?.maxCompletingTime ?? seconds(0),
 			neededShips: this.neededShips,
 			unitStat: this.unitStat,
 			siegeState: this.preparation()?.siegeState ?? AttackPlan.SIEGE_NOT_TESTED,
-			position5TurnsAgo: this.position5TurnsAgo,
-			lastPosition: this.lastPosition,
+			position5TurnsAgo: this.march.position5TurnsAgo,
+			lastPosition: this.march.lastPosition,
 			position: this.position !== undefined ? clone(this.position) : undefined,
 			isBlocked: this.isBlocked,
 			targetPlayer: this.targetPlayer,
