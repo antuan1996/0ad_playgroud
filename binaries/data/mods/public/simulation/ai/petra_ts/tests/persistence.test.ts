@@ -24,7 +24,7 @@ import { DiplomacyManager, type SerializedDiplomacyManager } from "../decision/d
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
 import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
-import { NavalManager } from "../decision/navalManager.ts";
+import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager } from "../decision/victoryManager.ts";
@@ -197,13 +197,14 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "NavalManager",
-			original: () => new NavalManager(makeConfig(), world, bareGeography(world)),
+			original: () => new NavalManager(makeConfig(), world, bareGeography(world), fake<NavalHQ>({})),
 			fromSave: (data, gameState) =>
 				NavalManager.restore(
 					makeConfig(),
 					gameState,
 					bareGeography(gameState),
 					fake<ReturnType<NavalManager["Serialize"]>>(data),
+					fake<NavalHQ>({}),
 				),
 		}, world);
 	});

@@ -30,7 +30,7 @@ function seat()
 
 function initNaval(s: ReturnType<typeof seat>): void
 {
-	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography);
+	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography, s.hq);
 	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 }
 

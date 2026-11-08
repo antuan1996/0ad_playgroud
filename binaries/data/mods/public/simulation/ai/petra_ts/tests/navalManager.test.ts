@@ -74,7 +74,7 @@ function backToBoarding(p: TransportPlan): void
 
 const init = (s: ReturnType<typeof seat>) =>
 {
-	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography);
+	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography, s.hq);
 	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 };
 
@@ -289,7 +289,7 @@ describe("the fleet counted at the start: init", () =>
 		// a save from a game whose spots were mapped otherwise
 		saved.properties.landingZones = { [WEST]: { [SEA]: new Set([7]) } };
 
-		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved);
+		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved, s.hq);
 
 		assert.deepEqual(loaded.landingZones, { [WEST]: { [SEA]: new Set([7]) } });
 	});
@@ -1484,7 +1484,7 @@ describe("the fleet saved and loaded", () =>
 		s.naval.wantedTransportShips[SEA] = 2;
 		const saved = s.naval.Serialize();
 
-		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved);
+		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved, s.hq);
 		s.hq.navalManager = loaded;
 
 		assert.equal(loaded.wantedTransportShips[SEA], 2);
