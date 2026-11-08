@@ -24,6 +24,7 @@ import { seconds } from "../adapter/brands.ts";
 import type { Headquarters } from "../decision/headquarters.ts";
 import { Queue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, isQueueName } from "../execution/queueManager.ts";
+import type { NavalService } from "../execution/services.ts";
 import type { BasesView } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
 
@@ -1326,12 +1327,10 @@ describe("QueueManager", () =>
 			// Almost no workers, so everything that is not workforce would
 			// pause — unless the economy is missing it. No farm, no corral, no
 			// dock and no fishing boat stand, and the headquarters wants each.
-			const gameState = workerWorld(5, {
-				needFarm: true,
-				needCorral: true,
-				needFish: true,
-				navalManager: { ships: { filter: () => ({ hasEntities: () => false }) } },
-			}, { ownStructures: [] });
+			const gameState = workerWorld(5, { needFarm: true, needCorral: true, needFish: true }, {
+				ownStructures: [],
+			});
+			gameState.ai.naval = fake<NavalService>({ ships: { filter: () => ({ hasEntities: () => false }) } });
 			const manager = makeManager(makeConfig(), {
 				field: [],
 				corral: [],
