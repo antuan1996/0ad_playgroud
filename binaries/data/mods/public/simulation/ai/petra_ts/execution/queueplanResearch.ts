@@ -1,5 +1,4 @@
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { hqOf } from "./hq.ts";
 import { QueuePlan, type PlanMetadata, type PlanStart } from "./queueplan.ts";
 
 export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
@@ -88,7 +87,7 @@ export class ResearchPlan extends QueuePlan<CommonTechnology, "technology">
 			{
 				continue;
 			}
-			hqOf(gameState).phaseResearched(gameState, i);
+			gameState.ai.town.phaseResearched(gameState, i);
 			break;
 		}
 	}

@@ -4,7 +4,6 @@ import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { debugWarn } from "../adapter/debug.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import type { Config } from "../world/config.ts";
-import { hqOf } from "./hq.ts";
 import { Queue, type SerializedQueue } from "./queue.ts";
 import { gatherDemand as queueGatherDemand, wantedGatherRates as queueWantedGatherRates } from "./queueDemand.ts";
 import { Worker } from "./worker.ts";
@@ -165,7 +164,7 @@ function pausedForWorkers(
 /** The first field, corral, dock or fishing boat of a town that needs it never waits. */
 function feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): boolean
 {
-	const hq = hqOf(gameState);
+	const hq = gameState.ai.town;
 	const hasNone = (className: string): boolean =>
 		!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
 	if (q === "field")
@@ -325,9 +324,9 @@ export class QueueManager
 		}
 		aiWarn("Current Resources: " + uneval(gameState.getResources()));
 		aiWarn("Available Resources: " + uneval(this.getAvailableResources(gameState)));
-		aiWarn("Wanted Gather Rates: " + uneval(hqOf(gameState).GetWantedGatherRates(gameState)));
+		aiWarn("Wanted Gather Rates: " + uneval(gameState.ai.town.GetWantedGatherRates(gameState)));
 		aiWarn("Current Gather Rates: " + uneval(gameState.ai.bases.GetCurrentGatherRates(gameState)));
-		aiWarn("Most needed resources: " + uneval(hqOf(gameState).pickMostNeededResources(gameState)));
+		aiWarn("Most needed resources: " + uneval(gameState.ai.town.pickMostNeededResources(gameState)));
 		aiWarn("------------------------------------");
 	}
 

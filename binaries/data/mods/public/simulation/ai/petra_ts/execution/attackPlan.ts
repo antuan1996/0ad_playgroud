@@ -47,7 +47,6 @@ import {
 	rallyPoints,
 	targetDistance,
 } from "./attackTargets.ts";
-import { hqOf } from "./hq.ts";
 import type { Queue } from "./queue.ts";
 import { type PlanMetadata } from "./queueplan.ts";
 import { TrainingPlan } from "./queueplanTraining.ts";
@@ -733,7 +732,7 @@ export class AttackPlan
 			}
 			else if (!start.overseas && rallyAccess !== undefined)
 			{
-				const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, access);
+				const sea = gameState.ai.town.getSeaBetweenIndices(gameState, rallyAccess, access);
 				if (!sea)
 				{
 					if (target)
@@ -771,7 +770,7 @@ export class AttackPlan
 				data,
 				start,
 				variation: randFloat(0.8, 1.2),
-				canBuildUnits: hqOf(gameState).canBuildUnits,
+				canBuildUnits: gameState.ai.town.canBuildUnits,
 			});
 	}
 
@@ -1554,7 +1553,7 @@ export class AttackPlan
 		const interests = firstOrder[3].interests;
 		const template = interests === undefined ?
 			undefined :
-			hqOf(gameState).findBestTrainableUnit(gameState, firstOrder[1], interests);
+			gameState.ai.town.findBestTrainableUnit(gameState, firstOrder[1], interests);
 		if (template === undefined)
 		{
 			debugWarn(this.Config, 1, () => "attack no template found " + firstOrder[1]);
@@ -1859,7 +1858,7 @@ export class AttackPlan
 			this.overseas = 0;
 			return true;
 		}
-		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
+		const sea = gameState.ai.town.getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
 		if (!sea)
 		{
 			aiWarn(
@@ -2114,7 +2113,7 @@ export class AttackPlan
 			{
 				this.rallyPoint = path[0];
 			}
-			else if (i > 1 && hqOf(gameState).isDangerousLocation(gameState, path[i - 1], 20))
+			else if (i > 1 && gameState.ai.town.isDangerousLocation(gameState, path[i - 1], 20))
 			{
 				this.rallyPoint = path[i - 2];
 				path.splice(0, i - 2);
@@ -2208,7 +2207,7 @@ export class AttackPlan
 		targetPos: CommonPosition,
 	): boolean
 	{
-		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
+		const sea = gameState.ai.town.getSeaBetweenIndices(gameState, rallyAccess, targetAccess);
 		if (sea === undefined)
 		{
 			return false;

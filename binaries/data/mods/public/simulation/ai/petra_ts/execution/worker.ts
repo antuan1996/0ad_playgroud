@@ -9,7 +9,6 @@ import { requireActivity, stateIs, unitState, type UnitState } from "../adapter/
 import type { ResourceSupply } from "../world/baseResources.ts";
 import { basesOf, type BaseView, type SupplyUpkeep, type WorkerBase } from "../world/bases.ts";
 import { allowCapture } from "../world/capture.ts";
-import { hqOf } from "./hq.ts";
 import { gatherTreasure } from "./treasure.ts";
 import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 
@@ -704,7 +703,7 @@ export class UnitWork
 		}
 
 		// If we are here, we have nothing left to gather ... certainly no more resources of this type
-		hqOf(gameState).noteNothingToGather(resource, gameState.ai.elapsedTime);
+		gameState.ai.town.noteNothingToGather(resource, gameState.ai.elapsedTime);
 		debugWarn(
 			gameState.ai.Config,
 			2,
@@ -1040,7 +1039,7 @@ export class UnitWork
 	{
 		// Still nothing, we look now for faraway resources, first in the accessible ones, then in the others
 		// except for food when farms or corrals can be used
-		const allowDistant = resource !== "food" || hqOf(gameState).allowsDistantFood(gameState);
+		const allowDistant = resource !== "food" || gameState.ai.town.allowsDistantFood(gameState);
 		if (!allowDistant)
 		{
 			return false;

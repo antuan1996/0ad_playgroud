@@ -7,7 +7,6 @@ import { getLandAccess, getSeaAccess, requireValue } from "../adapter/entityExte
 import { isPlaced } from "../adapter/placed.ts";
 import { stateIs, unitState } from "../adapter/unitState.ts";
 import { seaRoute, shootersOf, threatsAlong, threatsAt, type Shooter } from "../world/seaRoute.ts";
-import { hqOf } from "./hq.ts";
 import { Worker } from "./worker.ts";
 
 /** The ships we have on one sea, by kind (a transport may be a warship too) */
@@ -252,7 +251,7 @@ export class TransportPlan
 			// our ships always have their sea set (see NavalManager init and checkEvents)
 			return ship && getSeaAccess(gameState, ship);
 		}
-		const sea = hqOf(gameState).getSeaBetweenIndices(gameState, startIndex, endIndex);
+		const sea = gameState.ai.town.getSeaBetweenIndices(gameState, startIndex, endIndex);
 		if (!sea)
 		{
 			debugWarn(

@@ -7,7 +7,6 @@ import { isStructureTemplate } from "../adapter/templateData.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { buildOverseaDock, constructOnShore, findDockPosition } from "./dockPlacement.ts";
-import { hqOf } from "./hq.ts";
 import { QueuePlan, type PlanMetadata, type PlanStart } from "./queueplan.ts";
 
 export type BuildingPosition = {
@@ -142,7 +141,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 
 	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
-		if (hqOf(gameState).turnCache.buildingBuilt)
+		if (gameState.ai.town.turnCache.buildingBuilt)
 		{ // do not start another building if already one this turn
 			return undefined;
 		}
@@ -210,7 +209,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		{
 			return undefined;
 		}
-		hqOf(gameState).markBuildingStarted();
+		gameState.ai.town.markBuildingStarted();
 
 		if (this.metadata === undefined)
 		{
@@ -235,7 +234,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			// followed until it stands: a spot that fails is avoided (FINDINGS §39)
 			if (this.template.hasClass("CivCentre"))
 			{
-				hqOf(gameState).noteCivCentreOrdered(gameState, worldPos(pos.x, pos.z));
+				gameState.ai.town.noteCivCentreOrdered(gameState, worldPos(pos.x, pos.z));
 			}
 		}
 		// try with the lowest, move towards us unless we're same
@@ -388,7 +387,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	 */
 	specialPosition(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
-		const HQ = hqOf(gameState);
+		const HQ = gameState.ai.town;
 		if (template.hasClass("CivCentre"))
 		{
 			return this.civCentreSpot(gameState, template);
@@ -419,7 +418,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	/** A civic centre where the plan wants it; with none, a dock in a not-enemy island is tried instead */
 	private civCentreSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition
 	{
-		const HQ = hqOf(gameState);
+		const HQ = gameState.ai.town;
 		let pos;
 		if (this.metadata && this.metadata.room)
 		{
@@ -441,7 +440,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		}
 		// No possible location, try to build instead a dock in a not-enemy island
 		const templateName = gameState.applyCiv("structures/{civ}/dock");
-		if (hqOf(gameState).canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
+		if (gameState.ai.town.canBuild(gameState, templateName) && !gameState.isTemplateDisabled(templateName))
 		{
 			// canBuild() above already verified that the template exists; a dock is a structure
 			const dockTemplate = requireTemplate(gameState, templateName);
@@ -459,7 +458,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	/** A market in a base of its own, with the gain expected; undefined to search as for any, false for none */
 	private marketSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
-		const pos = hqOf(gameState).findMarketLocation(gameState, template);
+		const pos = gameState.ai.town.findMarketLocation(gameState, template);
 		const base = pos ? pos[2] : -1;
 		// a base of its own (not -1, nor a cell no base claims): there
 		if (pos && base !== -1 && base !== NO_BASE)
@@ -485,7 +484,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		placement: InfoMap<"territory">,
 	): boolean
 	{
-		const HQ = hqOf(gameState);
+		const HQ = gameState.ai.town;
 		const cellSize = placement.cellSize;
 		let alreadyHasHouses = false;
 
@@ -536,7 +535,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		placement: InfoMap<"territory">,
 	): void
 	{
-		const HQ = hqOf(gameState);
+		const HQ = gameState.ai.town;
 		const cellSize = placement.cellSize;
 		// Requires to be inside our territory, and inside our base territory if required
 		// and if our first market, put it on border if possible to maximize distance with next Market.
@@ -578,13 +577,13 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		if (this.goRequirement === "houseNeeded")
 		{
 			if (
-				!hqOf(gameState).canBuild(gameState, "structures/{civ}/house") &&
-				!hqOf(gameState).canBuild(gameState, "structures/{civ}/apartment")
+				!gameState.ai.town.canBuild(gameState, "structures/{civ}/house") &&
+				!gameState.ai.town.canBuild(gameState, "structures/{civ}/apartment")
 			)
 			{
 				return false;
 			}
-			return hqOf(gameState).houseNeeded(gameState);
+			return gameState.ai.town.houseNeeded(gameState);
 		}
 		return true;
 	}

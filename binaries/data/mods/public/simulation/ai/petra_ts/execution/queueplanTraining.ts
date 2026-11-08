@@ -1,7 +1,6 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { isPlaced } from "../adapter/placed.ts";
-import { hqOf } from "./hq.ts";
 import { QueuePlan, type PlanMetadata, type PlanStart } from "./queueplan.ts";
 import { Worker } from "./worker.ts";
 
@@ -133,7 +132,7 @@ export class TrainingPlan extends QueuePlan<CommonTemplate, "unit">
 		const wantedIndex = this.metadata && this.metadata.index ? this.metadata.index : undefined;
 		const workerUnit = this.metadata && this.metadata.role && this.metadata.role === Worker.ROLE_WORKER;
 		const supportUnit = this.template.hasClass("Support");
-		const hq = hqOf(gameState);
+		const hq = gameState.ai.town;
 		// a building's own score: its queue, raised for the civic centre, danger and the wrong land
 		const score = (ent: CommonPlacedEntity): number =>
 		{

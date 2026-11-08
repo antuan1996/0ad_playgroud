@@ -95,3 +95,68 @@ export interface TradeService
 	checkRoutes(gameState: CommonGameState): boolean;
 	isNewMarketWorth(expectedGain: number): boolean;
 }
+
+/** A trainable unit's weights for findBestTrainableUnit: a name, a weight and its arguments (decision/workforce.ts) */
+type TrainableWeight = [string, number, ...string[]];
+
+/**
+ * The headquarters' own services (decision/headquarters.ts, `gameState.ai.town`): the town's state of the moment,
+ * the placement and economy searches, the sea between two lands, and what a plan reports back. Read-only to
+ * execution code but for the reports.
+ */
+export interface HeadquartersService
+{
+	readonly canBuildUnits: boolean;
+	readonly needCorral: boolean;
+	readonly needFarm: boolean;
+	readonly needFish: boolean;
+	readonly requireHouses: boolean | undefined;
+	readonly saveResources: boolean | undefined;
+	/** the turn's bookkeeping: whether a building was started this turn */
+	readonly turnCache: Readonly<{ buildingBuilt?: boolean; }>;
+
+	findBestBaseForMilitary(gameState: CommonGameState): number | undefined;
+	findDefensiveLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): [number, number, BaseId] | undefined;
+	findEconomicCCLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+		resource: string,
+		options?: { proximity?: CommonPosition; fromStrategic?: boolean; forRoom?: boolean; },
+	): false | CommonPosition;
+	findMarketLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): false | [number, number, BaseId | -1, number];
+	findStrategicCCLocation(
+		gameState: CommonGameState,
+		template: CommonStructureTemplate,
+	): false | CommonPosition | undefined;
+	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean;
+	isNearInvadingArmy(pos: CommonPosition): boolean;
+
+	canBuild(gameState: CommonGameState, structure: string): boolean;
+	findBestTrainableUnit(
+		gameState: CommonGameState,
+		classes: Array<string | string[]>,
+		requirements: TrainableWeight[],
+		gatherersOnly?: boolean,
+	): TemplateName | undefined;
+	GetWantedGatherRates(gameState: CommonGameState): Record<string, number>;
+	houseNeeded(gameState: CommonGameState): boolean;
+	pickMostNeededResources(
+		gameState: CommonGameState,
+		allowedResources?: string[],
+	): Array<{ type: string; wanted: number; current: number; }>;
+
+	/** the sea joining two lands, if any */
+	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined;
+
+	allowsDistantFood(gameState: CommonGameState): boolean;
+	markBuildingStarted(): void;
+	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void;
+	noteNothingToGather(resource: string, time: GameSeconds): void;
+	phaseResearched(gameState: CommonGameState, phase: number): void;
+}

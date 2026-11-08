@@ -10,6 +10,7 @@ import type {
 	AttackRegistry,
 	BuildRules,
 	DefenseService,
+	HeadquartersService,
 	NavalService,
 	TradeService,
 	VictoryService,
@@ -229,6 +230,12 @@ export class PetraBot extends BaseAI
 	get bases(): BasesView
 	{
 		return requireValue(this.HQ).basesManager;
+	}
+
+	/** The headquarters' own services, as `gameState.ai.town` (PetraRuntime.AIState, execution/services.ts) */
+	get town(): HeadquartersService
+	{
+		return requireValue(this.HQ);
 	}
 
 	/** The defense manager's services, as `gameState.ai.defense` (PetraRuntime.AIState, execution/services.ts) */

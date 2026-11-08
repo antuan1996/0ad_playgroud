@@ -6,7 +6,6 @@ import { isPlaced } from "../adapter/placed.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
-import { hqOf } from "./hq.ts";
 import type { PlanMetadata } from "./queueplan.ts";
 import type { BuildingPosition } from "./queueplanBuilding.ts";
 
@@ -106,7 +105,7 @@ function isOverseaLand(
 		{
 			if (cc.owner() === PlayerID && !sea)
 			{
-				sea = hqOf(gameState).getSeaBetweenIndices(gameState, ccAccess, i);
+				sea = gameState.ai.town.getSeaBetweenIndices(gameState, ccAccess, i);
 			}
 			continue;
 		}
@@ -645,7 +644,7 @@ function placeDock(
 	{
 		return undefined;
 	}
-	if (hqOf(gameState).isDangerousLocation(gameState, pos, halfSize))
+	if (gameState.ai.town.isDangerousLocation(gameState, pos, halfSize))
 	{
 		return undefined;
 	}
