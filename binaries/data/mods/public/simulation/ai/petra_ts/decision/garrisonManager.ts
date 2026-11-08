@@ -6,6 +6,7 @@ import { hasActivity } from "../adapter/unitState.ts";
 import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
+import type { DefenseManager } from "./defenseManager.ts";
 
 export type GarrisonHolderData = { list: EntityId[]; allowMelee: boolean; };
 type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSiege: boolean; unit: boolean; };
@@ -38,16 +39,24 @@ function mayThreaten(ent: CommonEntity): boolean
  * Futhermore garrison units have a metadata garrisonType describing its reason (protection, transport, ...)
  */
 
+/**
+ * What the garrison manager asks of its sibling managers, through the
+ * headquarters that owns them all: the defense, to fill a decaying structure.
+ */
+export type GarrisonSiblings = { readonly defenseManager: Pick<DefenseManager, "garrisonUnitsInside">; };
+
 export class GarrisonManager
 {
 	Config: Config;
+	readonly siblings: GarrisonSiblings;
 
 	holders = new Map<EntityId, GarrisonHolderData>();
 	decayingStructures = new Map<EntityId, number>();
 
-	constructor(Config: Config)
+	constructor(Config: Config, siblings: GarrisonSiblings)
 	{
 		this.Config = Config;
+		this.siblings = siblings;
 	}
 
 	static TYPE_FORCE = "force";
@@ -99,7 +108,7 @@ export class GarrisonManager
 			}
 			else if (this.numberOfGarrisonedSlots(ent) < gmin)
 			{
-				gameState.ai.HQ.defenseManager.garrisonUnitsInside(gameState, ent, {
+				this.siblings.defenseManager.garrisonUnitsInside(gameState, ent, {
 					min: gmin,
 					type: GarrisonManager.TYPE_DECAY,
 				});
@@ -536,9 +545,9 @@ export class GarrisonManager
 	}
 
 	/** A saved garrison manager: its holders and decaying structures */
-	static restore(Config: Config, data: SerializedGarrisonManager): GarrisonManager
+	static restore(Config: Config, data: SerializedGarrisonManager, siblings: GarrisonSiblings): GarrisonManager
 	{
-		const manager = new GarrisonManager(Config);
+		const manager = new GarrisonManager(Config, siblings);
 		manager.resume(data);
 		return manager;
 	}

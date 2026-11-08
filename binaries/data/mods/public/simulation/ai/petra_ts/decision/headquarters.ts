@@ -373,7 +373,7 @@ export class Headquarters
 
 			this.researchManager = ResearchManager.restore(this.Config, saved.researchManager);
 			this.diplomacyManager = DiplomacyManager.restore(this.Config, saved.diplomacyManager);
-			this.garrisonManager = GarrisonManager.restore(this.Config, saved.garrisonManager);
+			this.garrisonManager = GarrisonManager.restore(this.Config, saved.garrisonManager, this);
 			this.victoryManager = VictoryManager.restore(this.Config, saved.victoryManager);
 			this.emergencyManager = EmergencyManager.restore(this.Config, saved.emergencyManager);
 			return;
@@ -387,7 +387,7 @@ export class Headquarters
 		this.navalManager = new NavalManager(this.Config, gameState, geography);
 		this.researchManager = new ResearchManager(this.Config);
 		this.diplomacyManager = new DiplomacyManager(this.Config, false);
-		this.garrisonManager = new GarrisonManager(this.Config);
+		this.garrisonManager = new GarrisonManager(this.Config, this);
 		this.victoryManager = new VictoryManager(this.Config);
 		this.emergencyManager = EmergencyManager.start(this.Config, gameState);
 	}
