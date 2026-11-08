@@ -747,7 +747,7 @@ export class AttackPlan
 					continue;
 				}
 				start = { rallyPoint: start.rallyPoint, overseas: sea };
-				hqOf(gameState).navalManager.setMinimalTransportShips(gameState, sea, 1);
+				gameState.ai.naval.setMinimalTransportShips(gameState, sea, 1);
 			}
 		}
 		return start;
@@ -1271,7 +1271,7 @@ export class AttackPlan
 		// Petra, waiting before it drafted, left 147 idle citizen soldiers out of
 		// an attack waiting for its ships on a dry island (FINDINGS §40); the
 		// ship queue is raised meanwhile (NavalManager.shipPriority)
-		if (this.overseas && !hqOf(gameState).navalManager.fleet(this.overseas)?.transports.length)
+		if (this.overseas && !gameState.ai.naval.fleet(this.overseas)?.transports.length)
 		{
 			return false;
 		}
@@ -1463,7 +1463,7 @@ export class AttackPlan
 			}
 			else
 			{
-				hqOf(gameState).navalManager.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
+				gameState.ai.naval.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
 			}
 		}
 	}
@@ -1869,7 +1869,7 @@ export class AttackPlan
 			return false;
 		}
 		this.overseas = sea;
-		hqOf(gameState).navalManager.setMinimalTransportShips(gameState, this.overseas, this.neededShips);
+		gameState.ai.naval.setMinimalTransportShips(gameState, this.overseas, this.neededShips);
 		return true;
 	}
 
@@ -2223,7 +2223,7 @@ export class AttackPlan
 		// and put back its state to "walking" when the transport is finished
 		for (const ent of this.unitCollection.values())
 		{
-			hqOf(gameState).navalManager.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
+			gameState.ai.naval.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
 		}
 		return true;
 	}

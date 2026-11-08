@@ -6,6 +6,7 @@ import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
+import type { NavalService } from "./execution/services.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
@@ -221,6 +222,12 @@ export class PetraBot extends BaseAI
 	get bases(): BasesView
 	{
 		return requireValue(this.HQ).basesManager;
+	}
+
+	/** The naval manager's services, as `gameState.ai.naval` (PetraRuntime.AIState, execution/services.ts) */
+	get naval(): NavalService
+	{
+		return requireValue(this.HQ).navalManager;
 	}
 
 	/** The treasures left on the map, as `gameState.ai.treasures` (PetraRuntime.AIState) */

@@ -228,7 +228,7 @@ export class DefenseArmy
 		// Remove from transport plan if not yet on Board
 		if (ent.getMetadata(PlayerID, "transport") !== undefined)
 		{
-			const plan = hqOf(gameState).navalManager.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const plan = gameState.ai.naval.getPlan(ent.getMetadata(PlayerID, "transport"));
 			if (plan && plan.state === TransportPlan.BOARDING && isPlaced(ent))
 			{
 				plan.removeUnit(gameState, ent);
@@ -383,7 +383,7 @@ export class DefenseArmy
 		}
 		else
 		{
-			hqOf(gameState).navalManager.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
+			gameState.ai.naval.requireTransport(gameState, ent, ownIndex, foeIndex, foePosition);
 		}
 		return true;
 	}

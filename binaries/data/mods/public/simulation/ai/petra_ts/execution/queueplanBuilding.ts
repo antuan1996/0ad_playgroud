@@ -175,7 +175,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 
 		if (laid && this.metadata && this.metadata.proximity)
 		{
-			hqOf(gameState).navalManager.createTransportIfNeeded(
+			gameState.ai.naval.createTransportIfNeeded(
 				gameState,
 				this.metadata.proximity,
 				worldPos(laid.pos.x, laid.pos.z),

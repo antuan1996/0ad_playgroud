@@ -30,6 +30,8 @@ declare namespace PetraRuntime
 		bases: import("./world/bases.ts").BasesView;
 		/** The treasures left on the map (HQ.treasures), for the collectors. */
 		treasures: CommonEntityCollection<CommonPlacedEntity>;
+		/** The naval manager's services to the execution layer (HQ.navalManager as execution/services.ts's NavalService). */
+		naval: import("./execution/services.ts").NavalService;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */
