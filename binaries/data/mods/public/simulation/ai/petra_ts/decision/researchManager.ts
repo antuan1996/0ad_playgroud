@@ -3,6 +3,7 @@ import { ResearchPlan } from "../execution/queueplanResearch.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import { PAYBACK_HORIZON, incomeGain, paybackSeconds } from "./economyScore.ts";
+import type { Headquarters } from "./headquarters.ts";
 
 /**
  * Whether a tech with these modifications is wanted as soon as available:
@@ -53,13 +54,26 @@ function tooDearForWorkers(
 /**
  * Manage the research
  */
+/**
+ * What the research manager asks of the headquarters that owns it: the
+ * accounted population and workers and the dry land, to time the phases (and
+ * to note the phase it heads for), and the measured gather rates the
+ * economy techs pay back on.
+ */
+export type ResearchHQ = Pick<
+	Headquarters,
+	"getAccountedPopulation" | "getAccountedWorkers" | "landRunDry" | "phasing" | "gatherEconomy"
+>;
+
 export class ResearchManager
 {
 	Config: Config;
+	readonly hq: ResearchHQ;
 
-	constructor(Config: Config)
+	constructor(Config: Config, hq: ResearchHQ)
 	{
 		this.Config = Config;
+		this.hq = hq;
 	}
 
 	/**
@@ -90,14 +104,13 @@ export class ResearchManager
 		// village phase (FINDINGS §37)
 		const petraRequirements =
 			currentPhaseIndex === 1 &&
-				(gameState.ai.HQ.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
-					gameState.ai.HQ.landRunDry(gameState)) ||
-			currentPhaseIndex === 2 &&
-				gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase3 ||
-			currentPhaseIndex >= 3 && gameState.ai.HQ.getAccountedWorkers(gameState) > this.Config.Economy.workPhase4;
+				(this.hq.getAccountedPopulation(gameState) >= this.Config.Economy.popPhase2 ||
+					this.hq.landRunDry(gameState)) ||
+			currentPhaseIndex === 2 && this.hq.getAccountedWorkers(gameState) > this.Config.Economy.workPhase3 ||
+			currentPhaseIndex >= 3 && this.hq.getAccountedWorkers(gameState) > this.Config.Economy.workPhase4;
 		if (petraRequirements && gameState.hasResearchers(nextPhaseName, true))
 		{
-			gameState.ai.HQ.phasing = currentPhaseIndex + 1;
+			this.hq.phasing = currentPhaseIndex + 1;
 			// Reset the queue priority in case it was changed during a previous phase update
 			gameState.ai.queueManager.changePriority("majorTech", gameState.ai.Config.priorities.majorTech);
 			queues.majorTech.addPlan(new ResearchPlan(gameState, nextPhaseName, true));
@@ -212,7 +225,7 @@ export class ResearchManager
 	 */
 	researchPayingTech(gameState: CommonGameState, techs: Array<[TechName, CommonTechnology]>): TechName | undefined
 	{
-		const economy = gameState.ai.HQ.gatherEconomy;
+		const economy = this.hq.gatherEconomy;
 		let best: TechName | undefined;
 		let bestPayback = PAYBACK_HORIZON;
 		for (const [name, tech] of techs)
@@ -412,9 +425,9 @@ export class ResearchManager
 	}
 
 	/** A saved research manager: it saves nothing of its own */
-	static restore(Config: Config, data: Record<string, never>): ResearchManager
+	static restore(Config: Config, data: Record<string, never>, hq: ResearchHQ): ResearchManager
 	{
-		const manager = new ResearchManager(Config);
+		const manager = new ResearchManager(Config, hq);
 		manager.resume(data);
 		return manager;
 	}
