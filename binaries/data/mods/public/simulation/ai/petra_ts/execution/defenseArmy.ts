@@ -5,7 +5,6 @@ import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
-import { hqOf } from "./hq.ts";
 import { TransportPlan } from "./transportPlan.ts";
 import { lentPlan, releasedPlan } from "./unitPlan.ts";
 import { Worker } from "./worker.ts";
@@ -335,7 +334,7 @@ export class DefenseArmy
 		}
 		if (
 			ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
-			hqOf(gameState).defenseManager.garrisonAttackedUnit(gameState, ent)
+			gameState.ai.defense.garrisonAttackedUnit(gameState, ent)
 		)
 		{
 			return;

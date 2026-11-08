@@ -7,7 +7,6 @@ import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { obstructionShape } from "../adapter/templateData.ts";
 import { basesOf } from "../world/bases.ts";
-import { hqOf } from "./hq.ts";
 
 /** What the distance to a dock or a foundation counts for in a naval map's target pick (getNearestTarget). */
 const ECONOMIC_TARGET_WEIGHT = 0.25;
@@ -350,7 +349,7 @@ export function findRushTarget(
 export function raidTargetFinder(gameState: CommonGameState): CommonEntityCollection
 {
 	const targets = new EntityCollection(gameState.sharedScript);
-	for (const targetId of hqOf(gameState).defenseManager.targetList)
+	for (const targetId of gameState.ai.defense.targetList)
 	{
 		const target = gameState.getEntityById(targetId);
 		if (target && isPlaced(target))
@@ -372,7 +371,7 @@ export function targetDistance(
 	const { land, targetPlayer, type } = query;
 	if (
 		targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-		(!ent.hasClass("Relic") || hqOf(gameState).victoryManager.isRelicRaided(ent.id()))
+		(!ent.hasClass("Relic") || gameState.ai.victory.isRelicRaided(ent.id()))
 	)
 	{
 		return undefined;

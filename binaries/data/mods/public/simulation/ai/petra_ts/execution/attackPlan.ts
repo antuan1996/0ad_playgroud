@@ -162,7 +162,7 @@ export function cannotGrow(gameState: CommonGameState): boolean
 	{
 		return false;
 	}
-	const buildManager = hqOf(gameState).buildManager;
+	const buildManager = gameState.ai.build;
 	return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
 	{
 		const name = gameState.applyCiv(house);
@@ -1738,7 +1738,7 @@ export class AttackPlan
 		{
 			return false;
 		}
-		if (hqOf(gameState).victoryManager.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
+		if (gameState.ai.victory.criticalEnts.has(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
 		{
 			return false;
 		}
@@ -1989,7 +1989,7 @@ export class AttackPlan
 			target.hasClass("Relic")
 		)
 		{
-			hqOf(gameState).victoryManager.planRelicRaid(target.id(), this.name);
+			gameState.ai.victory.planRelicRaid(target.id(), this.name);
 		}
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target

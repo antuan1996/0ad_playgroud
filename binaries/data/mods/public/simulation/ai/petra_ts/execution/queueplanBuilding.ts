@@ -157,7 +157,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			return undefined;
 		}
 
-		if (hqOf(gameState).buildManager.hasBuilder(this.type) !== true)
+		if (gameState.ai.build.hasBuilder(this.type) !== true)
 		{
 			return undefined;
 		}
@@ -202,7 +202,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const pos = this.findGoodPosition(gameState);
 		if (!pos)
 		{
-			hqOf(gameState).buildManager.setUnbuildable(gameState, this.type, 90, "room");
+			gameState.ai.build.setUnbuildable(gameState, this.type, 90, "room");
 			return undefined;
 		}
 
@@ -266,7 +266,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		{
 			return true;
 		}
-		const tradeManager = hqOf(gameState).tradeManager;
+		const tradeManager = gameState.ai.trade;
 		tradeManager.checkRoutes(gameState);
 		return tradeManager.isNewMarketWorth(this.metadata.expectedGain);
 	}

@@ -34,6 +34,11 @@ declare namespace PetraRuntime
 		naval: import("./execution/services.ts").NavalService;
 		/** The attack manager's services to the execution layer (HQ.attackManager as execution/services.ts's AttackRegistry). */
 		attacks: import("./execution/services.ts").AttackRegistry;
+		/** The defense, victory, build and trade managers' services to the execution layer (execution/services.ts). */
+		defense: import("./execution/services.ts").DefenseService;
+		victory: import("./execution/services.ts").VictoryService;
+		build: import("./execution/services.ts").BuildRules;
+		trade: import("./execution/services.ts").TradeService;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */
 		accessibility: import("simulation/ai/common-api/terrain-analysis.js").Accessibility;
 		/** Time elapsed in the game, in seconds (copied from the shared script each turn). */

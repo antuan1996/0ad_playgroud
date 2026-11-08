@@ -6,7 +6,14 @@ import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
-import type { AttackRegistry, NavalService } from "./execution/services.ts";
+import type {
+	AttackRegistry,
+	BuildRules,
+	DefenseService,
+	NavalService,
+	TradeService,
+	VictoryService,
+} from "./execution/services.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
@@ -222,6 +229,30 @@ export class PetraBot extends BaseAI
 	get bases(): BasesView
 	{
 		return requireValue(this.HQ).basesManager;
+	}
+
+	/** The defense manager's services, as `gameState.ai.defense` (PetraRuntime.AIState, execution/services.ts) */
+	get defense(): DefenseService
+	{
+		return requireValue(this.HQ).defenseManager;
+	}
+
+	/** The victory manager's services, as `gameState.ai.victory` */
+	get victory(): VictoryService
+	{
+		return requireValue(this.HQ).victoryManager;
+	}
+
+	/** The build manager's services, as `gameState.ai.build` */
+	get build(): BuildRules
+	{
+		return requireValue(this.HQ).buildManager;
+	}
+
+	/** The trade manager's services, as `gameState.ai.trade` */
+	get trade(): TradeService
+	{
+		return requireValue(this.HQ).tradeManager;
 	}
 
 	/** The attack manager's services, as `gameState.ai.attacks` (PetraRuntime.AIState, execution/services.ts) */
