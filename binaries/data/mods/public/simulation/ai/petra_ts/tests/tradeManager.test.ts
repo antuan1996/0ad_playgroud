@@ -69,7 +69,7 @@ function seat(
 			});
 		}
 	}
-	const manager = new TradeManager(hq.Config, world.gameState, hq.geography);
+	const manager = new TradeManager(hq.Config, world.gameState, hq.geography, hq);
 	hq.tradeManager = manager;
 	resetRecorder();
 	return { world, hq, manager, queues: world.ai.queues };
@@ -151,7 +151,7 @@ describe("the trade office opening: init and traders", () =>
 
 		const world = makeHqWorld();
 		const hq = seatHQ(world, { stubs: tradeDoors, navalMap: true });
-		const naval = new TradeManager(hq.Config, world.gameState, hq.geography);
+		const naval = new TradeManager(hq.Config, world.gameState, hq.geography, hq);
 		assert.equal(naval.minimalGain, 3);
 	});
 });
@@ -926,6 +926,7 @@ describe("the trade office saved and loaded", () =>
 			world.gameState,
 			hq.geography,
 			fake<SerializedTradeManager>({ tradeRoute: undefined, potentialTradeRoute: undefined }),
+			hq,
 		);
 		assert.deepEqual(loaded.Serialize(), defaults);
 	});

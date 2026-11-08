@@ -26,7 +26,7 @@ import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager 
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
 import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
-import { TradeManager, type SerializedTradeManager } from "../decision/tradeManager.ts";
+import { TradeManager, type SerializedTradeManager, type TradeHQ } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager } from "../decision/victoryManager.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "../execution/queueManager.ts";
@@ -149,13 +149,14 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "TradeManager",
-			original: () => new TradeManager(makeConfig(), world, bareGeography(world)),
+			original: () => new TradeManager(makeConfig(), world, bareGeography(world), fake<TradeHQ>({})),
 			fromSave: (data, gameState) =>
 				TradeManager.restore(
 					makeConfig(),
 					gameState,
 					bareGeography(gameState),
 					fake<SerializedTradeManager>(data),
+					fake<TradeHQ>({}),
 				),
 			notSaved: { minimalGain: "derived from the map at construction, which a reload reads again" },
 		}, world);
