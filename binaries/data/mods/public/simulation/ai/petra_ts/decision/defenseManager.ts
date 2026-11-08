@@ -22,12 +22,62 @@ import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
-import type { AttackManager } from "./attackManager.ts";
+import type { ArmyRelease, AttackManager } from "./attackManager.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { BasesManager } from "./basesManager.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import type { Headquarters } from "./headquarters.ts";
 import type { VictoryManager } from "./victoryManager.ts";
+
+/** Which armies a new attack takes: those whose foes stand within range of its target, or the one named */
+type ArmyPick = { range: number; } | { armyID: ArmyId; };
+
+/** An army dissolved into a new attack: its foes let go, each defender released and offered to it */
+function releaseArmy(gameState: CommonGameState, army: DefenseArmy, enlist: (unit: CommonEntity) => void): void
+{
+	while (army.foeEntities.length > 0)
+	{
+		army.removeFoe(gameState, army.foeEntities[0]);
+	}
+	while (army.ownEntities.length > 0)
+	{
+		const unitId = army.ownEntities[0];
+		army.removeOwn(gameState, unitId);
+		const unit = gameState.getEntityById(unitId);
+		if (unit)
+		{
+			enlist(unit);
+		}
+	}
+}
+
+/**
+ * The armies picked for a new attack, released to it once it is made
+ * (AttackManager.switchDefenseToAttack): by range, each army's position is
+ * recalculated first.
+ */
+export function releaseArmies(armies: readonly DefenseArmy[], pick: ArmyPick): ArmyRelease
+{
+	return (gameState, targetPos, enlist) =>
+	{
+		for (const army of armies)
+		{
+			if ("range" in pick)
+			{
+				army.recalculatePosition(gameState);
+				if (SquareVectorDistance(targetPos, army.foePosition) > pick.range * pick.range)
+				{
+					continue;
+				}
+			}
+			else if (army.ID !== pick.armyID)
+			{
+				continue;
+			}
+			releaseArmy(gameState, army, enlist);
+		}
+	};
+}
 
 /** What the defense asks of the garrison manager: the room in a holder, to garrison there, and who may */
 type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garrison" | "allowMelee">;
@@ -1369,7 +1419,11 @@ export class DefenseManager
 				// One of our cc has been captured.
 				if (ent && ent.hasClass("CivCentre"))
 				{
-					this.hq.attackManager.switchDefenseToAttack(gameState, ent, { range: 150 });
+					this.hq.attackManager.switchDefenseToAttack(
+						gameState,
+						ent,
+						releaseArmies(this.armies, { range: 150 }),
+					);
 				}
 			}
 		}
@@ -1592,7 +1646,12 @@ export class DefenseManager
 				{
 					continue;
 				}
-				this.hq.attackManager.switchDefenseToAttack(gameState, target, { armyID: army.ID, uniqueTarget: true });
+				this.hq.attackManager.switchDefenseToAttack(
+					gameState,
+					target,
+					releaseArmies(this.armies, { armyID: army.ID }),
+					true,
+				);
 				return;
 			}
 		}

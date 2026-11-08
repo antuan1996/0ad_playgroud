@@ -8,7 +8,6 @@ import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { ATTACK_TYPES, plansIn, type AttackType } from "../execution/attackConstants.ts";
 import { AttackPlan, byAttackType, type SerializedAttackPlan } from "../execution/attackPlan.ts";
-import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { allowCapture } from "../world/capture.ts";
@@ -74,39 +73,35 @@ function nearestLocalTarget(enemies: readonly CommonPlacedEntity[], from: Common
 	return best;
 }
 
-/** A defense army dissolved into the attack: its units on the target's land that the attack may take join it */
-function enlistArmy(
+/**
+ * How the defense hands armies to a new attack once it is made: it releases
+ * the armies' foes and defenders, each defender (still in the world) to
+ * `enlist` (decision/defenseManager.ts releaseArmies).
+ */
+export type ArmyRelease = (
 	gameState: CommonGameState,
-	army: DefenseArmy,
+	targetPos: CommonPosition,
+	enlist: (unit: CommonEntity) => void,
+) => void;
+
+/** A released defender joins the attack: on the map, on the target's land, and free to go */
+function enlistDefender(
+	gameState: CommonGameState,
 	attackPlan: AttackPlan,
 	targetAccess: AccessIndex,
+	unit: CommonEntity,
 ): void
 {
-	while (army.foeEntities.length > 0)
+	// the original ORed in "transport metadata exists" here, but
+	// isAvailableUnit below always rejects transport-marked units, so the
+	// clause could never lead to an enlistment and was dropped
+	if (
+		isPlaced(unit) && getLandAccess(gameState, unit) === targetAccess && attackPlan.isAvailableUnit(gameState, unit)
+	)
 	{
-		army.removeFoe(gameState, army.foeEntities[0]);
-	}
-	while (army.ownEntities.length > 0)
-	{
-		const unitId = army.ownEntities[0];
-		army.removeOwn(gameState, unitId);
-		const unit = gameState.getEntityById(unitId);
-		if (!unit)
-		{
-			continue;
-		}
-		// the original ORed in "transport metadata exists" here, but
-		// isAvailableUnit below always rejects transport-marked units, so the
-		// clause could never lead to an enlistment and was dropped
-		if (
-			isPlaced(unit) && getLandAccess(gameState, unit) === targetAccess &&
-			attackPlan.isAvailableUnit(gameState, unit)
-		)
-		{
-			unit.setMetadata(PlayerID, "plan", attackPlan.name);
-			unit.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
-			attackPlan.unitCollection.updateEnt(unit);
-		}
+		unit.setMetadata(PlayerID, "plan", attackPlan.name);
+		unit.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
+		attackPlan.unitCollection.updateEnt(unit);
 	}
 }
 
@@ -159,11 +154,11 @@ function bombingSpot(
 
 /**
  * What the attack manager asks of its sibling managers, through the
- * headquarters that owns them all: the defense's targets and armies, whether
+ * headquarters that owns them all: the defense's targets, whether
  * a base can still be founded, and the victory manager's gaia relics.
  */
 export type AttackSiblings = {
-	readonly defenseManager: Pick<DefenseManager, "targetList" | "armies">;
+	readonly defenseManager: Pick<DefenseManager, "targetList">;
 	readonly basesManager: Pick<BasesManager, "hasPotentialBase">;
 	readonly victoryManager: Pick<VictoryManager, "tryCaptureGaiaRelic" | "resetCaptureGaiaRelic">;
 };
@@ -1024,27 +1019,23 @@ export class AttackManager
 	}
 
 	/**
-	 * Switch defense armies into an attack one against the given target
-	 * data.range: transform all defense armies inside range of the target into a new attack
-	 * data.armyID: transform only the defense army ID into a new attack
-	 * data.uniqueTarget: the attack will stop when the target is destroyed or captured
+	 * Switch defense armies into an attack against the given target: once the
+	 * plan is made, the defense releases the armies it chose (`release`), and
+	 * each defender that may go joins the attack.
+	 * uniqueTarget: the attack will stop when the target is destroyed or captured
 	 */
 	switchDefenseToAttack(
 		gameState: CommonGameState,
 		target: CommonEntity,
-		data: { range?: number; armyID?: ArmyId; uniqueTarget?: boolean; },
+		release: ArmyRelease,
+		uniqueTarget = false,
 	): boolean
 	{
 		if (!target || !isPlaced(target))
 		{
 			return false;
 		}
-		if (!data.range && !data.armyID)
-		{
-			aiWarn(" attackManager.switchDefenseToAttack inconsistent data " + uneval(data));
-			return false;
-		}
-		const attackData = data.uniqueTarget ? { uniqueTargetId: target.id() } : undefined;
+		const attackData = uniqueTarget ? { uniqueTargetId: target.id() } : undefined;
 		const pos = target.position();
 		const attackType = AttackPlan.TYPE_DEFAULT;
 		const attackPlan = AttackPlan.create(gameState, this.Config, this.totalNumber, attackType, attackData);
@@ -1056,24 +1047,7 @@ export class AttackManager
 		this.startedAttacks[attackType].push(attackPlan);
 
 		const targetAccess = getLandAccess(gameState, target);
-		for (const army of this.siblings.defenseManager.armies)
-		{
-			if (data.range)
-			{
-				army.recalculatePosition(gameState);
-				if (SquareVectorDistance(pos, army.foePosition) > data.range * data.range)
-				{
-					continue;
-				}
-			}
-			// If range is not given, the entry check ensured armyID is set.
-			else if (army.ID !== data.armyID)
-			{
-				continue;
-			}
-
-			enlistArmy(gameState, army, attackPlan, targetAccess);
-		}
+		release(gameState, pos, (unit) => enlistDefender(gameState, attackPlan, targetAccess, unit));
 		if (!attackPlan.unitCollection.hasEntities())
 		{
 			attackPlan.Abort(gameState);
