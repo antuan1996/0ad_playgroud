@@ -5,6 +5,18 @@ import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import type { Config } from "../world/config.ts";
+import type { AttackManager } from "./attackManager.ts";
+import type { Headquarters } from "./headquarters.ts";
+
+/**
+ * What the diplomacy manager asks of the headquarters that owns it: the
+ * resources most needed (to tribute and to ask for), the economy plan (no
+ * tribute while saving); and of the attack manager: the defeated players and
+ * the one it targets, and the attacks to call off against a new ally.
+ */
+export type DiplomacyHQ = Pick<Headquarters, "pickMostNeededResources" | "economy"> & {
+	readonly attackManager: Pick<AttackManager, "defeated" | "currentEnemyPlayer" | "cancelAttacksAgainstPlayer">;
+};
 
 type DiplomacyRequestType = "ally" | "neutral";
 type DiplomacyRequestStatus = "accepted" | "allianceBroken" | "declinedRequest" | "waitingForTribute";
@@ -63,10 +75,11 @@ function declineAtOnce(
 	player: PlayerId,
 	request: DiplomacyRequest | undefined,
 	moreEnemiesThanAllies: boolean,
+	targeting: Pick<AttackManager, "currentEnemyPlayer">,
 ): boolean
 {
 	return !request && gameState.getPlayerCiv() !== gameState.getPlayerCiv(player) && randBool(0.6) ||
-		!moreEnemiesThanAllies || gameState.ai.HQ.attackManager.currentEnemyPlayer === player;
+		!moreEnemiesThanAllies || targeting.currentEnemyPlayer === player;
 }
 
 /** Whether we accept without a tribute: an alliance with a weaker player sometimes, neutrality mostly. */
@@ -131,9 +144,12 @@ export class DiplomacyManager
 	sentDiplomacyRequests: Map<PlayerId, SentDiplomacyRequest>;
 	waitingToBetray: boolean;
 
-	constructor(Config: Config, deserialized: boolean)
+	readonly hq: DiplomacyHQ;
+
+	constructor(Config: Config, deserialized: boolean, hq: DiplomacyHQ)
 	{
 		this.Config = Config;
+		this.hq = hq;
 		this.nextTributeUpdate = seconds(90);
 		this.nextTributeRequest = new Map();
 		this.nextTributeRequest.set("all", seconds(240));
@@ -188,17 +204,17 @@ export class DiplomacyManager
 		{
 			return;
 		}
-		let mostNeeded: ReturnType<typeof gameState.ai.HQ.pickMostNeededResources> | undefined;
+		let mostNeeded: ReturnType<DiplomacyHQ["pickMostNeededResources"]> | undefined;
 		const stock: TributeStock = {
 			codes: resTribCodes,
 			total: gameState.getResources(),
 			available: gameState.ai.queueManager.getAvailableResources(gameState),
-			mostNeeded: () => mostNeeded ??= gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes),
+			mostNeeded: () => mostNeeded ??= this.hq.pickMostNeededResources(gameState, resTribCodes),
 		};
 		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
 			const i = playerId(iIndex);
-			if (i === PlayerID || !gameState.isPlayerAlly(i) || gameState.ai.HQ.attackManager.defeated[i])
+			if (i === PlayerID || !gameState.isPlayerAlly(i) || this.hq.attackManager.defeated[i])
 			{
 				continue;
 			}
@@ -567,7 +583,7 @@ export class DiplomacyManager
 		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
 			const i = playerId(iIndex);
-			if (i === PlayerID || gameState.ai.HQ.attackManager.defeated[i])
+			if (i === PlayerID || this.hq.attackManager.defeated[i])
 			{
 				continue;
 			}
@@ -656,7 +672,7 @@ export class DiplomacyManager
 		const moreEnemiesThanAllies = gameState.getEnemies().length > gameState.getMutualAllies().length;
 
 		// For any given diplomacy request be likely to permanently decline
-		if (declineAtOnce(gameState, player, request, moreEnemiesThanAllies))
+		if (declineAtOnce(gameState, player, request, moreEnemiesThanAllies, this.hq.attackManager))
 		{
 			this.receivedDiplomacyRequests.set(player, { requestType: requestType, status: "declinedRequest" });
 			response = "decline";
@@ -708,7 +724,7 @@ export class DiplomacyManager
 			this.receivedDiplomacyRequests.set(player, { requestType: requestType, status: "declinedRequest" });
 			return undefined;
 		}
-		const requiredTribute = gameState.ai.HQ.pickMostNeededResources(gameState, resTribCodes)[0];
+		const requiredTribute = this.hq.pickMostNeededResources(gameState, resTribCodes)[0];
 		requiredTribute.wanted = Math.max(1000, gameState.getOwnUnits().length * (requestType === "ally" ? 10 : 5));
 		this.receivedDiplomacyRequests.set(player, {
 			status: "waitingForTribute",
@@ -729,7 +745,7 @@ export class DiplomacyManager
 	{
 		if (gameState.isPlayerEnemy(player) && (newDiplomaticStance === "ally" || newDiplomaticStance === "neutral"))
 		{
-			gameState.ai.HQ.attackManager.cancelAttacksAgainstPlayer(gameState, player);
+			this.hq.attackManager.cancelAttacksAgainstPlayer(gameState, player);
 		}
 		postCommand({ type: "diplomacy", player: player, to: newDiplomaticStance });
 		debugWarn(this.Config, 1, () => "diplomacy stance with player " + player + " is now " + newDiplomaticStance);
@@ -789,7 +805,7 @@ export class DiplomacyManager
 				const j = playerId(jIndex);
 				if (
 					gameState.sharedScript.playersData[i].isEnemy[j] && gameState.isPlayerEnemy(j) &&
-					!gameState.ai.HQ.attackManager.defeated[j]
+					!this.hq.attackManager.defeated[j]
 				)
 				{
 					++mutualEnemies;
@@ -821,8 +837,8 @@ export class DiplomacyManager
 	/** Whether we may ask player i for an alliance: not allied yet, not our target, not asked already nor declined by us. */
 	private mayAsk(gameState: CommonGameState, i: PlayerId, request: DiplomacyRequest | undefined): boolean
 	{
-		return !(gameState.isPlayerMutualAlly(i) || gameState.ai.HQ.attackManager.defeated[i] ||
-			gameState.ai.HQ.attackManager.currentEnemyPlayer === i ||
+		return !(gameState.isPlayerMutualAlly(i) || this.hq.attackManager.defeated[i] ||
+			this.hq.attackManager.currentEnemyPlayer === i ||
 			this.sentDiplomacyRequests.get(i) !== undefined || request && request.status === "declinedRequest");
 	}
 
@@ -831,7 +847,7 @@ export class DiplomacyManager
 		for (const [player, data] of this.sentDiplomacyRequests)
 		{
 			if (
-				gameState.ai.elapsedTime > data.timeSent + 60 && !gameState.ai.HQ.economy.saveResources &&
+				gameState.ai.elapsedTime > data.timeSent + 60 && !this.hq.economy.saveResources &&
 				gameState.getPopulation() > 70
 			)
 			{
@@ -846,7 +862,7 @@ export class DiplomacyManager
 		this.checkEvents(gameState, events);
 
 		if (
-			Resources.GetTributableCodes().length && !gameState.ai.HQ.economy.saveResources &&
+			Resources.GetTributableCodes().length && !this.hq.economy.saveResources &&
 			gameState.ai.elapsedTime > this.nextTributeUpdate
 		)
 		{
@@ -895,9 +911,9 @@ export class DiplomacyManager
 	}
 
 	/** A saved diplomacy manager: its tributes, betrayals and requests (no random draw: its timings are saved) */
-	static restore(Config: Config, data: SerializedDiplomacyManager): DiplomacyManager
+	static restore(Config: Config, data: SerializedDiplomacyManager, hq: DiplomacyHQ): DiplomacyManager
 	{
-		const manager = new DiplomacyManager(Config, true);
+		const manager = new DiplomacyManager(Config, true, hq);
 		manager.resume(data);
 		return manager;
 	}
