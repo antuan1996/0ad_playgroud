@@ -223,11 +223,16 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
 - World state lives in `world/` objects owned by managers (`HQ.geography`,
   `base.resources`) and hot paths read them directly
   (`HQ.geography.territoryMap`, `base.resources.dropsiteSupplies`), while owners
-  keep get/set accessors for saves and tests.
+  keep get/set accessors for saves and tests. Below `decision/` they are read
+  through `gameState.ai` (`PetraRuntime.AIState`, getters on the bot and in
+  the harnesses): `geography`, `bases` (`world/bases.ts` `BasesView`),
+  `treasures`, `captures` (`world/captureTally.ts`).
 - Execution code (`execution/`) reaches `Headquarters` only through
-  `hqOf(gameState)` (`execution/hq.ts`), reads bases through `world/bases.ts`
-  (`BaseView`), and mutates them only through capability interfaces
-  (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`).
+  `hqOf(gameState)` (`execution/hq.ts`) for its decisions and searches (the
+  managers, the placement queries, its flags), reads bases through
+  `gameState.ai.bases` and `world/bases.ts` (`BaseView`), and mutates them only
+  through capability interfaces (`SupplyBooking`, `SupplyUpkeep`,
+  `IdleWorkers`).
 - Methods never called (in port and original) are marked
   `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with
