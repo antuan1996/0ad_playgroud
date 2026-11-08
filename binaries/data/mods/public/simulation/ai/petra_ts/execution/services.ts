@@ -3,7 +3,8 @@
  * code depends on these interfaces only, never on decision/'s classes, and reaches them on `gameState.ai`
  * (PetraRuntime.AIState, the bot's getters return the managers, which satisfy them as they are).
  */
-import type { AttackPlan, AttackType } from "./attackPlan.ts";
+import { AttackType } from "./attackConstants.ts";
+import type { AttackPlan } from "./attackPlan.ts";
 import type { DefenseArmy } from "./defenseArmy.ts";
 import type { SeaFleet, TransportPlan } from "./transportPlan.ts";
 

@@ -6,14 +6,8 @@ import { debugWarn } from "../adapter/debug.ts";
 import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import {
-	ATTACK_TYPES,
-	AttackPlan,
-	byAttackType,
-	plansIn,
-	type AttackType,
-	type SerializedAttackPlan,
-} from "../execution/attackPlan.ts";
+import { ATTACK_TYPES, plansIn, type AttackType } from "../execution/attackConstants.ts";
+import { AttackPlan, byAttackType, type SerializedAttackPlan } from "../execution/attackPlan.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
 import { PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";

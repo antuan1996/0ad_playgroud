@@ -8,7 +8,6 @@ import {
 	requireValue,
 	setSeaAccess,
 } from "../adapter/entityExtend.ts";
-import { plansIn } from "../execution/attackPlan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportPlan, type SeaFleet } from "../execution/transportPlan.ts";
@@ -31,6 +30,7 @@ import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
+import { plansIn } from "../execution/attackConstants.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";

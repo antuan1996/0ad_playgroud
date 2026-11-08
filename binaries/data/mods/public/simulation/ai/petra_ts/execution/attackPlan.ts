@@ -1,55 +1,79 @@
-import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import {
-	INVALID_PLAYER,
-	NO_BASE,
-	NO_LAND,
-	NO_REGION,
-	attackPlanId,
-	playerId,
-	seconds,
-	worldPos,
-} from "../adapter/brands.ts";
-import { debugShade, postCommand } from "../adapter/commands.ts";
+import { aiWarn } from "simulation/ai/common-api/utils.js";
+import { NO_LAND, NO_REGION, attackPlanId, seconds, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import {
-	dumpEntity,
-	getHolder,
-	getLandAccess,
-	isSiegeUnit,
-	requireTemplate,
-	requireValue,
-	returnResources,
-} from "../adapter/entityExtend.ts";
+import { getLandAccess, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { computePath } from "../adapter/pathfinder.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { basesOf } from "../world/bases.ts";
 import { allowCapture } from "../world/capture.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
+import {
+	ANSWER_RANGE,
+	PREPARATION_FAILED,
+	PREPARATION_KEEP_GOING,
+	PREPARATION_START,
+	SIEGE_ADDED,
+	SIEGE_NOT_TESTED,
+	SIEGE_NO_TRAINER,
+	STATE_ARRIVED,
+	STATE_ATTACKING,
+	STATE_COMPLETING,
+	STATE_TRANSPORTING,
+	STATE_UNEXECUTED,
+	STATE_WALKING,
+	TYPE_DEFAULT,
+	TYPE_HUGE_ATTACK,
+	TYPE_RAID,
+	TYPE_RUSH,
+	WITHDRAW_RANGE,
+	type AttackType,
+} from "./attackConstants.ts";
+import { besideEnemies, draftWorkers, enlist, enlistAll, enlistRaiders, leaveDisputedLands } from "./attackDraft.ts";
+import {
+	onTargetLost,
+	onTargetRenamed,
+	rallyAtBaseOn,
+	releaseGarrisoned,
+	startAttacking,
+	withdrawPoint,
+} from "./attackFight.ts";
+import { UpdateTransporting, UpdateWalking, walkTo } from "./attackMarch.ts";
 import {
 	answerAttackers,
 	answersBlow,
 	attackerTargetClasses,
 	countUnitTargets,
-	destroyFarthestSiege,
 	orderAttacker,
 	type AttackerContext,
 } from "./attackOrders.ts";
 import {
-	defaultTargetFinder,
+	completingStep,
+	debugBuildOrders,
+	emptyQueues,
+	prepareArmy,
+	queueBuildOrder,
+	queuedFor,
+	setOff,
+	trainingStep,
+} from "./attackPreparation.ts";
+import {
+	findTarget,
+	followUnitTarget,
+	rallyOverseas,
+	switchTarget,
+	targetCandidates,
+	targetLand,
+} from "./attackTargeting.ts";
+import {
 	findRushTarget,
 	findTargetObstruction,
 	nearestBaseAnchors,
-	raidTargetFinder,
 	rallyPoints,
 	targetDistance,
 } from "./attackTargets.ts";
 import type { Queue } from "./queue.ts";
-import { type PlanMetadata } from "./queueplan.ts";
-import { TrainingPlan } from "./queueplanTraining.ts";
 import { PLAN_RESERVE } from "./unitPlan.ts";
 import { Worker } from "./worker.ts";
 
@@ -62,7 +86,7 @@ export type AttackUnitStat = {
 	interests?: Array<[string, number, ...string[]]>;
 };
 
-type AttackBuildOrder = [number, string[], CommonEntityCollection, AttackUnitStat, string];
+export type AttackBuildOrder = [number, string[], CommonEntityCollection, AttackUnitStat, string];
 
 /** What an attack plan looks like once serialized: `Serialize` builds it, `Deserialize` reads it. */
 export type SerializedAttackPlan = {
@@ -111,21 +135,6 @@ type AttackTransitions = {
 	"": never;
 };
 type AttackPlanState = keyof AttackTransitions;
-/** How near its rally point a withdrawing army stops, past the anchor's footprint when it is a base. */
-const WITHDRAW_RANGE = 15;
-
-/** The four kinds of attack plan, in the order the attack manager keeps them. */
-export type AttackType = "Rush" | "Raid" | "Attack" | "HugeAttack";
-export const ATTACK_TYPES: readonly AttackType[] = ["Rush", "Raid", "Attack", "HugeAttack"];
-
-/** Every plan of the records, type by type in ATTACK_TYPES' order; lazy, as the nested loops it replaces were. */
-export function* plansIn(records: Record<AttackType, AttackPlan[]>): Generator<AttackPlan>
-{
-	for (const type of ATTACK_TYPES)
-	{
-		yield* records[type];
-	}
-}
 
 /** A record over the four attack types, in ATTACK_TYPES' order, of what `make` gives for each. */
 export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackType, T>
@@ -145,42 +154,6 @@ export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackTyp
 export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number; };
 /** Where a plan gathers its army, and the sea to cross to its target (0: none). */
 type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0; };
-
-/** Empties a preparing plan's three queues. */
-export function emptyQueues(prep: AttackPreparation): void
-{
-	prep.queue.empty();
-	prep.queueChamp.empty();
-	prep.queueSiege.empty();
-}
-
-/** At our population limit, with no room left for a house (the house template marked unbuildable). */
-export function cannotGrow(gameState: CommonGameState): boolean
-{
-	if (gameState.getPopulationLimit() - gameState.getPopulation() >= 5)
-	{
-		return false;
-	}
-	const buildManager = gameState.ai.build;
-	return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
-	{
-		const name = gameState.applyCiv(house);
-		return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
-	});
-}
-
-/**
- * Whether a unit stands on another land than the rally point's with enemies
- * on it: it is not drafted, nor shipped to the rally point, while they are
- * there (FINDINGS §34).
- */
-function besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
-{
-	const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
-	// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
-	return land !== undefined && land > 1 && land !== rallyLand &&
-		gameState.ai.attacks.enemiesByLand(gameState).has(land);
-}
 
 /**
  * The build orders by training advancement, the least advanced (current size / target size, less priority)
@@ -541,14 +514,14 @@ type AttackPlanSetup =
 	});
 
 /** What an attack goes for: its target, and where it is (or was last seen, for a unit that went in somewhere) */
-type AttackAim = { target: CommonEntity; pos: CommonPosition; };
+export type AttackAim = { target: CommonEntity; pos: CommonPosition; };
 
 /**
  * What a plan attacks and what it knows of it: the entity, where it was last
  * seen, its owner, and the unique target it was asked to keep. Every stage
  * carries one, so the target and its position move together.
  */
-type AttackTarget = {
+export type AttackTarget = {
 	ent: CommonEntity | undefined;
 	pos: CommonPosition | undefined;
 	player: PlayerId | undefined;
@@ -957,32 +930,26 @@ export class AttackPlan
 		return this.target && this.targetPos ? { target: this.target, pos: this.targetPos } : undefined;
 	}
 
-	static PREPARATION_FAILED = 0;
-	static PREPARATION_KEEP_GOING = 1;
-	static PREPARATION_START = 2;
+	static PREPARATION_FAILED = PREPARATION_FAILED;
+	static PREPARATION_KEEP_GOING = PREPARATION_KEEP_GOING;
+	static PREPARATION_START = PREPARATION_START;
 
-	static SIEGE_NOT_TESTED = 0;
-	static SIEGE_NO_TRAINER = 1;
+	static SIEGE_NOT_TESTED = SIEGE_NOT_TESTED;
+	static SIEGE_NO_TRAINER = SIEGE_NO_TRAINER;
+	static SIEGE_ADDED = SIEGE_ADDED;
+	static ANSWER_RANGE = ANSWER_RANGE;
 
-	/**
-	 * Siege added in build orders
-	 */
-	static SIEGE_ADDED = 2;
-	/** How far from a unit hit the plan's units bound for a ship answer, while it gathers at its rally point (answerAttacks). */
-	static ANSWER_RANGE = 60;
+	static readonly STATE_UNEXECUTED = STATE_UNEXECUTED;
+	static readonly STATE_COMPLETING = STATE_COMPLETING;
+	static readonly STATE_WALKING = STATE_WALKING;
+	static readonly STATE_TRANSPORTING = STATE_TRANSPORTING;
+	static readonly STATE_ARRIVED = STATE_ARRIVED;
+	static readonly STATE_ATTACKING = STATE_ATTACKING;
 
-	static readonly STATE_UNEXECUTED = "unexecuted";
-	static readonly STATE_COMPLETING = "completing";
-	static readonly STATE_WALKING = "walking";
-	static readonly STATE_TRANSPORTING = "transporting";
-	static readonly STATE_ARRIVED = "arrived";
-	/** At the target: the units fight what they find. */
-	static readonly STATE_ATTACKING = "";
-
-	static readonly TYPE_DEFAULT = "Attack";
-	static readonly TYPE_HUGE_ATTACK = "HugeAttack";
-	static readonly TYPE_RAID = "Raid";
-	static readonly TYPE_RUSH = "Rush";
+	static readonly TYPE_DEFAULT = TYPE_DEFAULT;
+	static readonly TYPE_HUGE_ATTACK = TYPE_HUGE_ATTACK;
+	static readonly TYPE_RAID = TYPE_RAID;
+	static readonly TYPE_RUSH = TYPE_RUSH;
 
 	getName(): number
 	{
@@ -1197,7 +1164,7 @@ export class AttackPlan
 		// so we check that we have no more forced order before starting the attack
 		if (this.state === AttackPlan.STATE_COMPLETING)
 		{
-			const step = this.completingStep(gameState);
+			const step = completingStep(this, gameState);
 			if (step !== undefined)
 			{
 				return step;
@@ -1209,7 +1176,7 @@ export class AttackPlan
 			this.debugAttack();
 		}
 
-		if (!this.prepareArmy(gameState))
+		if (!prepareArmy(this, gameState))
 		{
 			return AttackPlan.PREPARATION_KEEP_GOING;
 		}
@@ -1221,250 +1188,14 @@ export class AttackPlan
 			return AttackPlan.PREPARATION_KEEP_GOING;
 		}
 
-		const step = this.trainingStep(gameState, prep);
+		const step = trainingStep(this, gameState, prep);
 		if (step !== undefined)
 		{
 			return step;
 		}
 
 		// if we're here, it means we must start
-		return this.setOff(gameState);
-	}
-
-	/**
-	 * A completing plan starts once its units are done with their transport and their forced orders (or its time is
-	 * up); undefined when its target is gone: it is unexecuted again
-	 */
-	private completingStep(gameState: CommonGameState): number | undefined
-	{
-		// if our target was destroyed, go back to "unexecuted" state
-		if (this.targetPlayer === undefined || !this.target || !gameState.getEntityById(this.target.id()))
-		{
-			this.changeState(AttackPlan.STATE_COMPLETING, AttackPlan.STATE_UNEXECUTED);
-			this.target = undefined;
-			return undefined;
-		}
-		// check that all units have finished with their transport if needed
-		if (this.waitingForTransport())
-		{
-			return AttackPlan.PREPARATION_KEEP_GOING;
-		}
-		// bloqued units which cannot finish their order should not stop the attack
-		if (gameState.ai.elapsedTime < this.maxCompletingTime && this.hasForceOrder())
-		{
-			return AttackPlan.PREPARATION_KEEP_GOING;
-		}
-		return AttackPlan.PREPARATION_START;
-	}
-
-	/** The plan drafts its units and keeps them off disputed lands; false while it waits for its ships */
-	private prepareArmy(gameState: CommonGameState): boolean
-	{
-		if (this.type !== AttackPlan.TYPE_RAID || !this.forced)
-		{ // Forced Raids have special purposes (as relic capture)
-			this.assignUnits(gameState);
-		}
-
-		// if we need a transport, wait for some transport ships, the units
-		// drafted first: they keep at their work until the plan sets off, and
-		// Petra, waiting before it drafted, left 147 idle citizen soldiers out of
-		// an attack waiting for its ships on a dry island (FINDINGS §40); the
-		// ship queue is raised meanwhile (NavalManager.shipPriority)
-		if (this.overseas && !gameState.ai.naval.fleet(this.overseas)?.transports.length)
-		{
-			return false;
-		}
-		if (
-			this.type !== AttackPlan.TYPE_RAID &&
-			gameState.ai.attacks.getAttackInPreparation(AttackPlan.TYPE_RAID) !== undefined
-		)
-		{
-			this.reassignFastUnit(gameState); // reassign some fast units (if any) to fasten raid preparations
-		}
-		// while it prepares, the plan holds no soldier beside enemies away from its rally point
-		this.leaveDisputedLands(gameState, gameState.ai.accessibility.getAccessValue(this.rallyPoint));
-
-		// Fasten the end game.
-		if (gameState.ai.playedTurn % 5 === 0 && this.hasSiegeUnits())
-		{
-			this.fastenEndGame(gameState);
-		}
-		return true;
-	}
-
-	/** The plan's training while it prepares: a result to return, or undefined when it must start */
-	private trainingStep(gameState: CommonGameState, prep: AttackPreparation): number | undefined
-	{
-		// special case: if we've reached max pop, and we can start the plan, start it;
-		// so too at our population limit with no room for a house: it cannot grow
-		// (FINDINGS §40: a huge attack of 136 waited for good on a full island)
-		if (gameState.getPopulationMax() - gameState.getPopulation() < 5 || cannotGrow(gameState))
-		{
-			let lengthMin = 16;
-			if (gameState.getPopulationMax() < 300)
-			{
-				lengthMin -= Math.floor(8 * (300 - gameState.getPopulationMax()) / 300);
-			}
-			if (this.canStart() || this.unitCollection.length > lengthMin)
-			{
-				emptyQueues(prep);
-				return undefined;
-			}
-			// Short of men at the cap: wait, gathering the reserve as below it. The
-			// original aborted the plan so that its units would serve other plans,
-			// but the next plan the attack manager made took them back at once
-			// (FINDINGS §16: 120 plans in 200 games, 80 in one).
-			return AttackPlan.PREPARATION_KEEP_GOING;
-		}
-		if (this.mustStart())
-		{
-			if (gameState.countOwnQueuedEntitiesWithMetadata("plan", +this.name) > 0)
-			{
-				// keep on while the units finish being trained, then we'll start
-				emptyQueues(prep);
-				return AttackPlan.PREPARATION_KEEP_GOING;
-			}
-			return undefined;
-		}
-		if (this.canBuildUnits)
-		{
-			// We still have time left to recruit units and do stuffs.
-			if (
-				prep.siegeState === AttackPlan.SIEGE_NOT_TESTED ||
-				prep.siegeState === AttackPlan.SIEGE_NO_TRAINER && gameState.ai.playedTurn % 5 === 0
-			)
-			{
-				this.addSiegeUnits(gameState);
-			}
-			this.trainMoreUnits(gameState, prep);
-			// may happen if we have no more training facilities and build orders are canceled
-			if (!prep.buildOrders.length)
-			{
-				return AttackPlan.PREPARATION_FAILED; // will abort the plan
-			}
-		}
-		return AttackPlan.PREPARATION_KEEP_GOING;
-	}
-
-	/** The plan sets off: completing, with its target and path, its units gathering, its queues reset */
-	private setOff(gameState: CommonGameState): number
-	{
-		this.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_COMPLETING);
-
-		// Raids have their predefined target
-		if (!this.target && !this.chooseTarget(gameState))
-		{
-			return AttackPlan.PREPARATION_FAILED;
-		}
-		this.leaveDisputedLands(gameState, this.targetLand(gameState));
-		const aim = this.aim();
-		if (!this.overseas && aim)
-		{
-			this.getPathToTarget(gameState, aim);
-		}
-
-		if (this.type === AttackPlan.TYPE_RAID)
-		{
-			this.maxCompletingTime = seconds(this.forced ? 0 : gameState.ai.elapsedTime + 20);
-		}
-		else
-		{
-			if (this.type === AttackPlan.TYPE_RUSH || this.forced)
-			{
-				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 40);
-			}
-			else
-			{
-				this.maxCompletingTime = seconds(gameState.ai.elapsedTime + 60);
-			}
-			// warn our allies so that they can help if possible
-			if (!this.requested && this.targetPlayer !== undefined)
-			{
-				postCommand({ type: "attack-request", source: PlayerID, player: this.targetPlayer });
-			}
-		}
-
-		this.gatherAtRallyPoint(gameState);
-
-		// reset all queued units
-		this.removeQueues(gameState);
-		return AttackPlan.PREPARATION_KEEP_GOING;
-	}
-
-	/** A plan with siege far bigger than the enemies' armies starts at once */
-	fastenEndGame(gameState: CommonGameState): void
-	{
-		let totEnemies = 0;
-		let hasEnemies = false;
-		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
-		{
-			const i = playerId(iIndex);
-			if (!gameState.isPlayerEnemy(i) || gameState.ai.attacks.defeated[i])
-			{
-				continue;
-			}
-			hasEnemies = true;
-			totEnemies += gameState.getEnemyUnits(i).length;
-		}
-		if (hasEnemies && this.unitCollection.length > 20 + 2 * totEnemies)
-		{
-			this.forceStart();
-		}
-	}
-
-	/** The plan sets off: its units leave bombing, return what they carry and go to the rally point, by ship if need be */
-	gatherAtRallyPoint(gameState: CommonGameState): void
-	{
-		// Remove those units which were in a temporary bombing attack
-		for (const unitIds of gameState.ai.attacks.bombingAttacks.values())
-		{
-			for (const entId of unitIds.values())
-			{
-				const ent = gameState.getEntityById(entId);
-				if (!ent || ent.getMetadata(PlayerID, "plan") !== this.name)
-				{
-					continue;
-				}
-				unitIds.delete(entId);
-				ent.stopMoving();
-			}
-		}
-
-		const rallyPoint = this.rallyPoint;
-		const rallyIndex = gameState.ai.accessibility.getAccessValue(rallyPoint);
-		for (const ent of this.unitCollection.values())
-		{
-			// For the time being, if occupied in a transport, remove the unit from this plan   TODO improve that
-			if (
-				ent.getMetadata(PlayerID, "transport") !== undefined ||
-				ent.getMetadata(PlayerID, "transporter") !== undefined
-			)
-			{
-				ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
-				continue;
-			}
-			ent.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
-			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_COMPLETING);
-			const carrying = ent.resourceCarrying();
-			let queued = false;
-			if (carrying && carrying.length)
-			{
-				queued = returnResources(gameState, ent);
-			}
-			const index = getLandAccess(gameState, ent);
-			if (index === undefined)
-			{
-				continue;
-			}
-			if (index === rallyIndex)
-			{
-				ent.moveToRange(rallyPoint[0], rallyPoint[1], 0, 15, queued);
-			}
-			else
-			{
-				gameState.ai.naval.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
-			}
-		}
+		return setOff(this, gameState);
 	}
 
 	trainMoreUnits(gameState: CommonGameState, prep: AttackPreparation): void
@@ -1474,124 +1205,19 @@ export class AttackPlan
 		// substract priority.
 		for (const order of prep.buildOrders)
 		{
-			order[0] = order[2].length + this.queuedFor(gameState, prep, order[4]).total;
+			order[0] = order[2].length + queuedFor(this, gameState, prep, order[4]).total;
 		}
 		prep.buildOrders.sort(byTrainingAdvancement);
 
 		if (this.Config.debug > 1 && gameState.ai.playedTurn % 50 === 0)
 		{
-			this.debugBuildOrders(gameState, prep);
+			debugBuildOrders(this, gameState, prep);
 		}
 
 		const firstOrder = prep.buildOrders[0];
 		if (firstOrder[0] < firstOrder[3].targetSize)
 		{
-			this.queueBuildOrder(gameState, prep, firstOrder);
-		}
-	}
-
-	/** The units of a build order in training and in the plan's three queues */
-	private queuedFor(
-		gameState: CommonGameState,
-		prep: AttackPreparation,
-		name: string,
-	): { inTraining: number; queue1: number; queue2: number; queue3: number; total: number; }
-	{
-		const special = "Plan_" + this.name + "_" + name;
-		const inTraining = gameState.countOwnQueuedEntitiesWithMetadata("special", special);
-		const queue1 = prep.queue.countQueuedUnitsWithMetadata("special", special);
-		const queue2 = prep.queueChamp.countQueuedUnitsWithMetadata("special", special);
-		const queue3 = prep.queueSiege.countQueuedUnitsWithMetadata("special", special);
-		let total = inTraining;
-		total += queue1;
-		total += queue2;
-		total += queue3;
-		return { inTraining, queue1, queue2, queue3, total };
-	}
-
-	private debugBuildOrders(gameState: CommonGameState, prep: AttackPreparation): void
-	{
-		aiWarn("====================================");
-		aiWarn("======== build order for plan " + this.name);
-		for (const order of prep.buildOrders)
-		{
-			const { inTraining, queue1, queue2, queue3 } = this.queuedFor(gameState, prep, order[4]);
-			aiWarn(
-				" >>> " + order[4] + " done " + order[2].length + " training " + inTraining +
-					" queue " + queue1 + " champ " + queue2 + " siege " + queue3 + " >> need " + order[3].targetSize,
-			);
-		}
-		aiWarn("====================================");
-	}
-
-	/**
-	 * A batch of the build order's best trainable unit in its queue (siege and heroes in the siege queue, champions
-	 * in the champions'), unless 6 wait there; with no trainable template the build order is removed, effectively
-	 * removing the unit from the plan (HACK, TODO replace)
-	 */
-	private queueBuildOrder(gameState: CommonGameState, prep: AttackPreparation, firstOrder: AttackBuildOrder): void
-	{
-		// find the actual queue we want
-		let queue = prep.queue;
-		if (firstOrder[4] === "Siege")
-		{
-			queue = prep.queueSiege;
-		}
-		else if (firstOrder[3].classes.indexOf("Hero") !== -1)
-		{
-			queue = prep.queueSiege;
-		}
-		else if (firstOrder[3].classes.indexOf("Champion") !== -1)
-		{
-			queue = prep.queueChamp;
-		}
-
-		if (queue.length() > 5)
-		{
-			return;
-		}
-		const interests = firstOrder[3].interests;
-		const template = interests === undefined ?
-			undefined :
-			gameState.ai.town.findBestTrainableUnit(gameState, firstOrder[1], interests);
-		if (template === undefined)
-		{
-			debugWarn(this.Config, 1, () => "attack no template found " + firstOrder[1]);
-			delete this.unitStat[firstOrder[4]]; // deleting the associated unitstat.
-			prep.buildOrders.splice(0, 1);
-			return;
-		}
-		debugWarn(this.Config, 2, () => "attack template " + template + " added for plan " + this.name);
-		const max = firstOrder[3].batchSize;
-		const specialData = "Plan_" + this.name + "_" + firstOrder[4];
-		// trained on the rally point's land where it can be (queueplanTraining's trainer choice)
-		const data: PlanMetadata = {
-			plan: this.name,
-			special: specialData,
-			base: NO_BASE,
-			index: gameState.ai.accessibility.getAccessValue(this.rallyPoint),
-		};
-		// findBestTrainableUnit names only templates that exist
-		const templateObj = requireTemplate(gameState, template);
-		// a mercenary is a citizen soldier that cannot gather: an attacker only
-		data.role = templateObj.hasClass("CitizenSoldier") && templateObj.resourceGatherRates() !== undefined ?
-			Worker.ROLE_WORKER :
-			Worker.ROLE_ATTACK;
-		const trainingPlan = new TrainingPlan(gameState, template, data, max, max);
-		if (trainingPlan.template)
-		{
-			queue.addPlan(trainingPlan);
-		}
-		else
-		{
-			debugWarn(
-				this.Config,
-				1,
-				() =>
-					"training plan canceled because no template for " + template +
-					"   build1 " + uneval(firstOrder[1]) +
-					" build3 " + uneval(firstOrder[3].interests),
-			);
+			queueBuildOrder(this, gameState, prep, firstOrder);
 		}
 	}
 
@@ -1604,12 +1230,12 @@ export class AttackPlan
 		// If we can not build units, assign all available except those affected to allied defense to the current attack.
 		if (!this.canBuildUnits)
 		{
-			return this.enlistAll(gameState, available);
+			return enlistAll(this, gameState, available);
 		}
 
 		if (this.type === AttackPlan.TYPE_RAID)
 		{
-			return this.enlistRaiders(gameState, available);
+			return enlistRaiders(this, gameState, available);
 		}
 
 		// Assign all units without specific role.
@@ -1619,14 +1245,14 @@ export class AttackPlan
 			{
 				continue;
 			}
-			added = this.enlist(ent);
+			added = enlist(this, ent);
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
 		for (const ent of gameState.ai.attacks.outOfPlan.values())
 		{
 			if (available(ent))
 			{
-				added = this.enlist(ent);
+				added = enlist(this, ent);
 			}
 		}
 
@@ -1635,92 +1261,7 @@ export class AttackPlan
 		{
 			return added;
 		}
-		return this.draftWorkers(gameState, available) || added;
-	}
-
-	/** All units available but those affected to allied defense join the plan; whether one did */
-	private enlistAll(gameState: CommonGameState, available: (ent: CommonEntity) => boolean): boolean
-	{
-		let added = false;
-		for (const ent of gameState.getOwnUnits().values())
-		{
-			if (!ent.getMetadata(PlayerID, "allied") && available(ent))
-			{
-				added = this.enlist(ent);
-			}
-		}
-		return added;
-	}
-
-	/** Raids are quick attacks: all FastMoving soldiers join, except some for hunting; whether one did */
-	private enlistRaiders(gameState: CommonGameState, available: (ent: CommonEntity) => boolean): boolean
-	{
-		let added = false;
-		let num = 0;
-		for (const ent of gameState.getOwnUnits().values())
-		{
-			if (!ent.hasClass("FastMoving") || !available(ent))
-			{
-				continue;
-			}
-			if (num++ < 2)
-			{
-				continue;
-			}
-			added = this.enlist(ent);
-		}
-		return added;
-	}
-
-	/** The unit joins the plan: true */
-	private enlist(ent: CommonEntity): boolean
-	{
-		ent.setMetadata(PlayerID, "plan", this.name);
-		this.unitCollection.updateEnt(ent);
-		return true;
-	}
-
-	/**
-	 * Some citizen soldiers from the workers: if Rush, all kind of workers, keeping only a minimum number of
-	 * defenders; otherwise only some idle workers if too much of them. Whether one was drafted.
-	 */
-	private draftWorkers(gameState: CommonGameState, available: (ent: CommonEntity) => boolean): boolean
-	{
-		let added = false;
-		let num = 0;
-		const numbase: Record<number, number> = {};
-		let keep = this.type !== AttackPlan.TYPE_RUSH ?
-			6 + 4 * gameState.getNumPlayerEnemies() + 8 * this.Config.personality.defensive :
-			8;
-		keep = Math.round(this.Config.popScaling * keep);
-		for (const ent of gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true).values())
-		{
-			if (!ent.hasClass("CitizenSoldier") || !available(ent))
-			{
-				continue;
-			}
-			const baseID = ent.getMetadata(PlayerID, "base");
-			if (baseID)
-			{
-				numbase[baseID] = numbase[baseID] ? ++numbase[baseID] : 1;
-			}
-			else
-			{
-				aiWarn("Petra problem ent without base ");
-				dumpEntity(ent);
-				continue;
-			}
-			if (num++ < keep || numbase[baseID] < 5)
-			{
-				continue;
-			}
-			if (this.type !== AttackPlan.TYPE_RUSH && ent.getMetadata(PlayerID, "subrole") !== Worker.SUBROLE_IDLE)
-			{
-				continue;
-			}
-			added = this.enlist(ent);
-		}
-		return added;
+		return draftWorkers(this, gameState, available) || added;
 	}
 
 	isAvailableUnit(gameState: CommonGameState, ent: CommonEntity): boolean
@@ -1771,7 +1312,7 @@ export class AttackPlan
 
 	chooseTarget(gameState: CommonGameState): boolean
 	{
-		if (!this.findTarget(gameState) || !this.target)
+		if (!findTarget(this, gameState) || !this.target)
 		{
 			return false;
 		}
@@ -1804,136 +1345,9 @@ export class AttackPlan
 		}
 		else if (rallyDiff)
 		{
-			return this.rallyOverseas(gameState, rallyDiff, targetIndex);
+			return rallyOverseas(this, gameState, rallyDiff, targetIndex);
 		}
 		return true;
-	}
-
-	/** The target player (chosen if none) and its nearest target, or another player's when it has none */
-	private findTarget(gameState: CommonGameState): boolean
-	{
-		if (this.targetPlayer === undefined)
-		{
-			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
-			if (this.targetPlayer === undefined)
-			{
-				return false;
-			}
-		}
-
-		this.target = this.getNearestTarget(gameState, this.rallyPoint);
-		if (this.target)
-		{
-			return true;
-		}
-		if (this.uniqueTargetId)
-		{
-			return false;
-		}
-
-		// may-be all our previous enemey target (if not recomputed here) have been destroyed ?
-		this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
-		if (this.targetPlayer !== undefined)
-		{
-			this.target = this.getNearestTarget(gameState, this.rallyPoint);
-		}
-		return !!this.target;
-	}
-
-	/**
-	 * The plan gathers at a base on another land than its target's: the enemy buildings on that land go first
-	 * (the whole plan clears it before it sails, FINDINGS §34), else it sails; false when the target cannot be reached
-	 */
-	private rallyOverseas(gameState: CommonGameState, rallyDiff: CommonPosition, targetIndex: AccessIndex): boolean
-	{
-		const rallyIndex = gameState.ai.accessibility.getAccessValue(rallyDiff);
-		this.rallyPoint = rallyDiff;
-		const local = this.targetOnLand(gameState, rallyIndex);
-		const localPos = local?.position();
-		if (local && localPos)
-		{
-			this.target = local;
-			this.targetPos = localPos;
-			this.targetPlayer = local.owner();
-			this.overseas = 0;
-			return true;
-		}
-		const sea = gameState.ai.town.getSeaBetweenIndices(gameState, rallyIndex, targetIndex);
-		if (!sea)
-		{
-			aiWarn(
-				"Petra: " + this.type + " " + this.name + " has an inaccessible target" +
-					" with indices " + rallyIndex + " " + targetIndex + " from " + this.target?.templateName(),
-			);
-			return false;
-		}
-		this.overseas = sea;
-		gameState.ai.naval.setMinimalTransportShips(gameState, this.overseas, this.neededShips);
-		return true;
-	}
-
-	/**
-	 * The plan's nearest target on a land, among the enemies with buildings
-	 * there (by the plan's own target search, kept to that land), the owner of
-	 * the building nearest to the rally point first; undefined for a plan with
-	 * a unique target, or when none is found (the target player then unchanged).
-	 */
-	targetOnLand(gameState: CommonGameState, land: AccessIndex): CommonEntity | undefined
-	{
-		if (this.uniqueTargetId)
-		{
-			return undefined;
-		}
-		const buildings = (gameState.ai.attacks.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
-			enemy.hasClass("Structure")
-		);
-		if (!buildings.length)
-		{
-			return undefined;
-		}
-		const distance = (enemy: CommonPlacedEntity): number => SquareVectorDistance(enemy.position(), this.rallyPoint);
-		const owners = new Set([...buildings].sort((a, b) => distance(a) - distance(b)).map((enemy) => enemy.owner()));
-		const targetPlayer = this.targetPlayer;
-		for (const owner of owners)
-		{
-			this.targetPlayer = owner;
-			const target = this.getNearestTarget(gameState, this.rallyPoint, land);
-			if (target)
-			{
-				return target;
-			}
-		}
-		this.targetPlayer = targetPlayer;
-		return undefined;
-	}
-
-	/** The land of the plan's target, if it has one. */
-	targetLand(gameState: CommonGameState): AccessIndex | undefined
-	{
-		const target = this.target;
-		return target && getLandAccess(gameState, target);
-	}
-
-	/**
-	 * Those of the plan's soldiers who stand beside enemies, on another land
-	 * than `keptLand` (the rally point's while the plan prepares, the target's
-	 * once it sets off), stay there to fight them, from LOCAL_FIGHT_MIN on a
-	 * land (AttackManager.splitLocalFights); the fewer, on another land than
-	 * the rally point's, leave the plan rather than be shipped to it, and go
-	 * back to work (FINDINGS §34). Run while it prepares, so that the plan
-	 * counts and trains without them.
-	 */
-	leaveDisputedLands(gameState: CommonGameState, keptLand: AccessIndex | undefined): void
-	{
-		gameState.ai.attacks.splitLocalFights(gameState, this, keptLand);
-		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
-		for (const ent of this.unitCollection.values())
-		{
-			if (besideEnemies(gameState, ent, rallyLand))
-			{
-				this.removeUnit(ent, true);
-			}
-		}
 	}
 
 	/**
@@ -1953,7 +1367,7 @@ export class AttackPlan
 		this.isBlocked = false;
 		const land = sameLand && sameLand > 1 ? sameLand : false;
 
-		const targets = this.targetCandidates(gameState, targetPlayer, land);
+		const targets = targetCandidates(this, gameState, targetPlayer, land);
 		if (!targets.hasEntities())
 		{
 			return undefined;
@@ -1994,42 +1408,6 @@ export class AttackPlan
 		// Obstruction also can change the enemy target
 		this.targetPlayer = target.owner();
 		return target;
-	}
-
-	/** The targets the plan chooses from: its unique target, a raid's, a rush's (or the defended ones) or the default ones */
-	private targetCandidates(
-		gameState: CommonGameState,
-		targetPlayer: PlayerId,
-		land: AccessIndex | false,
-	): CommonEntityCollection
-	{
-		if (this.uniqueTargetId)
-		{
-			const targets = new EntityCollection(gameState.sharedScript);
-			const ent = gameState.getEntityById(this.uniqueTargetId);
-			if (ent)
-			{
-				targets.addEnt(ent);
-			}
-			return targets;
-		}
-		if (this.type === AttackPlan.TYPE_RAID)
-		{
-			return raidTargetFinder(gameState);
-		}
-		if (this.type !== AttackPlan.TYPE_RUSH && this.type !== AttackPlan.TYPE_DEFAULT)
-		{
-			return defaultTargetFinder(gameState, targetPlayer, land);
-		}
-		const targets = this.rushTargetFinder(gameState, targetPlayer, land);
-		// with no undefended building, an attack takes on the defended ones; Petra
-		// waited for siege engines, and on islands its armies, finding nothing,
-		// were aborted and remade every few seconds for good (FINDINGS §35)
-		if (!targets.hasEntities() && (this.type === AttackPlan.TYPE_DEFAULT || this.hasSiegeUnits() || this.forced))
-		{
-			return defaultTargetFinder(gameState, targetPlayer, land);
-		}
-		return targets;
 	}
 
 	/** Rush target finder aims at isolated non-defended buildings */
@@ -2143,7 +1521,7 @@ export class AttackPlan
 		{
 			return false;
 		}
-		this.leaveDisputedLands(gameState, this.targetLand(gameState));
+		leaveDisputedLands(this, gameState, targetLand(this, gameState));
 
 		// erase our queue. This will stop any leftover unit from being trained.
 		this.removeQueues(gameState);
@@ -2176,27 +1554,9 @@ export class AttackPlan
 		}
 		if (rallyAccess === targetAccess)
 		{
-			return this.walkTo(gameState, { target, pos: targetPos });
+			return walkTo(this, gameState, { target, pos: targetPos });
 		}
 		return this.sailTo(gameState, rallyAccess, targetAccess, targetPos);
-	}
-
-	/** The plan walks to its target on its land, along its path (made now if none); false without one */
-	private walkTo(gameState: CommonGameState, aim: AttackAim): boolean
-	{
-		if (!this.path)
-		{
-			this.getPathToTarget(gameState, aim, true);
-		}
-		const path = this.path;
-		if (!path || !path[0][0] || !path[0][1])
-		{
-			return false;
-		}
-		this.overseas = 0;
-		this.startWalking(path);
-		this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
-		return true;
 	}
 
 	/** The plan's units are shipped to the target's land; false without a sea there */
@@ -2244,7 +1604,7 @@ export class AttackPlan
 	/** The turn of an attack under way: the units it has left, or false when it has no target any more */
 	private updateTurn(gameState: CommonGameState, events: EngineAIEvents): number | false
 	{
-		this.releaseGarrisoned(gameState);
+		releaseGarrisoned(this, gameState);
 		if (!this.unitCollection.hasEntities())
 		{
 			return 0;
@@ -2256,7 +1616,7 @@ export class AttackPlan
 		// TODO instead of state "arrived", made a state "walking" with a new path
 		if (this.state === AttackPlan.STATE_TRANSPORTING)
 		{
-			this.UpdateTransporting(gameState, events);
+			UpdateTransporting(this, gameState, events);
 		}
 
 		if (!this.position)
@@ -2265,14 +1625,14 @@ export class AttackPlan
 		}
 
 		const stage = this.stage;
-		if (stage.state === AttackPlan.STATE_WALKING && !this.UpdateWalking(gameState, events, stage.path))
+		if (stage.state === AttackPlan.STATE_WALKING && !UpdateWalking(this, gameState, events, stage.path))
 		{
 			return 0;
 		}
 
 		if (this.state === AttackPlan.STATE_ARRIVED)
 		{
-			this.startAttacking(gameState, this.position);
+			startAttacking(this, gameState, this.position);
 		}
 
 		// basic state of attacking.
@@ -2289,51 +1649,6 @@ export class AttackPlan
 		}
 		this.lastPosition = clone(this.position);
 		return this.unitCollection.length;
-	}
-
-	/**
-	 * A unit inside one of our buildings on land, not on its way by sea, is
-	 * out of the attack (trained where the rally point garrisons, then kept
-	 * there by the garrison manager): let it go, or a plan of only such
-	 * units waits for good and holds up the next attack.
-	 */
-	private releaseGarrisoned(gameState: CommonGameState): void
-	{
-		for (const ent of this.unitCollection.values())
-		{
-			if (isPlaced(ent) || ent.getMetadata(PlayerID, "transport") !== undefined)
-			{
-				continue;
-			}
-			const holderId = ent.garrisonHolderID();
-			const holder = holderId === undefined ? undefined : gameState.getEntityById(holderId);
-			if (holder && !holder.hasClass("Ship"))
-			{
-				this.removeUnit(ent, true);
-			}
-		}
-	}
-
-	/** Arrived: let's proceed on with whatever happens now; a rush tries to find a better target */
-	private startAttacking(gameState: CommonGameState, position: CommonPosition): void
-	{
-		this.changeState(AttackPlan.STATE_ARRIVED, AttackPlan.STATE_ATTACKING);
-		this.startingAttack = true;
-		this.unitCollection.forEach((ent) =>
-		{
-			ent.stopMoving();
-			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_ATTACKING);
-		});
-		if (this.type !== AttackPlan.TYPE_RUSH)
-		{
-			return;
-		}
-		const newtarget = this.getNearestTarget(gameState, position);
-		if (newtarget)
-		{
-			this.target = newtarget;
-			this.targetPos = this.target.position();
-		}
 	}
 
 	/** The attacking state's turn: answer the blows, then look at a few attackers' orders. */
@@ -2401,39 +1716,6 @@ export class AttackPlan
 		}
 	}
 
-	UpdateTransporting(gameState: CommonGameState, events: EngineAIEvents): void
-	{
-		let done = true;
-		for (const ent of this.unitCollection.values())
-		{
-			if (this.Config.debug > 1 && ent.getMetadata(PlayerID, "transport") !== undefined)
-			{
-				debugShade([ent.id()], [2, 2, 0]);
-			}
-			else if (this.Config.debug > 1)
-			{
-				debugShade([ent.id()], [1, 1, 1]);
-			}
-			if (!done)
-			{
-				continue;
-			}
-			if (ent.getMetadata(PlayerID, "transport") !== undefined)
-			{
-				done = false;
-			}
-		}
-
-		if (done)
-		{
-			this.changeState(AttackPlan.STATE_TRANSPORTING, AttackPlan.STATE_ARRIVED);
-			return;
-		}
-
-		// if we are attacked while waiting the rest of the army, retaliate
-		this.answerAttacks(gameState, events);
-	}
-
 	/**
 	 * Answers the first attack of the turn on one of the plan's units, while
 	 * the plan waits for its ships. A unit bound for a ship, still ashore, walks
@@ -2487,164 +1769,6 @@ export class AttackPlan
 		}
 	}
 
-	/** A walking turn, on the path the plan sets off on (StartAttack) or was saved walking. */
-	UpdateWalking(gameState: CommonGameState, events: EngineAIEvents, path: CommonPosition[]): boolean
-	{
-		const pos = this.position;
-		if (!pos)
-		{
-			return false;
-		}
-		const pos5TurnsAgo = this.position5TurnsAgo;
-		const targetPos = this.targetPos;
-		// we're marching towards the target
-		// Are we arrived at destination ?
-		if (this.arrivedUnderFire(gameState, events, pos))
-		{
-			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
-			return true;
-		}
-
-		// basically haven't moved an inch: very likely stuck)
-		if (
-			pos5TurnsAgo && SquareVectorDistance(pos, pos5TurnsAgo) < 10 &&
-			path.length > 0 && gameState.ai.playedTurn % 5 === 0
-		)
-		{
-			destroyFarthestSiege(this.unitCollection, pos);
-		}
-		if (gameState.ai.playedTurn % 5 === 0)
-		{
-			this.position5TurnsAgo = clone(pos);
-		}
-
-		const lastPos = this.lastPosition;
-		if (lastPos && SquareVectorDistance(pos, lastPos) < 16 && path.length > 0)
-		{
-			const walls = this.unstick(gameState, pos, path);
-			if (walls !== undefined)
-			{
-				return walls;
-			}
-		}
-
-		// check if our units are close enough from the next waypoint.
-		if (targetPos && SquareVectorDistance(pos, targetPos) < 10000 || this.walkedPath(path, pos))
-		{
-			debugWarn(
-				this.Config,
-				1,
-				() => "Attack Plan " + this.type + " " + this.name + " has arrived to destination.",
-			);
-			this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
-		}
-		return true;
-	}
-
-	/**
-	 * Let's check if any of our unit has been attacked: in case yes, we'll determine if we're simply off against an
-	 * enemy army, a lone unit/building or if we reached the enemy base (attacked in its territory, or a lot).
-	 * Different plans may react differently.
-	 */
-	private arrivedUnderFire(gameState: CommonGameState, events: EngineAIEvents, pos: CommonPosition): boolean
-	{
-		let attackedNB = 0;
-		let attackedUnitNB = 0;
-		for (const evt of events.Attacked)
-		{
-			if (!this.unitCollection.hasEntId(evt.target))
-			{
-				continue;
-			}
-			const attacker = gameState.getEntityById(evt.attacker);
-			if (attacker && (attacker.owner() !== 0 || this.targetPlayer === 0))
-			{
-				attackedNB++;
-				if (attacker.hasClass("Unit"))
-				{
-					attackedUnitNB++;
-				}
-			}
-		}
-		return attackedNB > 1 && (attackedUnitNB > 0 || this.hasSiegeUnits()) &&
-			(gameState.ai.geography.territoryMap.getOwner(pos) === this.targetPlayer || attackedNB > 3);
-	}
-
-	/**
-	 * We're stuck, presumably: walls just close to us end the walk (arrived, true, if we can attack them, else
-	 * false: we give up); without, the army is sent again to the next waypoint (undefined)
-	 */
-	private unstick(gameState: CommonGameState, pos: CommonPosition, path: CommonPosition[]): boolean | undefined
-	{
-		if (!path[0][0] || !path[0][1])
-		{
-			aiWarn("Start: Problem with path " + uneval(path));
-		}
-		const walls = this.facesWalls(gameState, pos);
-		if (walls !== undefined)
-		{
-			if (walls)
-			{
-				this.changeState(AttackPlan.STATE_WALKING, AttackPlan.STATE_ARRIVED);
-			}
-			return walls;
-		}
-		// this.unitCollection.move(path[0][0], path[0][1]);
-		this.unitCollection.moveIndiv(path[0][0], path[0][1]);
-		return undefined;
-	}
-
-	/**
-	 * Walls just close to a stuck army: true if it can attack them (it has arrived), false if not (it gives up),
-	 * undefined when there are none
-	 */
-	private facesWalls(gameState: CommonGameState, pos: CommonPosition): boolean | undefined
-	{
-		for (const ent of gameState.getEnemyStructures().filter(filters.byClasses(["Palisade", "Wall"])).values())
-		{
-			const entPos = ent.position();
-			if (SquareVectorDistance(pos, entPos) > 800)
-			{
-				continue;
-			}
-			const enemyClass = ent.hasClass("Wall") ? "Wall" : "Palisade";
-			// there are walls, so check if we can attack
-			if (this.unitCollection.filter(filters.byCanAttackClass(enemyClass)).hasEntities())
-			{
-				debugWarn(
-					this.Config,
-					1,
-					() => "Attack Plan " + this.type + " " + this.name + " has met walls and is not happy.",
-				);
-				return true;
-			}
-			// abort plan
-			debugWarn(
-				this.Config,
-				1,
-				() => "Attack Plan " + this.type + " " + this.name + " has met walls and gives up.",
-			);
-			return false;
-		}
-		return undefined;
-	}
-
-	/** The next waypoint reached: the army moves on to the one after; whether that was the last */
-	private walkedPath(path: CommonPosition[], pos: CommonPosition): boolean
-	{
-		if (!path.length || !(SquareVectorDistance(pos, path[0]) < 1600))
-		{
-			return false;
-		}
-		path.shift();
-		if (!path.length)
-		{
-			return true;
-		}
-		this.unitCollection.moveToRange(path[0][0], path[0][1], 0, 15);
-		return false;
-	}
-
 	UpdateTarget(gameState: CommonGameState): AttackAim | undefined
 	{
 		const pos = this.position;
@@ -2655,7 +1779,7 @@ export class AttackPlan
 		// First update the target position in case it's a unit (and check if it has garrisoned)
 		if (this.target && this.target.hasClass("Unit"))
 		{
-			this.followUnitTarget(gameState, this.target);
+			followUnitTarget(this, gameState, this.target);
 		}
 		// Then update the target if needed:
 		if (this.targetPlayer === undefined || !gameState.isPlayerEnemy(this.targetPlayer))
@@ -2683,107 +1807,12 @@ export class AttackPlan
 				1,
 				() => "Seems like our target for plan " + this.name + " has been destroyed or captured. Switching.",
 			);
-			if (!this.switchTarget(gameState, pos))
+			if (!switchTarget(this, gameState, pos))
 			{
 				return undefined;
 			}
 		}
 		return this.aim();
-	}
-
-	/** A unit target's position; one gone into an enemy's building gives way to that holder */
-	private followUnitTarget(gameState: CommonGameState, target: CommonEntity): void
-	{
-		this.targetPos = target.position();
-		if (this.targetPos)
-		{
-			return;
-		}
-		const holder = getHolder(gameState, target);
-		if (holder && gameState.isPlayerEnemy(holder.owner()))
-		{
-			this.target = holder;
-			this.targetPos = holder.position();
-		}
-		else
-		{
-			this.target = undefined;
-		}
-	}
-
-	/**
-	 * A new target, the nearest on the army's land; else one of our other attacks' there, which we help; else
-	 * another enemy's. Whether one was found.
-	 */
-	private switchTarget(gameState: CommonGameState, pos: CommonPosition): boolean
-	{
-		const accessIndex = this.getAttackAccess(gameState);
-		this.target = this.getNearestTarget(gameState, pos, accessIndex);
-		if (!this.target)
-		{
-			if (this.uniqueTargetId)
-			{
-				return false;
-			}
-
-			// Check if we could help any current attack
-			if (this.helpOtherAttack(gameState, accessIndex))
-			{
-				return true;
-			}
-
-			// If not, let's look for another enemy
-			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
-			if (this.targetPlayer !== undefined)
-			{
-				this.target = this.getNearestTarget(gameState, pos, accessIndex);
-			}
-			if (!this.target)
-			{
-				debugWarn(this.Config, 1, () => "No new target found. Remaining units " + this.unitCollection.length);
-				return false;
-			}
-			debugWarn(this.Config, 1, () => "We will help one of our other attacks");
-		}
-		this.targetPos = this.target.position();
-		return true;
-	}
-
-	/** The target of another of our attacks on that land, still an enemy's: whether we take it */
-	private helpOtherAttack(gameState: CommonGameState, accessIndex: AccessIndex | undefined): boolean
-	{
-		const attackManager = gameState.ai.attacks;
-		for (const attack of plansIn(attackManager.startedAttacks))
-		{
-			if (attack.name === this.name)
-			{
-				continue;
-			}
-			if (
-				!attack.target || !gameState.getEntityById(attack.target.id()) ||
-				!gameState.isPlayerEnemy(attack.target.owner())
-			)
-			{
-				continue;
-			}
-			if (accessIndex !== getLandAccess(gameState, attack.target))
-			{
-				continue;
-			}
-			if (attack.target.owner() === 0 && attack.targetPlayer !== 0)
-			{ // looks like it has resigned
-				continue;
-			}
-			if (!gameState.isPlayerEnemy(attack.targetPlayer ?? INVALID_PLAYER))
-			{
-				continue;
-			}
-			this.target = attack.target;
-			this.targetPlayer = attack.targetPlayer;
-			this.targetPos = this.target.position();
-			return true;
-		}
-		return false;
 	}
 
 	/** reset any units */
@@ -2796,7 +1825,7 @@ export class AttackPlan
 			// If the attack was started, look for a good rallyPoint to withdraw
 			// (an army with no position is aboard ships: it gets no rallyPoint)
 			const { rallyPoint, withdrawRange } = this.isStarted() && pos ?
-				this.withdrawPoint(gameState, pos) :
+				withdrawPoint(this, gameState, pos) :
 				{ rallyPoint: undefined, withdrawRange: WITHDRAW_RANGE };
 
 			for (const ent of this.unitCollection.values())
@@ -2819,49 +1848,6 @@ export class AttackPlan
 		}
 
 		this.removeQueues(gameState);
-	}
-
-	/**
-	 * Where a started attack withdraws: its rally point if on the army's land, or a nearer base of ours there (in
-	 * case this attack has captured one); and how far from it the units may stop: an anchor's position is the
-	 * centre of its building, so the ring must reach out past the footprint or nobody can get there
-	 */
-	private withdrawPoint(
-		gameState: CommonGameState,
-		pos: CommonPosition,
-	): { rallyPoint: CommonPosition | undefined; withdrawRange: number; }
-	{
-		let rallyPoint;
-		let withdrawRange = WITHDRAW_RANGE;
-		const access = this.getAttackAccess(gameState);
-		let dist = Math.min();
-		if (this.rallyPoint && gameState.ai.accessibility.getAccessValue(this.rallyPoint) === access)
-		{
-			rallyPoint = this.rallyPoint;
-			dist = SquareVectorDistance(pos, rallyPoint);
-		}
-		for (const base of basesOf(gameState))
-		{
-			const anchor = base.anchor;
-			const anchorPos = anchor ? anchor.position() : undefined;
-			if (!anchor || !anchorPos)
-			{
-				continue;
-			}
-			if (getLandAccess(gameState, anchor) !== access)
-			{
-				continue;
-			}
-			const newdist = SquareVectorDistance(pos, anchorPos);
-			if (newdist > dist)
-			{
-				continue;
-			}
-			dist = newdist;
-			rallyPoint = anchorPos;
-			withdrawRange = anchor.obstructionRadius().max + WITHDRAW_RANGE;
-		}
-		return { rallyPoint, withdrawRange };
 	}
 
 	removeUnit(ent: CommonEntity, update = false): void
@@ -2891,11 +1877,11 @@ export class AttackPlan
 		{
 			if (this.target && this.target.id() === evt.entity)
 			{
-				this.onTargetRenamed(gameState, evt.newentity);
+				onTargetRenamed(this, gameState, evt.newentity);
 			}
 		}
 
-		this.onTargetLost(gameState, events);
+		onTargetLost(this, gameState, events);
 
 		// The original made and registered a new unit collection here every
 		// turn, never unregistering the last: each one stayed in the shared
@@ -2913,66 +1899,8 @@ export class AttackPlan
 			const ent = gameState.getEntityById(evt.entity);
 			if (ent && isPlaced(ent) && ent.hasClass("Structure") && gameState.isPlayerEnemy(ent.owner()))
 			{
-				this.rallyAtBaseOn(gameState, getLandAccess(gameState, ent));
+				rallyAtBaseOn(this, gameState, getLandAccess(gameState, ent));
 			}
-		}
-	}
-
-	/** The target captured by an ally is no more ours; a defeated target player gives way to another */
-	private onTargetLost(gameState: CommonGameState, events: EngineAIEvents): void
-	{
-		for (const evt of events.OwnershipChanged)
-		{ // capture event
-			if (this.target && this.target.id() === evt.entity && gameState.isPlayerAlly(evt.to))
-			{
-				this.target = undefined;
-			}
-		}
-
-		for (const evt of events.PlayerDefeated)
-		{
-			if (this.targetPlayer !== evt.playerId)
-			{
-				continue;
-			}
-			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
-			this.target = undefined;
-		}
-	}
-
-	/** The target renamed (promoted, upgraded): followed, but by a raid not yet started */
-	private onTargetRenamed(gameState: CommonGameState, newentity: EntityId): void
-	{
-		if (this.type === AttackPlan.TYPE_RAID && !this.isStarted())
-		{
-			this.target = undefined;
-		}
-		else
-		{
-			this.target = gameState.getEntityById(newentity);
-		}
-		if (this.target)
-		{
-			this.targetPos = this.target.position();
-		}
-	}
-
-	/** An enemy built on a land where we have a base: the plan gathers there, the last such base, without sailing */
-	private rallyAtBaseOn(gameState: CommonGameState, access: AccessIndex): void
-	{
-		for (const base of basesOf(gameState))
-		{
-			const anchorPos = base.anchor ? base.anchor.position() : undefined;
-			if (!anchorPos)
-			{
-				continue;
-			}
-			if (base.accessIndex !== access)
-			{
-				continue;
-			}
-			this.overseas = 0;
-			this.rallyPoint = anchorPos;
 		}
 	}
 
