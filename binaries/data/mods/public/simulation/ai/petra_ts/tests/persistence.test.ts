@@ -20,7 +20,7 @@ import { BaseManager, type SerializedBaseManager } from "../decision/baseManager
 import { BasesManager, type SerializedBasesManager } from "../decision/basesManager.ts";
 import { BuildManager, type SerializedBuildManager } from "../decision/buildManager.ts";
 import { DefenseManager, type SerializedDefenseManager } from "../decision/defenseManager.ts";
-import { DiplomacyManager, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
+import { DiplomacyManager, type DiplomacyHQ, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
 import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
@@ -121,8 +121,9 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "DiplomacyManager",
-			original: () => new DiplomacyManager(makeConfig(), false),
-			fromSave: (data) => DiplomacyManager.restore(makeConfig(), fake<SerializedDiplomacyManager>(data)),
+			original: () => new DiplomacyManager(makeConfig(), false, fake<DiplomacyHQ>({})),
+			fromSave: (data) =>
+				DiplomacyManager.restore(makeConfig(), fake<SerializedDiplomacyManager>(data), fake<DiplomacyHQ>({})),
 		}, makeFakeGameState().gameState);
 	});
 

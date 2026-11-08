@@ -71,7 +71,7 @@ function seat(players: PlayerSpec[], options: Partial<HqWorldOptions> = {}, chan
 		() => [{ type: "wood", wanted: 50, current: 10 }, { type: "food", wanted: 30, current: 20 }];
 	setPlayers(world, players);
 	resetRecorder();
-	const manager = new DiplomacyManager(hq.Config, false);
+	const manager = new DiplomacyManager(hq.Config, false, hq);
 	return { world, hq, manager, attackCalls: doorCalls(attack) };
 }
 
