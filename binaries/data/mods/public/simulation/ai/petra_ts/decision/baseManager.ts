@@ -25,10 +25,11 @@ import * as difficulty from "../world/difficultyLevel.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { isNotWorthBuilding } from "../world/territory.ts";
 import type { BasesManager } from "./basesManager.ts";
+import type { BuildManager } from "./buildManager.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
-import { buildNewBase } from "./expansion.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
+import type { Headquarters } from "./headquarters.ts";
 
 /**
  * Base Manager
@@ -257,6 +258,32 @@ function spacedFromDropsites(total: number, pos: CommonPosition, dpEnts: CommonP
  * If nothing found, return the noBase for units and undefined for structures.
  * If exclude is given, we exclude the base with ID = exclude.
  */
+/**
+ * What a base asks of the headquarters that owns its bases manager: the
+ * dangers and invading armies near a spot, what may be built (and the build
+ * manager's structures), the economy plan and measured gather rates, the
+ * resources most needed and those no worker found, the phase it heads for,
+ * the emergency units, and a new base when its land runs dry.
+ */
+export type BaseHQ =
+	& Pick<
+		Headquarters,
+		| "isDangerousLocation"
+		| "isNearInvadingArmy"
+		| "canBuild"
+		| "canBuildUnits"
+		| "canExpand"
+		| "expandFor"
+		| "economy"
+		| "gatherEconomy"
+		| "navalMap"
+		| "pickMostNeededResources"
+		| "lastFailedGather"
+		| "phasing"
+		| "trainEmergencyUnits"
+	>
+	& { readonly buildManager: Pick<BuildManager, "findStructuresByFilter">; };
+
 /** The bases getBestBase picks among: the bases manager's, and its base for the units of none */
 export type BaseSearch = Pick<BasesManager, "baselessBase" | "baseManagers">;
 
@@ -398,6 +425,12 @@ export class BaseManager
 	workers: CommonEntityCollection;
 
 	/** A base in the given state; a restored one takes its saved id (its collections follow its units by it) */
+	/** The headquarters, as its bases manager holds it */
+	private get hq(): BaseHQ
+	{
+		return this.basesManager.hq;
+	}
+
 	constructor(gameState: CommonGameState, basesManager: BasesManager, state: string, id?: BaseId)
 	{
 		this.Config = basesManager.Config;
@@ -632,12 +665,7 @@ export class BaseManager
 			pos: worldPos(0, 0),
 			templateName: NO_TEMPLATE,
 		};
-		for (
-			const templateName of gameState.ai.HQ.buildManager.findStructuresByFilter(
-				gameState,
-				filters.isDropsite(resource),
-			)
-		)
+		for (const templateName of this.hq.buildManager.findStructuresByFilter(gameState, filters.isDropsite(resource)))
 		{
 			const dp = this.findBestDropsiteLocation(gameState, resource, templateName);
 			if (dp.quality < bestResult.quality)
@@ -715,7 +743,7 @@ export class BaseManager
 				continue;
 			}
 
-			if (gameState.ai.HQ.isDangerousLocation(gameState, pos, halfSize))
+			if (this.hq.isDangerousLocation(gameState, pos, halfSize))
 			{
 				continue;
 			}
@@ -768,14 +796,14 @@ export class BaseManager
 		{
 			prox.push("medium");
 		}
-		if (gameState.ai.HQ.canBuild(gameState, "structures/{civ}/field"))
+		if (this.hq.canBuild(gameState, "structures/{civ}/field"))
 		{ // let's see if we need to add new farms.
 			this.planFields(gameState, queues, prox);
 			return;
 		}
 		if (
 			!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
-			!queues.corral.hasQueuedUnits() && gameState.ai.HQ.canBuild(gameState, "structures/{civ}/corral")
+			!queues.corral.hasQueuedUnits() && this.hq.canBuild(gameState, "structures/{civ}/corral")
 		)
 		{
 			const count = this.getResourceLevel(gameState, type, prox); // animals are not accounted
@@ -784,7 +812,7 @@ export class BaseManager
 				queues.corral.addPlan(
 					new ConstructionPlan(gameState, "structures/{civ}/corral", { favoredBase: this.ID }),
 				);
-				gameState.ai.HQ.economy.needCorral = true;
+				this.hq.economy.needCorral = true;
 			}
 		}
 	}
@@ -794,7 +822,7 @@ export class BaseManager
 	{
 		const count = this.getResourceLevel(gameState, "food", prox); // animals are not accounted
 		// a field is wanted as soon as it brings in more than the berries (decision/foodSource.ts)
-		const economy = gameState.ai.HQ.gatherEconomy;
+		const economy = this.hq.gatherEconomy;
 		const fieldsFirst = fieldsBeatBerries({
 			fruit: economy.foodRateOf("fruit"),
 			grain: economy.foodRateOf("grain"),
@@ -806,16 +834,16 @@ export class BaseManager
 			fields: gameState.getOwnStructures().filter(filters.byClass("Field")).length,
 			foundations: gameState.getOwnFoundations().filter(filters.byClass("Field")).length,
 			queued: queues.field.countQueuedUnits(),
-			maxFields: gameState.ai.HQ.economy.maxFields,
+			maxFields: this.hq.economy.maxFields,
 			provision: this.Config.Economy.provisionFields,
-			saving: !!gameState.ai.HQ.economy.saveResources || !!gameState.ai.HQ.economy.saveSpace,
+			saving: !!this.hq.economy.saveResources || !!this.hq.economy.saveSpace,
 		});
 		// on a naval map, each island with a civic centre of ours has a field
 		// of its own: Petra placed them by the town's count, near any food
 		// dropsite, and the home island filled while the new ones had none
 		// (FINDINGS §41)
 		if (
-			gameState.ai.HQ.navalMap && this.anchor && this.anchor.foundationProgress() === undefined &&
+			this.hq.navalMap && this.anchor && this.anchor.foundationProgress() === undefined &&
 			!this.hasOwnField(gameState, queues)
 		)
 		{
@@ -826,14 +854,14 @@ export class BaseManager
 			queues.field.addPlan(new ConstructionPlan(gameState, "structures/{civ}/field", { favoredBase: this.ID }));
 			if (decision === "first")
 			{
-				gameState.ai.HQ.economy.needFarm = true;
+				this.hq.economy.needFarm = true;
 			}
 		}
 		else if (
-			decision === "full" && gameState.ai.HQ.economy.needCorral &&
+			decision === "full" && this.hq.economy.needCorral &&
 			!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
 			!queues.corral.hasQueuedUnits() &&
-			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/corral")
+			this.hq.canBuild(gameState, "structures/{civ}/corral")
 		)
 		{
 			queues.corral.addPlan(new ConstructionPlan(gameState, "structures/{civ}/corral", { favoredBase: this.ID }));
@@ -900,7 +928,7 @@ export class BaseManager
 	{
 		const newDP = this.findBestDropsiteAndLocation(gameState, type);
 		// templateName is only "" when quality is 0, which the > 50 check rejects.
-		if (newDP.quality > GOOD_DROPSITE && gameState.ai.HQ.canBuild(gameState, newDP.templateName))
+		if (newDP.quality > GOOD_DROPSITE && this.hq.canBuild(gameState, newDP.templateName))
 		{
 			queues.dropsites.addPlan(
 				new ConstructionPlan(gameState, newDP.templateName, { base: this.ID, type: type }, newDP.pos),
@@ -915,9 +943,9 @@ export class BaseManager
 			return;
 		}
 		if (
-			(!gameState.ai.HQ.canExpand || !buildNewBase(gameState.ai.HQ, gameState, queues, type)) &&
+			(!this.hq.canExpand || !this.hq.expandFor(gameState, queues, type)) &&
 			newDP.quality > relaxedQuality &&
-			gameState.ai.HQ.canBuild(gameState, newDP.templateName)
+			this.hq.canBuild(gameState, newDP.templateName)
 		)
 		{
 			queues.dropsites.addPlan(
@@ -988,7 +1016,7 @@ export class BaseManager
 		this.timeNextIdleCheck = seconds(gameState.ai.elapsedTime + 8);
 		// change resource only towards one which is more needed, and if changing will not change this order
 		let nb = 1; // no more than 1 change per turn (otherwise we should update the rates)
-		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState);
+		const mostNeeded = this.hq.pickMostNeededResources(gameState);
 		let sumWanted = 0;
 		let sumCurrent = 0;
 		for (const need of mostNeeded)
@@ -1028,7 +1056,7 @@ export class BaseManager
 		nb: number,
 	): number
 	{
-		const lastFailed = gameState.ai.HQ.lastFailedGather[moreNeed.type];
+		const lastFailed = this.hq.lastFailedGather[moreNeed.type];
 		if (lastFailed && gameState.ai.elapsedTime - lastFailed < 20)
 		{
 			return nb;
@@ -1168,14 +1196,14 @@ export class BaseManager
 	/** The gatherer takes the most needed resource it can gather, not failed lately nor exhausted */
 	private gatherMostNeeded(gameState: CommonGameState, ent: CommonEntity): void
 	{
-		const mostNeeded = gameState.ai.HQ.pickMostNeededResources(gameState);
+		const mostNeeded = this.hq.pickMostNeededResources(gameState);
 		for (const needed of mostNeeded)
 		{
 			if (!ent.canGather(needed.type))
 			{
 				continue;
 			}
-			const lastFailed = gameState.ai.HQ.lastFailedGather[needed.type];
+			const lastFailed = this.hq.lastFailedGather[needed.type];
 			if (lastFailed && gameState.ai.elapsedTime - lastFailed < 20)
 			{
 				continue;
@@ -1364,7 +1392,7 @@ export class BaseManager
 			return; // we do not build fields
 		}
 
-		if (gameState.ai.HQ.isNearInvadingArmy(target.position()))
+		if (this.hq.isNearInvadingArmy(target.position()))
 		{
 			if (
 				!target.hasClasses(["CivCentre", "Wall"]) &&
@@ -1463,7 +1491,7 @@ export class BaseManager
 	{
 		// Don't repair if we're still under attack, unless it's a vital (civcentre or wall) building
 		// that's being destroyed.
-		if (gameState.ai.HQ.isNearInvadingArmy(target.position()))
+		if (this.hq.isNearInvadingArmy(target.position()))
 		{
 			if (
 				target.healthLevel() > 0.5 ||
@@ -1534,14 +1562,13 @@ export class BaseManager
 		{
 			this.leaveIfTooNearEnemy(gameState, this.anchor);
 		}
-		else if (this.neededDefenders && gameState.ai.HQ.trainEmergencyUnits(gameState, [this.anchor.position()]))
+		else if (this.neededDefenders && this.hq.trainEmergencyUnits(gameState, [this.anchor.position()]))
 		{
 			--this.neededDefenders;
 		}
 
 		if (
-			gameState.ai.elapsedTime > this.timeNextIdleCheck &&
-			(gameState.currentPhase() > 1 || gameState.ai.HQ.phasing === 2)
+			gameState.ai.elapsedTime > this.timeNextIdleCheck && (gameState.currentPhase() > 1 || this.hq.phasing === 2)
 		)
 		{
 			this.setWorkersIdleByPriority(gameState);
@@ -1618,7 +1645,7 @@ export class BaseManager
 				bestBase.assignEntity(gameState, ent);
 			}
 		}
-		else if (gameState.ai.HQ.canBuildUnits)
+		else if (this.hq.canBuildUnits)
 		{
 			this.manageWithoutBase(gameState);
 		}

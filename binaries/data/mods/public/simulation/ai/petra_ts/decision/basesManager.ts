@@ -9,8 +9,8 @@ import { isPlaced, isStructure } from "../adapter/placed.ts";
 import { requireStateName } from "../adapter/unitState.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
-import { BaseManager, getBestBase, type SerializedBaseManager } from "./baseManager.ts";
-import { handleNewBase } from "./hqEvents.ts";
+import { BaseManager, getBestBase, type BaseHQ, type SerializedBaseManager } from "./baseManager.ts";
+import type { Headquarters } from "./headquarters.ts";
 
 export interface SerializedBasesManager
 {
@@ -65,6 +65,12 @@ function toNearestDropsite(gameState: CommonGameState, ent: CommonPlacedEntity):
  * Only one base is run every turn.
  */
 
+/**
+ * What the bases manager asks of the headquarters that owns it: what its
+ * bases ask (BaseHQ), and to set the town up for a new base.
+ */
+export type BasesHQ = BaseHQ & Pick<Headquarters, "onNewBase">;
+
 export class BasesManager
 {
 	Config: Config;
@@ -78,13 +84,15 @@ export class BasesManager
 
 	// Deals with unit/structure without base.
 	noBase: BaseManager;
+	readonly hq: BasesHQ;
 
 	baseManagers: BaseManager[] = [];
 
 	/** No bases yet but the one for what has none; a saved manager has its saved bases and their map */
-	constructor(Config: Config, gameState: CommonGameState, saved?: SerializedBasesManager)
+	constructor(Config: Config, gameState: CommonGameState, hq: BasesHQ, saved?: SerializedBasesManager)
 	{
 		this.Config = Config;
+		this.hq = hq;
 		// Each pixel is a base ID, or 0 if not or not accessible.
 		this.basesMap = new InfoMap(gameState.sharedScript, "territory");
 		if (!saved)
@@ -533,7 +541,7 @@ export class BasesManager
 
 		if (addBase)
 		{
-			handleNewBase(gameState.ai.HQ, gameState);
+			this.hq.onNewBase(gameState);
 		}
 	}
 

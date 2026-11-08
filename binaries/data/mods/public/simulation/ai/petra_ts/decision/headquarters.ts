@@ -27,11 +27,11 @@ import { BuildManager } from "./buildManager.ts";
 import { DefenseManager } from "./defenseManager.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
-import { checkBaseExpansion, followCivCentreOrders, provideForDryLand } from "./expansion.ts";
+import { buildNewBase, checkBaseExpansion, followCivCentreOrders, provideForDryLand } from "./expansion.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { buildMoreHouses } from "./houseBuilding.ts";
 import { houseNeeded } from "./housing.ts";
-import { checkEvents } from "./hqEvents.ts";
+import { checkEvents, handleNewBase } from "./hqEvents.ts";
 import { DefenseSchedule, buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
 import { NavalManager } from "./navalManager.ts";
 import { checkPhaseRequirements, notePhase } from "./phasing.ts";
@@ -321,6 +321,18 @@ export class Headquarters
 	{
 		this.geography.navalRegions = regions;
 	}
+	/** A new base was made: the first sets the town's start up, a later one lifts its savings (hqEvents.ts) */
+	onNewBase(gameState: CommonGameState): void
+	{
+		handleNewBase(this, gameState);
+	}
+
+	/** A new base for a resource the bases run short of; false when none could be queued (expansion.ts) */
+	expandFor(gameState: CommonGameState, queues: HeadquartersQueues, resource: string): boolean
+	{
+		return buildNewBase(this, gameState, queues, resource);
+	}
+
 	get navalMap(): boolean
 	{
 		return this.geography.navalMap;
@@ -362,7 +374,7 @@ export class Headquarters
 			this.resumeProperties(saved.properties);
 			this.gatherEconomy = GatherEconomy.restore(saved.gatherEconomy);
 
-			this.basesManager = new BasesManager(this.Config, gameState, saved.basesManager);
+			this.basesManager = new BasesManager(this.Config, gameState, this, saved.basesManager);
 			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager, this);
 			this.attackManager = AttackManager.restore(
 				this.Config,
@@ -385,7 +397,7 @@ export class Headquarters
 			return;
 		}
 
-		this.basesManager = new BasesManager(this.Config, gameState);
+		this.basesManager = new BasesManager(this.Config, gameState, this);
 		this.attackManager = new AttackManager(this.Config, gameState, this);
 		this.buildManager = BuildManager.start(gameState);
 		this.defenseManager = new DefenseManager(this.Config, geography, this);
