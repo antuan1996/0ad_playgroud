@@ -45,15 +45,14 @@ import {
 } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import type { VictoryManager } from "../decision/victoryManager.ts";
+import { type AttackType } from "../execution/attackConstants.ts";
 import {
 	AttackPlan,
-	cannotGrow,
-	emptyQueues,
 	type AttackPlanData,
 	type AttackPreparation,
-	type AttackType,
 	type AttackUnitStat,
 } from "../execution/attackPlan.ts";
+import { cannotGrow, emptyQueues } from "../execution/attackPreparation.ts";
 import { defaultTargetFinder } from "../execution/attackTargets.ts";
 import type { Queue } from "../execution/queue.ts";
 import { EASY, SANDBOX, VERY_EASY } from "../world/difficultyLevel.ts";
