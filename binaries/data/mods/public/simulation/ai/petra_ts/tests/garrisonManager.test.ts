@@ -29,7 +29,7 @@ import { Worker } from "../execution/worker.ts";
 /** the manager of one headquarters as the constructor builds it */
 function makeGarrisonManager(world: World): GarrisonManager
 {
-	return new GarrisonManager(world.ai.Config);
+	return new GarrisonManager(world.ai.Config, world.ai.HQ);
 }
 
 /** a watch structure: the tower of the frontier week, with per-test answers */
@@ -1374,7 +1374,7 @@ describe("garrisonManager", () =>
 
 			const saved = manager.Serialize();
 			assert.deepEqual(Object.keys(saved).sort(), ["decayingStructures", "holders"]);
-			const fresh = GarrisonManager.restore(world.ai.Config, saved);
+			const fresh = GarrisonManager.restore(world.ai.Config, saved, world.ai.HQ);
 
 			assert.equal(leaf(fresh, 5000).list.length, 1, "the march is booked again");
 			assert.equal(fresh.allowMelee(tower), true);

@@ -22,7 +22,7 @@ import { BuildManager, type SerializedBuildManager } from "../decision/buildMana
 import { DefenseManager, type SerializedDefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
-import { GarrisonManager, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
+import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
 import { NavalManager } from "../decision/navalManager.ts";
 import { ResearchManager } from "../decision/researchManager.ts";
@@ -98,8 +98,13 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "GarrisonManager",
-			original: () => new GarrisonManager(makeConfig()),
-			fromSave: (data) => GarrisonManager.restore(makeConfig(), fake<SerializedGarrisonManager>(data)),
+			original: () => new GarrisonManager(makeConfig(), fake<GarrisonSiblings>({})),
+			fromSave: (data) =>
+				GarrisonManager.restore(
+					makeConfig(),
+					fake<SerializedGarrisonManager>(data),
+					fake<GarrisonSiblings>({}),
+				),
 		}, makeFakeGameState().gameState);
 	});
 
