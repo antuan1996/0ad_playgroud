@@ -400,7 +400,7 @@ export class BasesManager
 		}
 		if (ent.hasClass("Unit"))
 		{
-			const bestBase = getBestBase(gameState, ent);
+			const bestBase = getBestBase(gameState, this, ent);
 			if (bestBase)
 			{
 				bestBase.assignEntity(gameState, ent);
@@ -426,7 +426,7 @@ export class BasesManager
 		}
 		else
 		{
-			base = getBestBase(gameState, ent) || this.noBase;
+			base = getBestBase(gameState, this, ent) || this.noBase;
 		}
 		if (base)
 		{
@@ -467,7 +467,7 @@ export class BasesManager
 		let base;
 		if (ent.getMetadata(PlayerID, "base") === undefined)
 		{
-			base = getBestBase(gameState, ent);
+			base = getBestBase(gameState, this, ent);
 			if (base)
 			{
 				base.assignEntity(gameState, ent);
@@ -880,7 +880,7 @@ export class BasesManager
 		}
 		else
 		{
-			bestbase = getBestBase(gameState, ent) || this.noBase;
+			bestbase = getBestBase(gameState, this, ent) || this.noBase;
 		}
 		if (bestbase)
 		{

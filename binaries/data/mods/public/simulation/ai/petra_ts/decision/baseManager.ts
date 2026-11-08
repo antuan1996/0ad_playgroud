@@ -257,8 +257,12 @@ function spacedFromDropsites(total: number, pos: CommonPosition, dpEnts: CommonP
  * If nothing found, return the noBase for units and undefined for structures.
  * If exclude is given, we exclude the base with ID = exclude.
  */
+/** The bases getBestBase picks among: the bases manager's, and its base for the units of none */
+export type BaseSearch = Pick<BasesManager, "baselessBase" | "baseManagers">;
+
 export function getBestBase(
 	gameState: CommonGameState,
+	bases: BaseSearch,
 	ent: CommonEntity,
 	onlyConstructedBase: boolean = false,
 	exclude: number | false = false,
@@ -269,15 +273,15 @@ export function getBestBase(
 	{
 		aiWarn("Petra error: entity without position, but not garrisoned");
 		dumpEntity(ent);
-		return gameState.ai.HQ.basesManager.baselessBase();
+		return bases.baselessBase();
 	}
 	const { pos, accessIndex } = place;
 
 	let distmin = Math.min();
 	let bestbase;
-	for (const base of gameState.ai.HQ.basesManager.baseManagers)
+	for (const base of bases.baseManagers)
 	{
-		const baseless = gameState.ai.HQ.basesManager.baselessBase();
+		const baseless = bases.baselessBase();
 		if (base.ID === baseless.ID || exclude && base.ID === exclude)
 		{
 			continue;
@@ -300,7 +304,7 @@ export function getBestBase(
 	}
 	if (!bestbase && !ent.hasClass("Structure"))
 	{
-		bestbase = gameState.ai.HQ.basesManager.baselessBase();
+		bestbase = bases.baselessBase();
 	}
 	return bestbase;
 }
@@ -1587,7 +1591,7 @@ export class BaseManager
 			for (const ent of this.units.values())
 			{
 				// a unit always finds a base while one is active
-				const bestBase = requireValue(getBestBase(gameState, ent));
+				const bestBase = requireValue(getBestBase(gameState, this.basesManager, ent));
 				if (bestBase.ID !== this.ID)
 				{
 					bestBase.assignEntity(gameState, ent);
@@ -1595,7 +1599,7 @@ export class BaseManager
 			}
 			for (const ent of this.buildings.values())
 			{
-				const bestBase = getBestBase(gameState, ent);
+				const bestBase = getBestBase(gameState, this.basesManager, ent);
 				if (!bestBase)
 				{
 					if (ent.hasClass("Dock"))
@@ -1631,7 +1635,7 @@ export class BaseManager
 			// Reassign all remaining entities to its nearest base
 			for (const ent of this.units.values())
 			{
-				const base = getBestBase(gameState, ent, false, this.ID);
+				const base = getBestBase(gameState, this.basesManager, ent, false, this.ID);
 				if (!base)
 				{
 					continue;
@@ -1644,7 +1648,7 @@ export class BaseManager
 		let reassignedBase;
 		for (const ent of this.buildings.values())
 		{
-			const base = getBestBase(gameState, ent);
+			const base = getBestBase(gameState, this.basesManager, ent);
 			if (!base)
 			{
 				continue;

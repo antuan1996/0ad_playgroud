@@ -35,7 +35,10 @@ export type TradeHQ =
 	& Pick<Headquarters, "pickMostNeededResources" | "GetWantedGatherRates" | "canBuild" | "canBarter" | "placement">
 	& {
 		readonly navalManager: Pick<NavalManager, "fleet" | "requireTransport">;
-		readonly basesManager: Pick<BasesManager, "getTotalResourceLevel" | "GetCurrentGatherRates">;
+		readonly basesManager: Pick<
+			BasesManager,
+			"getTotalResourceLevel" | "GetCurrentGatherRates" | "baselessBase" | "baseManagers"
+		>;
 		readonly buildManager: Pick<BuildManager, "setBuildable" | "setUnbuildable">;
 		readonly researchManager: Pick<ResearchManager, "researchTradeBonus">;
 	};
@@ -1002,7 +1005,7 @@ export class TradeManager
 			ent.setMetadata(PlayerID, "route", undefined);
 			if (!possibleRoute && !ent.hasClass("Ship"))
 			{
-				const closestBase = getBestBase(gameState, ent, true);
+				const closestBase = getBestBase(gameState, this.hq.basesManager, ent, true);
 				// onlyConstructedBase (third argument) ensures the anchor exists when a base matched
 				if (closestBase && closestBase.accessIndex === access && closestBase.anchor)
 				{

@@ -26,7 +26,7 @@ import { buildWonder } from "./townBuildings.ts";
  */
 export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
 	readonly attackManager: Pick<AttackManager, "getPlan" | "outOfPlan" | "raidTargetEntity">;
-	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers">;
+	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers" | "baselessBase" | "baseManagers">;
 	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
 	readonly garrisonManager: Pick<GarrisonManager, "cancelGarrison">;
 	readonly navalManager: Pick<NavalManager, "requireTransport">;
@@ -855,7 +855,7 @@ export class VictoryManager
 			criticalEnt.setStance("passive");
 		}
 		const accessIndex = getLandAccess(gameState, criticalEnt);
-		const bestBase = getBestBase(gameState, criticalEnt, true);
+		const bestBase = getBestBase(gameState, this.hq.basesManager, criticalEnt, true);
 		if (bestBase && bestBase.accessIndex === accessIndex)
 		{
 			const bestBaseAnchor = bestBase.anchor;
