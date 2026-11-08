@@ -55,11 +55,11 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - No `!` non-null assertion.
   - `Engine.PostCommand` only in `adapter/commands.ts`.
   - Execution code reaching the HQ only through `execution/hq.ts`.
-- **Baseline counts (`structure-baseline.json`; all 0 but the two run-time
-  access counts below, which may only fall)**:
+- **Baseline counts (`structure-baseline.json`; all 0 but `hq-manager-access`,
+  which may only fall)**:
   - Layer violations (`adapter < world < execution < decision < root`,
     `PLAN.md` §3.4; type-only imports included).
-  - `layer-access` (12): members of a higher layer reached at run time with no
+  - `layer-access` (0): members of a higher layer reached at run time with no
     import, through `gameState.ai.HQ` and the like: a property (read as
     `x.name`, `x["name"]` or destructured) whose declaration, or the type of
     the value it yields, lies in a higher layer, resolved by the type checker;

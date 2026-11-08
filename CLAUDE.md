@@ -92,9 +92,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   across `adapter < world < execution < decision < root` including type-only
   imports, value-import cycles, `Engine` outside `adapter/`, unmarked dead
   exports/methods, stale `TODO never called` markers). No module may export what
-  only it uses. Two type-checked run-time counts may only fall: `layer-access`
-  (12: a higher layer's members reached without an import, e.g.
-  `gameState.ai.HQ` from `adapter/` or `world/`) and `hq-manager-access` (52:
+  only it uses. Two type-checked run-time counts: `layer-access` at **0** (a
+  higher layer's members reached without an import, e.g. `gameState.ai.HQ`
+  from `adapter/` or `world/`) and `hq-manager-access` (52, may only fall:
   execution using members of the managers `hqOf` hands out).
 - TypeScript configs are in `build/petra_ts/` (`tsconfig.json`,
   `tsconfig.build.json`, `tsconfig.tests.json`). **Never put a `.json` file
@@ -117,7 +117,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   - `adapter/` (engine boundary): `brands.ts`, `entityExtend.ts`, `chatHelper.ts`,
     `unitState.ts` (parses what a unit is doing), `orders.ts` (reads what it was
     ordered to do), `commands.ts` (sole exit for bot commands), `pathfinder.ts`,
-    `templateData.ts`, `placed.ts`, `debug.ts`.
+    `templateData.ts`, `placed.ts`, `debug.ts`. It reads no AI state
+    (`gameState.ai.*`).
   - `world/` (AI's model): `config.ts`, `difficultyLevel.ts`, `mapModule.ts`,
     `mapMask.ts`, `geography.ts` (territory/border maps and land/sea regions,
     owned by HQ), `gatherEconomy.ts` (measured gather rates including walk,
@@ -125,7 +126,11 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     saved), `census.ts` (population vs room), `seaRoute.ts` (ship routing round
     enemy shooters), `shipTraffic.ts` (fading enemy ship heatmap on naval maps,
     places towers), `baseResources.ts` (dropsite supplies per base), `bases.ts`
-    (read-only `BaseView`).
+    (read-only `BaseView`), `captureTally.ts` (our units' capture strength per
+    target, owned by HQ, exposed as `gameState.ai.captures`), `capture.ts`
+    (`allowCapture`), `territory.ts` (territory helpers over
+    `gameState.ai.geography`, the HQ's geography). World code reaches AI
+    state only through such exposed world objects, never `gameState.ai.HQ`.
   - `decision/`: `headquarters.ts`, `startingStrategy.ts`, managers (`attack`,
     `base`, `bases`, `build`, `defense`, `diplomacy`, `emergency`, `garrison`,
     `naval`, `research`, `trade`, `victory`), `placement.ts`, `enemySelection.ts`,
@@ -134,7 +139,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   - `execution/`: `attackPlan.ts`, `transportPlan.ts`, `defenseArmy.ts`,
     `queue.ts`, `queueManager.ts`, `queueplan.ts`, `queueplanBuilding.ts`,
     `queueplanTraining.ts`, `queueplanResearch.ts`, `worker.ts`, `unitPlan.ts`,
-    `hq.ts`.
+    `treasure.ts`, `hq.ts` (`hqOf`, the execution layer's view of the HQ, and
+    `basesOf`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 
