@@ -18,6 +18,7 @@ import {
 	makeHqEntity,
 	makeHqWorld,
 	seatHQ,
+	structureTemplate,
 	type HqWorld,
 	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
@@ -51,6 +52,18 @@ function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions>
 	hq.defenseManager.getArmy = () => undefined;
 	const manager = new VictoryManager(hq.Config);
 	return { world, hq, manager, queues: world.ai.queues };
+}
+
+/** the town may build a wonder: the template is there and allowed (canBuild), none stands nor is queued */
+function allowWonder(world: HqWorld, hq: ReturnType<typeof seatHQ>): void
+{
+	world.templates["structures/athen/wonder"] = structureTemplate("structures/athen/wonder", {
+		classes: ["Structure", "Wonder"],
+		cost: { food: 1000, wood: 1000, stone: 1000, metal: 1000 },
+	});
+	const canBuild = hq.canBuild.bind(hq);
+	hq.canBuild = (gs: CommonGameState, structure: string) =>
+		structure === "structures/{civ}/wonder" || canBuild(gs, structure);
 }
 
 /** a unit of ours at the given spot, recording its orders */
@@ -825,11 +838,11 @@ describe("the victory manager through its turn: update", () =>
 	it("every tenth turn, a wonder game builds the wonder, and a healthy soldier hero goes back to fighting", () =>
 	{
 		const wonder = seat(["wonder"]);
-		const built: boolean[] = [];
-		wonder.hq.buildWonder = (_gs: unknown, _q: unknown, force: boolean) => built.push(force);
+		// a wonder the town may build (decision/townBuildings.ts buildWonder, forced: whatever the stock)
+		allowWonder(wonder.world, wonder.hq);
 		wonder.world.ai.playedTurn = 10;
 		wonder.manager.update(wonder.world.gameState, events({}), wonder.queues);
-		assert.deepEqual(built, [true]);
+		assert.equal(wonder.queues.wonder.plans.length, 1, "the wonder is queued");
 
 		const regicide = seat(["regicide"]);
 		const hero = unit(regicide.world, 600, ["Hero", "Soldier"]);
@@ -843,17 +856,16 @@ describe("the victory manager through its turn: update", () =>
 	it("does nothing between its tenth turns, or in a plain conquest game", () =>
 	{
 		const off = seat(["wonder"]);
-		const built: boolean[] = [];
-		off.hq.buildWonder = () => built.push(true);
+		allowWonder(off.world, off.hq);
 		off.world.ai.playedTurn = 11;
 		off.manager.update(off.world.gameState, events({}), off.queues);
 
 		const plain = seat([]);
-		plain.hq.buildWonder = () => built.push(true);
+		allowWonder(plain.world, plain.hq);
 		plain.world.ai.playedTurn = 10;
 		plain.manager.update(plain.world.gameState, events({}), plain.queues);
 
-		assert.deepEqual(built, []);
+		assert.equal(off.queues.wonder.plans.length + plain.queues.wonder.plans.length, 0, "no wonder queued");
 	});
 });
 

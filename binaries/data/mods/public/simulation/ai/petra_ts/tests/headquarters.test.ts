@@ -57,18 +57,31 @@ import {
 import { requireValue } from "../adapter/entityExtend.ts";
 import { BasesManager } from "../decision/basesManager.ts";
 import { BuildManager } from "../decision/buildManager.ts";
-import { GarrisonManager } from "../decision/garrisonManager.ts";
 import {
-	CC_ENEMY_AVOID,
 	CC_ORDER_WAIT,
 	CC_SPOT_MEMORY,
-	DRY_WOOD,
-	type Headquarters,
-} from "../decision/headquarters.ts";
+	buildNewBase,
+	checkBaseExpansion,
+	followCivCentreOrders,
+	provideForDryLand,
+} from "../decision/expansion.ts";
+import { GarrisonManager } from "../decision/garrisonManager.ts";
+import { CC_ENEMY_AVOID, DRY_WOOD, type Headquarters } from "../decision/headquarters.ts";
+import { buildMoreHouses } from "../decision/houseBuilding.ts";
 import { checkEvents, handleNewBase } from "../decision/hqEvents.ts";
+import { buildDefenses, constructTrainingBuildings } from "../decision/militaryBuildings.ts";
 import { checkPhaseRequirements } from "../decision/phasing.ts";
 import { SHORE_TOWER_TRAFFIC } from "../decision/placement.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
+import {
+	buildEarlyMarket,
+	buildFarmstead,
+	buildForge,
+	buildMarket,
+	buildTemple,
+	buildWonder,
+	manageCorral,
+} from "../decision/townBuildings.ts";
 import { STALLED_IDLE, trainMoreWorkers, workforceStalled } from "../decision/workforceTraining.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
@@ -2967,10 +2980,10 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		centre(world, 5001, [62, 198], 0);
 
 		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT - 1);
-		hq.followCivCentreOrders(world.gameState);
+		followCivCentreOrders(hq, world.gameState);
 		assert.equal(hq.ccSpotsAvoided.length, 0, "still waiting");
 		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT);
-		hq.followCivCentreOrders(world.gameState);
+		followCivCentreOrders(hq, world.gameState);
 		assert.deepEqual(hq.ccSpotsAvoided.map((spot) => spot.pos), [[200, 200]], "the spot that never took");
 		assert.equal(
 			hq.isContestedCCSpot(world.gameState, worldPos(240, 220), landRegion(2)),
@@ -2981,7 +2994,7 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		assert.equal(hq.ccOrders.length, 1, "the foundation that stands is followed on");
 
 		world.ai.elapsedTime = seconds(1000 + CC_SPOT_MEMORY + CC_ORDER_WAIT);
-		hq.followCivCentreOrders(world.gameState);
+		followCivCentreOrders(hq, world.gameState);
 		assert.equal(hq.ccSpotsAvoided.length, 0, "and forgotten after a while");
 	});
 
@@ -2993,11 +3006,11 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 		hq.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
 		const lost = centre(world, 5001, [200, 200], 30);
 		centre(world, 5002, [60, 200], 50);
-		hq.followCivCentreOrders(world.gameState);
+		followCivCentreOrders(hq, world.gameState);
 		override(lost, { position: () => undefined }); // destroyed
 		override(requireValue(world.gameState.getEntityById(entityId(5002))), { foundationProgress: () => undefined });
 		world.ai.elapsedTime = seconds(1002);
-		hq.followCivCentreOrders(world.gameState);
+		followCivCentreOrders(hq, world.gameState);
 		assert.deepEqual(hq.ccSpotsAvoided.map((spot) => spot.pos), [[200, 200]]);
 		assert.equal(hq.ccOrders.length, 0);
 	});
@@ -3046,7 +3059,7 @@ describe("a dry town on a naval map", () =>
 			});
 			bookBuilder(world, hq, ["structures/{civ}/market"]);
 			assert.equal(hq.landRunDry(world.gameState), naval);
-			hq.buildEarlyMarket(world.gameState, world.ai.queues);
+			buildEarlyMarket(hq, world.gameState, world.ai.queues);
 			assert.equal(world.ai.queues.economicBuilding.plans.length, naval ? 1 : 0, naval ? "naval" : "mainland");
 		}
 	});
@@ -3092,12 +3105,12 @@ describe("a town whose land ran dry", () =>
 	{
 		const { world, hq } = dryTown(true, 0, 0);
 		hq.maxFields = 2;
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(hq.maxFields, false);
 
 		const wet = dryTown(false, 0, 0);
 		wet.hq.maxFields = 2;
-		wet.hq.provideForDryLand(wet.world.gameState, wet.world.ai.queues);
+		provideForDryLand(wet.hq, wet.world.gameState, wet.world.ai.queues);
 		assert.equal(wet.hq.maxFields, 2, "wood left: the limit stands");
 	});
 
@@ -3106,13 +3119,13 @@ describe("a town whose land ran dry", () =>
 		const { world, hq } = dryTown(true, 0, 0);
 		const queueManager = world.ai.queueManager;
 		const raised = Math.max(hq.Config.priorities.villager, hq.Config.priorities.citizenSoldier) + 2;
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "none queued");
 		override(world.ai.queues.civilCentre, { hasQueuedUnits: () => true });
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), raised, "queued on dry land");
 		override(hq.basesManager, { getTotalResourceLevel: () => ({ wood: DRY_WOOD + 1 }) });
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("civilCentre"), hq.Config.priorities.civilCentre, "wood again");
 	});
 
@@ -3123,10 +3136,10 @@ describe("a town whose land ran dry", () =>
 		const missing = { n: 2 };
 		override(hq.buildManager, { numberMissingRoom: () => missing.n });
 		const raised = Math.max(hq.Config.priorities.villager, hq.Config.priorities.citizenSoldier) + 2;
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queueManager.getPriority("civilCentre"), raised, "two buildings without room");
 		missing.n = 1;
-		hq.provideForDryLand(world.gameState, world.ai.queues);
+		provideForDryLand(hq, world.gameState, world.ai.queues);
 		assert.equal(
 			world.ai.queueManager.getPriority("civilCentre"),
 			hq.Config.priorities.civilCentre,
@@ -4327,7 +4340,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		);
 		seatCards(world, hq);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), true);
 
 		const queue = world.ai.queues.civilCentre;
 		assert.equal(queue.plans.length, 1);
@@ -4345,7 +4358,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		});
 		seatCards(world, hq);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), true);
 
 		const queue = world.ai.queues.civilCentre;
 		assert.equal(queue.plans[0]?.type, "structures/athen/civil_centre");
@@ -4358,7 +4371,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		const { world, hq } = seat({ stock: { food: 500, wood: 500, stone: 500, metal: 500 } });
 		seatCards(world, hq);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), false);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), false);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 	});
 
@@ -4372,7 +4385,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		});
 		seatCards(world, hq);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), true);
 		const queue = world.ai.queues.civilCentre;
 		assert.equal(queue.plans.length, 1, "the laying goes up while the research walks");
 	});
@@ -4393,7 +4406,7 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		);
 
 		assert.equal(
-			hq.buildNewBase(world.gameState, world.ai.queues),
+			buildNewBase(hq, world.gameState, world.ai.queues),
 			false,
 			"one town already rises; the office waits for it",
 		);
@@ -4404,9 +4417,9 @@ describe("planting a new ground: buildNewBase's template cards", () =>
 		const { world, hq } = seat({ phase: 2, stock: { food: 500, wood: 500, stone: 500, metal: 500 } });
 		seatCards(world, hq);
 		// the office already books one; a second call holds on its side
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), true);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), true);
 		assert.equal(
-			hq.buildNewBase(world.gameState, world.ai.queues),
+			buildNewBase(hq, world.gameState, world.ai.queues),
 			false,
 			"one plan at a time holds the civil-centre queue",
 		);
@@ -4466,9 +4479,9 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		seatCards(world, hq);
 		seatPopulation(world, 80);
 		// one ground already booked
-		hq.buildNewBase(world.gameState, world.ai.queues);
+		buildNewBase(hq, world.gameState, world.ai.queues);
 
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1, "the queue's batch is the whole answer while it lasts");
@@ -4483,7 +4496,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/barracks", 90, "room");
 		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/watchtower", 90, "room");
 
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1, "the missing room asks a ground of its own");
@@ -4497,7 +4510,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		seatPopulation(world, 80);
 		hq.phasing = 1;
 
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 
 		assert.equal(
 			world.ai.queues.civilCentre.plans.length,
@@ -4513,7 +4526,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		// one town on the board over the default personality (0.5): the floor
 		// is 65 + 5 + 15 * 0 = 70 souls, so 70 callers hold, 71 ask
 		seatPopulation(world, 70);
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 0, "exactly the threshold holds");
 
 		world.addEntity(
@@ -4525,7 +4538,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 				templateName: "units/athen/support_female_citizen",
 			}),
 		);
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 1, "the caller over the floor breaks the wait");
 	});
 
@@ -4536,7 +4549,7 @@ describe("asking for another ground: checkBaseExpansion's thinking", () =>
 		hq.saveResources = true;
 		seatPopulation(world, 55);
 
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1, "holding funds, fifty and one callers ask a ground");
@@ -4876,7 +4889,7 @@ describe("a pen for the herd: manageCorral", () =>
 		});
 		seatPenBuilder(world, hq);
 
-		hq.manageCorral(world.gameState, world.ai.queues);
+		manageCorral(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.corral.plans;
 		assert.equal(plans.length, 1);
@@ -4898,7 +4911,7 @@ describe("a pen for the herd: manageCorral", () =>
 			}, { trainableEntities: () => ["gaia/fauna_deer"], trainingQueue: () => [] }),
 		);
 
-		hq.manageCorral(world.gameState, world.ai.queues);
+		manageCorral(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.corral.plans;
 		assert.equal(plans.length, 1);
@@ -4933,7 +4946,7 @@ describe("a pen for the herd: manageCorral", () =>
 			);
 		}
 
-		hq.manageCorral(world.gameState, world.ai.queues);
+		manageCorral(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.corral.plans;
 		assert.equal(plans.length, 0, "the pen does not train past its count");
@@ -4965,7 +4978,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 		const { world, hq } = seat({ stock: { food: 800, wood: 800, stone: 800 } });
 		seatWonder(world, hq);
 
-		hq.buildWonder(world.gameState, world.ai.queues);
+		buildWonder(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.wonder.plans;
 		assert.equal(plans.length, 1);
@@ -4978,7 +4991,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 		const { world, hq } = seat({ stock: { food: 900, wood: 100, stone: 100 } });
 		seatWonder(world, hq);
 
-		hq.buildWonder(world.gameState, world.ai.queues);
+		buildWonder(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.wonder.plans.length, 0, "the wonder waits until no more than one need runs thin");
 	});
@@ -4988,7 +5001,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 		const { world, hq } = seat({ stock: { food: 200, wood: 200, stone: 200 } });
 		seatWonder(world, hq);
 
-		hq.buildWonder(world.gameState, world.ai.queues);
+		buildWonder(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.wonder.plans.length, 0);
 	});
@@ -4998,7 +5011,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 		const { world, hq } = seat({ stock: { food: 200, wood: 200, stone: 200 } });
 		seatWonder(world, hq);
 
-		hq.buildWonder(world.gameState, world.ai.queues, true);
+		buildWonder(hq, world.gameState, world.ai.queues, true);
 
 		assert.equal(world.ai.queues.wonder.plans.length, 1);
 	});
@@ -5017,7 +5030,7 @@ describe("the wonder for a rich town: buildWonder", () =>
 			}),
 		);
 
-		hq.buildWonder(world.gameState, world.ai.queues, true);
+		buildWonder(hq, world.gameState, world.ai.queues, true);
 
 		assert.equal(world.ai.queues.wonder.plans.length, 0, "one wonder per town, forced or not");
 	});
@@ -5045,7 +5058,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		const { world, hq } = seat({ populationMax: 300, populationLimit: 300, population: 120 });
 		houseCards(world, hq);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(
 			world.ai.queues.house.plans.length,
@@ -5059,7 +5072,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		const { world, hq } = seat({ populationMax: 300, populationLimit: 60, population: 55 });
 		houseCards(world, hq);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.house.plans;
 		assert.equal(plans.length, 1);
@@ -5073,7 +5086,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		houseCards(calm.world, calm.hq);
 		for (let turn = 0; turn < 6; ++turn)
 		{
-			calm.hq.buildMoreHouses(calm.world.gameState, calm.world.ai.queues);
+			buildMoreHouses(calm.hq, calm.world.gameState, calm.world.ai.queues);
 		}
 		assert.equal(calm.world.ai.queues.house.plans.length, 3, "three houses wait on a quiet town");
 
@@ -5081,7 +5094,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		houseCards(crowded.world, crowded.hq);
 		for (let turn = 0; turn < 6; ++turn)
 		{
-			crowded.hq.buildMoreHouses(crowded.world.gameState, crowded.world.ai.queues);
+			buildMoreHouses(crowded.hq, crowded.world.gameState, crowded.world.ai.queues);
 		}
 		assert.equal(crowded.world.ai.queues.house.plans.length, 5, "a crowd over eighty keeps five waiting");
 	});
@@ -5096,7 +5109,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		});
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.house.plans[0]?.type, "structures/athen/apartment");
 	});
@@ -5117,7 +5130,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		});
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.house.plans[0]?.type, "structures/athen/house");
 	});
@@ -5131,12 +5144,12 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 			phaseRequirements: { 2: [{ class: "Village", count: 3 }] },
 		});
 		houseCards(world, hq);
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 		// the spot was turned away for room, then the phase's wants arrive
 		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/house", 90, "room");
 		hq.phasing = 2;
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(hq.requireHouses, true, "the house is required until the phase's villages stand");
 		assert.equal(
@@ -5170,7 +5183,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		hq.phasing = 2;
 		hq.requireHouses = true;
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(hq.requireHouses, undefined, "three houses stand: the phase has its villages");
 	});
@@ -5182,7 +5195,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		hq.requireHouses = true;
 		hq.phasing = 0;
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(hq.requireHouses, undefined);
 	});
@@ -5193,7 +5206,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		houseCards(world, hq);
 		hq.buildManager.setUnbuildable(world.gameState, "structures/athen/house", 90, "room");
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.ok(
 			doorCalls(hq.researchManager).some(([name]: [string, unknown[]]) => name === "researchPopulationBonus"),
@@ -5208,7 +5221,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		const { world, hq } = seat({ populationMax: 300, populationLimit: 60, population: 58 });
 		houseCards(world, hq);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		const house = world.ai.queueManager.getPriority("house");
 		assert.ok(house > world.ai.queueManager.getPriority("citizenSoldier"), "before the soldiers");
@@ -5223,7 +5236,7 @@ describe("the houses the census asks for: buildMoreHouses", () =>
 		houseCards(world, hq);
 		world.ai.queueManager.changePriority("house", 2 * hq.Config.priorities.house);
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queueManager.getPriority("house"), hq.Config.priorities.house);
 	});
@@ -5279,7 +5292,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		hq.canBarter = false;
 		world.ai.elapsedTime = seconds(10000);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.defenseBuilding.plans.length, 0);
 	});
@@ -5293,7 +5306,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
 		world.ai.elapsedTime = seconds(hq.towerLapseTime + hq.fortStartTime + 1);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.defenseBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5308,7 +5321,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		bookBuilder(world, hq, ["structures/{civ}/sentry_tower"]);
 		world.ai.elapsedTime = seconds(hq.towerLapseTime + hq.fortStartTime - 1);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.defenseBuilding.plans.length, 0);
 	});
@@ -5322,7 +5335,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		standing(world, 2701, ["Structure", "Tower"], SENTRY);
 		world.ai.elapsedTime = seconds(10000);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.defenseBuilding.plans.length, 0);
 	});
@@ -5334,7 +5347,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		bookBuilder(world, hq, ["structures/{civ}/fortress"]);
 		world.ai.elapsedTime = seconds(hq.fortressLapseTime + hq.fortressStartTime + 1);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.defenseBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5350,7 +5363,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		});
 		bookBuilder(world, hq, ["structures/{civ}/defense_tower"]);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.defenseBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5383,7 +5396,7 @@ describe("the frontier's defences: buildDefenses", () =>
 				hq.shipTraffic.cells[requireValue(hq.shipTraffic.cellAt(worldPos(72, 40)))] = 100;
 			}
 
-			hq.buildDefenses(world.gameState, world.ai.queues);
+			buildDefenses(hq, world.gameState, world.ai.queues);
 
 			assert.equal(
 				world.ai.queues.defenseBuilding.plans.length,
@@ -5408,7 +5421,7 @@ describe("the frontier's defences: buildDefenses", () =>
 		}
 		world.ai.elapsedTime = seconds(10000);
 
-		hq.buildDefenses(world.gameState, world.ai.queues);
+		buildDefenses(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.defenseBuilding.plans.length, 0);
 	});
@@ -5425,7 +5438,7 @@ describe("the forge after the market: buildForge", () =>
 		world.templates[FORGE] = structureTemplate(FORGE, { classes: ["Structure", "Forge"] });
 		bookBuilder(world, hq, ["structures/{civ}/forge"]);
 
-		hq.buildForge(world.gameState, world.ai.queues);
+		buildForge(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5438,7 +5451,7 @@ describe("the forge after the market: buildForge", () =>
 		world.templates[FORGE] = structureTemplate(FORGE, { classes: ["Structure", "Forge"] });
 		bookBuilder(world, hq, ["structures/{civ}/forge"]);
 
-		hq.buildForge(world.gameState, world.ai.queues);
+		buildForge(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans.length, 0);
 	});
@@ -5451,7 +5464,7 @@ describe("the forge after the market: buildForge", () =>
 		world.templates[FORGE] = structureTemplate(FORGE, { classes: ["Structure", "Forge"] });
 		bookBuilder(world, hq, ["structures/{civ}/forge"]);
 
-		hq.buildForge(world.gameState, world.ai.queues);
+		buildForge(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans.length, 0);
 	});
@@ -5496,7 +5509,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5511,7 +5524,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		card(world, BARRACKS, ["Structure", "Barracks"]);
 		bookBuilder(world, hq, ["structures/{civ}/barracks"]);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans.length, 0);
 	});
@@ -5524,7 +5537,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		bookBuilder(world, hq, ["structures/{civ}/stable", "structures/{civ}/barracks"]);
 		armed(world, 1, 0, 0);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, STABLE);
 	});
@@ -5537,7 +5550,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		bookBuilder(world, hq, ["structures/{civ}/range", "structures/{civ}/barracks"]);
 		armed(world, 1, 0, 1);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, RANGE);
 	});
@@ -5557,7 +5570,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		hq.productionLoad.trainers = 4;
 		hq.productionLoad.busy = 0.95;
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5578,7 +5591,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 			armed(world, 3, 1, 1);
 			hq.productionLoad.trainers = trainers;
 			hq.productionLoad.busy = busy;
-			hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+			constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 			return world.ai.queues.militaryBuilding.plans.length;
 		};
 		assert.equal(town(0.6, 4, { wood: 2000, stone: 1000 }), 0, "the barracks keep up: some stand idle");
@@ -5596,7 +5609,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		// a built market licences the barter; update() books it each turn
 		hq.canBarter = true;
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(
 			world.ai.queues.militaryBuilding.plans.length,
@@ -5620,7 +5633,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		]);
 		armed(world, 1, 1, 2);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, ELEPHANT);
 	});
@@ -5638,7 +5651,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 			hq.saveResources = true;
 			hq.canBarter = canBarter;
 
-			hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+			constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 			assert.deepEqual(
 				world.ai.queues.militaryBuilding.plans.map((plan) => plan.type),
@@ -5663,7 +5676,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		]);
 		armed(world, 1, 1, 2);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, ARSENAL);
 	});
@@ -5687,7 +5700,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		// the advanced list the game's start-up analysis books from the civ's config
 		hq.bAdvanced = [templateName(GYMNASIUM)];
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -5706,7 +5719,7 @@ describe("the army's houses: constructTrainingBuildings", () =>
 		standing(world, 2742, ["Structure", "Gymnasium"], GYMNASIUM);
 		hq.bAdvanced = [templateName(GYMNASIUM), templateName("structures/athen/prytaneion")];
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans.length, 0);
 	});
@@ -5726,7 +5739,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[TEMPLE] = structureTemplate(TEMPLE, { classes: ["Structure", "Temple"] });
 		bookBuilder(world, hq, ["structures/{civ}/temple"]);
 
-		hq.buildTemple(world.gameState, world.ai.queues);
+		buildTemple(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 0);
 	});
@@ -5738,7 +5751,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[TEMPLE] = structureTemplate(TEMPLE, { classes: ["Structure", "Temple"] });
 		bookBuilder(world, hq, ["structures/{civ}/temple"]);
 
-		hq.buildTemple(world.gameState, world.ai.queues);
+		buildTemple(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans[0]?.type, TEMPLE);
 	});
@@ -5751,7 +5764,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[VESTA] = structureTemplate(VESTA, { classes: ["Structure", "Temple"] });
 		bookBuilder(world, hq, ["structures/{civ}/temple", "structures/{civ}/temple_vesta"]);
 
-		hq.buildTemple(world.gameState, world.ai.queues);
+		buildTemple(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans[0]?.type, VESTA);
 	});
@@ -5762,7 +5775,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[TEMPLE] = structureTemplate(TEMPLE, { classes: ["Structure", "Temple"] });
 		bookBuilder(world, hq, ["structures/{civ}/temple"]);
 
-		hq.buildTemple(world.gameState, world.ai.queues);
+		buildTemple(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 0);
 	});
@@ -5773,7 +5786,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		bookBuilder(world, hq, ["structures/{civ}/market"]);
 
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans[0]?.type, MARKET);
 		assert.equal(world.ai.queueManager.getPriority("economicBuilding"), 3 * hq.Config.priorities.economicBuilding);
@@ -5788,7 +5801,7 @@ describe("the temple, the market and the farmstead", () =>
 			world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 			hq.saveResources = saving ? true : undefined;
 			hq.basesManager.getTotalResourceLevel = () => ({ wood: woodLeft });
-			hq.buildEarlyMarket(world.gameState, world.ai.queues);
+			buildEarlyMarket(hq, world.gameState, world.ai.queues);
 			return { world, hq };
 		};
 		const dry = town(true, 120);
@@ -5821,15 +5834,15 @@ describe("the temple, the market and the farmstead", () =>
 		hq.saveResources = true;
 		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
 		const queueManager = world.ai.queueManager;
-		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		buildEarlyMarket(hq, world.gameState, world.ai.queues);
 
 		// the town phase queued: 500 wood the market must not hold back
 		world.ai.queues.majorTech.hasQueuedUnits = () => true;
-		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		buildEarlyMarket(hq, world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("economicBuilding"), queueManager.getPriority("majorTech") - 1);
 
 		world.ai.queues.majorTech.hasQueuedUnits = () => false;
-		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		buildEarlyMarket(hq, world.gameState, world.ai.queues);
 		assert.equal(queueManager.getPriority("economicBuilding"), 3 * hq.Config.priorities.economicBuilding);
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "the same market all along");
 	});
@@ -5840,8 +5853,8 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		hq.saveResources = true;
 		hq.basesManager.getTotalResourceLevel = () => ({ wood: 0 });
-		hq.buildEarlyMarket(world.gameState, world.ai.queues);
-		hq.buildEarlyMarket(world.gameState, world.ai.queues);
+		buildEarlyMarket(hq, world.gameState, world.ai.queues);
+		buildEarlyMarket(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "queued once");
 
 		const standing = seat();
@@ -5857,7 +5870,7 @@ describe("the temple, the market and the farmstead", () =>
 				templateName: MARKET,
 			}),
 		);
-		standing.hq.buildEarlyMarket(standing.world.gameState, standing.world.ai.queues);
+		buildEarlyMarket(standing.hq, standing.world.gameState, standing.world.ai.queues);
 		assert.equal(standing.world.ai.queues.economicBuilding.plans.length, 0);
 	});
 
@@ -5866,9 +5879,9 @@ describe("the temple, the market and the farmstead", () =>
 		const { world, hq } = seat({ stock: { food: 500, wood: 500, stone: 500, metal: 500 } });
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		bookBuilder(world, hq, ["structures/{civ}/market"]);
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1);
 	});
@@ -5880,7 +5893,7 @@ describe("the temple, the market and the farmstead", () =>
 		world.templates[MARKET] = structureTemplate(MARKET, { classes: ["Structure", "Market"] });
 		bookBuilder(world, hq, ["structures/{civ}/market"]);
 
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 0);
 	});
@@ -5892,7 +5905,7 @@ describe("the temple, the market and the farmstead", () =>
 		bookBuilder(world, hq, ["structures/{civ}/farmstead"]);
 		standing(world, 2760, ["Structure", "House", "Village"], "structures/athen/house");
 
-		hq.buildFarmstead(world.gameState, world.ai.queues);
+		buildFarmstead(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 0, "no storehouse yet to tie the farms to");
 	});
@@ -5905,12 +5918,12 @@ describe("the temple, the market and the farmstead", () =>
 		standing(world, 2760, ["Structure", "House", "Village"], "structures/athen/house");
 		standing(world, 2761, ["Structure", "Storehouse"], "structures/athen/storehouse");
 
-		hq.buildFarmstead(world.gameState, world.ai.queues);
+		buildFarmstead(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.economicBuilding.plans[0]?.type, FARMSTEAD);
 
 		standing(world, 2762, ["Structure", "Farmstead"], FARMSTEAD);
 		const before = world.ai.queues.economicBuilding.plans.length;
-		hq.buildFarmstead(world.gameState, world.ai.queues);
+		buildFarmstead(hq, world.gameState, world.ai.queues);
 		assert.equal(world.ai.queues.economicBuilding.plans.length, before, "one farmstead is enough");
 	});
 });
@@ -5921,7 +5934,7 @@ describe("a herd without a pen card: manageCorral", () =>
 	{
 		const { world, hq } = seat();
 
-		hq.manageCorral(world.gameState, world.ai.queues);
+		manageCorral(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.corral.plans.length, 0);
 	});
@@ -5939,7 +5952,7 @@ describe("the last civil centre gone: checkBaseExpansion with no base", () =>
 			makeHqEntity({ id: 2207, owner: PLAYER, position: [50, 50], classes: ["Unit", "Support", "Worker"] }),
 		);
 
-		hq.checkBaseExpansion(world.gameState, world.ai.queues);
+		checkBaseExpansion(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.civilCentre.plans;
 		assert.equal(plans.length, 1);
@@ -5966,7 +5979,7 @@ describe("the second and third military houses, and the advanced houses' trainer
 		standing(world, 2771, ["Structure", "Range"], RANGE, [50, 40]);
 		standing(world, 2772, ["Structure", "Stable"], STABLE, [60, 40]);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.militaryBuilding.plans[0]?.type, STABLE);
 	});
@@ -5982,7 +5995,7 @@ describe("the second and third military houses, and the advanced houses' trainer
 		standing(world, 2770, ["Structure", "Barracks"], BARRACKS, [40, 40]);
 		standing(world, 2771, ["Structure", "Range"], RANGE, [50, 40]);
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -6002,7 +6015,7 @@ describe("the second and third military houses, and the advanced houses' trainer
 		standing(world, 2775, ["Structure", "Arsenal"], "structures/athen/arsenal");
 		hq.bAdvanced = [templateName(PRYTANEION)];
 
-		hq.constructTrainingBuildings(world.gameState, world.ai.queues);
+		constructTrainingBuildings(hq, world.gameState, world.ai.queues);
 
 		const plans = world.ai.queues.militaryBuilding.plans;
 		assert.equal(plans.length, 1);
@@ -6016,7 +6029,7 @@ describe("the second and third military houses, and the advanced houses' trainer
 		const { world, hq } = seat({ phase: 2, stock: { food: 500, wood: 500, stone: 500, metal: 500 } });
 		bookBuilder(world, hq, ["structures/{civ}/civil_centre", "structures/{civ}/military_colony"]);
 
-		assert.equal(hq.buildNewBase(world.gameState, world.ai.queues), false);
+		assert.equal(buildNewBase(hq, world.gameState, world.ai.queues), false);
 		assert.equal(world.ai.queues.civilCentre.plans.length, 0);
 	});
 });
@@ -6316,10 +6329,10 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			cost: { wood: 300 },
 		});
 		bookBuilder(world, hq, ["structures/{civ}/market"]);
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 		setWood(world, "house", 400);
 
-		hq.buildMarket(world.gameState, world.ai.queues);
+		buildMarket(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 1, "the market is still the one plan");
 		assert.equal(
@@ -6345,11 +6358,11 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 			popBonus: 10,
 		});
 		bookBuilder(world, hq, ["structures/{civ}/house"]);
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 		hq.phasing = 2;
 
-		hq.buildMoreHouses(world.gameState, world.ai.queues);
+		buildMoreHouses(hq, world.gameState, world.ai.queues);
 
 		// the house this turn adds is counted after the release, so it keeps its need
 		const plans = world.ai.queues.house.plans;
