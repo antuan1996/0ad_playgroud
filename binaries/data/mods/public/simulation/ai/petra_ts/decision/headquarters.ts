@@ -2,26 +2,18 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, NEW_BASE, NO_BASE, cellIndex, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { GAIA, NEW_BASE, NO_BASE, cellIndex, seconds, worldPos } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import {
-	getAttackBonus,
-	getLandAccess,
-	getMaxStrength,
-	requireTemplate,
-	setSeaAccess,
-} from "../adapter/entityExtend.ts";
-import { ordersOf } from "../adapter/orders.ts";
+import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isStructureTemplate } from "../adapter/templateData.ts";
-import { hasActivity } from "../adapter/unitState.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
+import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
-import { allowCapture } from "../world/capture.ts";
 import { CaptureTally, type CaptureEntry } from "../world/captureTally.ts";
 import { censusOf } from "../world/census.ts";
 import { Config } from "../world/config.ts";
@@ -40,6 +32,7 @@ import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
+import { checkEvents } from "./hqEvents.ts";
 import { NavalManager } from "./navalManager.ts";
 import {
 	findDefensiveSpot,
@@ -50,7 +43,7 @@ import {
 	type EconomicCCOptions,
 } from "./placement.ts";
 import { ResearchManager } from "./researchManager.ts";
-import { buildFirstBase, configFirstBase } from "./startingStrategy.ts";
+import { buildFirstBase } from "./startingStrategy.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import {
@@ -147,13 +140,6 @@ export const CC_SPOT_MEMORY = 600;
 /** Metres around such a spot avoided, and around enemy soldiers. */
 const CC_SPOT_AVOID = 80;
 export const CC_ENEMY_AVOID = 150;
-
-/** Whether an entity is a market of ours */
-function isOwnMarket(gameState: CommonGameState, id: EntityId): boolean
-{
-	const ent = gameState.getEntityById(id);
-	return !!ent && ent.owner() === PlayerID && !!ent.hasClass("Market");
-}
 
 /** A unit template's value by the parameters (before its cost); an unknown parameter is warned about (once a comparison) */
 function unitValue(
@@ -433,102 +419,6 @@ function capFirstBatches(queue: { plans: Array<{ number: number; }>; }, size: nu
 	{
 		queue.plans[1].number = Math.min(queue.plans[1].number, size);
 	}
-}
-
-/** A unit we captured: its old roles cleared, a trader, worker or soldier of ours */
-function takeOverUnit(gameState: CommonGameState, ent: CommonEntity): void
-{
-	ent.setMetadata(PlayerID, "role", undefined);
-	ent.setMetadata(PlayerID, "subrole", undefined);
-	ent.setMetadata(PlayerID, "plan", undefined);
-	ent.setMetadata(PlayerID, "PartOfArmy", undefined);
-	if (ent.hasClass("Trader"))
-	{
-		ent.setMetadata(PlayerID, "role", Worker.ROLE_TRADER);
-		ent.setMetadata(PlayerID, "route", undefined);
-	}
-	if (ent.hasClass("Worker") && ent.isGatherer())
-	{
-		ent.setMetadata(PlayerID, "role", Worker.ROLE_WORKER);
-		ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE);
-	}
-	if (ent.hasClass("Ship"))
-	{
-		setSeaAccess(gameState, ent);
-	}
-	if (!ent.hasClasses(["Support", "Ship"]) && ent.attackTypes() !== undefined)
-	{
-		ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
-	}
-}
-
-/** A building of ours starting to train: its trained units will autogarrison if its first batch is to */
-function setTrainingRallyPoint(gameState: CommonGameState, entity: EntityId): void
-{
-	const ent = gameState.getEntityById(entity);
-	if (!ent || !ent.isOwn(PlayerID))
-	{
-		return;
-	}
-
-	const trainingQueue = ent.trainingQueue();
-	if (!trainingQueue || !trainingQueue.length)
-	{
-		return;
-	}
-	const metadata = trainingQueue[0].metadata;
-	if (metadata && metadata.garrisonType)
-	{
-		ent.setRallyPoint(ent, "garrison"); // trained units will autogarrison
-	}
-	else
-	{
-		ent.unsetRallyPoint();
-	}
-}
-
-/**
- * Whether a decaying structure of ours is being lost to an enemy: half its capture points or more still ours,
- * an enemy's among the others, and below a random ratio (higher when it is attacked)
- */
-function lostToEnemy(gameState: CommonGameState, ent: CommonEntity, events: HeadquartersEvents): boolean
-{
-	const capture = ent.capturePoints();
-	if (!capture)
-	{
-		return false;
-	}
-	const captureRatio = capture[PlayerID] / capture.reduce((a: number, b: number): number => a + b);
-	if (captureRatio < 0.50)
-	{
-		return false;
-	}
-	let decayToGaia = true;
-	for (let iIndex = 1; iIndex < capture.length; ++iIndex)
-	{
-		const i = playerId(iIndex);
-		if (gameState.isPlayerAlly(i) || !capture[i])
-		{
-			continue;
-		}
-		decayToGaia = false;
-		break;
-	}
-	if (decayToGaia)
-	{
-		return false;
-	}
-	let ratioMax = 0.7 + randFloat(0, 0.1);
-	for (const evt of events.Attacked)
-	{
-		if (ent.id() !== evt.target)
-		{
-			continue;
-		}
-		ratioMax = 0.85 + randFloat(0, 0.1);
-		break;
-	}
-	return !(captureRatio > ratioMax);
 }
 
 /** A plan for the next phase goes first in its queue, raised meanwhile (the major techs' for a wonder) */
@@ -817,202 +707,6 @@ export class Headquarters
 	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined
 	{
 		return seaBetween(gameState, index1, index2, this.Config.debug);
-	}
-
-	/** checkEvents: units trained. */
-	onTrainingFinished(gameState: CommonGameState, events: HeadquartersEvents): void
-	{
-		for (const evt of events.TrainingFinished)
-		{
-			for (const entId of evt.entities)
-			{
-				const ent = gameState.getEntityById(entId);
-				if (!ent || !ent.isOwn(PlayerID))
-				{
-					continue;
-				}
-
-				if (!isPlaced(ent))
-				{
-					this.checkAutogarrison(gameState, ent);
-				}
-				else if (ent.getMetadata(PlayerID, "garrisonType"))
-				{
-					// we were supposed to be autogarrisoned, but this has failed (may-be full)
-					ent.setMetadata(PlayerID, "garrisonType", undefined);
-				}
-
-				// Check if this unit is no more needed in its attack plan
-				// (happen when the training ends after the attack is started or aborted)
-				const plan = ent.getMetadata(PlayerID, "plan");
-				if (plan !== undefined && plan >= 0)
-				{
-					const attack = this.attackManager.getPlan(plan);
-					if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
-					{
-						ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
-					}
-				}
-			}
-		}
-	}
-
-	/**
-	 * we are autogarrisoned, check that the holder is registered in the garrisonManager.
-	 * The rally point garrisons a whole building's batches, set from the one
-	 * at the head of its queue as we last saw it: a unit not trained to
-	 * garrison (one of an attack, say) comes out again.
-	 */
-	private checkAutogarrison(gameState: CommonGameState, ent: CommonEntity): void
-	{
-		const holderID = ent.garrisonHolderID();
-		const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
-		if (holder && !ent.getMetadata(PlayerID, "garrisonType"))
-		{
-			holder.unload(ent.id());
-		}
-		else if (holder)
-		{
-			this.garrisonManager.registerHolder(gameState, holder);
-		}
-	}
-
-	checkEvents(gameState: CommonGameState, events: HeadquartersEvents): void
-	{
-		this.buildManager.checkEvents(gameState, events);
-		this.updateTerritories(gameState);
-
-		// Reset the entities collections which depend on diplomacy
-		if (events.DiplomacyChanged.some((evt) => evt.player === PlayerID || evt.otherPlayer === PlayerID))
-		{
-			gameState.resetOnDiplomacyChanged();
-		}
-
-		this.basesManager.checkEvents(gameState, events);
-
-		// a market built lifts the fields' limit
-		for (const evt of events.ConstructionFinished)
-		{
-			if (evt.newentity !== evt.entity && this.maxFields && isOwnMarket(gameState, evt.newentity))
-			{ // not a repaired building
-				this.maxFields = false;
-			}
-		}
-
-		for (const evt of events.OwnershipChanged)
-		{ // capture events
-			if (evt.to === PlayerID)
-			{
-				this.onCaptured(gameState, evt.entity);
-			}
-		}
-
-		// deal with the different rally points of training units: the rally point is set when the training starts
-		// for the time being, only autogarrison is used
-		for (const evt of events.TrainingStarted)
-		{
-			setTrainingRallyPoint(gameState, evt.entity);
-		}
-
-		this.onTrainingFinished(gameState, events);
-
-		for (const evt of events.TerritoryDecayChanged)
-		{
-			this.onDecayChanged(gameState, evt.entity, evt.to);
-		}
-
-		// Then deals with decaying structures: destroy them if being lost to enemy (except in easier difficulties)
-		if (this.Config.difficulty >= difficulty.EASY)
-		{
-			this.destroyLostStructures(gameState, events);
-		}
-	}
-
-	/** Our decaying structures being lost to an enemy are destroyed; those no more decaying (or gone) forgotten */
-	private destroyLostStructures(gameState: CommonGameState, events: HeadquartersEvents): void
-	{
-		for (const entId of this.decayingStructures)
-		{
-			const ent = gameState.getEntityById(entId);
-			if (ent && ent.decaying() && ent.isOwn(PlayerID))
-			{
-				if (!lostToEnemy(gameState, ent, events))
-				{
-					continue;
-				}
-				ent.destroy();
-			}
-			this.decayingStructures.delete(entId);
-		}
-	}
-
-	/** A building of ours starting or stopping to decay */
-	private onDecayChanged(gameState: CommonGameState, entity: EntityId, decaying: boolean): void
-	{
-		const ent = gameState.getEntityById(entity);
-		if (!ent || !ent.isOwn(PlayerID) || ent.foundationProgress() !== undefined)
-		{
-			return;
-		}
-		if (decaying)
-		{
-			this.noteDecaying(gameState, ent, false);
-		}
-		else if (ent.isGarrisonHolder())
-		{
-			this.garrisonManager.removeDecayingStructure(entity);
-		}
-	}
-
-	/** An entity we captured: a decaying structure is followed, a unit taken over */
-	private onCaptured(gameState: CommonGameState, entity: EntityId): void
-	{
-		const ent = gameState.getEntityById(entity);
-		if (!ent)
-		{
-			return;
-		}
-		if (!ent.hasClass("Unit"))
-		{
-			if (ent.decaying())
-			{
-				this.noteDecaying(gameState, ent, true);
-			}
-			return;
-		}
-		takeOverUnit(gameState, ent);
-	}
-
-	/** A structure of ours decaying: garrisoned against it if it may be (justCaptured too), else followed */
-	private noteDecaying(gameState: CommonGameState, ent: CommonEntity, justCaptured: boolean): void
-	{
-		if (
-			ent.isGarrisonHolder() &&
-			this.garrisonManager.addDecayingStructure(gameState, ent.id(), justCaptured || undefined)
-		)
-		{
-			return;
-		}
-		if (!this.decayingStructures.has(ent.id()))
-		{
-			this.decayingStructures.add(ent.id());
-		}
-	}
-
-	handleNewBase(gameState: CommonGameState): void
-	{
-		if (!this.firstBaseConfig)
-		{
-			// This is our first base, let us configure our starting resources.
-			configFirstBase(this, gameState);
-		}
-		else
-		{
-			// Let us hope this new base will fix our possible resource shortage.
-			this.saveResources = undefined;
-			this.saveSpace = undefined;
-			this.maxFields = false;
-		}
 	}
 
 	/** Ensure that all requirements are met when phasing up*/
@@ -2793,48 +2487,6 @@ export class Headquarters
 		return { narrow: false, onFrontier };
 	}
 
-	/** A unit of ours capturing adds its capture strength to its target's */
-	private addCaptureStrength(gameState: CommonGameState, ent: CommonEntity): void
-	{
-		if (!ent.canCapture())
-		{
-			return;
-		}
-		if (!hasActivity(ent, "COMBAT"))
-		{
-			return;
-		}
-		const orderData = ordersOf(ent);
-		if (!orderData || !orderData.length || !orderData[0].target)
-		{
-			return;
-		}
-		const targetId = orderData[0].target;
-		const target = gameState.getEntityById(targetId);
-		if (!target || !target.isCapturable() || !ent.canCapture(target))
-		{
-			return;
-		}
-		const captureStrength = ent.captureStrength();
-		if (captureStrength === undefined)
-		{
-			return;
-		}
-		const capturableTarget = this.capturableTargets.get(targetId);
-		if (!capturableTarget)
-		{
-			this.capturableTargets.set(targetId, {
-				strength: captureStrength * getAttackBonus(ent, target, "Capture"),
-				ents: new Set([ent.id()]),
-			});
-		}
-		else
-		{
-			capturableTarget.strength += captureStrength * getAttackBonus(ent, target, "Capture");
-			capturableTarget.ents.add(ent.id());
-		}
-	}
-
 	updateTerritories(gameState: CommonGameState): void
 	{
 		const around = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
@@ -2960,49 +2612,6 @@ export class Headquarters
 		this.captures.time = time;
 	}
 
-	/** Compute the capture strength of all units attacking a capturable target */
-	updateCaptureStrength(gameState: CommonGameState): void
-	{
-		this.capturableTargets.clear();
-		for (const ent of gameState.getOwnUnits().values())
-		{
-			this.addCaptureStrength(gameState, ent);
-		}
-
-		for (const [targetId, capturableTarget] of this.capturableTargets)
-		{
-			const target = gameState.getEntityById(targetId);
-			if (!target)
-			{
-				continue;
-			}
-			let shouldCapture;
-			for (const entId of capturableTarget.ents)
-			{
-				const ent = gameState.getEntityById(entId);
-				if (!ent)
-				{
-					continue;
-				}
-				if (shouldCapture === undefined)
-				{
-					shouldCapture = allowCapture(gameState, ent, target);
-				}
-				const orderData = ordersOf(ent);
-				if (!orderData || !orderData.length || !orderData[0].attackType)
-				{
-					continue;
-				}
-				if ((orderData[0].attackType === "Capture") !== shouldCapture)
-				{
-					ent.attack(targetId, shouldCapture);
-				}
-			}
-		}
-
-		this.capturableTargetsTime = gameState.ai.elapsedTime;
-	}
-
 	/**
 	 * Check if a structure in blinking territory should/can be defended (currently if it has some attacking armies around)
 	 */
@@ -3084,7 +2693,7 @@ export class Headquarters
 		this.updateWorld(gameState, queues);
 		this.notePhase(gameState);
 
-		profiled("HQ checkEvents", () => this.checkEvents(gameState, events));
+		profiled("HQ checkEvents", () => checkEvents(this, gameState, events));
 		profiled("HQ naval checkEvents", () => this.navalManager.checkEvents(gameState, queues, events));
 
 		if (this.phasing)
@@ -3132,7 +2741,7 @@ export class Headquarters
 		// We update the capture strength at the end as it can change attack orders
 		if (gameState.ai.elapsedTime - this.capturableTargetsTime > 3)
 		{
-			profiled("HQ updateCaptureStrength", () => this.updateCaptureStrength(gameState));
+			profiled("HQ updateCaptureStrength", () => updateCaptureStrength(gameState, this.captures));
 		}
 
 		Engine.ProfileStop();

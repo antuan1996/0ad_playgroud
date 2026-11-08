@@ -10,6 +10,7 @@ import { requireStateName } from "../adapter/unitState.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import { BaseManager, getBestBase, type SerializedBaseManager } from "./baseManager.ts";
+import { handleNewBase } from "./hqEvents.ts";
 
 export interface SerializedBasesManager
 {
@@ -532,7 +533,7 @@ export class BasesManager
 
 		if (addBase)
 		{
-			gameState.ai.HQ.handleNewBase(gameState);
+			handleNewBase(gameState.ai.HQ, gameState);
 		}
 	}
 
