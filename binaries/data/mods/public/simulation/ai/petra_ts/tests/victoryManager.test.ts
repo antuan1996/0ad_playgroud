@@ -50,7 +50,7 @@ function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions>
 		e.getMetadata(PlayerID, "plan") === -1
 	);
 	hq.defenseManager.getArmy = () => undefined;
-	const manager = new VictoryManager(hq.Config);
+	const manager = new VictoryManager(hq.Config, hq);
 	return { world, hq, manager, queues: world.ai.queues };
 }
 
@@ -875,7 +875,7 @@ describe("the victory manager saved and loaded", () =>
 	{
 		const { manager } = seat();
 		const defaults = manager.Serialize();
-		const loaded = VictoryManager.restore(manager.Config, fake<SerializedVictoryManager>({}));
+		const loaded = VictoryManager.restore(manager.Config, fake<SerializedVictoryManager>({}), manager.hq);
 		assert.deepEqual(loaded.Serialize(), defaults);
 	});
 });

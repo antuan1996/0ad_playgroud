@@ -27,7 +27,7 @@ import { Headquarters, type HeadquartersSerializedData } from "../decision/headq
 import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager, type TradeHQ } from "../decision/tradeManager.ts";
-import { VictoryManager, type SerializedVictoryManager } from "../decision/victoryManager.ts";
+import { VictoryManager, type SerializedVictoryManager, type VictoryHQ } from "../decision/victoryManager.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -131,8 +131,9 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "VictoryManager",
-			original: () => new VictoryManager(makeConfig()),
-			fromSave: (data) => VictoryManager.restore(makeConfig(), fake<SerializedVictoryManager>(data)),
+			original: () => new VictoryManager(makeConfig(), fake<VictoryHQ>({})),
+			fromSave: (data) =>
+				VictoryManager.restore(makeConfig(), fake<SerializedVictoryManager>(data), fake<VictoryHQ>({})),
 		}, makeFakeGameState().gameState);
 	});
 
