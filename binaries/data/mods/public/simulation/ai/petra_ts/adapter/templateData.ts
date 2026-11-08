@@ -169,3 +169,26 @@ export function combatStats(template: CommonTemplate): CombatStats
 		attacks,
 	};
 }
+
+/**
+ * The bonuses with which a unit counters others: those of its attacks that multiply its damage. What common-api's
+ * `Template.counters()` means to read; it drops the class list it builds and so answers false always (FINDINGS §55).
+ */
+export function counterBonuses(template: CommonTemplate): AttackBonus[]
+{
+	const bonuses: AttackBonus[] = [];
+	for (const type of template.attackTypes() ?? [])
+	{
+		bonuses.push(...attackBonuses(template, type).filter((bonus) => bonus.Multiplier > 1));
+	}
+	return bonuses;
+}
+
+/** Whether a target is countered by one of these bonuses: it has the bonus's classes, and its civ if named. */
+export function counteredBy(bonuses: readonly AttackBonus[], target: CommonTemplate): boolean
+{
+	return bonuses.some((bonus) =>
+		(bonus.Civ === undefined || bonus.Civ === target.civ()) &&
+		(bonus.Classes === undefined || !!target.hasClasses(bonus.Classes))
+	);
+}

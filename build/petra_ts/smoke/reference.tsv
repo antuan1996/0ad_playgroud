@@ -3,32 +3,32 @@
 # petra_out against petra_parity, random/mainland, athen, difficulty 5 (very hard),
 # conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit e83507e23f268e486226439e3894e079e80ffcdc with uncommitted changes to the game,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261107-140036.
+# Recorded from commit 2ab1f56601e418772dcf94216596888aa7b92f3e with uncommitted changes to the game,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261108-141443.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint
 1	49765995	128618844	false	blue	last player alive	1220000	ba5edd51e3e1ffc6
 2	49765995	128618844	true	blue	last player alive	987800	33361e3777fffd1b
-3	464365697	387224098	false	blue	last player alive	1422000	d9dcfd9f3818b3e7
-4	464365697	387224098	true	blue	last player alive	1433200	501cc95add42a5cd
-5	432832614	163304524	false	blue	last player alive	1257600	e54270b15ace3d17
-6	432832614	163304524	true	blue	last player alive	1674800	90c9835a85951a13
-7	343709746	131020175	false	blue	last player alive	1345000	cbf3c88409556556
+3	464365697	387224098	false	blue	last player alive	1512200	b1ef13685bf43da3
+4	464365697	387224098	true	blue	last player alive	1449200	f6d7e6e56e4f1c5d
+5	432832614	163304524	false	blue	last player alive	1247400	a0110ca8aaa48503
+6	432832614	163304524	true	blue	last player alive	2510000	c64e114d00e70afb
+7	343709746	131020175	false	blue	last player alive	1345800	519632cac9c24006
 8	343709746	131020175	true	blue	last player alive	1248400	4866e134c4f69e93
 9	462725104	860388854	false	blue	last player alive	1145000	f4e3eda2de993410
-10	462725104	860388854	true	blue	last player alive	1415200	d0adc6fec77e18bb
+10	462725104	860388854	true	blue	last player alive	1429800	e62980efc5823440
 11	988024885	401668228	false	red	last player alive	1193200	ea9d603413335614
 12	988024885	401668228	true	blue	last player alive	1286200	b4eaef5cd365f56e
 13	730040291	731036029	false	blue	last player alive	1284200	24bc8b4dc79c2918
 14	730040291	731036029	true	blue	last player alive	1299800	dd3432f1421cc53b
 15	779659345	690691362	false	blue	last player alive	1284200	485cdb41eafc2850
 16	779659345	690691362	true	blue	last player alive	1226800	eaaa3f8e6335bfb7
-17	766714254	112125970	false	blue	last player alive	1227000	a008089676e3e26e
+17	766714254	112125970	false	blue	last player alive	1213800	21cb87a52456350a
 18	766714254	112125970	true	blue	last player alive	1322200	32bd6943bfa55325
 19	626711260	545303125	false	blue	last player alive	1351400	58d6df153e69cc61
-20	626711260	545303125	true	blue	last player alive	1697200	7319269769edeecb
-21	354373809	547528647	false	blue	last player alive	1272400	63ef3ee02d76283f
+20	626711260	545303125	true	blue	last player alive	1521200	ea900b2669348d55
+21	354373809	547528647	false	blue	last player alive	1336600	7f6936baf85741dd
 22	354373809	547528647	true	blue	last player alive	1178800	d6aaf0100f77db39
 23	416963839	328731430	false	blue	last player alive	1351400	1ad3c5d2c0d64e58
-24	416963839	328731430	true	blue	last player alive	966000	43b087dba9beb9d2
+24	416963839	328731430	true	blue	last player alive	1377600	605d6ef01e1c0998

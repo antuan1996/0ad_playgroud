@@ -3,6 +3,7 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { allowCapture, getLandAccess, isSiegeUnit, requireValue } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import { counterBonuses, counteredBy } from "../adapter/templateData.ts";
 import { isInState, requiredActivityIs } from "../adapter/unitState.ts";
 
 /** What an attacker's orders are chosen from, worked out once a turn (AttackPlan.updateAttacking). */
@@ -736,10 +737,12 @@ function sortByAttackValue(ent: CommonEntity, mUnit: CommonEntity[], veto: Recor
 {
 	const worth = new Map<CommonEntity, number>();
 	const distance = new Map<CommonEntity, number | undefined>();
+	const bonuses = counterBonuses(ent);
 	for (const unit of mUnit)
 	{
 		let value = unit.hasClass("Support") ? 50 : 0;
-		if (ent.counters(unit))
+		// Petra asked common-api's counters(), always false (FINDINGS §55, §59)
+		if (counteredBy(bonuses, unit))
 		{
 			value += 100;
 		}
