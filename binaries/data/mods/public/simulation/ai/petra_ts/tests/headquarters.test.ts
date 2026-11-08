@@ -63,12 +63,13 @@ import {
 	CC_ORDER_WAIT,
 	CC_SPOT_MEMORY,
 	DRY_WOOD,
-	STALLED_IDLE,
 	type Headquarters,
 } from "../decision/headquarters.ts";
 import { checkEvents, handleNewBase } from "../decision/hqEvents.ts";
+import { checkPhaseRequirements } from "../decision/phasing.ts";
 import { SHORE_TOWER_TRAFFIC } from "../decision/placement.ts";
 import { configFirstBase } from "../decision/startingStrategy.ts";
+import { STALLED_IDLE, trainMoreWorkers, workforceStalled } from "../decision/workforceTraining.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -1394,7 +1395,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		builder(world, 17, ["structures/athen/market"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		const economic = world.ai.queues;
 		const plans = economic.economicBuilding.plans;
@@ -1434,7 +1435,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		builder(world, 17, ["structures/athen/temple"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		const economic = world.ai.queues.economicBuilding;
 		assert.equal(economic.plans.length, 1);
@@ -1470,7 +1471,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		builder(world, 17, ["structures/athen/forge"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		const military = world.ai.queues.militaryBuilding;
 		assert.equal(military.plans.length, 1);
@@ -1516,7 +1517,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		// every queue stays empty and untouched
 		const untouched: PetraRuntime.ConfiguredQueueName[] = [
@@ -1558,7 +1559,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		const queues = world.ai.queues;
 		queues.economicBuilding.addPlan(new ConstructionPlan(world.gameState, "structures/athen/corral"));
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		// the corral remains the only order on the economic line
 		assert.equal(queues.economicBuilding.plans.length, 1);
@@ -1578,7 +1579,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		builder(world, 17, ["structures/athen/market"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		assert.equal(world.ai.queues.economicBuilding.plans.length, 0);
 		const priority = world.ai.queueManager.getPriority("economicBuilding");
@@ -1597,7 +1598,7 @@ describe("headquarters and phase advance: what the city still lacks", () =>
 		builder(world, 17, ["structures/athen/wonder"]);
 		hq.buildManager = BuildManager.start(world.gameState);
 
-		hq.checkPhaseRequirements(world.gameState, world.ai.queues);
+		checkPhaseRequirements(hq, world.gameState, world.ai.queues);
 
 		const wonder = world.ai.queues.wonder;
 		assert.equal(wonder.plans.length, 1);
@@ -1640,7 +1641,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		stubGlobal("pickRandom", (list: string[]) => list[1]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.villager.plans[0].number, 1);
@@ -1676,7 +1677,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hand(world, 600 + i, true);
 		}
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 1);
@@ -1707,7 +1708,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		stubGlobal("pickRandom", (list: string[]) => list[1]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.citizenSoldier.plans.length, 1);
@@ -1757,7 +1758,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		stubGlobal("pickRandom", (list: string[]) => list[0]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.deepEqual(
@@ -1792,7 +1793,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hand(world, 600 + i, true);
 		}
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 1);
@@ -1824,7 +1825,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		stubGlobal("pickRandom", (list: string[]) => list[1]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.citizenSoldier.plans.length, 1);
@@ -1856,7 +1857,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hand(world, 600 + i, true);
 		}
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 1);
@@ -1875,7 +1876,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		}
 		trainingOrder(world, "villager", "units/athen/support_civilian", 9, { role: "worker", base: 0, support: true });
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans[0].number, 2);
@@ -1893,7 +1894,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		}
 		trainingOrder(world, "villager", "units/athen/support_civilian", 9, { role: "worker", base: 0, support: true });
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans[0].number, 5);
@@ -1914,7 +1915,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		}
 		hq.saveResources = true;
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 0);
@@ -1941,7 +1942,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		stubGlobal("pickRandom", (list: string[]) => list[1]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.citizenSoldier.plans.length, 1);
@@ -1980,7 +1981,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hand(world, 600 + i, true);
 		}
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 1);
@@ -2007,7 +2008,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 				}),
 			];
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 0);
@@ -2032,7 +2033,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 		);
 		trainingOrder(world, "citizenSoldier", "units/athen/infantry_spearman_b", 10, { role: "worker", base: 0 }, 4);
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 4);
@@ -2059,7 +2060,7 @@ describe("headquarters and the workforce: how many hands the village asks for", 
 			hand(world, 500 + i, false);
 		}
 
-		hq.trainMoreWorkers(world.gameState, world.ai.queues);
+		trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 		const queues = world.ai.queues;
 		assert.equal(queues.villager.plans.length, 0);
@@ -2181,7 +2182,7 @@ describe("headquarters and the recruit choice: what the weights pick", () =>
 		stubGlobal("pickRandom", (list: string[]) => list[2]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.citizenSoldier.plans.length, 1);
@@ -3079,7 +3080,7 @@ describe("a town whose land ran dry", () =>
 		const stalled = (dry: boolean, workers: number, idle: number) =>
 		{
 			const { world, hq } = dryTown(dry, workers, idle);
-			return hq.workforceStalled(world.gameState);
+			return workforceStalled(hq, world.gameState);
 		};
 		assert.equal(stalled(true, 60, 13), true, "13 of 60");
 		assert.equal(stalled(true, 60, 12), false, "12 of 60: a fifth");
@@ -6247,7 +6248,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		stubGlobal("pickRandom", (list: string[]) => list[2]);
 		try
 		{
-			hq.trainMoreWorkers(world.gameState, world.ai.queues);
+			trainMoreWorkers(hq, world.gameState, world.ai.queues);
 
 			const queues = world.ai.queues;
 			assert.equal(queues.citizenSoldier.plans.length, 1);
