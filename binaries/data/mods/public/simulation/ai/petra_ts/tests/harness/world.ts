@@ -433,6 +433,9 @@ export function makeWorld(options: WorldOptions = {}): World
 	ai.HQ = fake<Headquarters>(HQ);
 	// as the bot's getter (PetraBot.geography): the HQ's geography, the stub HQ itself here
 	Object.defineProperty(ai, "geography", { get: () => ai.HQ.geography, configurable: true });
+	// and its bases' view and treasures (PetraBot.bases, PetraBot.treasures)
+	Object.defineProperty(ai, "bases", { get: () => ai.HQ.basesManager, configurable: true });
+	Object.defineProperty(ai, "treasures", { get: () => ai.HQ.treasures, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({

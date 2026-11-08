@@ -760,6 +760,8 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 	// as the bot's getter (PetraBot.captures): the tally of whichever HQ is seated, a restored one too
 	Object.defineProperty(world.ai, "captures", { get: () => world.ai.HQ.captures, configurable: true });
 	Object.defineProperty(world.ai, "geography", { get: () => world.ai.HQ.geography, configurable: true });
+	Object.defineProperty(world.ai, "bases", { get: () => world.ai.HQ.basesManager, configurable: true });
+	Object.defineProperty(world.ai, "treasures", { get: () => world.ai.HQ.treasures, configurable: true });
 
 	if (options.seatBases ?? true)
 	{
