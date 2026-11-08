@@ -26,6 +26,7 @@ import { createObstructionMap } from "../world/mapModule.ts";
 import { isNotWorthBuilding } from "../world/territory.ts";
 import type { BasesManager } from "./basesManager.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
+import { buildNewBase } from "./expansion.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
 
@@ -910,7 +911,7 @@ export class BaseManager
 			return;
 		}
 		if (
-			(!gameState.ai.HQ.canExpand || !gameState.ai.HQ.buildNewBase(gameState, queues, type)) &&
+			(!gameState.ai.HQ.canExpand || !buildNewBase(gameState.ai.HQ, gameState, queues, type)) &&
 			newDP.quality > relaxedQuality &&
 			gameState.ai.HQ.canBuild(gameState, newDP.templateName)
 		)

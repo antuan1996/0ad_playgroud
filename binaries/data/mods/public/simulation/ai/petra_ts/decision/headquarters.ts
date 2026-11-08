@@ -2,14 +2,12 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, NEW_BASE, cellIndex, seconds, worldPos } from "../adapter/brands.ts";
-import { debugWarn } from "../adapter/debug.ts";
+import { GAIA, cellIndex, seconds, worldPos } from "../adapter/brands.ts";
 import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isStructureTemplate } from "../adapter/templateData.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
-import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
@@ -29,9 +27,12 @@ import { BuildManager } from "./buildManager.ts";
 import { DefenseManager } from "./defenseManager.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
+import { checkBaseExpansion, followCivCentreOrders, provideForDryLand } from "./expansion.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
-import { TIGHT_SLOTS, houseNeeded, planAnotherHouse, urgentHousePriority } from "./housing.ts";
+import { buildMoreHouses } from "./houseBuilding.ts";
+import { houseNeeded } from "./housing.ts";
 import { checkEvents } from "./hqEvents.ts";
+import { buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
 import { NavalManager } from "./navalManager.ts";
 import { checkPhaseRequirements, notePhase } from "./phasing.ts";
 import {
@@ -43,7 +44,15 @@ import {
 	type EconomicCCOptions,
 } from "./placement.ts";
 import { ResearchManager } from "./researchManager.ts";
-import { buildFirstBase } from "./startingStrategy.ts";
+import {
+	buildEarlyMarket,
+	buildFarmstead,
+	buildForge,
+	buildMarket,
+	buildTemple,
+	buildWonder,
+	manageCorral,
+} from "./townBuildings.ts";
 import { TradeManager } from "./tradeManager.ts";
 import { VictoryManager } from "./victoryManager.ts";
 import { type TrainableRequirement } from "./workforce.ts";
@@ -119,15 +128,7 @@ export type HeadquartersSerializedData = {
 
 /** Wood left within reach of our bases under which a saving town calls its land dry (buildEarlyMarket). */
 export const DRY_WOOD = 500;
-/** The share of the time our infantry trainers train above which another one is built (FINDINGS §29). */
-const BUSY_TRAINERS = 0.85;
-/** The most infantry trainers that rule builds up to. */
-const MAX_MILITARY_TRAINERS = 5;
 
-/** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
-export const CC_ORDER_WAIT = 20;
-/** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
-export const CC_SPOT_MEMORY = 600;
 /** Metres around such a spot avoided, and around enemy soldiers. */
 const CC_SPOT_AVOID = 80;
 export const CC_ENEMY_AVOID = 150;
@@ -185,38 +186,6 @@ function profiled(name: string, step: () => void): void
 	Engine.ProfileStart(name);
 	step();
 	Engine.ProfileStop();
-}
-
-/** The barracks, range and stable templates we can build */
-type TrainerTemplates = { barracks: string | undefined; range: string | undefined; stable: string | undefined; };
-
-/** Put available resources in the queued market */
-function fundMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
-{
-	fundQueue(gameState, queues.economicBuilding.plans[0].getCost(), "economicBuilding");
-}
-
-/** A queue's account gets what is available for the cost, then other queues' until it can pay */
-function fundQueue(gameState: CommonGameState, cost: ResourcesManager, queue: PetraRuntime.ConfiguredQueueName): void
-{
-	const queueManager = gameState.ai.queueManager;
-	queueManager.setAccounts(gameState, cost, queue);
-	if (queueManager.canAfford(queue, cost))
-	{
-		return;
-	}
-	for (const [q] of queueManager.entries())
-	{
-		if (q === queue)
-		{
-			continue;
-		}
-		queueManager.transferAccounts(cost, q, queue);
-		if (queueManager.canAfford(queue, cost))
-		{
-			break;
-		}
-	}
 }
 
 /** Whether a building trains for over 5 s what has started or garrisons there */
@@ -280,43 +249,6 @@ function emergencyTemplate(
 		}
 	}
 	return templateFound;
-}
-
-/** The first huntable animal a corral may train of which we have (or train) no more than one per corral */
-function corralAnimal(
-	gameState: CommonGameState,
-	corral: CommonEntity,
-	civ: string,
-	nCorral: number,
-): TemplateName | undefined
-{
-	for (const trainable of (corral.trainableEntities(civ) ?? []))
-	{
-		if (gameState.isTemplateDisabled(trainable))
-		{
-			continue;
-		}
-		const template = gameState.getTemplate(trainable);
-		if (!template || !template.isHuntable())
-		{
-			continue;
-		}
-		let count = gameState.countEntitiesByType(trainable, true);
-		const corralTrainingQueue = corral.trainingQueue();
-		if (corralTrainingQueue)
-		{
-			for (const item of corralTrainingQueue)
-			{
-				count += item.count;
-			}
-		}
-		if (count > nCorral)
-		{
-			continue;
-		}
-		return trainable;
-	}
-	return undefined;
 }
 
 /** Find the base nearest to an enemy civic centre, for military buildings. */
@@ -901,83 +833,10 @@ export class Headquarters
 		return true;
 	}
 
-	/**
-	 * When the land has run dry (landRunDry): the field limit of a small
-	 * starting island lifted, as a market or a new base lifts it (with nothing
-	 * left to gather, every field's room is worth taking; the fishing boats
-	 * follow the fish left, NavalManager.fishByWhatIsLeft). In a 4-player Dodecanese
-	 * match a town kept its 2 fields for 50 minutes after its islands ran
-	 * dry, its workers idle, holding 6000 wood (FINDINGS §40). And its
-	 * civic centre's queue raised while one is queued.
-	 */
-	provideForDryLand(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		const queueManager = gameState.ai.queueManager;
-		const dry = this.landRunDry(gameState);
-		// a new base is a dry or full town's way out: its civic centre goes just
-		// above the training queues, where Petra left it at 1, paid only once
-		// every other queue was (FINDINGS §40: one waited from minute 31 to the end)
-		const wanted = dry || this.geography.navalMap && this.buildManager.numberMissingRoom(gameState) > 1;
-		const ccPriority = wanted && queues.civilCentre.hasQueuedUnits() ?
-			Math.max(this.Config.priorities.villager, this.Config.priorities.citizenSoldier) + 2 :
-			this.Config.priorities.civilCentre;
-		if (queueManager.getPriority("civilCentre") !== ccPriority)
-		{
-			queueManager.changePriority("civilCentre", ccPriority);
-		}
-		if (dry)
-		{
-			this.maxFields = false;
-		}
-	}
-
 	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
 	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void
 	{
 		this.ccOrders.push({ pos, time: gameState.ai.elapsedTime, seen: false });
-	}
-
-	/**
-	 * Follows the civic centres ordered: one whose foundation did not appear
-	 * within CC_ORDER_WAIT seconds (the spot taken, by another player's
-	 * foundation most often), or whose foundation was lost before it was
-	 * built, has its spot avoided for CC_SPOT_MEMORY seconds. Petra ordered
-	 * the same spot again and again: in a 4-player Dodecanese match three
-	 * players went for the same spot of the same neutral island, one ordering
-	 * it 6 times in a minute (FINDINGS §39).
-	 */
-	followCivCentreOrders(gameState: CommonGameState): void
-	{
-		const now = gameState.ai.elapsedTime;
-		this.ccSpotsAvoided = this.ccSpotsAvoided.filter((spot) => spot.until > now);
-		if (!this.ccOrders.length)
-		{
-			return;
-		}
-		const centres = gameState.getOwnStructures().filter(filters.byClass("CivCentre")).toEntityArray();
-		this.ccOrders = this.ccOrders.filter((order) =>
-		{
-			const centre = centres.find((ent) =>
-			{
-				const pos = ent.position();
-				return !!pos && SquareVectorDistance(pos, order.pos) < 40 * 40;
-			});
-			if (centre)
-			{
-				if (centre.foundationProgress() === undefined)
-				{
-					return false;
-				}
-				order.seen = true;
-				return true;
-			}
-			if (!order.seen && now - order.time < CC_ORDER_WAIT)
-			{
-				return true;
-			}
-			this.ccSpotsAvoided.push({ pos: order.pos, until: now + CC_SPOT_MEMORY });
-			return false;
-		});
 	}
 
 	/**
@@ -1043,108 +902,6 @@ export class Headquarters
 		return this.shipTraffic ? findShoreTowerSpot(this, this.shipTraffic, gameState, template) : undefined;
 	}
 
-	buildTemple(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		// at least one market (which have the same queue) should be build before any temple
-		if (
-			queues.economicBuilding.hasQueuedUnits() ||
-			gameState.getOwnEntitiesByClass("Temple", true).hasEntities() ||
-			!gameState.getOwnEntitiesByClass("Market", true).hasEntities()
-		)
-		{
-			return;
-		}
-		// Try to build a temple earlier if in regicide to recruit healer guards
-		if (this.currentPhase < 3 && !gameState.getVictoryConditions().has("regicide"))
-		{
-			return;
-		}
-
-		let templateName = "structures/{civ}/temple";
-		if (this.canBuild(gameState, "structures/{civ}/temple_vesta"))
-		{
-			templateName = "structures/{civ}/temple_vesta";
-		}
-		else if (!this.canBuild(gameState, templateName))
-		{
-			return;
-		}
-		queues.economicBuilding.addPlan(new ConstructionPlan(gameState, templateName));
-	}
-
-	buildMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (
-			gameState.getOwnEntitiesByClass("Market", true).hasEntities() ||
-			!this.canBuild(gameState, "structures/{civ}/market")
-		)
-		{
-			return;
-		}
-
-		if (queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
-		{
-			if (!queues.economicBuilding.paused)
-			{
-				fundMarket(gameState, queues);
-			}
-			return;
-		}
-
-		gameState.ai.queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
-		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
-		plan.queueToReset = "economicBuilding";
-		queues.economicBuilding.addPlan(plan);
-	}
-
-	/**
-	 * A saving town (little wood on its land from the start, FINDINGS §37)
-	 * whose land has no wood left within reach queues its market at once, in
-	 * the village phase too: queued, the market holds its wood at the top
-	 * priority until the town phase lets it be built, and then barters the
-	 * town's food, stone and metal for wood. Petra queued it only in the town
-	 * phase, when the wood was gone: 24 of 38 drawn island games had it waiting
-	 * for good with 50-277 of its 300 wood. The town phase it waits for goes
-	 * first: while the phase is queued, the market's queue sits just below it
-	 * (holding the wood at the top, it starved the phase on islands with
-	 * under 800 wood left, and the town stayed in the village phase).
-	 */
-	buildEarlyMarket(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (
-			!this.saveResources && !this.geography.navalMap ||
-			gameState.getOwnEntitiesByClass("Market", true).hasEntities()
-		)
-		{
-			return;
-		}
-		const queueManager = gameState.ai.queueManager;
-		if (queues.economicBuilding.hasQueuedUnitsWithClass("Market"))
-		{
-			const priority = queues.majorTech.hasQueuedUnits() ?
-				Math.max(1, queueManager.getPriority("majorTech") - 1) :
-				3 * this.Config.priorities.economicBuilding;
-			if (queueManager.getPriority("economicBuilding") !== priority)
-			{
-				queueManager.changePriority("economicBuilding", priority);
-			}
-			return;
-		}
-		const market = gameState.applyCiv("structures/{civ}/market");
-		if (!gameState.isTemplateAvailable(market) || this.buildManager.isUnbuildable(gameState, market))
-		{
-			return;
-		}
-		if (!this.landRunDry(gameState))
-		{
-			return;
-		}
-		queueManager.changePriority("economicBuilding", 3 * this.Config.priorities.economicBuilding);
-		const plan = new ConstructionPlan(gameState, "structures/{civ}/market");
-		plan.queueToReset = "economicBuilding";
-		queues.economicBuilding.addPlan(plan);
-	}
-
 	/**
 	 * A saving town (little wood on its land from the start), or any town on
 	 * a naval map, with under DRY_WOOD left within reach of its bases: what
@@ -1160,794 +917,10 @@ export class Headquarters
 				DRY_WOOD;
 	}
 
-	/** Build a farmstead */
-	buildFarmstead(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		// Only build one farmstead for the time being ("DropsiteFood" does not refer to CCs)
-		if (gameState.getOwnEntitiesByClass("Farmstead", true).hasEntities())
-		{
-			return;
-		}
-		// Wait to have at least one dropsite and house before the farmstead
-		if (!gameState.getOwnEntitiesByClass("Storehouse", true).hasEntities())
-		{
-			return;
-		}
-		if (!gameState.getOwnEntitiesByClass("House", true).hasEntities())
-		{
-			return;
-		}
-		if (queues.economicBuilding.hasQueuedUnitsWithClass("DropsiteFood"))
-		{
-			return;
-		}
-		if (!this.canBuild(gameState, "structures/{civ}/farmstead"))
-		{
-			return;
-		}
-
-		queues.economicBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/farmstead"));
-	}
-
-	/**
-	 * Try to build a wonder when required
-	 * force = true when called from the victoryManager in case of Wonder victory condition.
-	 */
-	buildWonder(gameState: CommonGameState, queues: HeadquartersQueues, force: boolean = false): void
-	{
-		if (
-			queues.wonder && queues.wonder.hasQueuedUnits() ||
-			gameState.getOwnEntitiesByClass("Wonder", true).hasEntities() ||
-			!this.canBuild(gameState, "structures/{civ}/wonder")
-		)
-		{
-			return;
-		}
-
-		if (!force)
-		{
-			// canBuild() above already verified that the template exists.
-			const template = requireTemplate(gameState, gameState.applyCiv("structures/{civ}/wonder"));
-			// Check that we have enough resources to start thinking to build a wonder
-			const cost = template.cost();
-			const resources = gameState.getResources();
-			let highLevel = 0;
-			let lowLevel = 0;
-			for (const res in cost)
-			{
-				if (resources[res] && resources[res] > 0.7 * cost[res])
-				{
-					++highLevel;
-				}
-				else if (!resources[res] || resources[res] < 0.3 * cost[res])
-				{
-					++lowLevel;
-				}
-			}
-			if (highLevel === 0 || lowLevel > 1)
-			{
-				return;
-			}
-		}
-
-		queues.wonder.addPlan(new ConstructionPlan(gameState, "structures/{civ}/wonder"));
-	}
-
-	/** Build a corral, and train animals there */
-	manageCorral(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (queues.corral.hasQueuedUnits())
-		{
-			return;
-		}
-
-		const nCorral = gameState.getOwnEntitiesByClass("Corral", true).length;
-		if (
-			!nCorral ||
-			!gameState.isTemplateAvailable(gameState.applyCiv("structures/{civ}/field")) &&
-				nCorral < this.currentPhase && gameState.getPopulation() > 30 * nCorral
-		)
-		{
-			if (this.canBuild(gameState, "structures/{civ}/corral"))
-			{
-				queues.corral.addPlan(new ConstructionPlan(gameState, "structures/{civ}/corral"));
-				return;
-			}
-			if (!nCorral)
-			{
-				return;
-			}
-		}
-
-		// And train some animals
-		const civ = gameState.getPlayerCiv();
-		for (const corral of gameState.getOwnEntitiesByClass("Corral", true).values())
-		{
-			if (corral.foundationProgress() !== undefined)
-			{
-				continue;
-			}
-			const trainable = corralAnimal(gameState, corral, civ, nCorral);
-			if (trainable === undefined)
-			{
-				continue;
-			}
-			queues.corral.addPlan(new TrainingPlan(gameState, trainable, { trainer: corral.id() }));
-			return;
-		}
-	}
-
-	/**
-	 * build more houses if needed.
-	 * kinda ugly, lots of special cases to both build enough houses but not tooo many…
-	 */
-	buildMoreHouses(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		let houseTemplateString = "structures/{civ}/apartment";
-		if (
-			!gameState.isTemplateAvailable(gameState.applyCiv(houseTemplateString)) ||
-			!this.canBuild(gameState, houseTemplateString)
-		)
-		{
-			houseTemplateString = "structures/{civ}/house";
-			if (!gameState.isTemplateAvailable(gameState.applyCiv(houseTemplateString)))
-			{
-				return;
-			}
-		}
-		if (gameState.getPopulationMax() <= gameState.getPopulationLimit())
-		{
-			return;
-		}
-		// isTemplateAvailable() above already verified that this template exists.
-		const houseTemplateName = gameState.applyCiv(houseTemplateString);
-
-		const numPlanned = queues.house.length();
-		if (planAnotherHouse(numPlanned, gameState.getPopulation()))
-		{
-			const plan = new ConstructionPlan(gameState, houseTemplateString);
-			// change the starting condition according to the situation.
-			plan.goRequirement = "houseNeeded";
-			queues.house.addPlan(plan);
-		}
-
-		if (numPlanned > 0 && this.phasing && gameState.getPhaseEntityRequirements(this.phasing).length)
-		{
-			this.housesForPhase(gameState, queues, houseTemplateName, numPlanned);
-		}
-
-		if (this.requireHouses)
-		{
-			const houseTemplate = requireTemplate(gameState, houseTemplateName);
-			if (
-				!this.phasing ||
-				gameState.getPhaseEntityRequirements(this.phasing).every((
-					req: { class: string; count: number; },
-				): boolean =>
-					!houseTemplate.hasClass(req.class) ||
-					gameState.getOwnStructures().filter(filters.byClass(req.class)).length >= req.count
-				)
-			)
-			{
-				this.requireHouses = undefined;
-			}
-		}
-
-		this.raiseHousesIfTight(gameState, queues, houseTemplateName);
-	}
-
-	/**
-	 * The houses the next phase requires go without waiting to be needed; with no room to place one we try to
-	 * be less restrictive
-	 */
-	private housesForPhase(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		houseTemplateName: TemplateName,
-		numPlanned: number,
-	): void
-	{
-		const houseTemplate = requireTemplate(gameState, houseTemplateName);
-
-		let needed = 0;
-		for (const entityReq of gameState.getPhaseEntityRequirements(this.phasing))
-		{
-			if (!houseTemplate.hasClass(entityReq.class))
-			{
-				continue;
-			}
-
-			const count = gameState.getOwnStructures().filter(filters.byClass(entityReq.class)).length;
-			if (count < entityReq.count && this.buildManager.isUnbuildable(gameState, houseTemplateName))
-			{
-				debugWarn(this.Config, 1, () => "no room to place a house ... try to be less restrictive");
-				this.buildManager.setBuildable(houseTemplateName);
-				this.requireHouses = true;
-			}
-			needed = Math.max(needed, entityReq.count - count);
-		}
-
-		const houseQueue = queues.house.plans;
-		for (let i = 0; i < numPlanned; ++i)
-		{
-			if (houseQueue[i].isGo(gameState))
-			{
-				--needed;
-			}
-			else if (needed > 0)
-			{
-				houseQueue[i].goRequirement = undefined;
-				--needed;
-			}
-		}
-	}
-
-	/**
-	 * When population limit too tight: if no room to build, try to improve with technology, otherwise increase
-	 * temporarily the priority of houses
-	 */
-	private raiseHousesIfTight(gameState: CommonGameState, queues: HeadquartersQueues, house: TemplateName): void
-	{
-		const HouseNb = gameState.getOwnFoundations().filter(filters.byClass("House")).length;
-		const houseTemplate = requireTemplate(gameState, house);
-		const popBonus = houseTemplate.getPopulationBonus();
-		const freeSlots = gameState.getPopulationLimit() + HouseNb * popBonus - this.getAccountedPopulation(gameState);
-		let priority;
-		if (freeSlots < TIGHT_SLOTS)
-		{
-			if (this.buildManager.isUnbuildable(gameState, house))
-			{
-				debugWarn(this.Config, 1, () => "no room to place a house ... try to improve with technology");
-				this.researchManager.researchPopulationBonus(gameState, queues);
-			}
-			else
-			{
-				priority = urgentHousePriority(this.Config.priorities);
-			}
-		}
-		else
-		{
-			priority = this.Config.priorities.house;
-		}
-
-		if (priority && priority !== gameState.ai.queueManager.getPriority("house"))
-		{
-			gameState.ai.queueManager.changePriority("house", priority);
-		}
-	}
-
 	/** Whether a planned house may be paid now (decision/housing.ts). */
 	houseNeeded(gameState: CommonGameState): boolean
 	{
 		return houseNeeded(censusOf(gameState), !!this.saveResources);
-	}
-
-	/** Checks the status of the territory expansion. If no new economic bases created, build some strategic ones. */
-	checkBaseExpansion(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (queues.civilCentre.hasQueuedUnits())
-		{
-			return;
-		}
-		// First build one cc if all have been destroyed
-		if (!this.basesManager.hasPotentialBase())
-		{
-			buildFirstBase(this, gameState);
-			return;
-		}
-		// Then expand if we have not enough room available for buildings
-		if (this.buildManager.numberMissingRoom(gameState) > 1)
-		{
-			debugWarn(this.Config, 2, () => "try to build a new base because not enough room to build ");
-			// on a naval map, for its room: any free land will do (FINDINGS §40)
-			this.buildNewBase(gameState, queues, undefined, this.geography.navalMap);
-			return;
-		}
-		// If we've already planned to phase up, wait a bit before trying to expand
-		if (this.phasing)
-		{
-			return;
-		}
-		// Finally expand if we have lots of units (threshold depending on the aggressivity value)
-		const activeBases = this.basesManager.numActiveBases();
-		const numUnits = gameState.getOwnUnits().length;
-		const numvar = 10 * (1 - this.Config.personality.aggressive);
-		if (
-			numUnits > activeBases * (65 + numvar + (10 + numvar) * (activeBases - 1)) ||
-			this.saveResources && numUnits > 50
-		)
-		{
-			debugWarn(
-				this.Config,
-				2,
-				() => "try to build a new base because of population " + numUnits + " for " + activeBases + " CCs",
-			);
-			this.buildNewBase(gameState, queues);
-		}
-	}
-
-	buildNewBase(gameState: CommonGameState, queues: HeadquartersQueues, resource?: string, forRoom = false): boolean
-	{
-		const phaseName2 = gameState.getPhaseName(2);
-		if (
-			this.basesManager.hasPotentialBase() && this.currentPhase === 1 &&
-			(phaseName2 === undefined || !gameState.isResearching(phaseName2))
-		)
-		{
-			return false;
-		}
-		if (
-			gameState.getOwnFoundations().filter(filters.byClass("CivCentre")).hasEntities() ||
-			queues.civilCentre.hasQueuedUnits()
-		)
-		{
-			return false;
-		}
-
-		const template = this.newBaseTemplate(gameState);
-		if (template === undefined)
-		{
-			return false;
-		}
-
-		// base "-1" means new base.
-		debugWarn(
-			this.Config,
-			1,
-			() => "new base " + gameState.applyCiv(template) + " planned with resource " + resource,
-		);
-		queues.civilCentre.addPlan(
-			new ConstructionPlan(
-				gameState,
-				template,
-				forRoom ? { base: NEW_BASE, room: true } : { base: NEW_BASE, resource: resource },
-			),
-		);
-		return true;
-	}
-
-	/**
-	 * A military colony once we have a civic centre of our own civ (it may allow specific units or techs), else a
-	 * civic centre, else a colony; undefined when we can build none
-	 */
-	private newBaseTemplate(gameState: CommonGameState): string | undefined
-	{
-		let hasOwnCC = false;
-		for (const ent of gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")).values())
-		{
-			if (ent.owner() !== PlayerID || ent.templateName() !== gameState.applyCiv("structures/{civ}/civil_centre"))
-			{
-				continue;
-			}
-			hasOwnCC = true;
-			break;
-		}
-		if (hasOwnCC && this.canBuild(gameState, "structures/{civ}/military_colony"))
-		{
-			return "structures/{civ}/military_colony";
-		}
-		if (this.canBuild(gameState, "structures/{civ}/civil_centre"))
-		{
-			return "structures/{civ}/civil_centre";
-		}
-		if (!hasOwnCC && this.canBuild(gameState, "structures/{civ}/military_colony"))
-		{
-			return "structures/{civ}/military_colony";
-		}
-		return undefined;
-	}
-
-	/** Deals with building fortresses and towers along our border with enemies. */
-	buildDefenses(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (queues.defenseBuilding.hasQueuedUnits())
-		{
-			return;
-		}
-		// A saving town builds no defense, but for a tower on a shore the enemy's
-		// ships pass (FINDINGS §38): an island's town saves its wood, and sat on
-		// thousands of stone while their transports and warships sailed by.
-		const saving = this.saveResources && !this.canBarter;
-		if (saving && !this.shipTraffic)
-		{
-			return;
-		}
-		const shoreOnly = saving || this.towersByTrafficOnly(gameState);
-
-		if (
-			!this.saveResources && this.reachingCityPhase(gameState) &&
-			this.canBuild(gameState, "structures/{civ}/fortress") && this.queueFortress(gameState, queues)
-		)
-		{
-			return;
-		}
-
-		if (
-			this.Config.Military.numSentryTowers && this.currentPhase < 2 &&
-			this.canBuild(gameState, "structures/{civ}/sentry_tower")
-		)
-		{
-			this.queueSentryTower(gameState, queues, shoreOnly);
-			return;
-		}
-
-		if (this.currentPhase < 2 || !this.canBuild(gameState, "structures/{civ}/defense_tower"))
-		{
-			return;
-		}
-		this.queueDefenseTower(gameState, queues, shoreOnly);
-	}
-
-	/** Whether we are in the city phase, or researching it */
-	private reachingCityPhase(gameState: CommonGameState): boolean
-	{
-		const phaseName3 = gameState.getPhaseName(3);
-		return this.currentPhase > 2 || phaseName3 !== undefined && gameState.isResearching(phaseName3);
-	}
-
-	/** A fortress, the first raised in priority, once the last is old enough and we have bases and men for it; whether one was queued */
-	private queueFortress(gameState: CommonGameState, queues: HeadquartersQueues): boolean
-	{
-		const numFortresses = gameState.getOwnEntitiesByClass("Fortress", true).length;
-		if (
-			(!numFortresses ||
-				gameState.ai.elapsedTime >
-					(1 + 0.10 * numFortresses) * this.fortressLapseTime + this.fortressStartTime) &&
-			numFortresses < this.basesManager.numActiveBases() + 1 + this.extraFortresses &&
-			numFortresses < Math.floor(gameState.getPopulation() / 25) &&
-			gameState.getOwnFoundationsByClass("Fortress").length < 2
-		)
-		{
-			this.fortressStartTime = gameState.ai.elapsedTime;
-			if (!numFortresses)
-			{
-				gameState.ai.queueManager.changePriority("defenseBuilding", 2 * this.Config.priorities.defenseBuilding);
-			}
-			const plan = new ConstructionPlan(gameState, "structures/{civ}/fortress");
-			plan.queueToReset = "defenseBuilding";
-			queues.defenseBuilding.addPlan(plan);
-			return true;
-		}
-		return false;
-	}
-
-	/** A sentry tower in the village phase, up to the configured number, spaced in time (all towers and wall towers counted) */
-	private queueSentryTower(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		shoreOnly: boolean | undefined,
-	): void
-	{
-		const numTowers = gameState.getOwnEntitiesByClass("Tower", true).length +
-			gameState.getOwnEntitiesByClass("WallTower", true).length;
-		const towerLapseTime = this.saveResources ? (1 + 0.5 * numTowers) * this.towerLapseTime : this.towerLapseTime;
-		if (
-			numTowers < this.Config.Military.numSentryTowers &&
-			gameState.ai.elapsedTime > towerLapseTime + this.fortStartTime
-		)
-		{
-			if (shoreOnly && !this.hasShoreTowerSpot(gameState, "structures/{civ}/sentry_tower"))
-			{
-				return;
-			}
-			this.fortStartTime = gameState.ai.elapsedTime;
-			queues.defenseBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/sentry_tower"));
-		}
-	}
-
-	/** A stone tower, spaced in time, up to a number by our bases and men (lowered in priority past it) */
-	private queueDefenseTower(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		shoreOnly: boolean | undefined,
-	): void
-	{
-		const numTowers = gameState.getOwnEntitiesByClass("StoneTower", true).length;
-		const towerLapseTime = this.saveResources ? (1 + numTowers) * this.towerLapseTime : this.towerLapseTime;
-		if (
-			(!numTowers || gameState.ai.elapsedTime > (1 + 0.1 * numTowers) * towerLapseTime + this.towerStartTime) &&
-			numTowers < 2 * this.basesManager.numActiveBases() + 3 + this.extraTowers &&
-			numTowers < Math.floor(gameState.getPopulation() / 8) &&
-			gameState.getOwnFoundationsByClass("Tower").length < 3
-		)
-		{
-			if (shoreOnly && !this.hasShoreTowerSpot(gameState, "structures/{civ}/defense_tower"))
-			{
-				return;
-			}
-			this.towerStartTime = gameState.ai.elapsedTime;
-			if (numTowers > 2 * this.basesManager.numActiveBases() + 3)
-			{
-				gameState.ai.queueManager.changePriority(
-					"defenseBuilding",
-					Math.round(0.7 * this.Config.priorities.defenseBuilding),
-				);
-			}
-			const plan = new ConstructionPlan(gameState, "structures/{civ}/defense_tower");
-			plan.queueToReset = "defenseBuilding";
-			queues.defenseBuilding.addPlan(plan);
-		}
-	}
-
-	buildForge(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (
-			this.getAccountedPopulation(gameState) < this.Config.Military.popForForge ||
-			queues.militaryBuilding.hasQueuedUnits() || gameState.getOwnEntitiesByClass("Forge", true).length
-		)
-		{
-			return;
-		}
-		// Build a Market before the Forge.
-		if (!gameState.getOwnEntitiesByClass("Market", true).hasEntities())
-		{
-			return;
-		}
-
-		if (this.canBuild(gameState, "structures/{civ}/forge"))
-		{
-			queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, "structures/{civ}/forge"));
-		}
-	}
-
-	/**
-	 * Deals with constructing military buildings (e.g. barracks, stable).
-	 * They are mostly defined by Config.js. This is unreliable since changes could be done easily.
-	 */
-	constructTrainingBuildings(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (this.saveResources && !this.canBarter || queues.militaryBuilding.hasQueuedUnits())
-		{
-			return;
-		}
-
-		// A saving town builds no more military buildings, and so on islands, where
-		// every town saves, no arsenal and no siege engine came, and the attacks
-		// met defended towns without siege (FINDINGS §37). With a market it can
-		// barter for one: its arsenal.
-		if (
-			this.saveResources && this.canBarter && this.currentPhase >= 3 &&
-			this.queueMissing(gameState, queues, "Arsenal", "arsenal")
-		)
-		{
-			return;
-		}
-
-		const numBarracks = gameState.getOwnEntitiesByClass("Barracks", true).length;
-		if (this.saveResources && numBarracks !== 0)
-		{
-			return;
-		}
-
-		if (this.queueTrainerIfNeeded(gameState, queues, numBarracks))
-		{
-			return;
-		}
-
-		if (!this.saveResources && this.currentPhase >= 3)
-		{
-			this.queueCityMilitary(gameState, queues);
-		}
-	}
-
-	/** In the city phase: an elephant stable, an arsenal, then the advanced buildings with the population */
-	private queueCityMilitary(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		if (
-			this.queueMissing(gameState, queues, "ElephantStable", "elephant_stable") ||
-			this.queueMissing(gameState, queues, "Arsenal", "arsenal")
-		)
-		{
-			return;
-		}
-
-		if (this.getAccountedPopulation(gameState) < 80 || !this.bAdvanced.length)
-		{
-			return;
-		}
-		this.queueAdvancedBuilding(gameState, queues);
-	}
-
-	/** A military building we can build and have none of; whether it was queued */
-	private queueMissing(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		className: string,
-		name: string,
-	): boolean
-	{
-		const template = "structures/{civ}/" + name;
-		if (!this.canBuild(gameState, template) || gameState.getOwnEntitiesByClass(className, true).hasEntities())
-		{
-			return false;
-		}
-		queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, template, { militaryBase: true }));
-		return true;
-	}
-
-	/**
-	 * With the population for barracks (or while phasing to the town phase short of village buildings), a trainer;
-	 * whether one was queued. (canBuild marks what cannot be built: asked each time, as Petra did)
-	 */
-	private queueTrainerIfNeeded(gameState: CommonGameState, queues: HeadquartersQueues, numBarracks: number): boolean
-	{
-		const trainers: TrainerTemplates = {
-			barracks: this.canBuild(gameState, "structures/{civ}/barracks") ? "structures/{civ}/barracks" : undefined,
-			range: this.canBuild(gameState, "structures/{civ}/range") ? "structures/{civ}/range" : undefined,
-			stable: this.canBuild(gameState, "structures/{civ}/stable") ? "structures/{civ}/stable" : undefined,
-		};
-		return (this.getAccountedPopulation(gameState) > this.Config.Military.popForBarracks1 ||
-			this.phasing === 2 && gameState.getOwnStructures().filter(filters.byClass("Village")).length < 5) &&
-			this.queueTrainer(gameState, queues, numBarracks, trainers);
-	}
-
-	/**
-	 * The barracks, ranges and stables: the first ones (raised in priority), a second and a third with the
-	 * population, then one more while those we have are busy; whether one was queued
-	 */
-	private queueTrainer(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		numBarracks: number,
-		trainers: TrainerTemplates,
-	): boolean
-	{
-		const stableTemplate = trainers.stable;
-		const numRanges = gameState.getOwnEntitiesByClass("Range", true).length;
-		const numStables = gameState.getOwnEntitiesByClass("Stable", true).length;
-		const military = (template: string): boolean =>
-		{
-			queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, template, { militaryBase: true }));
-			return true;
-		};
-
-		if (this.queueFirstTrainer(gameState, queues, numBarracks + numRanges, trainers))
-		{
-			return true;
-		}
-		if (numStables === 0 && stableTemplate)
-		{
-			return military(stableTemplate);
-		}
-		return this.queueMoreTrainers(gameState, { numBarracks, numRanges, numStables }, trainers, military);
-	}
-
-	/** The first barracks (or range), raised in priority; whether it was queued */
-	private queueFirstTrainer(
-		gameState: CommonGameState,
-		queues: HeadquartersQueues,
-		numFootTrainers: number,
-		trainers: TrainerTemplates,
-	): boolean
-	{
-		if (numFootTrainers === 0)
-		{
-			const template = trainers.barracks || trainers.range;
-			if (template)
-			{
-				gameState.ai.queueManager.changePriority(
-					"militaryBuilding",
-					2 * this.Config.priorities.militaryBuilding,
-				);
-				const plan = new ConstructionPlan(gameState, template, { militaryBase: true });
-				plan.queueToReset = "militaryBuilding";
-				queues.militaryBuilding.addPlan(plan);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** A second and a third barracks, range or stable with the population, then one more while those are busy */
-	private queueMoreTrainers(
-		gameState: CommonGameState,
-		counts: { numBarracks: number; numRanges: number; numStables: number; },
-		trainers: TrainerTemplates,
-		military: (template: string) => boolean,
-	): boolean
-	{
-		const next = this.nextTrainer(gameState, counts, trainers);
-		if (next)
-		{
-			return military(next);
-		}
-
-		// One more while those we have are nearly always training and the
-		// stock lies unbooked: the town cannot spend what it gathers (FINDINGS §29)
-		const template = trainers.barracks || trainers.range;
-		if (template && this.oneMoreTrainerPays(gameState, template))
-		{
-			return military(template);
-		}
-		return false;
-	}
-
-	/** The second barracks/range and stable, and a third if needed, with the population */
-	private nextTrainer(
-		gameState: CommonGameState,
-		counts: { numBarracks: number; numRanges: number; numStables: number; },
-		trainers: TrainerTemplates,
-	): string | undefined
-	{
-		const { numBarracks, numRanges, numStables } = counts;
-		const barracksTemplate = trainers.barracks;
-		const rangeTemplate = trainers.range;
-		const stableTemplate = trainers.stable;
-		const popForBarracks2 = this.Config.Military.popForBarracks2;
-		if (numBarracks + numRanges === 1 && this.getAccountedPopulation(gameState) > popForBarracks2)
-		{
-			const template = numBarracks === 0 ?
-				(barracksTemplate || rangeTemplate) :
-				(rangeTemplate || barracksTemplate);
-			if (template)
-			{
-				return template;
-			}
-		}
-		if (numStables === 1 && stableTemplate && this.getAccountedPopulation(gameState) > popForBarracks2)
-		{
-			return stableTemplate;
-		}
-		if (numBarracks + numRanges + numStables === 2 && this.getAccountedPopulation(gameState) > popForBarracks2 + 30)
-		{
-			return barracksTemplate || stableTemplate || rangeTemplate;
-		}
-		return undefined;
-	}
-
-	/** Whether our trainers are busy and twice the trainer's cost lies unbooked */
-	private oneMoreTrainerPays(gameState: CommonGameState, template: string): boolean
-	{
-		if (
-			!(this.productionLoad.trainers >= 1 && this.productionLoad.trainers < MAX_MILITARY_TRAINERS &&
-				this.productionLoad.busy >= BUSY_TRAINERS)
-		)
-		{
-			return false;
-		}
-		const cost = gameState.getTemplate(gameState.applyCiv(template))?.costSum() ?? Infinity;
-		const unbooked = gameState.ai.queueManager.getAvailableResources(gameState);
-		let free = 0;
-		for (const res of Resources.GetCodes())
-		{
-			free += Math.max(0, unbooked[res]);
-		}
-		return free >= 2 * cost;
-	}
-
-	/** Build advanced military buildings: the first, then the others with the population */
-	private queueAdvancedBuilding(gameState: CommonGameState, queues: HeadquartersQueues): void
-	{
-		let nAdvanced = 0;
-		for (const advanced of this.bAdvanced)
-		{
-			nAdvanced += gameState.countEntitiesAndQueuedByType(advanced, true);
-		}
-
-		if (nAdvanced && !(nAdvanced < this.bAdvanced.length && this.getAccountedPopulation(gameState) > 110))
-		{
-			return;
-		}
-		for (const advanced of this.bAdvanced)
-		{
-			if (gameState.countEntitiesAndQueuedByType(advanced, true) > 0 || !this.canBuild(gameState, advanced))
-			{
-				continue;
-			}
-			// canBuild() above already verified that the template exists.
-			const template = requireTemplate(gameState, advanced);
-			const civ = gameState.getPlayerCiv();
-			if (template.hasDefensiveFire() || template.trainableEntities(civ))
-			{
-				queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, advanced, { militaryBase: true }));
-			}
-			// not a military building, but still use this queue
-			else
-			{
-				queues.militaryBuilding.addPlan(new ConstructionPlan(gameState, advanced));
-			}
-			return;
-		}
 	}
 
 	/**
@@ -1992,7 +965,7 @@ export class Headquarters
 		// Check first if we can afford it without touching the other accounts
 		// and if not, take some of other accounted resources
 		// TODO sort the queues to be substracted
-		fundQueue(gameState, new ResourcesManager(templateFound[1].cost()), "emergency");
+		gameState.ai.queueManager.fund(gameState, new ResourcesManager(templateFound[1].cost()), "emergency");
 		const metadata: PlanMetadata = {
 			role: Worker.ROLE_WORKER,
 			base: nearestAnchor.getMetadata(PlayerID, "base"),
@@ -2423,10 +1396,10 @@ export class Headquarters
 		{
 			profiled("HQ training buildings and defenses", () =>
 			{
-				this.constructTrainingBuildings(gameState, queues);
+				constructTrainingBuildings(this, gameState, queues);
 				if (this.Config.difficulty > difficulty.SANDBOX)
 				{
-					this.buildDefenses(gameState, queues);
+					buildDefenses(this, gameState, queues);
 				}
 			});
 		}
@@ -2462,10 +1435,10 @@ export class Headquarters
 		{
 			this.geography.territoryMap = createTerritoryMap(gameState);
 		});
-		profiled("HQ followCivCentreOrders", () => this.followCivCentreOrders(gameState));
+		profiled("HQ followCivCentreOrders", () => followCivCentreOrders(this, gameState));
 		if (gameState.ai.playedTurn % 10 === 3)
 		{
-			this.provideForDryLand(gameState, queues);
+			provideForDryLand(this, gameState, queues);
 		}
 		if (this.geography.navalMap)
 		{
@@ -2486,15 +1459,15 @@ export class Headquarters
 		}
 		if (turn % 4 === 1)
 		{
-			profiled("HQ buildMoreHouses", () => this.buildMoreHouses(gameState, queues));
+			profiled("HQ buildMoreHouses", () => buildMoreHouses(this, gameState, queues));
 		}
 		if ((!this.saveResources || this.canBarter) && turn % 4 === 2)
 		{
-			profiled("HQ buildFarmstead", () => this.buildFarmstead(gameState, queues));
+			profiled("HQ buildFarmstead", () => buildFarmstead(this, gameState, queues));
 		}
 		if (this.needCorral && turn % 4 === 3)
 		{
-			profiled("HQ manageCorral", () => this.manageCorral(gameState, queues));
+			profiled("HQ manageCorral", () => manageCorral(this, gameState, queues));
 		}
 		if (turn % 5 === 1)
 		{
@@ -2510,12 +1483,12 @@ export class Headquarters
 			this.canExpand && gameState.ai.playedTurn % 10 === 7 && this.currentPhase > 1
 		)
 		{
-			profiled("HQ checkBaseExpansion", () => this.checkBaseExpansion(gameState, queues));
+			profiled("HQ checkBaseExpansion", () => checkBaseExpansion(this, gameState, queues));
 		}
 
 		if (this.currentPhase === 1 && gameState.ai.playedTurn % 3 === 0 && !this.canBarter)
 		{
-			this.buildEarlyMarket(gameState, queues);
+			buildEarlyMarket(this, gameState, queues);
 		}
 		if (this.currentPhase <= 1 || gameState.ai.playedTurn % 3 !== 0)
 		{
@@ -2525,18 +1498,18 @@ export class Headquarters
 		{
 			if (!this.canBarter)
 			{
-				this.buildMarket(gameState, queues);
+				buildMarket(this, gameState, queues);
 			}
 
 			if (!this.saveResources)
 			{
-				this.buildForge(gameState, queues);
-				this.buildTemple(gameState, queues);
+				buildForge(this, gameState, queues);
+				buildTemple(this, gameState, queues);
 			}
 
 			if (gameState.ai.playedTurn % 30 === 0 && gameState.getPopulation() > 0.9 * gameState.getPopulationMax())
 			{
-				this.buildWonder(gameState, queues, false);
+				buildWonder(this, gameState, queues, false);
 			}
 		});
 	}

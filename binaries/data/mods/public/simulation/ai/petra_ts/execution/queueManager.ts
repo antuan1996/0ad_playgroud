@@ -830,6 +830,28 @@ export class QueueManager
 		this.queueArrays = sortedQueues(this.queues, this.priorities);
 	}
 
+	/** A queue's account gets what is available for the cost, then other queues' until it can pay */
+	fund(gameState: CommonGameState, cost: ResourcesManager, queue: PetraRuntime.ConfiguredQueueName): void
+	{
+		this.setAccounts(gameState, cost, queue);
+		if (this.canAfford(queue, cost))
+		{
+			return;
+		}
+		for (const [q] of this.entries())
+		{
+			if (q === queue)
+			{
+				continue;
+			}
+			this.transferAccounts(cost, q, queue);
+			if (this.canAfford(queue, cost))
+			{
+				break;
+			}
+		}
+	}
+
 	Serialize(): {
 		priorities: Record<string, number>;
 		queues: Record<string, ReturnType<Queue["Serialize"]>>;

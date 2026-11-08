@@ -9,6 +9,7 @@ import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import { getBestBase } from "./baseManager.ts";
+import { buildWonder } from "./townBuildings.ts";
 
 /**
  * Handle events that are important to specific victory conditions:
@@ -999,7 +1000,7 @@ export class VictoryManager
 
 		if (gameState.getVictoryConditions().has("wonder"))
 		{
-			gameState.ai.HQ.buildWonder(gameState, queues, true);
+			buildWonder(gameState.ai.HQ, gameState, queues, true);
 		}
 
 		if (gameState.getVictoryConditions().has("regicide"))
