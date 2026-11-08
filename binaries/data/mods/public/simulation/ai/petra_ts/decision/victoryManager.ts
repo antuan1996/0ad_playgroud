@@ -607,7 +607,7 @@ export class VictoryManager
 	manageCriticalEntHealers(gameState: CommonGameState, queues: PetraRuntime.QueueCollection): void
 	{
 		if (
-			gameState.ai.HQ.saveResources || queues.healer.hasQueuedUnits() ||
+			gameState.ai.HQ.economy.saveResources || queues.healer.hasQueuedUnits() ||
 			!gameState.getOwnEntitiesByClass("Temple", true).hasEntities() ||
 			this.guardEnts.size > Math.min(gameState.getPopulationMax() / 10, gameState.getPopulation() / 4)
 		)

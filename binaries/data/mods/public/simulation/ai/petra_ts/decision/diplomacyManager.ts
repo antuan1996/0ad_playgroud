@@ -831,7 +831,7 @@ export class DiplomacyManager
 		for (const [player, data] of this.sentDiplomacyRequests)
 		{
 			if (
-				gameState.ai.elapsedTime > data.timeSent + 60 && !gameState.ai.HQ.saveResources &&
+				gameState.ai.elapsedTime > data.timeSent + 60 && !gameState.ai.HQ.economy.saveResources &&
 				gameState.getPopulation() > 70
 			)
 			{
@@ -846,7 +846,7 @@ export class DiplomacyManager
 		this.checkEvents(gameState, events);
 
 		if (
-			Resources.GetTributableCodes().length && !gameState.ai.HQ.saveResources &&
+			Resources.GetTributableCodes().length && !gameState.ai.HQ.economy.saveResources &&
 			gameState.ai.elapsedTime > this.nextTributeUpdate
 		)
 		{

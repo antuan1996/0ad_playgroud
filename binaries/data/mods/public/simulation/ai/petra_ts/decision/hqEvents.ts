@@ -28,9 +28,9 @@ export function checkEvents(hq: Headquarters, gameState: CommonGameState, events
 	// a market built lifts the fields' limit
 	for (const evt of events.ConstructionFinished)
 	{
-		if (evt.newentity !== evt.entity && hq.maxFields && isOwnMarket(gameState, evt.newentity))
+		if (evt.newentity !== evt.entity && hq.economy.maxFields && isOwnMarket(gameState, evt.newentity))
 		{ // not a repaired building
-			hq.maxFields = false;
+			hq.economy.maxFields = false;
 		}
 	}
 
@@ -194,7 +194,7 @@ function noteDecaying(hq: Headquarters, gameState: CommonGameState, ent: CommonE
 
 export function handleNewBase(hq: Headquarters, gameState: CommonGameState): void
 {
-	if (!hq.firstBaseConfig)
+	if (!hq.economy.firstBaseConfig)
 	{
 		// This is our first base, let us configure our starting resources.
 		configFirstBase(hq, gameState);
@@ -202,9 +202,9 @@ export function handleNewBase(hq: Headquarters, gameState: CommonGameState): voi
 	else
 	{
 		// Let us hope hq new base will fix our possible resource shortage.
-		hq.saveResources = undefined;
-		hq.saveSpace = undefined;
-		hq.maxFields = false;
+		hq.economy.saveResources = undefined;
+		hq.economy.saveSpace = undefined;
+		hq.economy.maxFields = false;
 	}
 }
 

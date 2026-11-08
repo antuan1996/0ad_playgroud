@@ -169,19 +169,19 @@ function feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): bo
 		!gameState.getOwnStructures().filter(filters.byClass(className)).hasEntities();
 	if (q === "field")
 	{
-		return hq.needFarm && hasNone("Field");
+		return hq.economy.needFarm && hasNone("Field");
 	}
 	if (q === "corral")
 	{
-		return hq.needCorral && hasNone("Field");
+		return hq.economy.needCorral && hasNone("Field");
 	}
 	if (q === "dock")
 	{
-		return hq.needFish && hasNone("Dock");
+		return hq.economy.needFish && hasNone("Dock");
 	}
 	if (q === "ships")
 	{
-		return hq.needFish && !gameState.ai.naval.ships.filter(filters.byClass("FishingBoat")).hasEntities();
+		return hq.economy.needFish && !gameState.ai.naval.ships.filter(filters.byClass("FishingBoat")).hasEntities();
 	}
 	return false;
 }

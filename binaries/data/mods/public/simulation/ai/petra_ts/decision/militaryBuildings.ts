@@ -49,7 +49,7 @@ export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queu
 	// A saving town builds no defense, but for a tower on a shore the enemy's
 	// ships pass (FINDINGS §38): an island's town saves its wood, and sat on
 	// thousands of stone while their transports and warships sailed by.
-	const saving = hq.saveResources && !hq.canBarter;
+	const saving = hq.economy.saveResources && !hq.canBarter;
 	if (saving && !hq.shipTraffic)
 	{
 		return;
@@ -57,7 +57,7 @@ export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queu
 	const shoreOnly = saving || hq.placement.towersByTrafficOnly(gameState);
 
 	if (
-		!hq.saveResources && reachingCityPhase(hq, gameState) &&
+		!hq.economy.saveResources && reachingCityPhase(hq, gameState) &&
 		hq.canBuild(gameState, "structures/{civ}/fortress") && queueFortress(hq, gameState, queues)
 	)
 	{
@@ -123,7 +123,7 @@ function queueSentryTower(
 {
 	const numTowers = gameState.getOwnEntitiesByClass("Tower", true).length +
 		gameState.getOwnEntitiesByClass("WallTower", true).length;
-	const towerLapseTime = hq.saveResources ?
+	const towerLapseTime = hq.economy.saveResources ?
 		(1 + 0.5 * numTowers) * hq.defenses.towerLapseTime :
 		hq.defenses.towerLapseTime;
 	if (
@@ -149,7 +149,9 @@ function queueDefenseTower(
 ): void
 {
 	const numTowers = gameState.getOwnEntitiesByClass("StoneTower", true).length;
-	const towerLapseTime = hq.saveResources ? (1 + numTowers) * hq.defenses.towerLapseTime : hq.defenses.towerLapseTime;
+	const towerLapseTime = hq.economy.saveResources ?
+		(1 + numTowers) * hq.defenses.towerLapseTime :
+		hq.defenses.towerLapseTime;
 	if (
 		(!numTowers ||
 			gameState.ai.elapsedTime > (1 + 0.1 * numTowers) * towerLapseTime + hq.defenses.towerStartTime) &&
@@ -186,7 +188,7 @@ export function constructTrainingBuildings(
 	queues: HeadquartersQueues,
 ): void
 {
-	if (hq.saveResources && !hq.canBarter || queues.militaryBuilding.hasQueuedUnits())
+	if (hq.economy.saveResources && !hq.canBarter || queues.militaryBuilding.hasQueuedUnits())
 	{
 		return;
 	}
@@ -196,7 +198,7 @@ export function constructTrainingBuildings(
 	// met defended towns without siege (FINDINGS §37). With a market it can
 	// barter for one: its arsenal.
 	if (
-		hq.saveResources && hq.canBarter && hq.currentPhase >= 3 &&
+		hq.economy.saveResources && hq.canBarter && hq.currentPhase >= 3 &&
 		queueMissing(hq, gameState, queues, "Arsenal", "arsenal")
 	)
 	{
@@ -204,7 +206,7 @@ export function constructTrainingBuildings(
 	}
 
 	const numBarracks = gameState.getOwnEntitiesByClass("Barracks", true).length;
-	if (hq.saveResources && numBarracks !== 0)
+	if (hq.economy.saveResources && numBarracks !== 0)
 	{
 		return;
 	}
@@ -214,7 +216,7 @@ export function constructTrainingBuildings(
 		return;
 	}
 
-	if (!hq.saveResources && hq.currentPhase >= 3)
+	if (!hq.economy.saveResources && hq.currentPhase >= 3)
 	{
 		queueCityMilitary(hq, gameState, queues);
 	}

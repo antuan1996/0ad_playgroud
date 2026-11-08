@@ -14,6 +14,7 @@ import { CaptureTally, type CaptureEntry } from "../world/captureTally.ts";
 import { censusOf } from "../world/census.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
+import { EconomyPlan } from "../world/economyPlan.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { restoreGeography, seaBetween, type Geography } from "../world/geography.ts";
 import * as mapMask from "../world/mapMask.ts";
@@ -69,16 +70,9 @@ export type HeadquartersSerializedData = {
 			Headquarters,
 			| "phasing"
 			| "lastFailedGather"
-			| "firstBaseConfig"
 			| "supportRatio"
 			| "targetNumWorkers"
 			| "bAdvanced"
-			| "saveResources"
-			| "saveSpace"
-			| "needCorral"
-			| "needFarm"
-			| "needFish"
-			| "maxFields"
 			| "canExpand"
 			| "canBuildUnits"
 			| "navalMap"
@@ -87,6 +81,10 @@ export type HeadquartersSerializedData = {
 			| "decayingStructures"
 			| "capturableTargets"
 			| "capturableTargetsTime"
+		>
+		& Pick<
+			EconomyPlan,
+			"saveResources" | "saveSpace" | "needFarm" | "needCorral" | "needFish" | "maxFields" | "firstBaseConfig"
 		>
 		& Pick<DefenseSchedule, "fortStartTime" | "towerStartTime" | "fortressStartTime">;
 	basesManager: ReturnType<BasesManager["Serialize"]>;
@@ -262,21 +260,15 @@ export class Headquarters
 	readonly defenses: DefenseSchedule;
 	diplomacyManager: DiplomacyManager;
 	emergencyManager: EmergencyManager;
-	firstBaseConfig: boolean;
+	/** What the town saves for and where its food comes from (world/economyPlan.ts) */
+	readonly economy = new EconomyPlan();
 	garrisonManager: GarrisonManager;
 	/** When a worker last found nothing left to gather, per resource. */
 	lastFailedGather: Record<string, GameSeconds>;
-	/** the most fields the map's start allows, false for no limit (startingStrategy) */
-	maxFields: number | false = false;
 	navalManager: NavalManager;
-	needCorral = false;
-	needFarm = false;
-	needFish = false;
 	phasing: number;
 	requireHouses: boolean | undefined;
 	researchManager: ResearchManager;
-	saveResources: boolean | undefined;
-	saveSpace: boolean | undefined;
 	supportRatio: number;
 	targetNumWorkers: number;
 	tradeManager: TradeManager;
@@ -353,8 +345,6 @@ export class Headquarters
 		this.turnCache = {};
 		this.lastFailedGather = {};
 
-		this.firstBaseConfig = false;
-
 		// Workers configuration.
 		this.targetNumWorkers = this.Config.Economy.targetNumWorkers;
 		this.supportRatio = this.Config.Economy.supportRatio;
@@ -407,19 +397,19 @@ export class Headquarters
 	{
 		this.phasing = properties.phasing;
 		this.lastFailedGather = properties.lastFailedGather;
-		this.firstBaseConfig = properties.firstBaseConfig;
+		this.economy.firstBaseConfig = properties.firstBaseConfig;
 		this.supportRatio = properties.supportRatio;
 		this.targetNumWorkers = properties.targetNumWorkers;
 		this.defenses.fortStartTime = properties.fortStartTime;
 		this.defenses.towerStartTime = properties.towerStartTime;
 		this.defenses.fortressStartTime = properties.fortressStartTime;
 		this.bAdvanced = properties.bAdvanced;
-		this.saveResources = properties.saveResources;
-		this.saveSpace = properties.saveSpace;
-		this.needCorral = properties.needCorral;
-		this.needFarm = properties.needFarm;
-		this.needFish = properties.needFish;
-		this.maxFields = properties.maxFields;
+		this.economy.saveResources = properties.saveResources;
+		this.economy.saveSpace = properties.saveSpace;
+		this.economy.needCorral = properties.needCorral;
+		this.economy.needFarm = properties.needFarm;
+		this.economy.needFish = properties.needFish;
+		this.economy.maxFields = properties.maxFields;
 		this.canExpand = properties.canExpand;
 		this.canBuildUnits = properties.canBuildUnits;
 		this.decayingStructures = properties.decayingStructures;
@@ -673,7 +663,7 @@ export class Headquarters
 	 */
 	landRunDry(gameState: CommonGameState): boolean
 	{
-		return (!!this.saveResources || this.geography.navalMap) &&
+		return (!!this.economy.saveResources || this.geography.navalMap) &&
 			this.basesManager.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood <
 				DRY_WOOD;
 	}
@@ -681,7 +671,7 @@ export class Headquarters
 	/** Whether a planned house may be paid now (decision/housing.ts). */
 	houseNeeded(gameState: CommonGameState): boolean
 	{
-		return houseNeeded(censusOf(gameState), !!this.saveResources);
+		return houseNeeded(censusOf(gameState), !!this.economy.saveResources);
 	}
 
 	/**
@@ -1165,11 +1155,11 @@ export class Headquarters
 		{
 			profiled("HQ buildMoreHouses", () => buildMoreHouses(this, gameState, queues));
 		}
-		if ((!this.saveResources || this.canBarter) && turn % 4 === 2)
+		if ((!this.economy.saveResources || this.canBarter) && turn % 4 === 2)
 		{
 			profiled("HQ buildFarmstead", () => buildFarmstead(this, gameState, queues));
 		}
-		if (this.needCorral && turn % 4 === 3)
+		if (this.economy.needCorral && turn % 4 === 3)
 		{
 			profiled("HQ manageCorral", () => manageCorral(this, gameState, queues));
 		}
@@ -1205,7 +1195,7 @@ export class Headquarters
 				buildMarket(this, gameState, queues);
 			}
 
-			if (!this.saveResources)
+			if (!this.economy.saveResources)
 			{
 				buildForge(this, gameState, queues);
 				buildTemple(this, gameState, queues);
@@ -1223,19 +1213,19 @@ export class Headquarters
 		const properties = {
 			phasing: this.phasing,
 			lastFailedGather: this.lastFailedGather,
-			firstBaseConfig: this.firstBaseConfig,
+			firstBaseConfig: this.economy.firstBaseConfig,
 			supportRatio: this.supportRatio,
 			targetNumWorkers: this.targetNumWorkers,
 			fortStartTime: this.defenses.fortStartTime,
 			towerStartTime: this.defenses.towerStartTime,
 			fortressStartTime: this.defenses.fortressStartTime,
 			bAdvanced: this.bAdvanced,
-			saveResources: this.saveResources,
-			saveSpace: this.saveSpace,
-			needCorral: this.needCorral,
-			needFarm: this.needFarm,
-			needFish: this.needFish,
-			maxFields: this.maxFields,
+			saveResources: this.economy.saveResources,
+			saveSpace: this.economy.saveSpace,
+			needCorral: this.economy.needCorral,
+			needFarm: this.economy.needFarm,
+			needFish: this.economy.needFish,
+			maxFields: this.economy.maxFields,
 			canExpand: this.canExpand,
 			canBuildUnits: this.canBuildUnits,
 			navalMap: this.geography.navalMap,

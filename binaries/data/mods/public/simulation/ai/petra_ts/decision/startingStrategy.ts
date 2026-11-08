@@ -428,13 +428,13 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 		return;
 	}
 
-	HQ.firstBaseConfig = true;
+	HQ.economy.firstBaseConfig = true;
 
 	const { startingSize, startingLand } = startingLandSize(HQ, gameState);
 	debugWarn(HQ.Config, 1, () => "starting size " + startingSize + "(cut at 24000 for fish pushing)");
 	if (startingSize < 25000)
 	{
-		HQ.saveSpace = true;
+		HQ.economy.saveSpace = true;
 		HQ.Config.Economy.popForDock = Math.min(HQ.Config.Economy.popForDock, 16);
 		const num = Math.max(HQ.Config.Economy.targetNumFishers, 2);
 		for (const land of startingLand)
@@ -447,16 +447,16 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 				}
 			}
 		}
-		HQ.maxFields = 1;
-		HQ.needCorral = true;
+		HQ.economy.maxFields = 1;
+		HQ.economy.needCorral = true;
 	}
 	else if (startingSize < 60000)
 	{
-		HQ.maxFields = 2;
+		HQ.economy.maxFields = 2;
 	}
 	else
 	{
-		HQ.maxFields = false;
+		HQ.economy.maxFields = false;
 	}
 
 	// - count the available food resource, and react accordingly
@@ -467,18 +467,18 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 	{
 		if (startingSize < 25000)
 		{
-			HQ.needFish = true;
+			HQ.economy.needFish = true;
 			HQ.Config.Economy.popForDock = 1;
 		}
 		else
 		{
-			HQ.needFarm = true;
+			HQ.economy.needFarm = true;
 		}
 	}
 	configByWood(HQ, gameState);
 	queueFirstDropsite(HQ, gameState);
 	// and build immediately a corral if needed
-	if (HQ.needCorral)
+	if (HQ.economy.needCorral)
 	{
 		const template = gameState.applyCiv("structures/{civ}/corral");
 		if (!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() && HQ.canBuild(gameState, template))
@@ -528,13 +528,13 @@ function configByWood(HQ: Headquarters, gameState: CommonGameState): void
 	);
 	if (startingWood < 6000)
 	{
-		HQ.saveResources = true;
+		HQ.economy.saveResources = true;
 		HQ.Config.Economy.popPhase2 = Math.floor(0.75 * HQ.Config.Economy.popPhase2); // Switch to town phase sooner to be able to expand
 
-		if (startingWood < 2000 && HQ.needFarm)
+		if (startingWood < 2000 && HQ.economy.needFarm)
 		{
-			HQ.needCorral = true;
-			HQ.needFarm = false;
+			HQ.economy.needCorral = true;
+			HQ.economy.needFarm = false;
 		}
 	}
 	if (startingWood > 8500 && HQ.canBuildUnits)

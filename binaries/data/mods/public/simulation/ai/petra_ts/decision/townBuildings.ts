@@ -75,7 +75,10 @@ export function buildMarket(hq: Headquarters, gameState: CommonGameState, queues
  */
 export function buildEarlyMarket(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
-	if (!hq.saveResources && !hq.geography.navalMap || gameState.getOwnEntitiesByClass("Market", true).hasEntities())
+	if (
+		!hq.economy.saveResources && !hq.geography.navalMap ||
+		gameState.getOwnEntitiesByClass("Market", true).hasEntities()
+	)
 	{
 		return;
 	}

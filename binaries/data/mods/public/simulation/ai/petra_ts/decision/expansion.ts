@@ -40,7 +40,10 @@ export function checkBaseExpansion(hq: Headquarters, gameState: CommonGameState,
 	const activeBases = hq.basesManager.numActiveBases();
 	const numUnits = gameState.getOwnUnits().length;
 	const numvar = 10 * (1 - hq.Config.personality.aggressive);
-	if (numUnits > activeBases * (65 + numvar + (10 + numvar) * (activeBases - 1)) || hq.saveResources && numUnits > 50)
+	if (
+		numUnits > activeBases * (65 + numvar + (10 + numvar) * (activeBases - 1)) ||
+		hq.economy.saveResources && numUnits > 50
+	)
 	{
 		debugWarn(
 			hq.Config,
@@ -150,7 +153,7 @@ export function provideForDryLand(hq: Headquarters, gameState: CommonGameState, 
 	}
 	if (dry)
 	{
-		hq.maxFields = false;
+		hq.economy.maxFields = false;
 	}
 }
 

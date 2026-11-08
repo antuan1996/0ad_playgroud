@@ -3,6 +3,7 @@
  * code depends on these interfaces only, never on decision/'s classes, and reaches them on `gameState.ai`
  * (PetraRuntime.AIState, the bot's getters return the managers, which satisfy them as they are).
  */
+import type { EconomyPlan } from "../world/economyPlan.ts";
 import { AttackType } from "./attackConstants.ts";
 import type { AttackPlan } from "./attackPlan.ts";
 import type { DefenseArmy } from "./defenseArmy.ts";
@@ -108,11 +109,9 @@ type TrainableWeight = [string, number, ...string[]];
 export interface HeadquartersService
 {
 	readonly canBuildUnits: boolean;
-	readonly needCorral: boolean;
-	readonly needFarm: boolean;
-	readonly needFish: boolean;
+	/** what the town saves for and where its food comes from */
+	readonly economy: Readonly<EconomyPlan>;
 	readonly requireHouses: boolean | undefined;
-	readonly saveResources: boolean | undefined;
 	/** the turn's bookkeeping: whether a building was started this turn */
 	readonly turnCache: Readonly<{ buildingBuilt?: boolean; }>;
 

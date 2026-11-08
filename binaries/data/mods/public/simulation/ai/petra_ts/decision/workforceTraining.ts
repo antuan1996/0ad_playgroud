@@ -51,7 +51,7 @@ export function trainMoreWorkers(hq: Headquarters, gameState: CommonGameState, q
 			target: hq.targetNumWorkers,
 			popPhase2: hq.Config.Economy.popPhase2,
 			waitingForTown: hq.currentPhase === 1 && (phaseName2 === undefined || !gameState.isResearching(phaseName2)),
-			saving: !!hq.saveResources,
+			saving: !!hq.economy.saveResources,
 			stalled,
 		})
 	)

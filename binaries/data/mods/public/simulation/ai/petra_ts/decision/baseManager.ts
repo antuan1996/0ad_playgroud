@@ -780,7 +780,7 @@ export class BaseManager
 				queues.corral.addPlan(
 					new ConstructionPlan(gameState, "structures/{civ}/corral", { favoredBase: this.ID }),
 				);
-				gameState.ai.HQ.needCorral = true;
+				gameState.ai.HQ.economy.needCorral = true;
 			}
 		}
 	}
@@ -802,9 +802,9 @@ export class BaseManager
 			fields: gameState.getOwnStructures().filter(filters.byClass("Field")).length,
 			foundations: gameState.getOwnFoundations().filter(filters.byClass("Field")).length,
 			queued: queues.field.countQueuedUnits(),
-			maxFields: gameState.ai.HQ.maxFields,
+			maxFields: gameState.ai.HQ.economy.maxFields,
 			provision: this.Config.Economy.provisionFields,
-			saving: !!gameState.ai.HQ.saveResources || !!gameState.ai.HQ.saveSpace,
+			saving: !!gameState.ai.HQ.economy.saveResources || !!gameState.ai.HQ.economy.saveSpace,
 		});
 		// on a naval map, each island with a civic centre of ours has a field
 		// of its own: Petra placed them by the town's count, near any food
@@ -822,11 +822,11 @@ export class BaseManager
 			queues.field.addPlan(new ConstructionPlan(gameState, "structures/{civ}/field", { favoredBase: this.ID }));
 			if (decision === "first")
 			{
-				gameState.ai.HQ.needFarm = true;
+				gameState.ai.HQ.economy.needFarm = true;
 			}
 		}
 		else if (
-			decision === "full" && gameState.ai.HQ.needCorral &&
+			decision === "full" && gameState.ai.HQ.economy.needCorral &&
 			!gameState.getOwnEntitiesByClass("Corral", true).hasEntities() &&
 			!queues.corral.hasQueuedUnits() &&
 			gameState.ai.HQ.canBuild(gameState, "structures/{civ}/corral")
