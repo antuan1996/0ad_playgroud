@@ -6,15 +6,7 @@ import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
-import type {
-	AttackRegistry,
-	BuildRules,
-	DefenseService,
-	NavalService,
-	PlacementService,
-	TradeService,
-	VictoryService,
-} from "./execution/services.ts";
+import type { AttackRegistry, DefenseService, NavalService, VictoryService } from "./execution/services.ts";
 import type { Town } from "./execution/town.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
@@ -233,12 +225,6 @@ export class PetraBot extends BaseAI
 		return requireValue(this.HQ).basesManager;
 	}
 
-	/** The placement searches, as `gameState.ai.placement` (PetraRuntime.AIState, execution/services.ts) */
-	get placement(): PlacementService
-	{
-		return requireValue(this.HQ).placement;
-	}
-
 	/** The headquarters' town, as `gameState.ai.town` (PetraRuntime.AIState, execution/town.ts) */
 	get town(): Town
 	{
@@ -255,18 +241,6 @@ export class PetraBot extends BaseAI
 	get victory(): VictoryService
 	{
 		return requireValue(this.HQ).victoryManager;
-	}
-
-	/** The build manager's services, as `gameState.ai.build` */
-	get build(): BuildRules
-	{
-		return requireValue(this.HQ).buildManager;
-	}
-
-	/** The trade manager's services, as `gameState.ai.trade` */
-	get trade(): TradeService
-	{
-		return requireValue(this.HQ).tradeManager;
 	}
 
 	/** The attack manager's services, as `gameState.ai.attacks` (PetraRuntime.AIState, execution/services.ts) */

@@ -382,11 +382,11 @@ export function cannotGrow(gameState: CommonGameState): boolean
 	{
 		return false;
 	}
-	const buildManager = gameState.ai.build;
+	const sites = gameState.ai.town.sites;
 	return ["structures/{civ}/house", "structures/{civ}/apartment"].some((house) =>
 	{
 		const name = gameState.applyCiv(house);
-		return gameState.isTemplateAvailable(name) && buildManager.isUnbuildable(gameState, name);
+		return gameState.isTemplateAvailable(name) && sites.isUnbuildable(gameState, name);
 	});
 }
 

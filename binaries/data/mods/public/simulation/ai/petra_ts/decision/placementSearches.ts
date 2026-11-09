@@ -3,8 +3,8 @@ export const CC_ENEMY_AVOID = 150;
 /**
  * Where to build (moved out of decision/headquarters.ts; the scoring helpers are decision/placement.ts): a new
  * civic centre for the economy or for strategy, a market, a defensive structure, a shore tower, the base for a
- * military building. Owned by the headquarters (HQ.placement) and given to the execution layer as
- * execution/services.ts's PlacementService (gameState.ai.placement).
+ * military building. Owned by the headquarters (HQ.placement); the construction plans reach it through the town's
+ * sites (execution/siteDesk.ts).
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
