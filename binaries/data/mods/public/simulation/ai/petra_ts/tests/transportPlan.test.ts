@@ -145,7 +145,7 @@ describe("the ship queue while an attack waits for ships", () =>
 		const queueManager = s.world.ai.queueManager;
 		const units = { has: true };
 		const attack = fake<AttackPlan>({ overseas: SEA, unitCollection: { hasEntities: () => units.has } });
-		s.hq.attackManager.upcomingAttacks["Attack"].push(attack);
+		s.hq.town.attacks.upcomingAttacks["Attack"].push(attack);
 
 		s.hq.navalManager.shipPriority(s.world.gameState);
 		assert.equal(queueManager.getPriority("ships"), Math.max(priorities.villager, priorities.citizenSoldier) + 2);
@@ -400,7 +400,7 @@ describe("a transport plan letting units and ships go", () =>
 	{
 		const s = seat();
 		const left: string[] = [];
-		override(s.hq.attackManager, {
+		override(s.hq.town.attacks, {
 			getPlan: (id: number) => id === 4 ? { removeUnit: () => left.push("attack") } : undefined,
 		});
 		override(s.hq.defenseManager, {

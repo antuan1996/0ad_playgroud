@@ -681,7 +681,7 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 	{
 		const { world, hq } = seat();
 		// a raid plan that never started: the recruit recorded under its name
-		hq.attackManager.upcomingAttacks = byAttackType((type) =>
+		hq.town.attacks.upcomingAttacks = byAttackType((type) =>
 			type === "Raid" ? [fake<AttackPlan>({ getName: () => 12, state: AttackPlan.STATE_UNEXECUTED })] : []
 		);
 		const unit = world.addEntity(
@@ -2625,7 +2625,7 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		const gaia = new Set([29 + 29 * 40]);
 		const { world, hq } = seat({ territoryOwner: (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER });
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		override(hq.attackManager, {
+		override(hq.town.attacks, {
 			enemiesByLand: () =>
 				new Map([[2, [
 					makeHqEntity({ id: 6100, owner: ENEMY, position: [240, 240], classes: ["Unit", "Soldier"] }),
@@ -3098,7 +3098,7 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 	{
 		const { world, hq } = seat({ territoryOwner: () => 0 });
 		const enemyLands = new Map<number, CommonEntity[]>();
-		override(hq.attackManager, { enemiesByLand: () => enemyLands });
+		override(hq.town.attacks, { enemiesByLand: () => enemyLands });
 		const tower = makeHqEntity({ id: 6001, owner: ENEMY, position: [300, 300], classes: ["Structure", "Tower"] });
 		const soldier = makeHqEntity({ id: 6002, owner: ENEMY, position: [100, 100], classes: ["Unit", "Soldier"] });
 		enemyLands.set(7, [tower]);
@@ -6378,7 +6378,7 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 		);
 		// a raid's army near the building, as the attack office books it
 		const raid = (size: number) => ({ position: [110, 100], unitCollection: { length: size } });
-		const started = hq.attackManager.startedAttacks as Record<string, unknown[]>;
+		const started = hq.town.attacks.startedAttacks as Record<string, unknown[]>;
 
 		started["Raid"] = [raid(8)];
 		hq.turnCache.numAround = undefined;

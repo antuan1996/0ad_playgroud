@@ -28,6 +28,7 @@ import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager, type TradeHQ } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager, type VictoryHQ } from "../decision/victoryManager.ts";
+import { AttackDesk, type SerializedAttacks } from "../execution/attackDesk.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -188,10 +189,26 @@ describe("save and reload", () =>
 			label: "AttackManager",
 			original: () => new AttackManager(makeConfig(), world, world.ai.HQ),
 			fromSave: (data, gameState) =>
-				AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), true, world.ai.HQ),
+				AttackManager.restore(makeConfig(), gameState, fake<SerializedAttackManager>(data), world.ai.HQ),
+		}, world);
+	});
+
+	it("keeps the town's attacks", () =>
+	{
+		const world = emptyWorldWithMap();
+		assertRoundTrip({
+			label: "AttackDesk",
+			original: () => new AttackDesk(makeConfig(), world.ai.HQ),
+			fromSave: (data, gameState) =>
+			{
+				const attacks = new AttackDesk(makeConfig(), world.ai.HQ);
+				attacks.resume(gameState, fake<SerializedAttacks>(data));
+				return attacks;
+			},
 			notSaved: {
 				enemyLandsTurn: "a cache of enemiesByLand, counted again on the turn it is asked",
 				enemyLands: "a cache of enemiesByLand, counted again on the turn it is asked",
+				bombingAttacks: "the siege sent to bomb meanwhile, sent again (as in the original)",
 			},
 		}, world);
 	});

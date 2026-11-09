@@ -46,7 +46,7 @@ function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions>
 	const hq = seatHQ(world, { stubs: victoryDoors });
 	hq.updateTerritories(world.gameState);
 	// the military office's answers: no plan unless a test gives one, no army
-	hq.attackManager.getPlan = () => undefined;
+	hq.town.attacks.getPlan = () => undefined;
 	hq.attackManager.outOfPlan = world.gameState.getOwnUnits().filter((e: CommonEntity) =>
 		e.getMetadata(PlayerID, "plan") === -1
 	);
@@ -234,7 +234,7 @@ describe("regicide: the hero under attack", () =>
 	{
 		const left: string[] = [];
 		const { world, hq, manager, hero } = heroAt(0.6, { plan: 4, PartOfArmy: 7 });
-		override(hq.attackManager, {
+		override(hq.town.attacks, {
 			getPlan: (id: number) => id === 4 ? { removeUnit: () => left.push("attack") } : undefined,
 		});
 		override(hq.defenseManager, {
@@ -432,7 +432,7 @@ describe("guards renamed, killed, unloaded; critical entities lost", () =>
 	{
 		const { world, hq, manager } = seat(["capture_the_relic"]);
 		const aborted: number[] = [];
-		override(hq.attackManager, { getPlan: (id: number) => ({ Abort: () => aborted.push(id) }) });
+		override(hq.town.attacks, { getPlan: (id: number) => ({ Abort: () => aborted.push(id) }) });
 		raids(manager).set(entityId(701), [3, 4]);
 
 		manager.checkEvents(world.gameState, events({ OwnershipChanged: [{ entity: 701, from: 0, to: ENEMY }] }));
@@ -738,7 +738,7 @@ describe("the relic game: raids on gaia relics", () =>
 	it("a raid already strong enough is not reinforced; units already busy are not taken", () =>
 	{
 		const { world, hq, manager, units, forced } = relicGame([60, 60]);
-		override(hq.attackManager, {
+		override(hq.town.attacks, {
 			getPlan: (id: number) =>
 				id === 5 ?
 					{ unitCollection: { values: () => units.map((u) => u.ent) }, state: "arrived", type: "Raid" } :
@@ -770,7 +770,7 @@ describe("the relic game: raids on gaia relics", () =>
 			captureStrength: () => undefined,
 			get: () => undefined,
 		});
-		override(hq.attackManager, {
+		override(hq.town.attacks, {
 			getPlan: (id: number) =>
 				id === 5 ?
 					{
@@ -791,7 +791,7 @@ describe("the relic game: raids on gaia relics", () =>
 	{
 		const { world, hq, manager } = relicGame([60, 60]);
 		const aborted: number[] = [];
-		override(hq.attackManager, {
+		override(hq.town.attacks, {
 			getPlan: (id: number) => ({ Abort: () => aborted.push(id), unitCollection: { values: () => [] } }),
 		});
 		raids(manager).set(entityId(701), [5]);

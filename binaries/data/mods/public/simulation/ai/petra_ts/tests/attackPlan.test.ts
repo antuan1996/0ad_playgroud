@@ -1525,7 +1525,7 @@ describe("updatePreparation: the completing step", () =>
 		// the bomber and one more unit sent against an enemy tower
 		const tower = entityId(2050);
 		const bombing = new Map([[tower, new Set([bomber.id(), entityId(9999)])]]);
-		world.ai.HQ.attackManager.bombingAttacks = bombing;
+		world.ai.town.attacks.bombingAttacks = bombing;
 
 		withPath([{ x: 30, y: 40 }], () =>
 		{
@@ -1766,7 +1766,7 @@ describe("updatePreparation: unexecuted plans", () =>
 		);
 		const plan = makePlan(world, { name: 1 });
 		const raid = makePlan(world, { name: 42, type: "Raid" });
-		world.ai.HQ.attackManager.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
+		world.ai.town.attacks.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
 
 		assert.equal(plan.unitCollection.length, 1, "the soldier is in the crowd");
 		assert.equal(plan.updatePreparation(world.gameState), 1, "the plan keeps preparing");
@@ -4259,7 +4259,7 @@ describe("directing the swarm", () =>
 		const plan = makePlan(world, { name: 1, data: { target: cc } });
 		world.removeEntity(2005); // the plan's own target is gone
 		world.removeEntity(2630); // a brother's prey recently died
-		world.ai.HQ.attackManager.startedAttacks.Raid = [
+		world.ai.town.attacks.startedAttacks.Raid = [
 			fake<AttackPlan>({ name: 1 }), // our own plan, skip
 			fake<AttackPlan>({ name: 2, target: gaiaHut, targetPlayer: ENEMY }), // gaia prey
 			fake<AttackPlan>({ name: 3, target: far, targetPlayer: ENEMY }), // other land
@@ -4640,7 +4640,7 @@ describe("second pass: preparing and choosing", () =>
 		);
 		const plan = makePlan(world, { name: 1 });
 		const raid = makePlan(world, { name: 42, type: "Raid" });
-		world.ai.HQ.attackManager.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
+		world.ai.town.attacks.getAttackInPreparation = (type: string) => type === "Raid" ? raid : undefined;
 		plan.reassignFastUnit(world.gameState);
 		assert.deepEqual(world.units.filter((u) => u.id() >= 1010).map((u) => u.getMetadata(PLAYER, "plan")), [
 			1,

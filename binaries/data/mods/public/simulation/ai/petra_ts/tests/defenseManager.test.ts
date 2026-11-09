@@ -1296,7 +1296,7 @@ describe("when our own are hit", () =>
 		world.addEntity(hunter);
 		const raider = makeSoldier(2000, [21, 21]);
 		world.addEntity(raider);
-		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) =>
+		world.ai.town.attacks.getPlan = (plan: UnitPlan | undefined) =>
 			plan == 5 ? { state: "started", removeUnit: () => undefined } as never : undefined;
 
 		const events = eventsWith({ Attacked: [{ target: entityId(3000), attacker: entityId(2000) }] });
@@ -1875,7 +1875,7 @@ describe("garrisoning by hand", () =>
 				removed.push(ent.id());
 			},
 		};
-		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
+		world.ai.town.attacks.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
 		// the tower is a captured decay-prone one: it takes even plan hands
 		assert.equal(
 			manager.garrisonUnitsInside(world.gameState, placed(tower), {
@@ -2481,7 +2481,7 @@ describe("rarer turns of the defence", () =>
 				removed.push(ent.id());
 			},
 		};
-		world.ai.HQ.attackManager.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
+		world.ai.town.attacks.getPlan = (plan: UnitPlan | undefined) => plan == 1 ? planStub as never : undefined;
 		// eight soldiers of an attack plan gathering at their rally point beside it
 		for (let i = 0; i < 8; ++i)
 		{

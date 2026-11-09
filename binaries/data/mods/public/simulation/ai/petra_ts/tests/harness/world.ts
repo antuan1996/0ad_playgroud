@@ -12,9 +12,8 @@ import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { byClass } from "simulation/ai/common-api/filters.js";
 
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
-import type { ArmyRelease } from "../../decision/attackManager.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
-import { AttackDesk } from "../../execution/attackDesk.ts";
+import { AttackDesk, type ArmyRelease } from "../../execution/attackDesk.ts";
 import { GuardDesk } from "../../execution/guardDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
@@ -342,36 +341,11 @@ export function makeWorld(options: WorldOptions = {}): World
 		},
 		// the houses have room (AttackPlan.cannotGrow reads it)
 		buildManager: { isUnbuildable: () => false },
-		attackManager: {
-			startedAttacks: { Raid: [], Rush: [], Attack: [], HugeAttack: [] },
-			defeated: {},
-			bombingAttacks: new Map<string, Set<number>>(),
-			outOfPlan: collect(),
-			getEnemyPlayer: () => knobs.enemyPlayer,
-			getAttackInPreparation: () => undefined,
-			getPlan: () => undefined,
-			switchDefenseToAttack: (
-				_gs: CommonGameState,
-				target: CommonEntity,
-				release: ArmyRelease,
-				uniqueTarget?: boolean,
-			) =>
-			{
-				switchCalls.push([target, release, uniqueTarget]);
-				return true;
-			},
-			splitLocalFights: (_gs: CommonGameState, plan: { name: number; }, targetLand: number | undefined) =>
-				leavingPlans.push([plan.name, targetLand]),
-			// the lands named in enemyLands, each with the world's enemies standing on it
-			enemiesByLand: () =>
-				new Map([...enemyLands].map((land) => [
-					land,
-					[...ents.values()].filter((ent) =>
-					{
-						const pos = ent.position();
-						return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
-					}),
-				])),
+		attackManager: { defeated: {}, outOfPlan: collect(), getEnemyPlayer: () => knobs.enemyPlayer },
+		// the town's desks reach the stub managers through it
+		get town()
+		{
+			return ai.town;
 		},
 		defenseManager: {
 			targetList: [],
@@ -443,7 +417,31 @@ export function makeWorld(options: WorldOptions = {}): World
 		// the town's desks, real over the stub managers
 		sites: new SiteDesk(ai.HQ),
 		guard: new GuardDesk(ai.HQ),
-		attacks: new AttackDesk(ai.HQ),
+		attacks: override(new AttackDesk(ai.Config, ai.HQ), {
+			// the defense handovers, local fights and lands of enemies, as the suites set and record them
+			switchDefenseToAttack: (
+				_gs: CommonGameState,
+				target: CommonEntity,
+				release: ArmyRelease,
+				uniqueTarget?: boolean,
+			) =>
+			{
+				switchCalls.push([target, release, uniqueTarget]);
+				return true;
+			},
+			splitLocalFights: (_gs: CommonGameState, plan: { name: number; }, targetLand: number | undefined) =>
+				leavingPlans.push([plan.name, targetLand]),
+			// the lands named in enemyLands, each with the world's enemies standing on it
+			enemiesByLand: () =>
+				new Map([...enemyLands].map((land) => [
+					land,
+					[...ents.values()].filter((ent) =>
+					{
+						const pos = ent.position();
+						return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
+					}),
+				])),
+		}),
 		transports: override(new TransportDesk(ai.Config, ai.HQ), {
 			// the passages asked, noted and granted, not made
 			requireTransport: (

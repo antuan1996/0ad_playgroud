@@ -12,7 +12,7 @@ import { afterEach, describe, it } from "node:test";
 
 import { setPlayers, type PlayerSpec } from "./harness/diplomacy.ts";
 import { commands, resetRecorder, sent } from "./harness/engine.ts";
-import { emptyEvents, eventsWith, restoreEngine, stubGlobal } from "./harness/fakes.ts";
+import { emptyEvents, eventsWith, override, restoreEngine, stubGlobal } from "./harness/fakes.ts";
 import {
 	PLAYER,
 	doorCalls,
@@ -72,7 +72,15 @@ function seat(players: PlayerSpec[], options: Partial<HqWorldOptions> = {}, chan
 	setPlayers(world, players);
 	resetRecorder();
 	const manager = new DiplomacyManager(hq.Config, false, hq);
-	return { world, hq, manager, attackCalls: doorCalls(attack) };
+	// the attacks called off, by the town that runs them
+	const attackCalls = doorCalls(attack);
+	override(hq.town.attacks, {
+		cancelAttacksAgainstPlayer: (...args: unknown[]) =>
+		{
+			attackCalls.push(["cancelAttacksAgainstPlayer", args]);
+		},
+	});
+	return { world, hq, manager, attackCalls };
 }
 
 /** the answers we sent a player, as their message text */
