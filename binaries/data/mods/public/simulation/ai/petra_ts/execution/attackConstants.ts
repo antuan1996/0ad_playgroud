@@ -37,7 +37,7 @@ export type AttackType = "Rush" | "Raid" | "Attack" | "HugeAttack";
 export const ATTACK_TYPES: readonly AttackType[] = ["Rush", "Raid", "Attack", "HugeAttack"];
 
 /** Every plan of the records, type by type in ATTACK_TYPES' order; lazy, as the nested loops it replaces were. */
-export function* plansIn(records: Record<AttackType, AttackPlan[]>): Generator<AttackPlan>
+export function* plansIn(records: Readonly<Record<AttackType, readonly AttackPlan[]>>): Generator<AttackPlan>
 {
 	for (const type of ATTACK_TYPES)
 	{

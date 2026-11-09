@@ -74,7 +74,7 @@ export function prepareArmy(plan: AttackPlan, gameState: CommonGameState): boole
 	{
 		return false;
 	}
-	if (plan.type !== TYPE_RAID && gameState.ai.attacks.getAttackInPreparation(TYPE_RAID) !== undefined)
+	if (plan.type !== TYPE_RAID && gameState.ai.town.attacks.getAttackInPreparation(TYPE_RAID) !== undefined)
 	{
 		plan.reassignFastUnit(gameState); // reassign some fast units (if any) to fasten raid preparations
 	}
@@ -196,7 +196,7 @@ export function fastenEndGame(plan: AttackPlan, gameState: CommonGameState): voi
 	for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 	{
 		const i = playerId(iIndex);
-		if (!gameState.isPlayerEnemy(i) || gameState.ai.attacks.defeated[i])
+		if (!gameState.isPlayerEnemy(i) || gameState.ai.town.attacks.isDefeated(i))
 		{
 			continue;
 		}
@@ -213,7 +213,7 @@ export function fastenEndGame(plan: AttackPlan, gameState: CommonGameState): voi
 export function gatherAtRallyPoint(plan: AttackPlan, gameState: CommonGameState): void
 {
 	// Remove those units which were in a temporary bombing attack
-	for (const unitIds of gameState.ai.attacks.bombingAttacks.values())
+	for (const unitIds of gameState.ai.town.attacks.bombingAttacks.values())
 	{
 		for (const entId of unitIds.values())
 		{

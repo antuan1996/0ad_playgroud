@@ -120,7 +120,7 @@ export function leaveDisputedLands(
 	keptLand: AccessIndex | undefined,
 ): void
 {
-	gameState.ai.attacks.splitLocalFights(gameState, plan, keptLand);
+	gameState.ai.town.attacks.splitLocalFights(gameState, plan, keptLand);
 	const rallyLand = gameState.ai.accessibility.getAccessValue(plan.rallyPoint);
 	for (const ent of plan.unitCollection.values())
 	{
@@ -141,5 +141,5 @@ export function besideEnemies(gameState: CommonGameState, ent: CommonEntity, ral
 	const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
 	// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
 	return land !== undefined && land > 1 && land !== rallyLand &&
-		gameState.ai.attacks.enemiesByLand(gameState).has(land);
+		gameState.ai.town.attacks.enemiesByLand(gameState).has(land);
 }

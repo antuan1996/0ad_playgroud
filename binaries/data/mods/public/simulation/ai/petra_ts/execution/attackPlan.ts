@@ -1261,7 +1261,7 @@ export class AttackPlan
 			added = enlist(this, ent);
 		}
 		// Add units previously in a plan, but which left it because needed for defense or attack finished.
-		for (const ent of gameState.ai.attacks.outOfPlan.values())
+		for (const ent of gameState.ai.town.attacks.outOfPlan.values())
 		{
 			if (available(ent))
 			{
@@ -1311,7 +1311,7 @@ export class AttackPlan
 			{
 				continue;
 			}
-			const raid = gameState.ai.attacks.getAttackInPreparation(AttackPlan.TYPE_RAID);
+			const raid = gameState.ai.town.attacks.getAttackInPreparation(AttackPlan.TYPE_RAID);
 			if (!raid)
 			{
 				return;
@@ -1797,7 +1797,7 @@ export class AttackPlan
 		// Then update the target if needed:
 		if (this.targetPlayer === undefined || !gameState.isPlayerEnemy(this.targetPlayer))
 		{
-			this.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, this);
+			this.targetPlayer = gameState.ai.town.attacks.getEnemyPlayer(gameState, this);
 			if (this.targetPlayer === undefined)
 			{
 				return undefined;

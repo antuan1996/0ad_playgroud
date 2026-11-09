@@ -2,7 +2,7 @@
  * The town as the execution layer sees it (`gameState.ai.town`): the state of the moment the plans and workers
  * share, the economy and danger queries they ask, and what they report back. It is the execution layer's one
  * door to the decision layer (decision/headquarters.ts, which owns it and passes itself as TownHQ): no other
- * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `guard`) reach
+ * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `guard`, `attacks`) reach
  * them only through their private views.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
@@ -10,6 +10,7 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import type { Config } from "../world/config.ts";
 import type { EconomyPlan } from "../world/economyPlan.ts";
 import { seaBetween } from "../world/geography.ts";
+import { AttackDesk, type AttackHQ } from "./attackDesk.ts";
 import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
 
@@ -58,16 +59,19 @@ export class Town
 	readonly sites: SiteDesk;
 	/** the defense and the victory conditions: raids, armies, shelter, critical units, relics */
 	readonly guard: GuardDesk;
+	/** the attack plans, whom they attack, and the units between plans */
+	readonly attacks: AttackDesk;
 	private readonly config: Config;
 	private readonly hq: TownHQ;
 	private turnCache: TownTurnCache = {};
 
-	constructor(config: Config, hq: TownHQ & SiteHQ & GuardHQ)
+	constructor(config: Config, hq: TownHQ & SiteHQ & GuardHQ & AttackHQ)
 	{
 		this.config = config;
 		this.hq = hq;
 		this.sites = new SiteDesk(hq);
 		this.guard = new GuardDesk(hq);
+		this.attacks = new AttackDesk(hq);
 	}
 
 	/** A headquarters turn starts: what was worked out for the last one is forgotten */

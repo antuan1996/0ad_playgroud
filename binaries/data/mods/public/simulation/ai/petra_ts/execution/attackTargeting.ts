@@ -16,7 +16,7 @@ export function findTarget(plan: AttackPlan, gameState: CommonGameState): boolea
 {
 	if (plan.targetPlayer === undefined)
 	{
-		plan.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, plan);
+		plan.targetPlayer = gameState.ai.town.attacks.getEnemyPlayer(gameState, plan);
 		if (plan.targetPlayer === undefined)
 		{
 			return false;
@@ -34,7 +34,7 @@ export function findTarget(plan: AttackPlan, gameState: CommonGameState): boolea
 	}
 
 	// may-be all our previous enemey target (if not recomputed here) have been destroyed ?
-	plan.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, plan);
+	plan.targetPlayer = gameState.ai.town.attacks.getEnemyPlayer(gameState, plan);
 	if (plan.targetPlayer !== undefined)
 	{
 		plan.target = plan.getNearestTarget(gameState, plan.rallyPoint);
@@ -91,7 +91,7 @@ export function targetOnLand(plan: AttackPlan, gameState: CommonGameState, land:
 	{
 		return undefined;
 	}
-	const buildings = (gameState.ai.attacks.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
+	const buildings = (gameState.ai.town.attacks.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
 		enemy.hasClass("Structure")
 	);
 	if (!buildings.length)
@@ -200,7 +200,7 @@ export function switchTarget(plan: AttackPlan, gameState: CommonGameState, pos: 
 		}
 
 		// If not, let's look for another enemy
-		plan.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, plan);
+		plan.targetPlayer = gameState.ai.town.attacks.getEnemyPlayer(gameState, plan);
 		if (plan.targetPlayer !== undefined)
 		{
 			plan.target = plan.getNearestTarget(gameState, pos, accessIndex);
@@ -223,7 +223,7 @@ export function helpOtherAttack(
 	accessIndex: AccessIndex | undefined,
 ): boolean
 {
-	const attackManager = gameState.ai.attacks;
+	const attackManager = gameState.ai.town.attacks;
 	for (const attack of plansIn(attackManager.startedAttacks))
 	{
 		if (attack.name === plan.name)

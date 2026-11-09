@@ -116,7 +116,7 @@ export function onTargetLost(plan: AttackPlan, gameState: CommonGameState, event
 		{
 			continue;
 		}
-		plan.targetPlayer = gameState.ai.attacks.getEnemyPlayer(gameState, plan);
+		plan.targetPlayer = gameState.ai.town.attacks.getEnemyPlayer(gameState, plan);
 		plan.target = undefined;
 	}
 }
