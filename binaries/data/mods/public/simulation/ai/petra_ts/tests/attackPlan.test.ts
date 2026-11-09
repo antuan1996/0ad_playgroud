@@ -1525,7 +1525,10 @@ describe("updatePreparation: the completing step", () =>
 		// the bomber and one more unit sent against an enemy tower
 		const tower = entityId(2050);
 		const bombing = new Map([[tower, new Set([bomber.id(), entityId(9999)])]]);
-		world.ai.town.attacks.bombingAttacks = bombing;
+		for (const [target, units] of bombing)
+		{
+			world.ai.town.bombing.bombingAttacks.set(target, units);
+		}
 
 		withPath([{ x: 30, y: 40 }], () =>
 		{

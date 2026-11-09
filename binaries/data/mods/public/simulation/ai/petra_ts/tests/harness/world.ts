@@ -14,6 +14,7 @@ import { byClass } from "simulation/ai/common-api/filters.js";
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { AttackDesk, type ArmyRelease } from "../../execution/attackDesk.ts";
+import { Bombardment } from "../../execution/bombardment.ts";
 import { DefenseDesk } from "../../execution/defenseDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
@@ -22,6 +23,7 @@ import { TransportDesk } from "../../execution/transportDesk.ts";
 import { VictoryDesk } from "../../execution/victoryDesk.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
+import { EnemyLands } from "../../world/enemyLands.ts";
 
 /** A base as the stub HQ hands them out: an anchor structure and the land it sits on. */
 export interface BaseLike
@@ -134,7 +136,7 @@ export interface World
 	minimalShipCalls: Array<[number, number]>;
 	/** the plans the attack manager was told set off (splitLocalFights), as [name, the target's land] */
 	leavingPlans: Array<[number, number | undefined]>;
-	/** the lands the attack manager says have enemies on them (enemiesByLand), with the world's enemies there */
+	/** the lands with enemies on them (gameState.ai.enemyLands), with the world's enemies there */
 	enemyLands: Set<number>;
 	/** resetCaptureGaiaRelic calls the victoryManager saw */
 	relicResets: unknown[];
@@ -421,7 +423,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		defense: new DefenseDesk(ai.HQ.defenseManager),
 		victory: new VictoryDesk(ai.HQ.victoryManager),
 		attacks: override(new AttackDesk(ai.Config, ai.HQ.attackManager), {
-			// the defense handovers, local fights and lands of enemies, as the suites set and record them
+			// the defense handovers and local fights, as the suites set and record them
 			switchDefenseToAttack: (
 				_gs: CommonGameState,
 				target: CommonEntity,
@@ -434,17 +436,8 @@ export function makeWorld(options: WorldOptions = {}): World
 			},
 			splitLocalFights: (_gs: CommonGameState, plan: { name: number; }, targetLand: number | undefined) =>
 				leavingPlans.push([plan.name, targetLand]),
-			// the lands named in enemyLands, each with the world's enemies standing on it
-			enemiesByLand: () =>
-				new Map([...enemyLands].map((land) => [
-					land,
-					[...ents.values()].filter((ent) =>
-					{
-						const pos = ent.position();
-						return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
-					}),
-				])),
 		}),
+		bombing: new Bombardment(),
 		transports: override(new TransportDesk(ai.Config, ai.HQ.navalManager), {
 			// the passages asked, noted and granted, not made
 			requireTransport: (
@@ -457,6 +450,20 @@ export function makeWorld(options: WorldOptions = {}): World
 		}),
 	});
 	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
+	// the enemies on each land (PetraBot.enemyLands): those of the lands the suite names
+	const lands = override(new EnemyLands(), {
+		// the lands named in enemyLands, each with the world's enemies standing on it
+		byLand: () =>
+			new Map([...enemyLands].map((land) => [
+				land,
+				[...ents.values()].filter((ent) =>
+				{
+					const pos = ent.position();
+					return isEnemy(ent.owner()) && ent.owner() !== 0 && pos !== undefined && accessOf(pos) === land;
+				}),
+			])),
+	});
+	Object.defineProperty(ai, "enemyLands", { value: lands, writable: true, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({

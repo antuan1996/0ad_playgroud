@@ -205,11 +205,6 @@ describe("save and reload", () =>
 				attacks.resume(gameState, fake<SerializedAttacks>(data), true);
 				return attacks;
 			},
-			notSaved: {
-				enemyLandsTurn: "a cache of enemiesByLand, counted again on the turn it is asked",
-				enemyLands: "a cache of enemiesByLand, counted again on the turn it is asked",
-				bombingAttacks: "the siege sent to bomb meanwhile, sent again (as in the original)",
-			},
 		}, world);
 	});
 

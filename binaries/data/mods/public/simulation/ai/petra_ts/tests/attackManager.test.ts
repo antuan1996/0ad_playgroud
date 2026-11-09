@@ -23,6 +23,7 @@ import { AttackPlan } from "../execution/attackPlan.ts";
 import { QueueManager } from "../execution/queueManager.ts";
 import { Config } from "../world/config.ts";
 import { MEDIUM, SANDBOX } from "../world/difficultyLevel.ts";
+import { EnemyLands } from "../world/enemyLands.ts";
 
 const KEEP = AttackPlan.PREPARATION_KEEP_GOING;
 const FAILED = AttackPlan.PREPARATION_FAILED;
@@ -330,25 +331,25 @@ describe("attack manager", () =>
 		it("renames a bombing aim whose target was rebuilt", () =>
 		{
 			const manager = freshManager(configFor(0.5));
-			desk(manager).bombingAttacks.set(entityId(5001), new Set([entityId(1100)]));
+			manager.bombing.bombingAttacks.set(entityId(5001), new Set([entityId(1100)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ entity: entityId(5001), newentity: entityId(7001) });
 
 			manager.checkEvents(fake<CommonGameState>({}), events);
-			assert.deepEqual([...desk(manager).bombingAttacks.keys()], [7001], "the aim followed the rebuild");
-			assert.deepEqual([...desk(manager).bombingAttacks.get(entityId(7001))!], [1100], "with its force intact");
+			assert.deepEqual([...manager.bombing.bombingAttacks.keys()], [7001], "the aim followed the rebuild");
+			assert.deepEqual([...manager.bombing.bombingAttacks.get(entityId(7001))!], [1100], "with its force intact");
 		});
 
 		it("renames each bomber inside a group whose unit was rebuilt", () =>
 		{
 			const manager = freshManager(configFor(0.5));
-			desk(manager).bombingAttacks.set(entityId(5000), new Set([entityId(6001), entityId(6002)]));
+			manager.bombing.bombingAttacks.set(entityId(5000), new Set([entityId(6001), entityId(6002)]));
 			const events = emptyEvents();
 			events.EntityRenamed.push({ entity: entityId(6001), newentity: entityId(7001) });
 
 			manager.checkEvents(fake<CommonGameState>({}), events);
 			assert.deepEqual(
-				[...desk(manager).bombingAttacks.get(entityId(5000))!],
+				[...manager.bombing.bombingAttacks.get(entityId(5000))!],
 				[6002, 7001],
 				"the rebuilt bomber was re-listed",
 			);
@@ -377,12 +378,12 @@ describe("attack manager", () =>
 					unitAIOrderData: () => orders({ target: entityId(5000) }),
 				}),
 			);
-			desk(manager).bombingAttacks.set(entityId(5002), new Set([entityId(1100)]));
-			desk(manager).bombingAttacks.set(entityId(5003), new Set([entityId(1100)]));
-			desk(manager).bombingAttacks.set(entityId(5000), new Set([entityId(1100)]));
+			manager.bombing.bombingAttacks.set(entityId(5002), new Set([entityId(1100)]));
+			manager.bombing.bombingAttacks.set(entityId(5003), new Set([entityId(1100)]));
+			manager.bombing.bombingAttacks.set(entityId(5000), new Set([entityId(1100)]));
 
-			desk(manager).assignBombers(world.gameState);
-			assert.deepEqual([...desk(manager).bombingAttacks.keys()], [5000], "only the enemy aim survived");
+			manager.bombing.assignBombers(world.gameState);
+			assert.deepEqual([...manager.bombing.bombingAttacks.keys()], [5000], "only the enemy aim survived");
 		});
 
 		it("keeps the bomber whose last order still names the storm, and drops the moved-on one", () =>
@@ -404,11 +405,11 @@ describe("attack manager", () =>
 					unitAIOrderData: () => orders({ target: entityId(6000) }),
 				}),
 			);
-			desk(manager).bombingAttacks.set(entityId(5000), new Set([entityId(1100), entityId(1101)]));
+			manager.bombing.bombingAttacks.set(entityId(5000), new Set([entityId(1100), entityId(1101)]));
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.deepEqual(
-				[...desk(manager).bombingAttacks.get(entityId(5000))!],
+				[...manager.bombing.bombingAttacks.get(entityId(5000))!],
 				[1100],
 				"the moved-on bomber was dropped",
 			);
@@ -450,8 +451,8 @@ describe("attack manager", () =>
 				}, { plan: 1, subrole: "walking" }),
 			);
 
-			desk(manager).assignBombers(world.gameState);
-			assert.equal(desk(manager).bombingAttacks.size, 0, "nobody was enrolled");
+			manager.bombing.assignBombers(world.gameState);
+			assert.equal(manager.bombing.bombingAttacks.size, 0, "nobody was enrolled");
 		});
 
 		it("strikes a structure already inside the gun's reach", () =>
@@ -470,9 +471,13 @@ describe("attack manager", () =>
 				}),
 			);
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [[5000, false, false]], "the wall took the shot without marching");
-			assert.deepEqual([...desk(manager).bombingAttacks.get(entityId(5000))!], [1100], "the bomber was enrolled");
+			assert.deepEqual(
+				[...manager.bombing.bombingAttacks.get(entityId(5000))!],
+				[1100],
+				"the bomber was enrolled",
+			);
 		});
 
 		it("marches out of reach and opens fire from the border", () =>
@@ -493,7 +498,7 @@ describe("attack manager", () =>
 				}),
 			);
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [[5000, false, true]], "the shot was queued while moving");
 			assert.equal(moves.length, 1, "the bomber marched once");
 			assert.ok(
@@ -525,7 +530,7 @@ describe("attack manager", () =>
 					move: () => undefined,
 				}),
 			);
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			return strikes.length;
 		}
 
@@ -572,7 +577,7 @@ describe("attack manager", () =>
 				}),
 			);
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [5001], "only the worked enemy field drew the bombers");
 		});
 
@@ -591,7 +596,7 @@ describe("attack manager", () =>
 				);
 				crowd.add(entityId(7001 + i));
 			}
-			desk(manager).bombingAttacks.set(entityId(5000), crowd);
+			manager.bombing.bombingAttacks.set(entityId(5000), crowd);
 			const strikes: unknown[] = [];
 			world.addEntity(
 				makeEntity({ id: 1100, owner: PLAYER, position: [10, 10], classes: ["Unit", "BoltShooter"] }, {
@@ -603,9 +608,9 @@ describe("attack manager", () =>
 				}),
 			);
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.deepEqual(strikes, [], "the crowded wall was left alone");
-			assert.equal(desk(manager).bombingAttacks.get(entityId(5000))!.size, 5, "the crowd stood unchanged");
+			assert.equal(manager.bombing.bombingAttacks.get(entityId(5000))!.size, 5, "the crowd stood unchanged");
 		});
 
 		it("lets a second bomber pile onto the same storm", () =>
@@ -634,10 +639,10 @@ describe("attack manager", () =>
 				}),
 			);
 
-			desk(manager).assignBombers(world.gameState);
+			manager.bombing.assignBombers(world.gameState);
 			assert.equal(strikes.length, 2, "both bombers opened fire");
 			assert.deepEqual(
-				[...desk(manager).bombingAttacks.get(entityId(5000))!],
+				[...manager.bombing.bombingAttacks.get(entityId(5000))!],
 				[1100, 1101],
 				"both were enrolled",
 			);
@@ -1080,7 +1085,7 @@ describe("attack manager", () =>
 
 			manager.update(world.gameState, world.ai.queues, emptyEvents());
 			assert.equal(
-				desk(manager).bombingAttacks.get(entityId(5000))?.has(entityId(1100)),
+				manager.bombing.bombingAttacks.get(entityId(5000))?.has(entityId(1100)),
 				true,
 				"the idle bomber was enrolled",
 			);
@@ -1101,7 +1106,7 @@ describe("attack manager", () =>
 			);
 
 			manager.update(otherTurn.gameState, otherTurn.ai.queues, emptyEvents());
-			assert.equal(desk(manager).bombingAttacks.size, 0, "no polling off the fifth turn");
+			assert.equal(manager.bombing.bombingAttacks.size, 0, "no polling off the fifth turn");
 
 			const easy = makeWorld({ enemyPlayer: ENEMY, difficulty: SANDBOX });
 			easy.ai.playedTurn = 5;
@@ -1116,7 +1121,7 @@ describe("attack manager", () =>
 			);
 
 			easyManager.update(easy.gameState, easy.ai.queues, emptyEvents());
-			assert.equal(desk(easyManager).bombingAttacks.size, 0, "no polling on the easiest difficulty");
+			assert.equal(easyManager.bombing.bombingAttacks.size, 0, "no polling on the easiest difficulty");
 		});
 	});
 
@@ -1726,6 +1731,8 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 	function sailingTown(onOurLand: number, houses = true)
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
+		// the enemies on each land, counted from the world
+		world.ai.enemyLands = new EnemyLands();
 		world.accessAt.set("70,70", 5);
 		world.accessAt.set("71,70", 5);
 		const manager = makeManager(world, worldConfig(world));
@@ -1804,37 +1811,6 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 		{
 			assert.equal(ent.getMetadata(PLAYER, "plan"), 7);
 		}
-	});
-
-	it("an enemy woman or trader alone keeps no one back; a soldier, a hero, a siege engine or a building on a land does", () =>
-	{
-		const world = makeWorld({ enemyPlayer: ENEMY });
-		const manager = makeManager(world, worldConfig(world));
-		for (
-			const [id, land, classes] of [
-				[3000, 5, ["Unit", "Support", "FemaleCitizen"]],
-				[3001, 6, ["Unit", "Trader"]],
-				[3002, 7, ["Unit", "Soldier"]],
-				[3003, 8, ["Unit", "Hero"]],
-				[3004, 10, ["Unit", "Siege"]],
-				[3005, 11, ["Structure", "House"]],
-				[3006, 12, ["Unit", "Ship", "Soldier"]],
-				[3007, 1, ["Unit", "Soldier"]],
-			] as const
-		)
-		{ // on an impassable cell, a cliff's edge: no land
-			world.accessAt.set(`${id},0`, land);
-			world.addEntity(makeEntity({ id, owner: ENEMY, position: [id, 0], classes: [...classes] }));
-		}
-		world.accessAt.set("4000,0", 13);
-		world.addEntity(makeEntity({ id: 4000, owner: 0, position: [4000, 0], classes: ["Unit", "Soldier"] }));
-
-		assert.deepEqual([...desk(manager).enemiesByLand(world.gameState).keys()].sort((a, b) => a - b), [
-			7,
-			8,
-			10,
-			11,
-		]);
 	});
 
 	it("three soldiers beside the enemy are too few to stay: they sail with the army", () =>

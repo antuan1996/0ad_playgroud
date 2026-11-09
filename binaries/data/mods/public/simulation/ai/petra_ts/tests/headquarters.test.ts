@@ -2617,8 +2617,8 @@ describe("findEconomicCCLocation: where the next village feeds", () =>
 		const gaia = new Set([29 + 29 * 40]);
 		const { world, hq } = seat({ territoryOwner: (ix: number, iy: number) => gaia.has(ix + iy * 40) ? 0 : PLAYER });
 		world.map.ccResourceMaps.wood.map[29 + 29 * 40] = 60;
-		override(hq.town.attacks, {
-			enemiesByLand: () =>
+		override(hq.enemyLands, {
+			byLand: () =>
 				new Map([[2, [
 					makeHqEntity({ id: 6100, owner: ENEMY, position: [240, 240], classes: ["Unit", "Soldier"] }),
 				]]]),
@@ -3095,7 +3095,7 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 	{
 		const { world, hq } = seat({ territoryOwner: () => 0 });
 		const enemyLands = new Map<number, CommonEntity[]>();
-		override(hq.town.attacks, { enemiesByLand: () => enemyLands });
+		override(hq.enemyLands, { byLand: () => enemyLands });
 		const tower = makeHqEntity({ id: 6001, owner: ENEMY, position: [300, 300], classes: ["Structure", "Tower"] });
 		const soldier = makeHqEntity({ id: 6002, owner: ENEMY, position: [100, 100], classes: ["Unit", "Soldier"] });
 		enemyLands.set(7, [tower]);

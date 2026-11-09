@@ -33,6 +33,7 @@ import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
 import { AttackDesk, type AttackDecisions } from "../../execution/attackDesk.ts";
+import { Bombardment } from "../../execution/bombardment.ts";
 import { DefenseDesk, type DefenseDecisions } from "../../execution/defenseDesk.ts";
 import { GarrisonManager, type GarrisonDefense } from "../../execution/garrisonManager.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
@@ -786,6 +787,7 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 	Object.defineProperty(world.ai, "bases", { get: () => world.ai.HQ.basesManager, configurable: true });
 	Object.defineProperty(world.ai, "treasures", { get: () => world.ai.HQ.treasures, configurable: true });
 	Object.defineProperty(world.ai, "town", { get: () => world.ai.HQ.town, configurable: true });
+	Object.defineProperty(world.ai, "enemyLands", { get: () => world.ai.HQ.enemyLands, configurable: true });
 
 	if (options.seatBases ?? true)
 	{
@@ -820,7 +822,7 @@ function deskOver(name: string, config: Config, door: unknown): Record<string, u
 	switch (name)
 	{
 		case "attackManager":
-			return { attacks: new AttackDesk(config, fake<AttackDecisions>(door)) };
+			return { attacks: new AttackDesk(config, fake<AttackDecisions>(door)), bombing: new Bombardment() };
 		case "navalManager":
 			return { transports: new TransportDesk(config, fake<NavalFleet>(door)) };
 		case "defenseManager":
