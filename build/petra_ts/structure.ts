@@ -5,9 +5,11 @@
  *   node build/petra_ts/structure.ts [options]
  *   npm run structure:petra -- [options]
  *
- *   --check            exit 1 when a rule is broken or a tracked count rose
+ *   --check            exit 1 when a rule is broken, a tracked count rose
  *                      above the baseline (build/petra_ts/structure-baseline.json)
- *   --update-baseline  write the tracked counts as the new baseline
+ *                      or a class's cohesion worsened (cohesion-baseline.json)
+ *   --update-baseline  write the tracked counts and the cohesion figures as
+ *                      the new baselines
  *   --top N            rows in each list (default 15)
  *   --json FILE        also write every finding as JSON
  *
@@ -24,7 +26,9 @@
  *   is given a view of the headquarters it uses when it is built, and
  *   execution reaches the decision layer through the town and its desks,
  *   execution/town.ts, on gameState.ai.town), or execution code importing
- *   decision/headquarters.ts.
+ *   decision/headquarters.ts;
+ * - view-only: decision code importing an execution class it sees only
+ *   through a view (VIEW_ONLY: AttackPlan, seen as AttackPlanView).
  *
  * Tracked counts (the check fails when one rises above the baseline; lower
  * them, then --update-baseline):
@@ -51,7 +55,17 @@
  *   certain and the count a lower bound;
  * - stale-todo: methods marked `TODO never called` that a call of the port
  *   reaches, resolved by the type checker (the program of
- *   tsconfig.tests.json).
+ *   tsconfig.tests.json);
+ * - whole-hq: values typed as the whole Headquarters (a parameter, field,
+ *   variable or return) outside decision/headquarters.ts and the bot's root,
+ *   where a view of what they use would do.
+ *
+ * Cohesion, ratcheted (cohesion-baseline.json): each class's core LCOM4, its
+ * own methods' groups (forwarders apart: a method passing one call or read on
+ * to a member of a collaborator; only collaborators, fields with no
+ * initializer, apart as hubs), and each class-with-parts' LCOM4 (coupling.ts)
+ * may not rise above the baseline; a class it does not know may have
+ * NEW_CLASS_CORE_MAX groups.
  *
  * Reported, not tracked: exports only the tests use, exports only their own
  * module uses (they need not be exported), each module's fan-in and fan-out,
@@ -111,6 +125,10 @@ export interface ClassCohesion
 	groups: string[][];
 	/** methods using no field and calling no method */
 	thisless: string[];
+	/** methods and accessors whose whole body passes one call or read on to a member of one field */
+	forwarders: string[];
+	/** the groups of the methods but the forwarders: the cohesion of what the class does itself */
+	coreLcom4: number;
 }
 
 export interface ModuleInfo
@@ -181,8 +199,139 @@ function resolveSpecifier(from: string, specifier: string): string | undefined
 
 /** The fewest methods a class has for its most used members to count as hubs */
 const HUB_MIN_METHODS = 9;
+
+/**
+ * The execution classes the decision layer may see only through a view: for each module, the names decision code
+ * may not import from it, and the view to use instead (the constants are in attackConstants.ts).
+ */
+export const VIEW_ONLY: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+	"execution/attackPlan.ts": { AttackPlan: "AttackPlanView (its states and types: execution/attackConstants.ts)" },
+};
+
+/** The modules that may type a value as the whole Headquarters: its own, and the bot's root */
+const WHOLE_HQ_ALLOWED = new Set(["decision/headquarters.ts"]);
+
+/** A class missing from the cohesion baseline may have this many groups (forwarders apart) */
+export const NEW_CLASS_CORE_MAX = 4;
 /** A member more methods than this share of them use is a hub */
 const HUB_SHARE = 8;
+
+/**
+ * Whether a method's whole body passes one call or read on to a member of one of the class's collaborators
+ * (`return this.manager.getPlan(id);`, `this.hq.navalManager.fleet(sea)`), its arguments its own parameters or
+ * constants: a forwarder, which a facade (a desk, the town) is made of, and which links no group of its own. A
+ * collaborator is a field with no initializer (given to the class); a field initialized where it is declared is
+ * the class's own state, and a call on it (`this.plans.push(plan)`) is the class's own work.
+ */
+function isForwarder(member: ts.Node, collaborators: Set<string>): boolean
+{
+	if (!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member)) || !member.body)
+	{
+		return false;
+	}
+	const statements = member.body.statements;
+	if (statements.length !== 1)
+	{
+		return false;
+	}
+	const statement = statements[0];
+	const expr = ts.isReturnStatement(statement) ?
+		statement.expression :
+		ts.isExpressionStatement(statement) ?
+		statement.expression :
+		undefined;
+	if (!expr)
+	{
+		return false;
+	}
+	const target = ts.isCallExpression(expr) ? expr.expression : expr;
+	if (
+		ts.isCallExpression(expr) && !expr.arguments.every((a) =>
+			ts.isIdentifier(a) || ts.isLiteralExpression(a) || a.kind === ts.SyntaxKind.TrueKeyword ||
+			a.kind === ts.SyntaxKind.FalseKeyword
+		)
+	)
+	{
+		return false;
+	}
+	// this.field.member(.member)*: a chain of property reads rooted at one field, two links at least
+	let node: ts.Expression = target;
+	let links = 0;
+	while (ts.isPropertyAccessExpression(node))
+	{
+		if (node.expression.kind === ts.SyntaxKind.ThisKeyword)
+		{
+			return links > 0 && collaborators.has(node.name.text);
+		}
+		node = node.expression;
+		++links;
+	}
+	return false;
+}
+
+/** The groups of the given methods, linked by the non-hub fields they share and the methods they call */
+function cohesionGroups(names: string[], uses: Map<string, Set<string>>, hubs: string[]): string[][]
+{
+	const parent = new Map<string, string>(names.map((n) => [n, n]));
+	const find = (n: string): string =>
+	{
+		let root = n;
+		while (parent.get(root) !== root)
+		{
+			root = parent.get(root) ?? root;
+		}
+		parent.set(n, root);
+		return root;
+	};
+	const union = (a: string, b: string): void =>
+	{
+		parent.set(find(a), find(b));
+	};
+	const fieldUser = new Map<string, string>();
+	for (const name of names)
+	{
+		for (const member of uses.get(name) ?? [])
+		{
+			if (hubs.includes(member))
+			{
+				continue;
+			}
+			if (parent.has(member))
+			{
+				union(name, member);
+				continue;
+			}
+			if (uses.has(member))
+			{
+				continue; // a method left out (a forwarder) links nothing
+			}
+			const other = fieldUser.get(member);
+			if (other === undefined)
+			{
+				fieldUser.set(member, name);
+			}
+			else
+			{
+				union(name, other);
+			}
+		}
+	}
+	const groupsByRoot = new Map<string, string[]>();
+	for (const name of names)
+	{
+		const root = find(name);
+		const group = groupsByRoot.get(root);
+		if (group)
+		{
+			group.push(name);
+		}
+		else
+		{
+			groupsByRoot.set(root, [name]);
+		}
+	}
+	return [...groupsByRoot.values()].sort((a, b) => b.length - a.length);
+}
 
 /** A class's cohesion: its methods linked when they share a field or one calls the other, hubs apart */
 function classCohesion(
@@ -192,6 +341,8 @@ function classCohesion(
 ): ClassCohesion
 {
 	const fields = new Set<string>();
+	/** the fields with no initializer: given to the class, in its constructor or by its owner */
+	const collaborators = new Set<string>();
 	const methods = new Map<string, ts.Node>();
 	for (const member of cls.members)
 	{
@@ -199,6 +350,10 @@ function classCohesion(
 		if (ts.isPropertyDeclaration(member) && name)
 		{
 			fields.add(name);
+			if (!member.initializer)
+			{
+				collaborators.add(name);
+			}
 		}
 		else if (
 			(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
@@ -216,6 +371,7 @@ function classCohesion(
 				if (ts.isParameterPropertyDeclaration(param, member) && ts.isIdentifier(param.name))
 				{
 					fields.add(param.name.text);
+					collaborators.add(param.name.text);
 				}
 			}
 			// fields assigned in the constructor
@@ -238,21 +394,6 @@ function classCohesion(
 	}
 	// a getter and setter of one name are one member
 	const names = [...methods.keys()];
-	const parent = new Map<string, string>(names.map((n) => [n, n]));
-	const find = (n: string): string =>
-	{
-		let root = n;
-		while (parent.get(root) !== root)
-		{
-			root = parent.get(root) ?? root;
-		}
-		parent.set(n, root);
-		return root;
-	};
-	const union = (a: string, b: string): void =>
-	{
-		parent.set(find(a), find(b));
-	};
 	// what each method uses of the class: its fields and the methods it calls
 	const uses = new Map<string, Set<string>>();
 	const thisless: string[] = [];
@@ -280,57 +421,32 @@ function classCohesion(
 		}
 	}
 	// hubs (the configuration, the managers a class asks): members an eighth of the methods use link no group
-	const userCount = new Map<string, number>();
-	for (const used of uses.values())
+	const hubsAmong = (among: string[]): string[] =>
 	{
-		for (const member of used)
+		if (among.length < HUB_MIN_METHODS)
 		{
-			userCount.set(member, (userCount.get(member) ?? 0) + 1);
+			return [];
 		}
-	}
-	const hubs = names.length >= HUB_MIN_METHODS ?
-		[...userCount].filter(([, n]) => n > names.length / HUB_SHARE).map(([member]) => member).sort() :
-		[];
-	const fieldUser = new Map<string, string>();
-	for (const [name, used] of uses)
+		const count = new Map<string, number>();
+		for (const name of among)
+		{
+			for (const member of uses.get(name) ?? [])
+			{
+				count.set(member, (count.get(member) ?? 0) + 1);
+			}
+		}
+		return [...count].filter(([, n]) => n > among.length / HUB_SHARE).map(([member]) => member).sort();
+	};
+	const hubs = hubsAmong(names);
+	const groups = cohesionGroups(names, uses, hubs);
+	const forwarders = names.filter((name) =>
 	{
-		for (const member of used)
-		{
-			if (hubs.includes(member))
-			{
-				continue;
-			}
-			if (methods.has(member))
-			{
-				union(name, member);
-				continue;
-			}
-			const other = fieldUser.get(member);
-			if (other === undefined)
-			{
-				fieldUser.set(member, name);
-			}
-			else
-			{
-				union(name, other);
-			}
-		}
-	}
-	const groupsByRoot = new Map<string, string[]>();
-	for (const name of names)
-	{
-		const root = find(name);
-		const group = groupsByRoot.get(root);
-		if (group)
-		{
-			group.push(name);
-		}
-		else
-		{
-			groupsByRoot.set(root, [name]);
-		}
-	}
-	const groups = [...groupsByRoot.values()].sort((a, b) => b.length - a.length);
+		const node = methods.get(name);
+		return node !== undefined && isForwarder(node, collaborators);
+	});
+	// the class's own methods, the collaborators they ask most apart as hubs (never the class's own state)
+	const own = names.filter((n) => !forwarders.includes(n));
+	const core = cohesionGroups(own, uses, hubsAmong(own).filter((h) => collaborators.has(h)));
 	return {
 		file,
 		name: cls.name?.text ?? "(anonymous)",
@@ -341,6 +457,8 @@ function classCohesion(
 		groups,
 		hubs,
 		thisless,
+		forwarders,
+		coreLcom4: core.length,
 	};
 }
 
@@ -511,6 +629,18 @@ export function analyseModule(file: string, text: string): ModuleInfo
 				finding("hq-access", node, node.getText(source));
 			}
 		}
+		if (
+			ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === "Headquarters" &&
+			layer !== "root" && !WHOLE_HQ_ALLOWED.has(file) &&
+			(ts.isParameter(node.parent) || ts.isPropertyDeclaration(node.parent) ||
+				ts.isPropertySignature(node.parent) || ts.isVariableDeclaration(node.parent) ||
+				ts.isFunctionLike(node.parent) && node.parent.type === node)
+		)
+		{
+			const where = node.parent;
+			const named = "name" in where && where.name && ts.isIdentifier(where.name) ? where.name.text : "a return";
+			finding("whole-hq", node, `${named}: Headquarters`);
+		}
 		if ((ts.isClassDeclaration(node) || ts.isClassExpression(node)))
 		{
 			info.classes.push(classCohesion(file, source, node));
@@ -542,6 +672,19 @@ export function analyseModule(file: string, text: string): ModuleInfo
 		if (layer === "execution" && edge.to === "decision/headquarters.ts")
 		{
 			info.findings.push({ rule: "hq-access", file, line: edge.line, text: "imports decision/headquarters.ts" });
+		}
+		const viewOnly = VIEW_ONLY[edge.to];
+		if (layer === "decision" && viewOnly)
+		{
+			for (const name of edge.names.filter((n) => n in viewOnly))
+			{
+				info.findings.push({
+					rule: "view-only",
+					file,
+					line: edge.line,
+					text: `imports ${name} from ${edge.to}: use ${viewOnly[name]}`,
+				});
+			}
 		}
 	}
 	return info;
@@ -948,6 +1091,8 @@ export interface Structure
 	classes: ClassCohesion[];
 	/** members of a higher layer reached at run time (layerAccesses), and those through the headquarters' view */
 	access: LayerAccess[];
+	/** values typed as the whole Headquarters outside it (a view of what they use would do) */
+	wholeHq: Finding[];
 }
 
 /** The counts the baseline holds */
@@ -961,6 +1106,7 @@ export function trackedCounts(structure: Structure): Record<string, number>
 		"dead-export": structure.dead.deadExports.length,
 		"dead-method": structure.dead.deadMethods.length,
 		"stale-todo": structure.dead.staleTodos.length,
+		"whole-hq": structure.wholeHq.length,
 	};
 }
 
@@ -985,7 +1131,7 @@ export function analyse(
 	}
 	return {
 		modules,
-		rules: findings.filter((f) => f.rule !== "engine"),
+		rules: findings.filter((f) => f.rule !== "engine" && f.rule !== "whole-hq"),
 		layer: layerViolations(modules),
 		cycles: importCycles(modules),
 		engine: findings.filter((f) => f.rule === "engine"),
@@ -997,7 +1143,61 @@ export function analyse(
 		})),
 		classes: modules.flatMap((m) => m.classes),
 		access: accesses,
+		wholeHq: findings.filter((f) => f.rule === "whole-hq"),
 	};
+}
+
+/** A class's or a class-with-parts' cohesion as the cohesion baseline keeps it */
+export type CohesionBaseline = Record<string, number>;
+
+/** The cohesion figures the baseline holds: each class's groups but the forwarders, each class-with-parts' groups */
+export function cohesionFigures(
+	classes: readonly ClassCohesion[],
+	parts: ReadonlyArray<{ file: string; name: string; lcom4: number; }>,
+): CohesionBaseline
+{
+	const figures: CohesionBaseline = {};
+	for (const c of classes)
+	{
+		figures[`${c.file}:${c.name}`] = c.coreLcom4;
+	}
+	for (const p of parts)
+	{
+		figures[`parts ${p.file}:${p.name}`] = p.lcom4;
+	}
+	return figures;
+}
+
+/** A cohesion figure that worsened: above its baseline, or a new class above NEW_CLASS_CORE_MAX */
+export interface CohesionChange
+{
+	key: string;
+	now: number;
+	/** the baseline's figure; undefined for a class it does not know */
+	was: number | undefined;
+}
+
+/** The figures above their baseline (worse), and those below it (better: the baseline may be lowered) */
+export function cohesionChanges(
+	figures: CohesionBaseline,
+	baseline: CohesionBaseline,
+): { worse: CohesionChange[]; better: CohesionChange[]; }
+{
+	const worse: CohesionChange[] = [];
+	const better: CohesionChange[] = [];
+	for (const [key, now] of Object.entries(figures))
+	{
+		const was = baseline[key];
+		if (was === undefined ? now > NEW_CLASS_CORE_MAX : now > was)
+		{
+			worse.push({ key, now, was });
+		}
+		else if (was !== undefined && now < was)
+		{
+			better.push({ key, now, was });
+		}
+	}
+	return { worse, better };
 }
 
 function listFiles(dir: string, keep: (path: string) => boolean): string[]
@@ -1038,6 +1238,7 @@ function main(args: string[]): void
 	const repo = resolve(import.meta.dirname, "../..");
 	const port = join(repo, "binaries/data/mods/public/simulation/ai/petra_ts");
 	const baselineFile = join(import.meta.dirname, "structure-baseline.json");
+	const cohesionFile = join(import.meta.dirname, "cohesion-baseline.json");
 	const top = Number(option(args, "--top") ?? 15);
 
 	const modules = listFiles(
@@ -1110,6 +1311,12 @@ function main(args: string[]): void
 	out.push(
 		structure.cycles.length ? structure.cycles.map((c) => `  ${c.length}: ${c.join(" ")}`).join("\n") : "  none",
 	);
+	out.push("\nvalues typed as the whole Headquarters outside it (a view of what they use would do):");
+	out.push(
+		structure.wholeHq.length ?
+			structure.wholeHq.map((f) => `  ${f.file}:${f.line}  ${f.text}`).join("\n") :
+			"  none",
+	);
 	out.push("\nEngine outside adapter/ (profiling apart):");
 	out.push(
 		structure.engine.length ? structure.engine.map((f) => `  ${f.file}:${f.line}  ${f.text}`).join("\n") : "  none",
@@ -1143,11 +1350,14 @@ function main(args: string[]): void
 			[1, 2],
 		),
 	);
-	out.push("\nclasses, by methods (LCOM4: groups of methods sharing no field nor call, the hubs apart):");
+	out.push(
+		"\nclasses, by methods (LCOM4: groups of methods sharing no field nor call, the hubs apart; core: the same, " +
+			"the forwarders apart):",
+	);
 	const classes = [...structure.classes].sort((a, b) => b.methods - a.methods).slice(0, top);
 	out.push(
 		table(
-			["class", "where", "methods", "fields", "lcom4", "no this", "groups (sizes)"],
+			["class", "where", "methods", "fields", "lcom4", "fwd", "core", "no this", "groups (sizes)"],
 			classes.map((
 				c,
 			) => [
@@ -1156,10 +1366,12 @@ function main(args: string[]): void
 				c.methods,
 				c.fields,
 				c.lcom4,
+				c.forwarders.length,
+				c.coreLcom4,
 				c.thisless.length,
 				c.groups.filter((g) => g.length > 1).map((g) => g.length).join(" "),
 			]),
-			[2, 3, 4, 5],
+			[2, 3, 4, 5, 6, 7],
 		),
 	);
 	for (const c of classes)
@@ -1179,6 +1391,10 @@ function main(args: string[]): void
 		if (c.thisless.length)
 		{
 			out.push(`  ${c.name}, using no field nor method: ${c.thisless.join(", ")}`);
+		}
+		if (c.forwarders.length)
+		{
+			out.push(`  ${c.name}, forwarders: ${c.forwarders.join(", ")}`);
 		}
 	}
 	const parts = partCohesion(program, port);
@@ -1257,6 +1473,21 @@ function main(args: string[]): void
 			).join("; ") + (w.narrow > narrow.length ? `; ... ${w.narrow - narrow.length} more` : ""),
 		);
 	}
+	const figures = cohesionFigures(structure.classes, parts);
+	const cohesionBaseline: CohesionBaseline = existsSync(cohesionFile) ?
+		JSON.parse(readFileSync(cohesionFile, "utf8")) :
+		{};
+	const cohesion = cohesionChanges(figures, cohesionBaseline);
+	out.push(
+		`\ncohesion against its baseline (${relative(repo, cohesionFile)}; core LCOM4 per class, LCOM4 per class ` +
+			`with its parts; a new class may have ${NEW_CLASS_CORE_MAX}):`,
+	);
+	const changeRow = (c: CohesionChange): string => `  ${c.key}  ${c.was ?? "new"} -> ${c.now}`;
+	out.push(cohesion.worse.length ? "worse:\n" + cohesion.worse.map(changeRow).join("\n") : "  none worse");
+	if (cohesion.better.length)
+	{
+		out.push("better (--update-baseline to keep them):\n" + cohesion.better.map(changeRow).join("\n"));
+	}
 	console.log(out.join("\n"));
 
 	const jsonFile = option(args, "--json");
@@ -1267,6 +1498,9 @@ function main(args: string[]): void
 			JSON.stringify(
 				{
 					counts,
+					cohesion: figures,
+					cohesionChanges: cohesion,
+					wholeHq: structure.wholeHq,
 					rules: structure.rules,
 					layer: structure.layer,
 					layerAccess: structure.access,
@@ -1286,7 +1520,9 @@ function main(args: string[]): void
 	if (args.includes("--update-baseline"))
 	{
 		writeFileSync(baselineFile, JSON.stringify(counts, null, "\t") + "\n");
-		console.log(`\nbaseline written: ${relative(repo, baselineFile)}`);
+		const sorted = Object.fromEntries(Object.entries(figures).sort(([a], [b]) => a.localeCompare(b)));
+		writeFileSync(cohesionFile, JSON.stringify(sorted, null, "\t") + "\n");
+		console.log(`\nbaselines written: ${relative(repo, baselineFile)}, ${relative(repo, cohesionFile)}`);
 	}
 	if (args.includes("--check"))
 	{
@@ -1295,11 +1531,15 @@ function main(args: string[]): void
 		{
 			console.log(`check: ${k} rose to ${v} (baseline ${baseline[k]})`);
 		}
-		if (structure.rules.length || rose.length)
+		for (const c of cohesion.worse)
+		{
+			console.log(`check: cohesion of ${c.key} worsened to ${c.now} (baseline ${c.was ?? "none"})`);
+		}
+		if (structure.rules.length || rose.length || cohesion.worse.length)
 		{
 			process.exit(1);
 		}
-		console.log("\ncheck: no rule broken, no tracked count above the baseline");
+		console.log("\ncheck: no rule broken, no tracked count above the baseline, no cohesion worse");
 	}
 }
 

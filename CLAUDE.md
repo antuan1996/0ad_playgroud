@@ -96,6 +96,13 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   only it uses. Also at **0**, type-checked: `layer-access` (a higher layer's
   members reached without an import, however reached: `gameState.ai.HQ` from
   `adapter/` or `world/`, a decision manager's method from `execution/`).
+  `view-only` (rule): no decision module imports `AttackPlan` (decision sees
+  `AttackPlanView`; `VIEW_ONLY` in `structure.ts`). `whole-hq` (baseline 4,
+  ratcheted): values typed as the whole `Headquarters` outside it and the
+  root. Cohesion is ratcheted in `build/petra_ts/cohesion-baseline.json`: each
+  class's core LCOM4 (forwarders apart, only collaborators as hubs) and each
+  class-with-parts' LCOM4 may not rise; a new class may have 4. Lower the
+  baselines with `--update-baseline` when a class improves.
   It also reports, untracked (`build/petra_ts/coupling.ts`): each class with its
   parts (functions taking it) as one LCOM4 graph plus the fields only one module
   uses, and the types other modules read narrowly (≤ a quarter of their members).

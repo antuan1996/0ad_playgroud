@@ -8,9 +8,12 @@ import { test } from "node:test";
 import ts from "typescript";
 import { partCohesion, typeWidth } from "./coupling.ts";
 import {
+	NEW_CLASS_CORE_MAX,
 	analyse,
 	analyseModule,
 	calledMethods,
+	cohesionChanges,
+	cohesionFigures,
 	importCycles,
 	layerAccesses,
 	layerOf,
@@ -230,6 +233,131 @@ test("in a class of nine methods or more, a member used by more than an eighth o
 	assert.deepEqual(cls.hubs, ["config"]);
 	assert.deepEqual([cls.methods, cls.lcom4], [18, 17]);
 	assert.deepEqual(cls.groups[0], ["i", "j"]);
+});
+
+test("a forwarder passes one call or read on to a member of a field; the core cohesion leaves forwarders out", () =>
+{
+	const [cls] = analyseModule(
+		"execution/a.ts",
+		`class Desk
+{
+	private readonly manager: Manager;
+	private plans: number[] = [];
+	constructor(manager: Manager) { this.manager = manager; }
+	get ships(): number { return this.manager.ships; }
+	fleet(sea: number): number { return this.manager.fleet(sea); }
+	report(sea: number): void { this.manager.navy.report(sea, true); }
+	add(plan: number): void { this.plans.push(plan); }
+	count(): number { return this.plans.length + this.manager.ships; }
+	asked(sea: number): number { return this.manager.fleet(sea + 1); }
+	twice(): void { this.manager.a(); this.manager.b(); }
+}`,
+	).classes;
+	assert.deepEqual(
+		cls.forwarders,
+		["ships", "fleet", "report"],
+		"an argument computed, or two calls, is no forwarding",
+	);
+	// all linked through manager (a small class has no hubs): forwarders apart, the rest still one group
+	assert.deepEqual([cls.lcom4, cls.coreLcom4], [1, 1]);
+});
+
+test("forwarders apart, a facade's own groups are what is left", () =>
+{
+	const forwards = "abcdefghk".split("").map((m) => `${m}(x: number): number { return this.hq.${m}(x); }`).join("\n");
+	const [cls] = analyseModule(
+		"execution/a.ts",
+		`class Facade
+{
+	private readonly hq: Hq;
+	private cache = 0;
+	${forwards}
+	read(): number { return this.cache; }
+	clear(): void { this.cache = 0; }
+}`,
+	).classes;
+	// of the eleven methods, hq and cache are hubs: each a group of its own; of the two own ones, cache (the class's
+	// own state, never a hub of the core) links both
+	assert.deepEqual([cls.methods, cls.lcom4, cls.forwarders.length, cls.coreLcom4], [11, 11, 9, 1]);
+});
+
+test("in the core, the class's own state links its methods however many use it; a collaborator they all ask does not", () =>
+{
+	const own = "abcdefghklmn".split("").map((m) => `${m}(): number { return this.plans.length + this.config.x; }`)
+		.join("\n");
+	const [cls] = analyseModule(
+		"execution/a.ts",
+		`class Registry
+{
+	private readonly config: Config;
+	private plans: number[] = [];
+	${own}
+	other(): number { return this.config.y + 1; }
+}`,
+	).classes;
+	// both are hubs of the whole class: thirteen groups; the core keeps plans, which links the twelve
+	assert.deepEqual([cls.methods, cls.lcom4, cls.coreLcom4], [13, 13, 2]);
+});
+
+test("a value typed as the whole Headquarters outside it is counted; a view of it is not", () =>
+{
+	assert.deepEqual(
+		analyseModule(
+			"decision/a.ts",
+			"import type { Headquarters } from \"./headquarters.ts\";\n" +
+				"function f(hq: Headquarters): void {}\n" +
+				"function g(hq: Pick<Headquarters, \"canBuild\">): Headquarters[\"economy\"] { return hq.economy; }\n" +
+				"class C { hq: Headquarters; }\n" +
+				"function h(): Headquarters { return x; }",
+		).findings.map((f) => [f.rule, f.text]),
+		[["whole-hq", "hq: Headquarters"], ["whole-hq", "hq: Headquarters"], ["whole-hq", "h: Headquarters"]],
+	);
+	assert.deepEqual(rules("decision/headquarters.ts", "function f(hq: Headquarters): void {}"), []);
+	assert.deepEqual(rules("_petrabot.ts", "let HQ: Headquarters;"), [], "the bot owns the headquarters");
+	const structure = analyse([analyseModule("decision/a.ts", "function f(hq: Headquarters): void {}")], []);
+	assert.equal(structure.rules.length, 0, "a tracked count, not a broken rule");
+	assert.equal(structure.wholeHq.length, 1);
+});
+
+test("decision code may not import an execution class it sees through a view", () =>
+{
+	assert.deepEqual(
+		analyseModule(
+			"decision/a.ts",
+			"import { AttackPlan, type AttackPlanView } from \"../execution/attackPlan.ts\";",
+		).findings.map((f) => [f.rule, f.text]),
+		[[
+			"view-only",
+			"imports AttackPlan from execution/attackPlan.ts: use AttackPlanView (its states and types: " +
+			"execution/attackConstants.ts)",
+		]],
+	);
+	assert.deepEqual(
+		rules("execution/b.ts", "import { AttackPlan } from \"./attackPlan.ts\";"),
+		[],
+		"execution runs the plans",
+	);
+});
+
+test("cohesion against its baseline: worse above it, better below, a new class allowed a few groups", () =>
+{
+	const [cls] = analyseModule("world/a.ts", "class One { x = 0; a(): number { return this.x; } }").classes;
+	const figures = cohesionFigures([cls], [{ file: "world/b.ts", name: "Plan", lcom4: 3 }]);
+	assert.deepEqual(figures, { "world/a.ts:One": 1, "parts world/b.ts:Plan": 3 });
+
+	const changes = cohesionChanges({
+		"a:Kept": 2,
+		"a:Worse": 5,
+		"a:Better": 1,
+		"a:NewSmall": NEW_CLASS_CORE_MAX,
+		"a:NewBig": NEW_CLASS_CORE_MAX + 1,
+	}, { "a:Kept": 2, "a:Worse": 3, "a:Better": 4, "a:Gone": 7 });
+	assert.deepEqual(changes.worse, [{ key: "a:Worse", now: 5, was: 3 }, {
+		key: "a:NewBig",
+		now: NEW_CLASS_CORE_MAX + 1,
+		was: undefined,
+	}]);
+	assert.deepEqual(changes.better, [{ key: "a:Better", now: 1, was: 4 }]);
 });
 
 /** The port of the layer-access tests: the headquarters reached through a global the declarations type, as the AI's */

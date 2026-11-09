@@ -57,7 +57,11 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - No execution code reaching the HQ (`.ai.HQ`, importing
     `decision/headquarters.ts`): it uses the town (`execution/town.ts`) and
     its desks on `gameState.ai.town`.
-- **Baseline counts (`structure-baseline.json`, all 0 — keep them 0)**:
+  - `view-only`: no decision module imports an execution class it sees
+    through a view (`VIEW_ONLY` in `structure.ts`: `AttackPlan`, seen as
+    `AttackPlanView`, its states and types from `attackConstants.ts`).
+- **Baseline counts (`structure-baseline.json`, all 0 but `whole-hq` — lower
+  them, never raise them)**:
   - Layer violations (`adapter < world < execution < decision < root`,
     `PLAN.md` §3.4; type-only imports included).
   - `layer-access` (0): members of a higher layer reached at run time with no
@@ -72,9 +76,25 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
     `bot-state.js`).
   - Stale `TODO never called` markers (reached by a call in the port, resolved
     by the typechecker).
+  - `whole-hq`: values (parameters, fields, variables, returns) typed as the
+    whole `Headquarters` outside `decision/headquarters.ts` and the bot's root,
+    where a view of what they use (`TownState` and the members they add)
+    would do; 4, the first-turn functions of `startingStrategy.ts`.
+- **Cohesion baseline (`cohesion-baseline.json`, `--check` fails when one
+  worsens)**: each class's core LCOM4 and each class-with-parts' LCOM4; a
+  class the baseline does not know may have 4 (`NEW_CLASS_CORE_MAX`). The
+  core LCOM4 groups a class's own methods: forwarders apart (a method whose
+  whole body passes one call or read on to a member of a collaborator,
+  `return this.manager.getPlan(id)`), and only collaborators (fields with no
+  initializer, given to the class) set apart as hubs, never its own state
+  (`private plans = []` links every method using it). A facade (the town, a
+  desk) is judged by what it does itself, a registry by its own lists. The
+  report lists the figures worse and better than the baseline;
+  `--update-baseline` writes both baselines (lower a figure when a class
+  improves, raise one only for a split that is meant).
 - **Also reports**: exports used only by their own module (keep at 0) or only by
-  tests, module fan-in/fan-out, and per-class methods, fields, and LCOM4
-  cohesion.
+  tests, module fan-in/fan-out, and per-class methods, fields, LCOM4, the
+  forwarders and the core LCOM4.
 - **Coupling and cohesion** (`coupling.ts`, type-checked, report-only):
   - Classes with their parts: LCOM4 over a class's methods and the port's
     functions taking the class (`walkTo(plan: AttackPlan)`), `this.x` and
