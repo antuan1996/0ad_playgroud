@@ -90,6 +90,8 @@ export type HeadquartersSerializedData = {
 	defenseManager: ReturnType<DefenseManager["Serialize"]>;
 	tradeManager: ReturnType<TradeManager["Serialize"]>;
 	navalManager: ReturnType<NavalManager["Serialize"]>;
+	/** the town's own state: the transports under way */
+	town: ReturnType<Town["Serialize"]>;
 	researchManager: ReturnType<ResearchManager["Serialize"]>;
 	diplomacyManager: ReturnType<DiplomacyManager["Serialize"]>;
 	garrisonManager: ReturnType<GarrisonManager["Serialize"]>;
@@ -376,6 +378,8 @@ export class Headquarters
 
 			this.basesManager = new BasesManager(this.Config, gameState, this, saved.basesManager);
 			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager, this);
+			// the transports, whose ships the naval manager's collections hold
+			this.town.resume(gameState, saved.town);
 			this.attackManager = AttackManager.restore(
 				this.Config,
 				gameState,
@@ -1132,6 +1136,7 @@ export class Headquarters
 			aiWarn(" defenseManager " + uneval(this.defenseManager.Serialize()));
 			aiWarn(" tradeManager " + uneval(this.tradeManager.Serialize()));
 			aiWarn(" navalManager " + uneval(this.navalManager.Serialize()));
+			aiWarn(" town " + uneval(this.town.Serialize()));
 			aiWarn(" researchManager " + uneval(this.researchManager.Serialize()));
 			aiWarn(" diplomacyManager " + uneval(this.diplomacyManager.Serialize()));
 			aiWarn(" garrisonManager " + uneval(this.garrisonManager.Serialize()));
@@ -1148,6 +1153,7 @@ export class Headquarters
 			defenseManager: this.defenseManager.Serialize(),
 			tradeManager: this.tradeManager.Serialize(),
 			navalManager: this.navalManager.Serialize(),
+			town: this.town.Serialize(),
 			researchManager: this.researchManager.Serialize(),
 			diplomacyManager: this.diplomacyManager.Serialize(),
 			garrisonManager: this.garrisonManager.Serialize(),

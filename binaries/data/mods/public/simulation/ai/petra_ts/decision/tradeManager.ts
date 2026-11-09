@@ -33,8 +33,8 @@ import type { ResearchManager } from "./researchManager.ts";
  * market and dock, and the trade bonus research.
  */
 export type TradeHQ = Pick<Headquarters, "canBuild" | "canBarter" | "placement"> & {
-	readonly town: Pick<Town, "pickMostNeededResources" | "GetWantedGatherRates">;
-	readonly navalManager: Pick<NavalManager, "fleet" | "requireTransport">;
+	readonly town: Pick<Town, "pickMostNeededResources" | "GetWantedGatherRates" | "transports">;
+	readonly navalManager: Pick<NavalManager, "fleet">;
 	readonly basesManager: Pick<
 		BasesManager,
 		"getTotalResourceLevel" | "GetCurrentGatherRates" | "baselessBase" | "baseManagers"
@@ -447,7 +447,7 @@ export class TradeManager
 			// not a ship: access is the land the trader stands on
 			const land = landRegion(access);
 			const destination = nearerSource ? routeSource.position() : routeTarget.position();
-			this.hq.navalManager.requireTransport(gameState, ent, land, route.land, destination);
+			this.hq.town.transports.requireTransport(gameState, ent, land, route.land, destination);
 			return;
 		}
 

@@ -13,7 +13,7 @@ import { seaBetween } from "../world/geography.ts";
 import { AttackDesk, type AttackHQ } from "./attackDesk.ts";
 import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
-import { TransportDesk, type TransportHQ } from "./transportDesk.ts";
+import { TransportDesk, type SerializedTransports, type TransportHQ } from "./transportDesk.ts";
 
 /** A trainable unit's weights for findBestTrainableUnit: a name, a weight and its arguments (decision/workforce.ts) */
 type TrainableWeight = [string, number, ...string[]];
@@ -75,7 +75,19 @@ export class Town
 		this.sites = new SiteDesk(hq);
 		this.guard = new GuardDesk(hq);
 		this.attacks = new AttackDesk(hq);
-		this.transports = new TransportDesk(hq);
+		this.transports = new TransportDesk(config, hq);
+	}
+
+	/** The town's own state, as the headquarters saves it with its own */
+	Serialize(): { transports: SerializedTransports; }
+	{
+		return { transports: this.transports.Serialize() };
+	}
+
+	/** The saved state back, once the managers it reads are restored */
+	resume(gameState: CommonGameState, data: ReturnType<Town["Serialize"]>): void
+	{
+		this.transports.resume(gameState, data.transports);
 	}
 
 	/** A headquarters turn starts: what was worked out for the last one is forgotten */

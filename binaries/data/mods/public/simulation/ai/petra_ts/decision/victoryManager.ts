@@ -5,6 +5,7 @@ import { getAttackBonus, getLandAccess, requireValue, returnResources } from "..
 import { isPlaced } from "../adapter/placed.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import type { TransportDesk } from "../execution/transportDesk.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
@@ -14,7 +15,6 @@ import type { BasesManager } from "./basesManager.ts";
 import type { DefenseManager } from "./defenseManager.ts";
 import type { GarrisonManager } from "./garrisonManager.ts";
 import type { Headquarters } from "./headquarters.ts";
-import type { NavalManager } from "./navalManager.ts";
 import { buildWonder } from "./townBuildings.ts";
 
 /**
@@ -29,7 +29,7 @@ export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
 	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers" | "baselessBase" | "baseManagers">;
 	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
 	readonly garrisonManager: Pick<GarrisonManager, "cancelGarrison">;
-	readonly navalManager: Pick<NavalManager, "requireTransport">;
+	readonly town: { readonly transports: Pick<TransportDesk, "requireTransport">; };
 };
 
 /**
@@ -991,7 +991,7 @@ export class VictoryManager
 			const criticalEntPos = criticalEnt.position();
 			if (guardEntAccess !== undefined && criticalEntAccess !== undefined)
 			{
-				this.hq.navalManager.requireTransport(
+				this.hq.town.transports.requireTransport(
 					gameState,
 					guardEnt,
 					guardEntAccess,

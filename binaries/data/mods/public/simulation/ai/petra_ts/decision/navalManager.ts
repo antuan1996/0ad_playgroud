@@ -1,16 +1,10 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
-import {
-	getLandAccess,
-	getSeaAccess,
-	isSiegeUnit,
-	requireMetadata,
-	requireValue,
-	setSeaAccess,
-} from "../adapter/entityExtend.ts";
+import { getLandAccess, getSeaAccess, requireMetadata, requireValue, setSeaAccess } from "../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import { TransportPlan, type SeaFleet } from "../execution/transportPlan.ts";
+import type { TransportDesk } from "../execution/transportDesk.ts";
+import { type SeaFleet } from "../execution/transportPlan.ts";
 import { gatherTreasure } from "../execution/treasure.ts";
 import { threatsAt } from "../world/seaRoute.ts";
 
@@ -27,7 +21,6 @@ const DEFAULT_TOWER_REACH = 60;
 export const FISH_PER_BOAT = 1500;
 export const FISH_MAX_BOATS = 8;
 import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
-import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { plansIn } from "../execution/attackConstants.ts";
@@ -49,6 +42,12 @@ export type NavalHQ = Pick<Headquarters, "navalMap" | "getAccountedPopulation" |
 	readonly tradeManager: Pick<TradeManager, "traders">;
 	readonly attackManager: Pick<AttackManager, "upcomingAttacks">;
 	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers">;
+	readonly town: {
+		readonly transports: Pick<
+			TransportDesk,
+			"plans" | "update" | "checkShipsLost" | "waitingForShips" | "isShipBoarding" | "getPlan"
+		>;
+	};
 };
 
 /**
@@ -485,8 +484,6 @@ export class NavalManager
 	neededTransportShips: number[] = [];
 	neededWarShips: number[] = [];
 
-	transportPlans: TransportPlan[] = [];
-
 	// shore-line regions where we can load and unload units
 	landingZones: Record<number, Record<number, Set<number>>> = {};
 	readonly hq: NavalHQ;
@@ -734,22 +731,7 @@ export class NavalManager
 	checkEvents(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		setNewShipsSeas(gameState, events);
-
-		for (const evt of events.Destroy)
-		{
-			const transporter = evt.metadata?.[PlayerID]?.transporter;
-			if (!transporter)
-			{
-				continue;
-			}
-			const plan = this.getPlan(transporter);
-			if (!plan)
-			{
-				continue;
-			}
-
-			this.onShipLost(gameState, plan, evt.entity);
-		}
+		this.hq.town.transports.checkShipsLost(gameState, events.Destroy);
 
 		for (const evt of events.OwnershipChanged)
 		{ // capture events
@@ -762,210 +744,6 @@ export class NavalManager
 			{
 				setSeaAccess(gameState, ent);
 			}
-		}
-	}
-
-	/** A ship of a transport plan was destroyed: the units it was to carry wait for another, those landed ask anew. */
-	private onShipLost(gameState: CommonGameState, plan: TransportPlan, shipId: EntityId): void
-	{
-		debugWarn(
-			this.Config,
-			1,
-			() => "one ship " + shipId + " from plan " + plan.ID + " destroyed during " + plan.state,
-		);
-		if (plan.state === TransportPlan.BOARDING)
-		{
-			// just reset the units onBoard metadata and wait for a new ship to be assigned to this plan
-			plan.units.forEach((ent) =>
-			{
-				if (
-					ent.getMetadata(PlayerID, "onBoard") === "onBoard" && isPlaced(ent) ||
-					ent.getMetadata(PlayerID, "onBoard") === shipId
-				)
-				{
-					ent.setMetadata(PlayerID, "onBoard", undefined);
-				}
-			});
-			plan.needTransportShips = !plan.transportShips.hasEntities();
-		}
-		else if (plan.state === TransportPlan.SAILING)
-		{
-			const endIndex = plan.endIndex;
-			for (const ent of plan.units.values())
-			{
-				if (!isPlaced(ent))
-				{ // unit from another ship of this plan ... do nothing
-					continue;
-				}
-				const access = getLandAccess(gameState, ent);
-				const endPos = plan.destinationOf(ent);
-				ent.setMetadata(PlayerID, "transport", undefined);
-				ent.setMetadata(PlayerID, "onBoard", undefined);
-				ent.setMetadata(PlayerID, "endPos", undefined);
-				// nothing else to do if access = endIndex as already at destination
-				// otherwise, we should require another transport
-				// TODO if attacking and no more ships available, remove the units from the attack
-				// to avoid delaying it too much
-				if (access !== endIndex)
-				{
-					this.requireTransport(gameState, ent, access, endIndex, endPos);
-				}
-			}
-		}
-	}
-
-	getPlan(ID: TransportPlanId | undefined): TransportPlan | undefined
-	{
-		for (const plan of this.transportPlans)
-		{
-			if (plan.ID === ID)
-			{
-				return plan;
-			}
-		}
-		return undefined;
-	}
-
-	/** TODO never called (nor in the original Petra): remove it, or call it where it was meant to be used */
-	addPlan(plan: TransportPlan): void
-	{
-		this.transportPlans.push(plan);
-	}
-
-	/**
-	 * complete already existing plan or create a new one for this requirement
-	 * (many units can then call this separately and end up in the same plan)
-	 * TODO  check garrison classes
-	 */
-	requireTransport(
-		gameState: CommonGameState,
-		ent: CommonEntity,
-		startIndex: AccessIndex,
-		endIndex: AccessIndex,
-		endPos: CommonPosition,
-	): boolean
-	{
-		if (!ent.canGarrison())
-		{
-			return false;
-		}
-
-		if (ent.getMetadata(PlayerID, "transport") !== undefined)
-		{
-			debugWarn(
-				this.Config,
-				0,
-				() => "Petra naval manager error: unit " + ent.id() + " has already required a transport",
-			);
-			return false;
-		}
-
-		const plans: TransportPlan[] = [];
-		for (const plan of this.transportPlans)
-		{
-			if (plan.startIndex !== startIndex || plan.endIndex !== endIndex || plan.state !== TransportPlan.BOARDING)
-			{
-				continue;
-			}
-			// Limit the number of siege units per transport to avoid problems when ungarrisoning
-			if (isSiegeUnit(ent) && plan.units.filter((unit) => isSiegeUnit(unit)).length > 3)
-			{
-				continue;
-			}
-			plans.push(plan);
-		}
-
-		if (plans.length)
-		{
-			// join the plan with the fewest units
-			plans.sort((a: TransportPlan, b: TransportPlan): number => a.units.length - b.units.length);
-			plans[0].addUnit(ent, endPos);
-			return true;
-		}
-
-		const plan = TransportPlan.create(gameState, [ent], { startIndex, endIndex, endPos });
-		if (!plan)
-		{
-			debugWarn(this.Config, 1, () => ">>>> transport plan aborted <<<<");
-			return false;
-		}
-		this.transportPlans.push(plan);
-		return true;
-	}
-
-	/** split a transport plan in two, moving all entities not yet affected to a ship in the new plan */
-	splitTransport(gameState: CommonGameState, plan: TransportPlan, needSplit: CommonEntity[]): boolean
-	{
-		debugWarn(this.Config, 1, () => ">>>> split of transport plan started <<<<");
-		const newplan = TransportPlan.create(gameState, [], plan);
-		if (!newplan)
-		{
-			debugWarn(this.Config, 1, () => ">>>> split of transport plan aborted <<<<");
-			return false;
-		}
-
-		for (const ent of needSplit)
-		{
-			if (ent.getMetadata(PlayerID, "onBoard"))
-			{ // Should never happen.
-				continue;
-			}
-			newplan.addUnit(ent, plan.destinationOf(ent));
-			plan.units.updateEnt(ent);
-		}
-
-		if (newplan.units.length)
-		{
-			this.transportPlans.push(newplan);
-		}
-		return newplan.units.length !== 0;
-	}
-
-	/**
-	 * create a transport from a garrisoned ship to a land location
-	 * needed at start game when starting with a garrisoned ship
-	 */
-	createTransportIfNeeded(
-		gameState: CommonGameState,
-		fromPos: CommonPosition,
-		toPos: CommonPosition,
-		toAccess: AccessIndex,
-	): void
-	{
-		const fromAccess = gameState.ai.accessibility.getAccessValue(fromPos);
-		if (fromAccess !== 1)
-		{
-			return;
-		}
-		if (toAccess < 2)
-		{
-			return;
-		}
-
-		for (const ship of this.ships.values())
-		{
-			if (!ship.isGarrisonHolder() || !ship.garrisoned().length)
-			{
-				continue;
-			}
-			if (ship.getMetadata(PlayerID, "transporter") !== undefined)
-			{
-				continue;
-			}
-			const units = ship.garrisoned().map((entId: EntityId): CommonEntity =>
-				requireValue(gameState.getEntityById(entId))
-			);
-			// TODO check that the garrisoned units have not another purpose
-			const plan = TransportPlan.create(gameState, units, {
-				startIndex: fromAccess,
-				endIndex: toAccess,
-				endPos: toPos,
-			}, ship);
-			if (!plan)
-			{
-				continue;
-			}
-			this.transportPlans.push(plan);
 		}
 	}
 
@@ -995,7 +773,7 @@ export class NavalManager
 			this.neededTransportShips[sea] = 0;
 		}
 
-		for (const plan of this.transportPlans)
+		for (const plan of this.hq.town.transports.plans)
 		{
 			if (!plan.needTransportShips || plan.units.length < 2)
 			{
@@ -1037,7 +815,7 @@ export class NavalManager
 	{
 		const priorities = this.Config.priorities;
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
-		const waiting = this.transportPlans.some((plan) => plan.needTransportShips && plan.units.length > 0) ||
+		const waiting = this.hq.town.transports.waitingForShips() ||
 			[...plansIn(this.hq.attackManager.upcomingAttacks)].some((plan) =>
 				plan.overseas !== 0 && plan.unitCollection.hasEntities() &&
 				!this.fleet(plan.overseas)?.transports.length
@@ -1161,34 +939,6 @@ export class NavalManager
 		}
 	}
 
-	/** assigns free ships to plans that need some */
-	assignShipsToPlans(gameState: CommonGameState): void
-	{
-		for (const plan of this.transportPlans)
-		{
-			if (plan.needTransportShips)
-			{
-				plan.assignShip(gameState);
-			}
-		}
-	}
-
-	/** Return true if this ship is likeky (un)garrisoning units */
-	isShipBoarding(ship: CommonEntity): boolean
-	{
-		if (!isPlaced(ship))
-		{
-			return false;
-		}
-		const plan = this.getPlan(ship.getMetadata(PlayerID, "transporter"));
-		const bp = plan?.shipPoints()[ship.id()];
-		if (!plan || !bp)
-		{
-			return false;
-		}
-		return SquareVectorDistance(bp, ship.position()) < plan.boardingRange;
-	}
-
 	/** let blocking ships move apart from active ships (waiting for a better pathfinder)
 	 * TODO Ships entity collections are currently in two parts as the trader ships are dealt with
 	 * in the tradeManager. That should be modified to avoid dupplicating all the code here.
@@ -1215,7 +965,7 @@ export class NavalManager
 				continue;
 			}
 			const shipPosition = ship.position();
-			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.isShipBoarding(ship))
+			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.hq.town.transports.isShipBoarding(ship))
 			{
 				continue;
 			}
@@ -1226,7 +976,7 @@ export class NavalManager
 				// a ship its transport sails by a route is left to it: its plan
 				// judges it stuck by its headway, and a nudge here threw its route
 				// away, the plan sending it again (FINDINGS §45)
-				if (transporter === undefined || !this.getPlan(transporter)?.routes[ship.id()])
+				if (transporter === undefined || !this.hq.town.transports.getPlan(transporter)?.routes[ship.id()])
 				{
 					nudgeIfBlocked(ship, shipPosition);
 				}
@@ -1400,20 +1150,8 @@ export class NavalManager
 	{
 		Engine.ProfileStart("Naval Manager update");
 
-		// close previous transport plans if finished
-		for (let i = 0; i < this.transportPlans.length; ++i)
-		{
-			const remaining = this.transportPlans[i].update(gameState);
-			if (remaining)
-			{
-				continue;
-			}
-			debugWarn(this.Config, 1, () => "no more units on transport plan " + this.transportPlans[i].ID);
-			this.transportPlans[i].releaseAll();
-			this.transportPlans.splice(i--, 1);
-		}
-		// assign free ships to plans which need them
-		this.assignShipsToPlans(gameState);
+		// close finished transport plans, and assign free ships to plans which need them
+		this.hq.town.transports.update(gameState);
 
 		if (gameState.ai.playedTurn % 20 === 11)
 		{
@@ -1445,7 +1183,6 @@ export class NavalManager
 			neededWarShips: number[];
 			landingZones: Record<number, Record<number, Set<number>>>;
 		};
-		transports: Record<string, ReturnType<TransportPlan["Serialize"]>>;
 	}
 	{
 		const properties = {
@@ -1457,14 +1194,7 @@ export class NavalManager
 			landingZones: this.landingZones,
 		};
 
-		const transports: Record<string, ReturnType<TransportPlan["Serialize"]>> = {};
-		// keyed by the plan's place in the list, as the save always was
-		this.transportPlans.forEach((plan, i) =>
-		{
-			transports[i] = plan.Serialize();
-		});
-
-		return { properties: properties, transports: transports };
+		return { properties: properties };
 	}
 
 	private resume(gameState: CommonGameState, data: ReturnType<NavalManager["Serialize"]>): void
@@ -1475,17 +1205,5 @@ export class NavalManager
 		this.neededTransportShips = data.properties.neededTransportShips;
 		this.neededWarShips = data.properties.neededWarShips;
 		this.landingZones = data.properties.landingZones;
-
-		this.transportPlans = [];
-		for (const i in data.transports)
-		{
-			const dataPlan = data.transports[i];
-			// a saved plan whose sea has no fleet (a sea too small to sail) is left
-			const plan = TransportPlan.restore(gameState, this, dataPlan);
-			if (plan)
-			{
-				this.transportPlans.push(plan);
-			}
-		}
 	}
 }
