@@ -1,8 +1,10 @@
 /**
  * The map as the AI understands it (PLAN.md §3.4, world/): who owns which
  * ground (the territory map, read again from the engine every HQ update), the
- * border and frontier cells (the border map), and the land and sea regions the
- * AI uses (found by analyseMap at the start of a game, kept in saves).
+ * border and frontier cells (the border map), the land and sea regions the
+ * AI uses (found by analyseMap at the start of a game, kept in saves), and
+ * where ships may land on each land from each sea (worked out again from the
+ * passability maps on a load, as they do not change).
  *
  * A Geography is made whole: analyseMap for a new game, restoreGeography for a
  * saved one. The headquarters owns one and keeps its old property names for it
@@ -19,6 +21,9 @@ import { createBorderMap, createTerritoryMap, type TerritoryMap } from "./mapMod
 /** The land and sea regions we use, and whether the map has a sea worth a navy. */
 type MapRegions = { landRegions: Record<number, boolean>; navalRegions: Record<number, boolean>; navalMap: boolean; };
 
+/** Where a ship may land on a land from a sea: the passability cells, by land, then by sea */
+export type LandingZones = Record<number, Record<number, Set<number>>>;
+
 export class Geography
 {
 	/** Who owns each territory cell, and whether it is blinking (cut off). Made again by each HQ update. */
@@ -31,14 +36,17 @@ export class Geography
 	navalRegions: Record<number, boolean>;
 	/** Whether the map has a sea worth a navy. */
 	navalMap: boolean;
+	/** Where a ship may land on a land from a sea (findLandingZones). */
+	readonly landingZones: Readonly<LandingZones>;
 
-	constructor(territoryMap: TerritoryMap, borderMap: InfoMap, regions: MapRegions)
+	constructor(territoryMap: TerritoryMap, borderMap: InfoMap, regions: MapRegions, landingZones: LandingZones)
 	{
 		this.territoryMap = territoryMap;
 		this.borderMap = borderMap;
 		this.landRegions = regions.landRegions;
 		this.navalRegions = regions.navalRegions;
 		this.navalMap = regions.navalMap;
+		this.landingZones = landingZones;
 	}
 }
 
@@ -49,13 +57,98 @@ export function analyseMap(gameState: CommonGameState, debug: number): Geography
 	// flags the cells on the border of the map; updateTerritories adds our frontier
 	const borderMap = createBorderMap(gameState);
 	const regions = analyseRegions(gameState, debug);
-	return regions && new Geography(territoryMap, borderMap, regions);
+	return regions && new Geography(territoryMap, borderMap, regions, findLandingZones(gameState));
 }
 
-/** The map of a saved game: its regions from the save, its maps read again. */
+/** The map of a saved game: its regions from the save, its maps and landing zones worked out again. */
 export function restoreGeography(gameState: CommonGameState, regions: MapRegions): Geography
 {
-	return new Geography(createTerritoryMap(gameState), createBorderMap(gameState), regions);
+	return new Geography(
+		createTerritoryMap(gameState),
+		createBorderMap(gameState),
+		regions,
+		findLandingZones(gameState),
+	);
+}
+
+/**
+ * The possible landing zones: the shore cells of each land on each sea (a
+ * cell of both a land region and a sea region), those with room around when
+ * possible.
+ */
+export function findLandingZones(gameState: CommonGameState): LandingZones
+{
+	const landingZones: LandingZones = {};
+	const width = gameState.getPassabilityMap().width;
+	const length = width * gameState.getPassabilityMap().height;
+	for (let i = 0; i < length; ++i)
+	{
+		const land = gameState.ai.accessibility.landPassMap[i];
+		if (land < 2)
+		{
+			continue;
+		}
+		const naval = gameState.ai.accessibility.navalPassMap[i];
+		if (naval < 2)
+		{
+			continue;
+		}
+		if (!landingZones[land])
+		{
+			landingZones[land] = {};
+		}
+		if (!landingZones[land][naval])
+		{
+			landingZones[land][naval] = new Set();
+		}
+		landingZones[land][naval].add(i);
+	}
+	// and keep only those with enough room around when possible
+	for (const land in landingZones)
+	{
+		for (const sea in landingZones[land])
+		{
+			keepRoomyCells(landingZones[land][sea], width);
+		}
+	}
+	return landingZones;
+}
+
+/** Keeps the cells of a landing zone with the most neighbours in it, up to 2 */
+function keepRoomyCells(landing: Set<number>, width: number): void
+{
+	const nbaround: Record<number, number> = {};
+	let nbcut = 0;
+	for (const i of landing)
+	{
+		let nb = 0;
+		if (landing.has(i - 1))
+		{
+			nb++;
+		}
+		if (landing.has(i + 1))
+		{
+			nb++;
+		}
+		if (landing.has(i + width))
+		{
+			nb++;
+		}
+		if (landing.has(i - width))
+		{
+			nb++;
+		}
+		nbaround[i] = nb;
+		nbcut = Math.max(nb, nbcut);
+	}
+	nbcut = Math.min(2, nbcut);
+	for (const i of landing)
+	{
+		if (nbaround[i] < nbcut)
+		{
+			landing.delete(i);
+		}
+	}
 }
 
 /** The sea between two land regions, when the shortest way from one to the other crosses exactly one. */

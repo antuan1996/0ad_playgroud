@@ -123,8 +123,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `templateData.ts`, `placed.ts`, `debug.ts`. It reads no AI state
     (`gameState.ai.*`).
   - `world/` (AI's model): `config.ts`, `difficultyLevel.ts`, `mapModule.ts`,
-    `mapMask.ts`, `geography.ts` (territory/border maps and land/sea regions,
-    owned by HQ), `gatherEconomy.ts` (measured gather rates including walk,
+    `mapMask.ts`, `geography.ts` (territory/border maps, land/sea regions and
+    landing zones, owned by HQ), `gatherEconomy.ts` (measured gather rates including walk,
     owned by HQ), `production.ts` (measured trainer busyness, owned by HQ, not
     saved), `census.ts` (population vs room), `economyPlan.ts` (what the town saves for and where its
     food comes from, `HQ.economy`), `seaRoute.ts` (ship routing round

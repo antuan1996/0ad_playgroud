@@ -21,7 +21,6 @@ export interface TransportHQ
 	readonly navalManager: {
 		readonly ships: CommonEntityCollection;
 		readonly transportShips: CommonEntityCollection;
-		readonly landingZones: Readonly<Record<number, Record<number, Set<number>>>>;
 		fleet(sea: number): SeaFleet | undefined;
 		setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void;
 		resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void;
@@ -59,12 +58,6 @@ export class TransportDesk
 	get transportShips(): CommonEntityCollection
 	{
 		return this.hq.navalManager.transportShips;
-	}
-
-	/** where a ship may land on a land from a sea: cells by land, then by sea */
-	get landingZones(): Readonly<Record<number, Record<number, Set<number>>>>
-	{
-		return this.hq.navalManager.landingZones;
 	}
 
 	/** our ships on a sea, by kind */

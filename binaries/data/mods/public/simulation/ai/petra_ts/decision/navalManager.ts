@@ -207,43 +207,6 @@ function setNewShipsSeas(gameState: CommonGameState, events: EngineAIEvents): vo
 	}
 }
 
-/** Keeps the cells of a landing zone with the most neighbours in it, up to 2 */
-function keepRoomyCells(landing: Set<number>, width: number): void
-{
-	const nbaround: Record<number, number> = {};
-	let nbcut = 0;
-	for (const i of landing)
-	{
-		let nb = 0;
-		if (landing.has(i - 1))
-		{
-			nb++;
-		}
-		if (landing.has(i + 1))
-		{
-			nb++;
-		}
-		if (landing.has(i + width))
-		{
-			nb++;
-		}
-		if (landing.has(i - width))
-		{
-			nb++;
-		}
-		nbaround[i] = nb;
-		nbcut = Math.max(nb, nbcut);
-	}
-	nbcut = Math.min(2, nbcut);
-	for (const i of landing)
-	{
-		if (nbaround[i] < nbcut)
-		{
-			landing.delete(i);
-		}
-	}
-}
-
 const FISH_RAYS = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
 
 /** The cell index of the t-th of ntry steps towards pos from radius*ntry cells in direction a, or undefined off the map */
@@ -484,8 +447,6 @@ export class NavalManager
 	neededTransportShips: number[] = [];
 	neededWarShips: number[] = [];
 
-	// shore-line regions where we can load and unload units
-	landingZones: Record<number, Record<number, Set<number>>> = {};
 	readonly hq: NavalHQ;
 
 	constructor(Config: Config, gameState: CommonGameState, geography: Geography, hq: NavalHQ)
@@ -512,7 +473,6 @@ export class NavalManager
 		this.fishShips.registerUpdates();
 
 		this.setUpFleets(gameState, geography);
-		this.findLandingZones(gameState);
 	}
 
 	/** A fleet on each sea we can sail, and the ships wanted there: fishing boats where there are fish enough. */
@@ -569,43 +529,6 @@ export class NavalManager
 			}
 			this.neededTransportShips.push(0);
 			this.neededWarShips.push(0);
-		}
-	}
-
-	/** The possible landing zones: the shore cells of each land on each sea, those with room around when possible. */
-	private findLandingZones(gameState: CommonGameState): void
-	{
-		const width = gameState.getPassabilityMap().width;
-		const length = width * gameState.getPassabilityMap().height;
-		for (let i = 0; i < length; ++i)
-		{
-			const land = gameState.ai.accessibility.landPassMap[i];
-			if (land < 2)
-			{
-				continue;
-			}
-			const naval = gameState.ai.accessibility.navalPassMap[i];
-			if (naval < 2)
-			{
-				continue;
-			}
-			if (!this.landingZones[land])
-			{
-				this.landingZones[land] = {};
-			}
-			if (!this.landingZones[land][naval])
-			{
-				this.landingZones[land][naval] = new Set();
-			}
-			this.landingZones[land][naval].add(i);
-		}
-		// and keep only thoses with enough room around when possible
-		for (const land in this.landingZones)
-		{
-			for (const sea in this.landingZones[land])
-			{
-				keepRoomyCells(this.landingZones[land][sea], width);
-			}
 		}
 	}
 
@@ -1181,7 +1104,6 @@ export class NavalManager
 			wantedFishShips: number[];
 			neededTransportShips: number[];
 			neededWarShips: number[];
-			landingZones: Record<number, Record<number, Set<number>>>;
 		};
 	}
 	{
@@ -1191,7 +1113,6 @@ export class NavalManager
 			wantedFishShips: this.wantedFishShips,
 			neededTransportShips: this.neededTransportShips,
 			neededWarShips: this.neededWarShips,
-			landingZones: this.landingZones,
 		};
 
 		return { properties: properties };
@@ -1204,6 +1125,5 @@ export class NavalManager
 		this.wantedFishShips = data.properties.wantedFishShips;
 		this.neededTransportShips = data.properties.neededTransportShips;
 		this.neededWarShips = data.properties.neededWarShips;
-		this.landingZones = data.properties.landingZones;
 	}
 }

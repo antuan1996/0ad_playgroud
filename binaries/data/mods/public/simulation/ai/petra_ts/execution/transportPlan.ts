@@ -965,12 +965,12 @@ export class TransportPlan
 	{
 		const landIndex = shore.land;
 		const seaIndex = shore.sea;
-		if (!gameState.ai.town.transports.landingZones[landIndex])
+		if (!gameState.ai.geography.landingZones[landIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex);
 			return destination;
 		}
-		else if (!gameState.ai.town.transports.landingZones[landIndex][seaIndex])
+		else if (!gameState.ai.geography.landingZones[landIndex][seaIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex + " and sea " + seaIndex);
 			return destination;
@@ -997,7 +997,7 @@ export class TransportPlan
 			alliedDocks,
 			avoid: shore.avoid,
 		};
-		for (const i of gameState.ai.town.transports.landingZones[landIndex][seaIndex])
+		for (const i of gameState.ai.geography.landingZones[landIndex][seaIndex])
 		{
 			let pos: CommonPosition = worldPos(i % width + 0.5, Math.floor(i / width) + 0.5);
 			pos = worldPos(cell * pos[0], cell * pos[1]);
