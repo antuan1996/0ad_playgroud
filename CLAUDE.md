@@ -154,12 +154,14 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `queue.ts`, `queueManager.ts`, `queueplan.ts`, `queueplanBuilding.ts`,
     `queueplanTraining.ts`, `queueplanResearch.ts`, `worker.ts`, `unitPlan.ts`,
     `treasure.ts`, `captureOrders.ts` (capture or destroy, every 3 s),
-    `services.ts` (the interfaces of the decision layer's
-    services to execution: `NavalService`, `AttackRegistry`, `DefenseService`,
-    `VictoryService`, `BuildRules`, `TradeService`, `PlacementService`),
-    `town.ts` (`Town`, `HQ.town`: the execution layer's one door to the HQ,
-    with the turn's cache, gather needs and danger queries; it reaches the HQ
-    only through its private `TownHQ` view).
+    `town.ts` (`Town`, `HQ.town`: the execution layer's one door to the
+    decision layer, with the turn's cache, gather needs and danger queries)
+    and its desks `siteDesk.ts` (`town.sites`: builders, unbuildables, where
+    to build), `guardDesk.ts` (`town.guard`: raids, defense armies, critical
+    units, relics), `attackDesk.ts` (`town.attacks`), `transportDesk.ts`
+    (`town.transports`: ships, transports, fishing); each reaches the HQ and
+    its managers only through its own private view (`TownHQ`, `SiteHQ`,
+    `GuardHQ`, `AttackHQ`, `TransportHQ`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 
@@ -247,15 +249,14 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   the harnesses): `geography`, `bases` (`world/bases.ts` `BasesView`),
   `treasures`, `captures` (`world/captureTally.ts`).
 - Execution code (`execution/`) never reaches `Headquarters` or a decision
-  manager's class: it uses the decision layer through the interfaces it
-  declares in `execution/services.ts`, on `gameState.ai` (`naval`, `attacks`,
-  `defense`, `victory`, `build`, `trade`, `placement`; the bot's getters return
-  the managers, which satisfy them as they are), and the HQ through
-  `gameState.ai.town` (`execution/town.ts`) for its queries, flags and
-  reports. It reads bases through `gameState.ai.bases` and `world/bases.ts`
+  manager's class: it uses the decision layer only through
+  `gameState.ai.town` (`execution/town.ts`) and its desks, which hold their
+  views of the HQ privately (the HQ passes itself; the views read its
+  managers when asked, so a test may replace one). It reads bases through `gameState.ai.bases` and `world/bases.ts`
   (`BaseView`), and mutates them only through capability
   interfaces (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`). A member
-  execution needs is added to its interface, never reached through the HQ.
+  execution needs is added to the town or a desk and its view, never reached
+  through the HQ.
 - Decision managers never read `gameState.ai.HQ` either: each takes, when
   built (and in its `restore`), a view of the HQ typed as what it uses
   (`GarrisonSiblings`, `AttackSiblings`, `ResearchHQ`, `NavalHQ`, `TradeHQ`,

@@ -181,7 +181,8 @@ function feedsTheTown(gameState: CommonGameState, q: PetraRuntime.QueueName): bo
 	}
 	if (q === "ships")
 	{
-		return hq.economy.needFish && !gameState.ai.naval.ships.filter(filters.byClass("FishingBoat")).hasEntities();
+		return hq.economy.needFish &&
+			!gameState.ai.town.transports.ships.filter(filters.byClass("FishingBoat")).hasEntities();
 	}
 	return false;
 }

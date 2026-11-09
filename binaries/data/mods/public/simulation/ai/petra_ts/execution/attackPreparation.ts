@@ -70,7 +70,7 @@ export function prepareArmy(plan: AttackPlan, gameState: CommonGameState): boole
 	// Petra, waiting before it drafted, left 147 idle citizen soldiers out of
 	// an attack waiting for its ships on a dry island (FINDINGS §40); the
 	// ship queue is raised meanwhile (NavalManager.shipPriority)
-	if (plan.overseas && !gameState.ai.naval.fleet(plan.overseas)?.transports.length)
+	if (plan.overseas && !gameState.ai.town.transports.fleet(plan.overseas)?.transports.length)
 	{
 		return false;
 	}
@@ -259,7 +259,7 @@ export function gatherAtRallyPoint(plan: AttackPlan, gameState: CommonGameState)
 		}
 		else
 		{
-			gameState.ai.naval.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
+			gameState.ai.town.transports.requireTransport(gameState, ent, index, rallyIndex, rallyPoint);
 		}
 	}
 }

@@ -2,7 +2,7 @@
  * The town as the execution layer sees it (`gameState.ai.town`): the state of the moment the plans and workers
  * share, the economy and danger queries they ask, and what they report back. It is the execution layer's one
  * door to the decision layer (decision/headquarters.ts, which owns it and passes itself as TownHQ): no other
- * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `guard`, `attacks`) reach
+ * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `guard`, `attacks`, `transports`) reach
  * them only through their private views.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
@@ -13,6 +13,7 @@ import { seaBetween } from "../world/geography.ts";
 import { AttackDesk, type AttackHQ } from "./attackDesk.ts";
 import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
+import { TransportDesk, type TransportHQ } from "./transportDesk.ts";
 
 /** A trainable unit's weights for findBestTrainableUnit: a name, a weight and its arguments (decision/workforce.ts) */
 type TrainableWeight = [string, number, ...string[]];
@@ -61,17 +62,20 @@ export class Town
 	readonly guard: GuardDesk;
 	/** the attack plans, whom they attack, and the units between plans */
 	readonly attacks: AttackDesk;
+	/** the ships, the transports between lands, and the fishing grounds */
+	readonly transports: TransportDesk;
 	private readonly config: Config;
 	private readonly hq: TownHQ;
 	private turnCache: TownTurnCache = {};
 
-	constructor(config: Config, hq: TownHQ & SiteHQ & GuardHQ & AttackHQ)
+	constructor(config: Config, hq: TownHQ & SiteHQ & GuardHQ & AttackHQ & TransportHQ)
 	{
 		this.config = config;
 		this.hq = hq;
 		this.sites = new SiteDesk(hq);
 		this.guard = new GuardDesk(hq);
 		this.attacks = new AttackDesk(hq);
+		this.transports = new TransportDesk(hq);
 	}
 
 	/** A headquarters turn starts: what was worked out for the last one is forgotten */

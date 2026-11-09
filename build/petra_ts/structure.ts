@@ -21,9 +21,9 @@
  * - non-null: a `!` non-null assertion;
  * - post-command: Engine.PostCommand outside adapter/commands.ts;
  * - hq-access: code below the bot's root reading `.ai.HQ` (each manager
- *   is given a view of the headquarters it uses when it is built, and the
- *   decision layer's services reach execution through the interfaces of
- *   execution/services.ts, on gameState.ai), or execution code importing
+ *   is given a view of the headquarters it uses when it is built, and
+ *   execution reaches the decision layer through the town and its desks,
+ *   execution/town.ts, on gameState.ai.town), or execution code importing
  *   decision/headquarters.ts.
  *
  * Tracked counts (the check fails when one rises above the baseline; lower
@@ -37,8 +37,8 @@
  *   world/ yields decision/'s headquarters), resolved by the type checker
  *   (layerAccesses), whether read as x.name, x["name"] or destructured
  *   (`const { name } = x`); one finding a chain. Execution code uses the
- *   decision layer's services only through interfaces declared in
- *   execution/services.ts, whose members are execution's own;
+ *   decision layer only through the views the town's desks declare, whose
+ *   members are execution's own;
  * - cycle: modules in a cycle of value imports (type-only imports leave
  *   nothing at run time);
  * - engine: uses of Engine outside adapter/ (profiling apart);
@@ -47,7 +47,7 @@
  * - dead-method: methods (and accessors) no code of the port (nor the
  *   build's bot-state.js) names, not marked `TODO never called`; matched by
  *   name, as a class is often reached through a type of its methods
- *   (execution/services.ts): a method `update` is never dead, so a finding is
+ *   (the town's desks' views): a method `update` is never dead, so a finding is
  *   certain and the count a lower bound;
  * - stale-todo: methods marked `TODO never called` that a call of the port
  *   reaches, resolved by the type checker (the program of

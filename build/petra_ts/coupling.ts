@@ -15,8 +15,8 @@
  * - typeWidth: for each class, interface or object type the port declares,
  *   the members each other port module reads of it, out of its public
  *   instance members. A module using a few members of a wide type could take
- *   an interface of them (as execution/services.ts does for the decision
- *   layer), and a member no other module reads need not be public.
+ *   an interface of them (as the town's desks, execution/*Desk.ts, do for
+ *   the decision layer), and a member no other module reads need not be public.
  *
  * Both see through the interfaces a class is given as (implementations):
  * where the port returns, passes or assigns a class's instance as an

@@ -278,7 +278,7 @@ export class TransportPlan
 		const id = transportPlanId(gameState.ai.uniqueIDs.transports++);
 		const { startIndex, endIndex, endPos } = route;
 		const sea = TransportPlan.findSea(gameState, startIndex, endIndex, ship);
-		const fleet = gameState.ai.naval;
+		const fleet = gameState.ai.town.transports;
 		const seaFleet = sea === undefined ? undefined : fleet.fleet(sea);
 		return sea === undefined || !seaFleet ?
 			undefined :
@@ -693,7 +693,7 @@ export class TransportPlan
 
 		if (boarding.needSplit.length)
 		{
-			gameState.ai.naval.splitTransport(gameState, this, boarding.needSplit);
+			gameState.ai.town.transports.splitTransport(gameState, this, boarding.needSplit);
 			boarding.needSplit = [];
 		}
 
@@ -965,12 +965,12 @@ export class TransportPlan
 	{
 		const landIndex = shore.land;
 		const seaIndex = shore.sea;
-		if (!gameState.ai.naval.landingZones[landIndex])
+		if (!gameState.ai.town.transports.landingZones[landIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex);
 			return destination;
 		}
-		else if (!gameState.ai.naval.landingZones[landIndex][seaIndex])
+		else if (!gameState.ai.town.transports.landingZones[landIndex][seaIndex])
 		{
 			aiWarn(" >>> no landing zone for land " + landIndex + " and sea " + seaIndex);
 			return destination;
@@ -997,7 +997,7 @@ export class TransportPlan
 			alliedDocks,
 			avoid: shore.avoid,
 		};
-		for (const i of gameState.ai.naval.landingZones[landIndex][seaIndex])
+		for (const i of gameState.ai.town.transports.landingZones[landIndex][seaIndex])
 		{
 			let pos: CommonPosition = worldPos(i % width + 0.5, Math.floor(i / width) + 0.5);
 			pos = worldPos(cell * pos[0], cell * pos[1]);

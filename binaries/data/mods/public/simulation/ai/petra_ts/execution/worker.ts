@@ -93,7 +93,7 @@ export class Worker
 		// Except if builder with their foundation destroyed, in which case cancel the transport if not yet on board
 		if (subrole === Worker.SUBROLE_BUILDER && ent.getMetadata(PlayerID, "target-foundation") !== undefined)
 		{
-			const plan = gameState.ai.naval.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const plan = gameState.ai.town.transports.getPlan(ent.getMetadata(PlayerID, "transport"));
 			const target = gameState.getEntityById(ent.getMetadata(PlayerID, "target-foundation"));
 			if (!target && plan && plan.state === "boarding" && isPlaced(ent))
 			{
@@ -103,7 +103,7 @@ export class Worker
 		// and gatherer if there are no more dropsite accessible in the base the ent is going to
 		if (subrole === Worker.SUBROLE_GATHERER || subrole === Worker.SUBROLE_HUNTER)
 		{
-			const plan = gameState.ai.naval.getPlan(ent.getMetadata(PlayerID, "transport"));
+			const plan = gameState.ai.town.transports.getPlan(ent.getMetadata(PlayerID, "transport"));
 			if (
 				plan && plan.state === "boarding" && isPlaced(ent) &&
 				!hasDropsiteOn(gameState, plan.endIndex, ent.getMetadata(PlayerID, "gather-type") || "food")
@@ -327,7 +327,7 @@ export class UnitWork
 			}
 			else
 			{
-				gameState.ai.naval.requireTransport(
+				gameState.ai.town.transports.requireTransport(
 					gameState,
 					ent,
 					this.entAccess,
@@ -399,7 +399,13 @@ export class UnitWork
 			}
 			else
 			{
-				gameState.ai.naval.requireTransport(gameState, ent, this.entAccess, goalAccess, target.position());
+				gameState.ai.town.transports.requireTransport(
+					gameState,
+					ent,
+					this.entAccess,
+					goalAccess,
+					target.position(),
+				);
 			}
 		}
 	}
@@ -900,7 +906,7 @@ export class UnitWork
 	{
 		if (
 			!supply ||
-			!gameState.ai.naval.requireTransport(
+			!gameState.ai.town.transports.requireTransport(
 				gameState,
 				this.ent,
 				this.entAccess,
@@ -996,7 +1002,7 @@ export class UnitWork
 	/** startGathering: a dropsite foundation of that resource across the sea, by a transport. Whether the worker was given work. */
 	buildOverseasDropsite(gameState: CommonGameState, resource: string): boolean
 	{
-		const navalManager = gameState.ai.naval;
+		const navalManager = gameState.ai.town.transports;
 		const foundations = gameState.getOwnFoundations().toEntityArray();
 		// Okay so we haven't found any appropriate dropsite anywhere.
 		// Try to help building one if any non-accessible foundation available
@@ -1225,7 +1231,7 @@ export class UnitWork
 		const resources = gameState.getFishableSupplies();
 		if (!resources.hasEntities())
 		{
-			gameState.ai.naval.resetFishingBoats(gameState);
+			gameState.ai.town.transports.resetFishingBoats(gameState);
 			this.ent.destroy();
 			return false;
 		}
@@ -1249,7 +1255,7 @@ export class UnitWork
 		resources.forEach((supply) =>
 		{
 			// check that it is accessible
-			if (gameState.ai.naval.getFishSea(gameState, supply) !== fisherSea)
+			if (gameState.ai.town.transports.getFishSea(gameState, supply) !== fisherSea)
 			{
 				return;
 			}
@@ -1274,7 +1280,7 @@ export class UnitWork
 
 		if (exhausted)
 		{
-			gameState.ai.naval.resetFishingBoats(gameState, fisherSea);
+			gameState.ai.town.transports.resetFishingBoats(gameState, fisherSea);
 			this.ent.destroy();
 			return false;
 		}
@@ -1307,7 +1313,7 @@ export class UnitWork
 		}
 
 		// Avoid ennemy territory
-		return gameState.ai.naval.canFishSafely(gameState, supply);
+		return gameState.ai.town.transports.canFishSafely(gameState, supply);
 	}
 
 	gatherNearestField(

@@ -75,7 +75,7 @@ export function rallyOverseas(
 		return false;
 	}
 	plan.overseas = sea;
-	gameState.ai.naval.setMinimalTransportShips(gameState, plan.overseas, plan.neededShips);
+	gameState.ai.town.transports.setMinimalTransportShips(gameState, plan.overseas, plan.neededShips);
 	return true;
 }
 

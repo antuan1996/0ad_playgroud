@@ -205,7 +205,7 @@ function dockSearch(
 {
 	const obstructions = createObstructionMap(gameState, NO_LAND, template);
 	// obstructions.dumpIm(template.buildPlacementType() + "_obstructions.png");
-	const nbShips = gameState.ai.naval.transportShips.length;
+	const nbShips = gameState.ai.town.transports.transportShips.length;
 	let wantedLand = metadata.land ? metadata.land : undefined;
 	const wantedSea = metadata.sea ? metadata.sea : undefined;
 	const proxyAccess = metadata.proximity ? gameState.ai.accessibility.getAccessValue(metadata.proximity) : null;

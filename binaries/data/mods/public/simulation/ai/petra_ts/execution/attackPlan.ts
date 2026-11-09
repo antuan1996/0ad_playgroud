@@ -720,7 +720,7 @@ export class AttackPlan
 					continue;
 				}
 				start = { rallyPoint: start.rallyPoint, overseas: sea };
-				gameState.ai.naval.setMinimalTransportShips(gameState, sea, 1);
+				gameState.ai.town.transports.setMinimalTransportShips(gameState, sea, 1);
 			}
 		}
 		return start;
@@ -1595,7 +1595,7 @@ export class AttackPlan
 		// and put back its state to "walking" when the transport is finished
 		for (const ent of this.unitCollection.values())
 		{
-			gameState.ai.naval.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
+			gameState.ai.town.transports.requireTransport(gameState, ent, rallyAccess, targetAccess, targetPos);
 		}
 		return true;
 	}

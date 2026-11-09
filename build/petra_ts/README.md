@@ -55,8 +55,8 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - No `!` non-null assertion.
   - `Engine.PostCommand` only in `adapter/commands.ts`.
   - No execution code reaching the HQ (`.ai.HQ`, importing
-    `decision/headquarters.ts`): it uses the interfaces of
-    `execution/services.ts` on `gameState.ai`.
+    `decision/headquarters.ts`): it uses the town (`execution/town.ts`) and
+    its desks on `gameState.ai.town`.
 - **Baseline counts (`structure-baseline.json`, all 0 — keep them 0)**:
   - Layer violations (`adapter < world < execution < decision < root`,
     `PLAN.md` §3.4; type-only imports included).
@@ -84,9 +84,9 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - Types used narrowly: for each class, interface or object type of the
     port, the members other modules read out of its public ones, and the
     modules reading a quarter or less of a type of 8 members or more. Those
-    could take an interface of what they use, as `execution/services.ts` does.
+    could take an interface of what they use, as the town's desks do.
   - Both count a member read through an interface or object type the class
-    is given as (returned, passed or assigned as `HeadquartersService`,
+    is given as (returned, passed or assigned as `SiteHQ`,
     `PlacementHQ`, ...) as a read of the class's member.
 
 ## Matches (`match.sh` / `npm run match:petra`)
