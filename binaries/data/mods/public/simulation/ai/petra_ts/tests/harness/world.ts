@@ -19,6 +19,7 @@ import { GuardDesk } from "../../execution/guardDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
 import type { Town } from "../../execution/town.ts";
+import { TransportDesk } from "../../execution/transportDesk.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
 
@@ -438,8 +439,6 @@ export function makeWorld(options: WorldOptions = {}): World
 	// and its bases' view and treasures (PetraBot.bases, PetraBot.treasures)
 	Object.defineProperty(ai, "bases", { get: () => ai.HQ.basesManager, configurable: true });
 	Object.defineProperty(ai, "treasures", { get: () => ai.HQ.treasures, configurable: true });
-	// the managers' services to execution (execution/services.ts), as the bot's getters give them
-	Object.defineProperty(ai, "naval", { get: () => ai.HQ.navalManager, configurable: true });
 	// the town (PetraBot.town, execution/town.ts): the stub HQ's state, the searches answered by the knobs
 	const town = fake<Town>({
 		get canBuildUnits()
@@ -453,6 +452,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		sites: new SiteDesk(ai.HQ),
 		guard: new GuardDesk(ai.HQ),
 		attacks: new AttackDesk(ai.HQ),
+		transports: new TransportDesk(ai.HQ),
 	});
 	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
 

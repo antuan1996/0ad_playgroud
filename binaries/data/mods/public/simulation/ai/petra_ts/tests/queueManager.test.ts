@@ -23,8 +23,8 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { seconds } from "../adapter/brands.ts";
 import { Queue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, isQueueName } from "../execution/queueManager.ts";
-import type { NavalService } from "../execution/services.ts";
 import type { Town } from "../execution/town.ts";
+import type { TransportDesk } from "../execution/transportDesk.ts";
 import type { BasesView } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
 import { EconomyPlan } from "../world/economyPlan.ts";
@@ -1332,7 +1332,10 @@ describe("QueueManager", () =>
 			const gameState = workerWorld(5, { needFarm: true, needCorral: true, needFish: true }, {
 				ownStructures: [],
 			});
-			gameState.ai.naval = fake<NavalService>({ ships: { filter: () => ({ hasEntities: () => false }) } });
+			// no ship of ours at all
+			Object.assign(gameState.ai.town, {
+				transports: fake<TransportDesk>({ ships: { filter: () => ({ hasEntities: () => false }) } }),
+			});
 			const manager = makeManager(makeConfig(), {
 				field: [],
 				corral: [],
