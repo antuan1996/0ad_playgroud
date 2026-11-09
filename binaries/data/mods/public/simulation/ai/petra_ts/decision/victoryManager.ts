@@ -5,6 +5,7 @@ import { getAttackBonus, getLandAccess, requireValue, returnResources } from "..
 import { isPlaced } from "../adapter/placed.ts";
 import type { AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
+import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
@@ -14,7 +15,6 @@ import type { AttackManager } from "./attackManager.ts";
 import { getBestBase } from "./baseManager.ts";
 import type { BasesManager } from "./basesManager.ts";
 import type { DefenseManager } from "./defenseManager.ts";
-import type { GarrisonManager } from "./garrisonManager.ts";
 import type { Headquarters } from "./headquarters.ts";
 import { buildWonder } from "./townBuildings.ts";
 
@@ -29,9 +29,9 @@ export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
 	readonly attackManager: Pick<AttackManager, "outOfPlan" | "raidTargetEntity">;
 	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers" | "baselessBase" | "baseManagers">;
 	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
-	readonly garrisonManager: Pick<GarrisonManager, "cancelGarrison">;
 	readonly town: {
 		readonly attacks: Pick<AttackDesk, "getPlan">;
+		readonly garrisons: Pick<GarrisonManager, "cancelGarrison">;
 		readonly transports: Pick<TransportDesk, "requireTransport">;
 	};
 };
@@ -512,7 +512,7 @@ export class VictoryManager
 			else if (hero && target.healthLevel() < this.Config.garrisonHealthLevel.low && !hero.garrisonEmergency)
 			{
 				// the hero is severely wounded, try to retreat/garrison quicker
-				this.hq.garrisonManager.cancelGarrison(target);
+				this.hq.town.garrisons.cancelGarrison(target);
 				this.pickCriticalEntRetreatLocation(gameState, target, true);
 				hero.garrisonEmergency = true;
 			}

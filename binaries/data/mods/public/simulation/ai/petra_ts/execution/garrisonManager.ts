@@ -3,10 +3,9 @@ import { dumpEntity, isSiegeUnit } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { hasActivity } from "../adapter/unitState.ts";
-import { lentPlan, releasedPlan } from "../execution/unitPlan.ts";
-import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
-import type { DefenseManager } from "./defenseManager.ts";
+import { lentPlan, releasedPlan } from "./unitPlan.ts";
+import { Worker } from "./worker.ts";
 
 export type GarrisonHolderData = { list: EntityId[]; allowMelee: boolean; };
 type GarrisonThreats = { defenseStructure: boolean; meleeSiege: boolean; rangeSiege: boolean; unit: boolean; };
@@ -32,6 +31,10 @@ function mayThreaten(ent: CommonEntity): boolean
 }
 
 /**
+ * The town's garrisons (`gameState.ai.town.garrisons`, part of execution/town.ts): the garrison orders the
+ * decisions give (protection, emergency, decay, trade, force), carried out, followed and released when no threat is
+ * left around the holder.
+ *
  * Manage the garrisonHolders
  * When a unit is ordered to garrison, it must be done through this.garrison() function so that
  * an object in this.holders is created. This object contains an array with the entities
@@ -40,20 +43,29 @@ function mayThreaten(ent: CommonEntity): boolean
  */
 
 /**
- * What the garrison manager asks of its sibling managers, through the
- * headquarters that owns them all: the defense, to fill a decaying structure.
+ * What the garrisons ask of the headquarters (decision/headquarters.ts satisfies it as it is): the defense, to fill
+ * a decaying structure.
  */
-export type GarrisonSiblings = { readonly defenseManager: Pick<DefenseManager, "garrisonUnitsInside">; };
+export interface GarrisonHQ
+{
+	readonly defenseManager: {
+		garrisonUnitsInside(
+			gameState: CommonGameState,
+			target: CommonPlacedEntity,
+			data: { min?: number; type?: string; attacker?: CommonPlacedEntity; },
+		): boolean;
+	};
+}
 
 export class GarrisonManager
 {
 	Config: Config;
-	readonly siblings: GarrisonSiblings;
+	private readonly siblings: GarrisonHQ;
 
 	holders = new Map<EntityId, GarrisonHolderData>();
 	decayingStructures = new Map<EntityId, number>();
 
-	constructor(Config: Config, siblings: GarrisonSiblings)
+	constructor(Config: Config, siblings: GarrisonHQ)
 	{
 		this.Config = Config;
 		this.siblings = siblings;
@@ -544,15 +556,8 @@ export class GarrisonManager
 		return { holders: this.holders, decayingStructures: this.decayingStructures };
 	}
 
-	/** A saved garrison manager: its holders and decaying structures */
-	static restore(Config: Config, data: SerializedGarrisonManager, siblings: GarrisonSiblings): GarrisonManager
-	{
-		const manager = new GarrisonManager(Config, siblings);
-		manager.resume(data);
-		return manager;
-	}
-
-	private resume(data: SerializedGarrisonManager): void
+	/** The saved holders and decaying structures back */
+	resume(data: SerializedGarrisonManager): void
 	{
 		this.holders = data.holders;
 		this.decayingStructures = data.decayingStructures;

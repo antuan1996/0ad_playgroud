@@ -6,6 +6,7 @@ import { cellIndex } from "../adapter/brands.ts";
 import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
+import { GarrisonManager } from "../execution/garrisonManager.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Town } from "../execution/town.ts";
@@ -29,7 +30,6 @@ import { DefenseManager } from "./defenseManager.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
 import { buildNewBase, checkBaseExpansion, provideForDryLand } from "./expansion.ts";
-import { GarrisonManager } from "./garrisonManager.ts";
 import { buildMoreHouses } from "./houseBuilding.ts";
 import { houseNeeded } from "./housing.ts";
 import { checkEvents, handleNewBase } from "./hqEvents.ts";
@@ -89,11 +89,10 @@ export type HeadquartersSerializedData = {
 	defenseManager: ReturnType<DefenseManager["Serialize"]>;
 	tradeManager: ReturnType<TradeManager["Serialize"]>;
 	navalManager: ReturnType<NavalManager["Serialize"]>;
-	/** the town's own state: the transports and attacks under way */
+	/** the town's own state: the transports and attacks under way, the garrisons */
 	town: ReturnType<Town["Serialize"]>;
 	researchManager: ReturnType<ResearchManager["Serialize"]>;
 	diplomacyManager: ReturnType<DiplomacyManager["Serialize"]>;
-	garrisonManager: ReturnType<GarrisonManager["Serialize"]>;
 	victoryManager: ReturnType<VictoryManager["Serialize"]>;
 	emergencyManager: ReturnType<EmergencyManager["Serialize"]>;
 	gatherEconomy: ReturnType<GatherEconomy["Serialize"]>;
@@ -258,7 +257,6 @@ export class Headquarters
 	emergencyManager: EmergencyManager;
 	/** What the town saves for and where its food comes from (world/economyPlan.ts) */
 	readonly economy = new EconomyPlan();
-	garrisonManager: GarrisonManager;
 	/** When a worker last found nothing left to gather, per resource. */
 	lastFailedGather: Record<string, GameSeconds>;
 	navalManager: NavalManager;
@@ -382,7 +380,6 @@ export class Headquarters
 
 			this.researchManager = ResearchManager.restore(this.Config, saved.researchManager, this);
 			this.diplomacyManager = DiplomacyManager.restore(this.Config, saved.diplomacyManager, this);
-			this.garrisonManager = GarrisonManager.restore(this.Config, saved.garrisonManager, this);
 			this.victoryManager = VictoryManager.restore(this.Config, saved.victoryManager, this);
 			this.emergencyManager = EmergencyManager.restore(this.Config, saved.emergencyManager);
 			return;
@@ -396,7 +393,6 @@ export class Headquarters
 		this.navalManager = new NavalManager(this.Config, gameState, geography, this);
 		this.researchManager = new ResearchManager(this.Config, this);
 		this.diplomacyManager = new DiplomacyManager(this.Config, false, this);
-		this.garrisonManager = new GarrisonManager(this.Config, this);
 		this.victoryManager = new VictoryManager(this.Config, this);
 		this.emergencyManager = EmergencyManager.start(this.Config, gameState);
 	}
@@ -673,7 +669,7 @@ export class Headquarters
 	 */
 	private makeRoomToGarrison(nearestAnchor: CommonEntity): boolean
 	{
-		let numGarrisoned = this.garrisonManager.numberOfGarrisonedSlots(nearestAnchor);
+		let numGarrisoned = this.town.garrisons.numberOfGarrisonedSlots(nearestAnchor);
 		const anchorQueue = nearestAnchor.trainingQueue();
 		if (anchorQueue)
 		{
@@ -953,7 +949,7 @@ export class Headquarters
 		this.updateBuildings(gameState, queues);
 
 		profiled("HQ trade", () => this.tradeManager.update(gameState, events, queues));
-		profiled("HQ garrison", () => this.garrisonManager.update(gameState, events));
+		profiled("HQ garrison", () => this.town.garrisons.update(gameState, events));
 		profiled("HQ defense", () => this.defenseManager.update(gameState, events));
 
 		if (gameState.ai.playedTurn % 3 === 0)
@@ -1120,7 +1116,6 @@ export class Headquarters
 			aiWarn(" town " + uneval(this.town.Serialize()));
 			aiWarn(" researchManager " + uneval(this.researchManager.Serialize()));
 			aiWarn(" diplomacyManager " + uneval(this.diplomacyManager.Serialize()));
-			aiWarn(" garrisonManager " + uneval(this.garrisonManager.Serialize()));
 			aiWarn(" victoryManager " + uneval(this.victoryManager.Serialize()));
 			aiWarn(" emergencyManager " + uneval(this.emergencyManager.Serialize()));
 		}
@@ -1137,7 +1132,6 @@ export class Headquarters
 			town: this.town.Serialize(),
 			researchManager: this.researchManager.Serialize(),
 			diplomacyManager: this.diplomacyManager.Serialize(),
-			garrisonManager: this.garrisonManager.Serialize(),
 			victoryManager: this.victoryManager.Serialize(),
 			emergencyManager: this.emergencyManager.Serialize(),
 			gatherEconomy: this.gatherEconomy.Serialize(),

@@ -140,7 +140,7 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     (`hqEvents.ts`, `phasing.ts`, `workforceTraining.ts`, `houseBuilding.ts`,
     `townBuildings.ts`, `militaryBuildings.ts`, `expansion.ts`),
     `startingStrategy.ts`, managers (`attack`, `base`, `bases`, `build`,
-    `defense`, `diplomacy`, `emergency`, `garrison`, `naval`, `research`,
+    `defense`, `diplomacy`, `emergency`, `naval`, `research`,
     `trade`, `victory`), `enemySelection.ts`, and pure/utility
     modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`, `fields.ts`,
     `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
@@ -159,12 +159,13 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     market's worth), `placementSearches.ts` (`town.placement`: where to build,
     over the scoring of `placement.ts`; civic centre orders followed),
     `guardDesk.ts` (`town.guard`: raids, defense armies, critical
-    units, relics), `attackDesk.ts` (`town.attacks`: owns the attack plans,
+    units, relics), `garrisonManager.ts` (`town.garrisons`: garrison orders
+    carried out and released), `attackDesk.ts` (`town.attacks`: owns the attack plans,
     runs them, bombing, local fights, defense armies turned to attacks) and
     `transportDesk.ts` (`town.transports`: owns the transport plans; ships,
     fishing); each reaches the HQ and its managers only through its own
     private view (`TownHQ`, `SiteHQ`, `PlacementSearchHQ`, `GuardHQ`,
-    `AttackHQ`, `TransportHQ`).
+    `GarrisonHQ`, `AttackHQ`, `TransportHQ`).
     The town's plans are saved with the HQ (`town`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
@@ -263,7 +264,7 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   through the HQ.
 - Decision managers never read `gameState.ai.HQ` either: each takes, when
   built (and in its `restore`), a view of the HQ typed as what it uses
-  (`GarrisonSiblings`, `AttackSiblings`, `ResearchHQ`, `NavalHQ`, `TradeHQ`,
+  (`AttackSiblings`, `ResearchHQ`, `NavalHQ`, `TradeHQ`,
   `DiplomacyHQ`, `DefenseHQ`, `VictoryHQ`, `BasesHQ`/`BaseHQ`: `Pick`s of
   `Headquarters` and of its other managers); the HQ passes itself. Its module
   functions take the one manager they ask. A member a manager needs is added

@@ -102,7 +102,7 @@ function onTrainingFinished(hq: Headquarters, gameState: CommonGameState, events
 }
 
 /**
- * we are autogarrisoned, check that the holder is registered in the garrisonManager.
+ * we are autogarrisoned, check that the holder is registered in the town's garrisons.
  * The rally point garrisons a whole building's batches, set from the one
  * at the head of its queue as we last saw it: a unit not trained to
  * garrison (one of an attack, say) comes out again.
@@ -117,7 +117,7 @@ function checkAutogarrison(hq: Headquarters, gameState: CommonGameState, ent: Co
 	}
 	else if (holder)
 	{
-		hq.garrisonManager.registerHolder(gameState, holder);
+		hq.town.garrisons.registerHolder(gameState, holder);
 	}
 }
 
@@ -153,7 +153,7 @@ function onDecayChanged(hq: Headquarters, gameState: CommonGameState, entity: En
 	}
 	else if (ent.isGarrisonHolder())
 	{
-		hq.garrisonManager.removeDecayingStructure(entity);
+		hq.town.garrisons.removeDecayingStructure(entity);
 	}
 }
 
@@ -180,8 +180,7 @@ function onCaptured(hq: Headquarters, gameState: CommonGameState, entity: Entity
 function noteDecaying(hq: Headquarters, gameState: CommonGameState, ent: CommonEntity, justCaptured: boolean): void
 {
 	if (
-		ent.isGarrisonHolder() &&
-		hq.garrisonManager.addDecayingStructure(gameState, ent.id(), justCaptured || undefined)
+		ent.isGarrisonHolder() && hq.town.garrisons.addDecayingStructure(gameState, ent.id(), justCaptured || undefined)
 	)
 	{
 		return;
