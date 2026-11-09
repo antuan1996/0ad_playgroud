@@ -6,11 +6,19 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { NEW_BASE } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
-import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
-import { buildFirstBase } from "./startingStrategy.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { Headquarters, HeadquartersQueues, TownState } from "./headquarters.ts";
+import { buildFirstBase, type FirstBaseHQ } from "./startingStrategy.ts";
+
+/** What the expansion asks of the headquarters: its state, the map, the bases, and the first base */
+type ExpansionHQ = TownState & FirstBaseHQ & Pick<Headquarters, "geography" | "landRunDry"> & {
+	readonly buildManager: Pick<BuildManager, "numberMissingRoom">;
+	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "numActiveBases">;
+};
 
 /** Checks the status of the territory expansion. If no new economic bases created, build some strategic ones. */
-export function checkBaseExpansion(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function checkBaseExpansion(hq: ExpansionHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (queues.civilCentre.hasQueuedUnits())
 	{
@@ -54,7 +62,7 @@ export function checkBaseExpansion(hq: Headquarters, gameState: CommonGameState,
 }
 
 export function buildNewBase(
-	hq: Headquarters,
+	hq: ExpansionHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	resource?: string,
@@ -99,7 +107,7 @@ export function buildNewBase(
  * A military colony once we have a civic centre of our own civ (it may allow specific units or techs), else a
  * civic centre, else a colony; undefined when we can build none
  */
-function newBaseTemplate(hq: Headquarters, gameState: CommonGameState): string | undefined
+function newBaseTemplate(hq: ExpansionHQ, gameState: CommonGameState): string | undefined
 {
 	let hasOwnCC = false;
 	for (const ent of gameState.updatingGlobalCollection("allCCs", filters.byClass("CivCentre")).values())
@@ -135,7 +143,7 @@ function newBaseTemplate(hq: Headquarters, gameState: CommonGameState): string |
  * dry, its workers idle, holding 6000 wood (FINDINGS §40). And its
  * civic centre's queue raised while one is queued.
  */
-export function provideForDryLand(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function provideForDryLand(hq: ExpansionHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	const queueManager = gameState.ai.queueManager;
 	const dry = hq.landRunDry(gameState);

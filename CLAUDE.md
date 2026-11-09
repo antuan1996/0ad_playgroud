@@ -136,9 +136,10 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `gameState.ai.geography`, the HQ's geography). World code reaches AI
     state only through such exposed world objects, never `gameState.ai.HQ`.
   - `decision/`: `headquarters.ts` (the HQ: its update, saves, and the queries
-    other managers and execution use), the HQ's parts as functions taking it
-    (`hqEvents.ts`, `phasing.ts`, `workforceTraining.ts`, `houseBuilding.ts`,
-    `townBuildings.ts`, `militaryBuildings.ts`, `expansion.ts`),
+    other managers and execution use), the HQ's parts as functions taking a
+    view of it built on `TownState` (`hqEvents.ts`, `phasing.ts`,
+    `workforceTraining.ts`, `houseBuilding.ts`, `townBuildings.ts`,
+    `militaryBuildings.ts`, `expansion.ts`),
     `startingStrategy.ts`, managers (`attack`, `base`, `bases`, `build`,
     `defense`, `diplomacy`, `emergency`, `naval`, `research`,
     `trade`, `victory`), `enemySelection.ts`, and pure/utility
@@ -271,7 +272,12 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   (`AttackSiblings`, `ResearchHQ`, `NavalHQ`, `TradeHQ`,
   `DiplomacyHQ`, `DefenseHQ`, `VictoryHQ`, `BasesHQ`/`BaseHQ`: `Pick`s of
   `Headquarters` and of its other managers); the HQ passes itself. Its module
-  functions take the one manager they ask. A member a manager needs is added
+  functions take the one manager they ask. The HQ's part modules (and
+  `startingStrategy.ts`'s first-base functions) take a view too:
+  `TownState` (`Config`, `canBuild`, `economy`, `currentPhase`, `phasing`)
+  and the few members they add (`EventsHQ`, `PhasingHQ`, `ExpansionHQ`,
+  `HousingHQ`, `TownBuildingsHQ`, `MilitaryHQ`, `WorkforceHQ`,
+  `FirstBaseHQ`, `FirstBaseConfigHQ`). A member a manager needs is added
   to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
   `expandFor`). A core manager talks to its own desk directly (`this.desk`,
   and the defense's `this.garrisons`); another manager's desk it reaches

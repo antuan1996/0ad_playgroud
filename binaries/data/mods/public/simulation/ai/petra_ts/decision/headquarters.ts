@@ -57,6 +57,13 @@ type HeadquartersTurnCache = {
 	accountedWorkers?: number;
 };
 export type HeadquartersQueues = PetraRuntime.QueueCollection;
+
+/**
+ * The headquarters' state of the moment that its parts read most: the config, whether a structure may be built,
+ * the economy plan, the phase reached and the one phased towards. Each part's view of the headquarters starts
+ * from it.
+ */
+export type TownState = Pick<Headquarters, "Config" | "canBuild" | "economy" | "currentPhase" | "phasing">;
 export type HeadquartersTrainableRequirement = TrainableRequirement;
 export type HeadquartersEvents = EngineAIEvents;
 export type HeadquartersSerializedData = {

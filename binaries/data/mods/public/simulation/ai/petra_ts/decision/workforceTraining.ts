@@ -5,14 +5,25 @@
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { NO_BASE } from "../adapter/brands.ts";
+import type { AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
-import type { Headquarters, HeadquartersQueues, HeadquartersTrainableRequirement } from "./headquarters.ts";
+import type { AttackManager } from "./attackManager.ts";
+import type { Headquarters, HeadquartersQueues, HeadquartersTrainableRequirement, TownState } from "./headquarters.ts";
 import { batchSize, soldierRequirements, supportAlpha, supportShare, trainingStopped } from "./workforce.ts";
 
+/** What the workforce training asks of the headquarters: its state, the workers wanted, the recruit choice, rushes */
+type WorkforceHQ =
+	& TownState
+	& Pick<Headquarters, "targetNumWorkers" | "supportRatio" | "landRunDry" | "findBestTrainableUnit">
+	& {
+		readonly attackManager: Pick<AttackManager, "rushNumber" | "maxRushes">;
+		readonly town: { readonly attacks: Pick<AttackDesk, "upcomingAttacks">; };
+	};
+
 /** This code trains citizen workers, trying to keep close to a ratio of worker/soldiers */
-export function trainMoreWorkers(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function trainMoreWorkers(hq: WorkforceHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	// default template
 	const requirementsDef: HeadquartersTrainableRequirement[] = [["costsResource", 1, "food"]];
@@ -82,7 +93,7 @@ export function trainMoreWorkers(hq: Headquarters, gameState: CommonGameState, q
 
 /** A citizen soldier to train: at least 33% ranged and 33% melee; only units that gather (a mercenary, Athens' archers, is a citizen soldier by its classes) */
 function citizenSoldierTemplate(
-	hq: Headquarters,
+	hq: WorkforceHQ,
 	gameState: CommonGameState,
 	numberTotal: number,
 ): TemplateName | undefined
@@ -105,7 +116,7 @@ function citizenSoldierTemplate(
  * islands, and the food they took was what its ships and attacks lacked
  * (FINDINGS §40).
  */
-export function workforceStalled(hq: Headquarters, gameState: CommonGameState): boolean
+export function workforceStalled(hq: WorkforceHQ, gameState: CommonGameState): boolean
 {
 	const workers = gameState.getOwnEntitiesByRole(Worker.ROLE_WORKER, true);
 	const idle = workers.filter(filters.byMetadata(PlayerID, "subrole", Worker.SUBROLE_IDLE)).length;

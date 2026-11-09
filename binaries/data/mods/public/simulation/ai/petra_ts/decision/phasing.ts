@@ -4,10 +4,14 @@
  */
 import { debugWarn } from "../adapter/debug.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
-import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { HeadquartersQueues, TownState } from "./headquarters.ts";
+
+/** What the phasing asks of the headquarters: its state, and the structures it has of a class */
+type PhasingHQ = TownState & { readonly buildManager: Pick<BuildManager, "findStructureWithClass">; };
 
 /** Ensure that all requirements are met when phasing up*/
-export function checkPhaseRequirements(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function checkPhaseRequirements(hq: PhasingHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (gameState.getNumberOfPhases() === hq.currentPhase)
 	{
@@ -38,7 +42,7 @@ export function checkPhaseRequirements(hq: Headquarters, gameState: CommonGameSt
 }
 
 /** A market, else a temple, else a forge for the town phase, unless an economic or military building is queued */
-function townPhasePlan(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): PhasePlan | undefined
+function townPhasePlan(hq: PhasingHQ, gameState: CommonGameState, queues: HeadquartersQueues): PhasePlan | undefined
 {
 	if (queues.economicBuilding.hasQueuedUnits() || queues.militaryBuilding.hasQueuedUnits())
 	{
@@ -64,7 +68,7 @@ function townPhasePlan(hq: Headquarters, gameState: CommonGameState, queues: Hea
  * economic queue, except if wonder; none while that queue has one
  */
 function phasePlanWithClass(
-	hq: Headquarters,
+	hq: PhasingHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	className: string,
@@ -84,7 +88,7 @@ function phasePlanWithClass(
 }
 
 /** A phase reached (TODO find a better way to update) */
-export function notePhase(hq: Headquarters, gameState: CommonGameState): void
+export function notePhase(hq: PhasingHQ, gameState: CommonGameState): void
 {
 	if (hq.currentPhase === gameState.currentPhase())
 	{

@@ -5,9 +5,23 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { seconds } from "../adapter/brands.ts";
 import { requireTemplate } from "../adapter/entityExtend.ts";
+import type { PlacementSearches } from "../execution/placementSearches.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import type { Config } from "../world/config.ts";
-import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { Headquarters, HeadquartersQueues, TownState } from "./headquarters.ts";
+
+/** What the military buildings ask of the headquarters: its state, its defenses' schedule, trainers and towers */
+type MilitaryHQ =
+	& TownState
+	& Pick<
+		Headquarters,
+		"getAccountedPopulation" | "defenses" | "canBarter" | "productionLoad" | "bAdvanced" | "shipTraffic"
+	>
+	& {
+		readonly basesManager: Pick<BasesManager, "numActiveBases">;
+		readonly town: { readonly placement: Pick<PlacementSearches, "towersByTrafficOnly" | "hasShoreTowerSpot">; };
+	};
 
 /**
  * When the headquarters builds its next defenses: the start of each kind's
@@ -40,7 +54,7 @@ export class DefenseSchedule
 }
 
 /** Deals with building fortresses and towers along our border with enemies. */
-export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildDefenses(hq: MilitaryHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (queues.defenseBuilding.hasQueuedUnits())
 	{
@@ -81,14 +95,14 @@ export function buildDefenses(hq: Headquarters, gameState: CommonGameState, queu
 }
 
 /** Whether we are in the city phase, or researching it */
-function reachingCityPhase(hq: Headquarters, gameState: CommonGameState): boolean
+function reachingCityPhase(hq: MilitaryHQ, gameState: CommonGameState): boolean
 {
 	const phaseName3 = gameState.getPhaseName(3);
 	return hq.currentPhase > 2 || phaseName3 !== undefined && gameState.isResearching(phaseName3);
 }
 
 /** A fortress, the first raised in priority, once the last is old enough and we have bases and men for it; whether one was queued */
-function queueFortress(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): boolean
+function queueFortress(hq: MilitaryHQ, gameState: CommonGameState, queues: HeadquartersQueues): boolean
 {
 	const numFortresses = gameState.getOwnEntitiesByClass("Fortress", true).length;
 	if (
@@ -115,7 +129,7 @@ function queueFortress(hq: Headquarters, gameState: CommonGameState, queues: Hea
 
 /** A sentry tower in the village phase, up to the configured number, spaced in time (all towers and wall towers counted) */
 function queueSentryTower(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	shoreOnly: boolean | undefined,
@@ -142,7 +156,7 @@ function queueSentryTower(
 
 /** A stone tower, spaced in time, up to a number by our bases and men (lowered in priority past it) */
 function queueDefenseTower(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	shoreOnly: boolean | undefined,
@@ -182,11 +196,7 @@ function queueDefenseTower(
  * Deals with constructing military buildings (e.g. barracks, stable).
  * They are mostly defined by Config.js. This is unreliable since changes could be done easily.
  */
-export function constructTrainingBuildings(
-	hq: Headquarters,
-	gameState: CommonGameState,
-	queues: HeadquartersQueues,
-): void
+export function constructTrainingBuildings(hq: MilitaryHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (hq.economy.saveResources && !hq.canBarter || queues.militaryBuilding.hasQueuedUnits())
 	{
@@ -223,7 +233,7 @@ export function constructTrainingBuildings(
 }
 
 /** In the city phase: an elephant stable, an arsenal, then the advanced buildings with the population */
-function queueCityMilitary(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+function queueCityMilitary(hq: MilitaryHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (
 		queueMissing(hq, gameState, queues, "ElephantStable", "elephant_stable") ||
@@ -242,7 +252,7 @@ function queueCityMilitary(hq: Headquarters, gameState: CommonGameState, queues:
 
 /** A military building we can build and have none of; whether it was queued */
 function queueMissing(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	className: string,
@@ -263,7 +273,7 @@ function queueMissing(
  * whether one was queued. (canBuild marks what cannot be built: asked each time, as Petra did)
  */
 function queueTrainerIfNeeded(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	numBarracks: number,
@@ -284,7 +294,7 @@ function queueTrainerIfNeeded(
  * population, then one more while those we have are busy; whether one was queued
  */
 function queueTrainer(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	numBarracks: number,
@@ -313,7 +323,7 @@ function queueTrainer(
 
 /** The first barracks (or range), raised in priority; whether it was queued */
 function queueFirstTrainer(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	numFootTrainers: number,
@@ -337,7 +347,7 @@ function queueFirstTrainer(
 
 /** A second and a third barracks, range or stable with the population, then one more while those are busy */
 function queueMoreTrainers(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	counts: { numBarracks: number; numRanges: number; numStables: number; },
 	trainers: TrainerTemplates,
@@ -362,7 +372,7 @@ function queueMoreTrainers(
 
 /** The second barracks/range and stable, and a third if needed, with the population */
 function nextTrainer(
-	hq: Headquarters,
+	hq: MilitaryHQ,
 	gameState: CommonGameState,
 	counts: { numBarracks: number; numRanges: number; numStables: number; },
 	trainers: TrainerTemplates,
@@ -393,7 +403,7 @@ function nextTrainer(
 }
 
 /** Whether our trainers are busy and twice the trainer's cost lies unbooked */
-function oneMoreTrainerPays(hq: Headquarters, gameState: CommonGameState, template: string): boolean
+function oneMoreTrainerPays(hq: MilitaryHQ, gameState: CommonGameState, template: string): boolean
 {
 	if (
 		!(hq.productionLoad.trainers >= 1 && hq.productionLoad.trainers < MAX_MILITARY_TRAINERS &&
@@ -413,7 +423,7 @@ function oneMoreTrainerPays(hq: Headquarters, gameState: CommonGameState, templa
 }
 
 /** Build advanced military buildings: the first, then the others with the population */
-function queueAdvancedBuilding(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+function queueAdvancedBuilding(hq: MilitaryHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	let nAdvanced = 0;
 	for (const advanced of hq.bAdvanced)

@@ -9,7 +9,20 @@ import { isStructure } from "../adapter/placed.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { gatherTreasure } from "../execution/treasure.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
-import type { Headquarters } from "./headquarters.ts";
+import type { AttackManager } from "./attackManager.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { Headquarters, TownState } from "./headquarters.ts";
+import type { NavalManager } from "./navalManager.ts";
+
+/** What the first base asks of the headquarters: its state, and the docks it has */
+export type FirstBaseHQ = TownState & { readonly navalManager: Pick<NavalManager, "docks">; };
+
+/** What the first base's configuration asks of the headquarters: its state, the bases and land, the rushes */
+export type FirstBaseConfigHQ = TownState & Pick<Headquarters, "geography" | "canBuildUnits"> & {
+	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers" | "getTotalResourceLevel">;
+	readonly attackManager: Pick<AttackManager, "setRushes">;
+	readonly navalManager: Pick<NavalManager, "updateFishingBoats">;
+};
 
 /**
  * Determines the strategy to adopt when starting a new game,
@@ -147,7 +160,7 @@ function structureAnalysis(HQ: Headquarters, gameState: CommonGameState): void
  * build our first base
  * if not enough resource, try first to do a dock
  */
-export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): void
+export function buildFirstBase(HQ: FirstBaseHQ, gameState: CommonGameState): void
 {
 	if (gameState.ai.queues.civilCentre.hasQueuedUnits())
 	{
@@ -199,7 +212,7 @@ export function buildFirstBase(HQ: Headquarters, gameState: CommonGameState): vo
  * and can pay for it. Undefined: nothing now.
  */
 function firstBaseGoal(
-	HQ: Headquarters,
+	HQ: FirstBaseHQ,
 	gameState: CommonGameState,
 ): { templateName: string; goal: "civil_centre" | "dock"; } | undefined
 {
@@ -421,7 +434,7 @@ function guardAllyCentre(gameState: CommonGameState, ent: CommonEntity, allycc: 
  *   - if on a small island, favor fishing
  *   - count the available wood resource, and allow rushes only if enough (we should otherwise favor expansion)
  */
-export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): void
+export function configFirstBase(HQ: FirstBaseConfigHQ, gameState: CommonGameState): void
 {
 	if (!HQ.basesManager.hasPotentialBase())
 	{
@@ -492,7 +505,7 @@ export function configFirstBase(HQ: Headquarters, gameState: CommonGameState): v
 
 /** The area of the lands our anchored bases stand on, and those lands. */
 function startingLandSize(
-	HQ: Headquarters,
+	HQ: FirstBaseConfigHQ,
 	gameState: CommonGameState,
 ): { startingSize: number; startingLand: AccessIndex[]; }
 {
@@ -516,7 +529,7 @@ function startingLandSize(
 }
 
 /** Count the available wood: save resources when short, allow rushes only if enough (otherwise favor expansion). */
-function configByWood(HQ: Headquarters, gameState: CommonGameState): void
+function configByWood(HQ: FirstBaseConfigHQ, gameState: CommonGameState): void
 {
 	let startingWood = gameState.getResources().wood;
 	startingWood += HQ.basesManager.getTotalResourceLevel(gameState, ["wood"], ["nearby", "medium", "faraway"]).wood;
@@ -557,7 +570,7 @@ function configByWood(HQ: Headquarters, gameState: CommonGameState): void
 }
 
 /** Immediately a wood dropsite if possible, paid at once when we start with many workers or over the limit. */
-function queueFirstDropsite(HQ: Headquarters, gameState: CommonGameState): void
+function queueFirstDropsite(HQ: FirstBaseConfigHQ, gameState: CommonGameState): void
 {
 	if (gameState.getOwnEntitiesByClass("DropsiteWood", true).hasEntities())
 	{

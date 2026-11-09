@@ -5,9 +5,15 @@
 import { requireTemplate } from "../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { Headquarters, HeadquartersQueues, TownState } from "./headquarters.ts";
 
-export function buildTemple(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+/** What the town's buildings ask of the headquarters: its state, the population, the map, a dry land */
+type TownBuildingsHQ = TownState & Pick<Headquarters, "getAccountedPopulation" | "geography" | "landRunDry"> & {
+	readonly buildManager: Pick<BuildManager, "isUnbuildable">;
+};
+
+export function buildTemple(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	// at least one market (which have the same queue) should be build before any temple
 	if (
@@ -36,7 +42,7 @@ export function buildTemple(hq: Headquarters, gameState: CommonGameState, queues
 	queues.economicBuilding.addPlan(new ConstructionPlan(gameState, templateName));
 }
 
-export function buildMarket(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildMarket(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (
 		gameState.getOwnEntitiesByClass("Market", true).hasEntities() ||
@@ -73,7 +79,7 @@ export function buildMarket(hq: Headquarters, gameState: CommonGameState, queues
  * (holding the wood at the top, it starved the phase on islands with
  * under 800 wood left, and the town stayed in the village phase).
  */
-export function buildEarlyMarket(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildEarlyMarket(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (
 		!hq.economy.saveResources && !hq.geography.navalMap ||
@@ -110,7 +116,7 @@ export function buildEarlyMarket(hq: Headquarters, gameState: CommonGameState, q
 }
 
 /** Build a farmstead */
-export function buildFarmstead(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildFarmstead(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	// Only build one farmstead for the time being ("DropsiteFood" does not refer to CCs)
 	if (gameState.getOwnEntitiesByClass("Farmstead", true).hasEntities())
@@ -188,7 +194,7 @@ export function buildWonder(
 }
 
 /** Build a corral, and train animals there */
-export function manageCorral(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function manageCorral(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (queues.corral.hasQueuedUnits())
 	{
@@ -231,7 +237,7 @@ export function manageCorral(hq: Headquarters, gameState: CommonGameState, queue
 	}
 }
 
-export function buildForge(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildForge(hq: TownBuildingsHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	if (
 		hq.getAccountedPopulation(gameState) < hq.Config.Military.popForForge ||

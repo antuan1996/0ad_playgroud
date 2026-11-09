@@ -5,14 +5,31 @@
 import { playerId } from "../adapter/brands.ts";
 import { setSeaAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
+import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
-import type { Headquarters, HeadquartersEvents } from "./headquarters.ts";
-import { configFirstBase } from "./startingStrategy.ts";
+import type { BasesManager } from "./basesManager.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { Headquarters, HeadquartersEvents, TownState } from "./headquarters.ts";
+import { configFirstBase, type FirstBaseConfigHQ } from "./startingStrategy.ts";
 
-export function checkEvents(hq: Headquarters, gameState: CommonGameState, events: HeadquartersEvents): void
+/** What the events ask of the headquarters: its state, the decaying structures, the managers' event handling */
+type EventsHQ = TownState & FirstBaseConfigHQ & Pick<Headquarters, "updateTerritories" | "decayingStructures"> & {
+	readonly buildManager: Pick<BuildManager, "checkEvents">;
+	readonly basesManager: Pick<BasesManager, "checkEvents">;
+	readonly town: {
+		readonly garrisons: Pick<
+			GarrisonManager,
+			"registerHolder" | "removeDecayingStructure" | "addDecayingStructure"
+		>;
+		readonly attacks: Pick<AttackDesk, "getPlan">;
+	};
+};
+
+export function checkEvents(hq: EventsHQ, gameState: CommonGameState, events: HeadquartersEvents): void
 {
 	hq.buildManager.checkEvents(gameState, events);
 	hq.updateTerritories(gameState);
@@ -64,7 +81,7 @@ export function checkEvents(hq: Headquarters, gameState: CommonGameState, events
 }
 
 /** checkEvents: units trained. */
-function onTrainingFinished(hq: Headquarters, gameState: CommonGameState, events: HeadquartersEvents): void
+function onTrainingFinished(hq: EventsHQ, gameState: CommonGameState, events: HeadquartersEvents): void
 {
 	for (const evt of events.TrainingFinished)
 	{
@@ -107,7 +124,7 @@ function onTrainingFinished(hq: Headquarters, gameState: CommonGameState, events
  * at the head of its queue as we last saw it: a unit not trained to
  * garrison (one of an attack, say) comes out again.
  */
-function checkAutogarrison(hq: Headquarters, gameState: CommonGameState, ent: CommonEntity): void
+function checkAutogarrison(hq: EventsHQ, gameState: CommonGameState, ent: CommonEntity): void
 {
 	const holderID = ent.garrisonHolderID();
 	const holder = holderID === undefined ? undefined : gameState.getEntityById(holderID);
@@ -122,7 +139,7 @@ function checkAutogarrison(hq: Headquarters, gameState: CommonGameState, ent: Co
 }
 
 /** Our decaying structures being lost to an enemy are destroyed; those no more decaying (or gone) forgotten */
-function destroyLostStructures(hq: Headquarters, gameState: CommonGameState, events: HeadquartersEvents): void
+function destroyLostStructures(hq: EventsHQ, gameState: CommonGameState, events: HeadquartersEvents): void
 {
 	for (const entId of hq.decayingStructures)
 	{
@@ -140,7 +157,7 @@ function destroyLostStructures(hq: Headquarters, gameState: CommonGameState, eve
 }
 
 /** A building of ours starting or stopping to decay */
-function onDecayChanged(hq: Headquarters, gameState: CommonGameState, entity: EntityId, decaying: boolean): void
+function onDecayChanged(hq: EventsHQ, gameState: CommonGameState, entity: EntityId, decaying: boolean): void
 {
 	const ent = gameState.getEntityById(entity);
 	if (!ent || !ent.isOwn(PlayerID) || ent.foundationProgress() !== undefined)
@@ -158,7 +175,7 @@ function onDecayChanged(hq: Headquarters, gameState: CommonGameState, entity: En
 }
 
 /** An entity we captured: a decaying structure is followed, a unit taken over */
-function onCaptured(hq: Headquarters, gameState: CommonGameState, entity: EntityId): void
+function onCaptured(hq: EventsHQ, gameState: CommonGameState, entity: EntityId): void
 {
 	const ent = gameState.getEntityById(entity);
 	if (!ent)
@@ -177,7 +194,7 @@ function onCaptured(hq: Headquarters, gameState: CommonGameState, entity: Entity
 }
 
 /** A structure of ours decaying: garrisoned against it if it may be (justCaptured too), else followed */
-function noteDecaying(hq: Headquarters, gameState: CommonGameState, ent: CommonEntity, justCaptured: boolean): void
+function noteDecaying(hq: EventsHQ, gameState: CommonGameState, ent: CommonEntity, justCaptured: boolean): void
 {
 	if (
 		ent.isGarrisonHolder() && hq.town.garrisons.addDecayingStructure(gameState, ent.id(), justCaptured || undefined)
@@ -191,7 +208,7 @@ function noteDecaying(hq: Headquarters, gameState: CommonGameState, ent: CommonE
 	}
 }
 
-export function handleNewBase(hq: Headquarters, gameState: CommonGameState): void
+export function handleNewBase(hq: EventsHQ, gameState: CommonGameState): void
 {
 	if (!hq.economy.firstBaseConfig)
 	{

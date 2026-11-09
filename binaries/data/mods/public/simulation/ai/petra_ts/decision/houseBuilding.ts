@@ -6,14 +6,22 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { debugWarn } from "../adapter/debug.ts";
 import { requireTemplate } from "../adapter/entityExtend.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
-import type { Headquarters, HeadquartersQueues } from "./headquarters.ts";
+import type { BuildManager } from "./buildManager.ts";
+import type { Headquarters, HeadquartersQueues, TownState } from "./headquarters.ts";
 import { TIGHT_SLOTS, planAnotherHouse, urgentHousePriority } from "./housing.ts";
+import type { ResearchManager } from "./researchManager.ts";
+
+/** What the house building asks of the headquarters: its state, the houses wanted, the population counted */
+type HousingHQ = TownState & Pick<Headquarters, "requireHouses" | "getAccountedPopulation"> & {
+	readonly buildManager: Pick<BuildManager, "isUnbuildable" | "setBuildable">;
+	readonly researchManager: Pick<ResearchManager, "researchPopulationBonus">;
+};
 
 /**
  * build more houses if needed.
  * kinda ugly, lots of special cases to both build enough houses but not tooo many…
  */
-export function buildMoreHouses(hq: Headquarters, gameState: CommonGameState, queues: HeadquartersQueues): void
+export function buildMoreHouses(hq: HousingHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
 {
 	let houseTemplateString = "structures/{civ}/apartment";
 	if (
@@ -71,7 +79,7 @@ export function buildMoreHouses(hq: Headquarters, gameState: CommonGameState, qu
  * be less restrictive
  */
 function housesForPhase(
-	hq: Headquarters,
+	hq: HousingHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	houseTemplateName: TemplateName,
@@ -118,7 +126,7 @@ function housesForPhase(
  * temporarily the priority of houses
  */
 function raiseHousesIfTight(
-	hq: Headquarters,
+	hq: HousingHQ,
 	gameState: CommonGameState,
 	queues: HeadquartersQueues,
 	house: TemplateName,
