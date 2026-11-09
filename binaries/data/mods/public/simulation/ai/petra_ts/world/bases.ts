@@ -9,6 +9,8 @@
  * as it is; the interfaces only limit what the reader may do with it.
  */
 import type { ResourceSupply } from "./baseResources.ts";
+import type { BaseTerritory } from "./baseTerritory.ts";
+import type { GatherTally } from "./gatherTally.ts";
 
 /** A base's resource supplies by resource, then by band of distance ("nearby", "medium", "faraway"). */
 type SupplyBands = Readonly<Record<string, Readonly<Record<string, ReadonlyArray<Readonly<ResourceSupply>>>>>>;
@@ -66,11 +68,12 @@ export interface BasesView
 	readonly baseManagers: ReadonlyArray<BaseView & SupplyUpkeep>;
 	getBaseByID(baseID: BaseId): BaseView | undefined;
 	baselessBase(): BaseView;
-	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId;
+	/** which base each territory cell belongs to */
+	readonly territory: Pick<BaseTerritory, "baseAt">;
 	hasPotentialBase(): boolean;
 	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>;
-	/** the gatherers on their way to a supply this turn */
-	GetTCGatherer(supplyID: EntityId): number;
+	/** the turn's tally of our gatherers: those on their way to a supply */
+	readonly tally: Pick<GatherTally, "gatherersBooked">;
 }
 
 /** All our bases, for reading and for dropping gone supplies from their lists. */

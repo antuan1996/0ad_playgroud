@@ -742,7 +742,7 @@ export function findDockPosition(
 	const z = (Math.floor(best.idx / obstructions.width) + 0.5) * obstructions.cellSize;
 
 	// Assign this dock to a base
-	let baseIndex = gameState.ai.bases.baseAtIndex(best.jdx);
+	let baseIndex = gameState.ai.bases.territory.baseAt(best.jdx);
 	if (!baseIndex)
 	{
 		baseIndex = NEW_ANCHORLESS_BASE; // We'll do an anchorless base around it

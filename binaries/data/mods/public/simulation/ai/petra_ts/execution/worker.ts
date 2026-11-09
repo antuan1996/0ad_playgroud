@@ -23,7 +23,7 @@ import { PLAN_RESERVE, isLent } from "./unitPlan.ts";
 function isSupplyFull(gameState: CommonGameState, ent: CommonSupplyEntity): boolean
 {
 	return ent.isFull() === true ||
-		ent.resourceSupplyNumGatherers() + gameState.ai.bases.GetTCGatherer(ent.id()) >= ent.maxGatherers();
+		ent.resourceSupplyNumGatherers() + gameState.ai.bases.tally.gatherersBooked(ent.id()) >= ent.maxGatherers();
 }
 
 export class Worker

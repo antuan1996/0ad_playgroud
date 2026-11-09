@@ -1,14 +1,15 @@
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import * as filters from "simulation/ai/common-api/filters.js";
-import { InfoMap } from "simulation/ai/common-api/map-module.js";
 import { SquareVectorDistance, aiWarn, getMapIndices } from "simulation/ai/common-api/utils.js";
-import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, baseId, worldPos } from "../adapter/brands.ts";
+import { NEW_ANCHORLESS_BASE, NEW_BASE, NO_BASE, NO_LAND, worldPos } from "../adapter/brands.ts";
 import { getLandAccess } from "../adapter/entityExtend.ts";
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced, isStructure } from "../adapter/placed.ts";
 import { requireStateName } from "../adapter/unitState.ts";
 import { Worker } from "../execution/worker.ts";
+import { BaseTerritory } from "../world/baseTerritory.ts";
 import type { Config } from "../world/config.ts";
+import { GatherTally } from "../world/gatherTally.ts";
 import { BaseManager, getBestBase, type BaseHQ, type SerializedBaseManager } from "./baseManager.ts";
 import type { Headquarters } from "./headquarters.ts";
 
@@ -19,12 +20,7 @@ export interface SerializedBasesManager
 	baseManagers: SerializedBaseManager[];
 }
 
-type BasesManagerTurnCache = {
-	currentRates?: Record<string, number>;
-	resourceGatherer?: Record<number, number>;
-	resourceGathererByType?: Record<string, number>;
-	base?: { active: number; potential: number; };
-};
+type BasesManagerTurnCache = { base?: { active: number; potential: number; }; };
 
 /** A trained animal (a supply) walks to the nearest of our dropsites for its resource on its land. */
 function toNearestDropsite(gameState: CommonGameState, ent: CommonPlacedEntity): void
@@ -74,8 +70,10 @@ export type BasesHQ = BaseHQ & Pick<Headquarters, "onNewBase">;
 export class BasesManager
 {
 	Config: Config;
-	/** Each territory cell's base id, 0 for none */
-	basesMap: InfoMap;
+	/** Which base each territory cell belongs to (world/baseTerritory.ts) */
+	readonly territory: BaseTerritory;
+	/** The turn's tally of our gatherers and the gather rates (world/gatherTally.ts) */
+	readonly tally = new GatherTally();
 
 	currentBase = 0;
 
@@ -94,7 +92,7 @@ export class BasesManager
 		this.Config = Config;
 		this.hq = hq;
 		// Each pixel is a base ID, or 0 if not or not accessible.
-		this.basesMap = new InfoMap(gameState.sharedScript, "territory");
+		this.territory = new BaseTerritory(gameState);
 		if (!saved)
 		{
 			this.noBase = new BaseManager(gameState, this, BaseManager.STATE_WITH_ANCHOR);
@@ -109,7 +107,7 @@ export class BasesManager
 		{
 			for (const j of base.territoryIndices)
 			{
-				this.basesMap.map[j] = base.ID;
+				this.territory.assign(j, base.ID);
 			}
 		}
 	}
@@ -498,6 +496,7 @@ export class BasesManager
 	checkEvents(gameState: CommonGameState, events: EngineAIEvents): void
 	{
 		this.turnCache = {};
+		this.tally.newTurn();
 		let addBase = false;
 
 		for (const evt of events.Destroy)
@@ -625,91 +624,7 @@ export class BasesManager
 	 */
 	GetCurrentGatherRates(gameState: CommonGameState): Record<string, number>
 	{
-		if (!this.turnCache.currentRates)
-		{
-			const currentRates: Record<string, number> = {};
-			for (const res of Resources.GetCodes())
-			{
-				currentRates[res] = 0.5 * this.GetTCResGatherer(res);
-			}
-
-			this.addGatherRates(gameState, currentRates);
-
-			for (const res of Resources.GetCodes())
-			{
-				currentRates[res] = Math.max(currentRates[res], 0);
-			}
-
-			this.turnCache.currentRates = currentRates;
-		}
-
-		return this.turnCache.currentRates;
-	}
-
-	/** Some functions that register that we assigned a gatherer to a resource this turn */
-
-	/** Add a gatherer to the turn cache for this supply. */
-	AddTCGatherer(supplyID: EntityId): void
-	{
-		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID] !== undefined)
-		{
-			++this.turnCache.resourceGatherer[supplyID];
-		}
-		else
-		{
-			if (!this.turnCache.resourceGatherer)
-			{
-				this.turnCache.resourceGatherer = {};
-			}
-			this.turnCache.resourceGatherer[supplyID] = 1;
-		}
-	}
-
-	/** Remove a gatherer from the turn cache for this supply. */
-	RemoveTCGatherer(supplyID: EntityId): void
-	{
-		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
-		{
-			--this.turnCache.resourceGatherer[supplyID];
-		}
-		else
-		{
-			if (!this.turnCache.resourceGatherer)
-			{
-				this.turnCache.resourceGatherer = {};
-			}
-			this.turnCache.resourceGatherer[supplyID] = -1;
-		}
-	}
-
-	GetTCGatherer(supplyID: EntityId): number
-	{
-		if (this.turnCache.resourceGatherer && this.turnCache.resourceGatherer[supplyID])
-		{
-			return this.turnCache.resourceGatherer[supplyID];
-		}
-
-		return 0;
-	}
-
-	/** The next two are to register that we assigned a gatherer to a resource this turn. */
-	AddTCResGatherer(resource: string): void
-	{
-		if (!this.turnCache.resourceGathererByType)
-		{
-			this.turnCache.resourceGathererByType = {};
-		}
-		this.turnCache.resourceGathererByType[resource] = (this.turnCache.resourceGathererByType[resource] ?? 0) + 1;
-
-		if (this.turnCache.currentRates)
-		{
-			this.turnCache.currentRates[resource] += 0.5;
-		}
-	}
-
-	GetTCResGatherer(resource: string): number
-	{
-		return this.turnCache.resourceGathererByType?.[resource] ?? 0;
+		return this.tally.currentRates((rates) => this.addGatherRates(gameState, rates));
 	}
 
 	/**
@@ -825,7 +740,7 @@ export class BasesManager
 				{
 					continue;
 				}
-				this.AddTCGatherer(orders[1].target);
+				this.tally.bookGatherer(orders[1].target);
 			}
 		}
 	}
@@ -912,20 +827,10 @@ export class BasesManager
 
 	/**
 	 * @param {number} territoryIndex
-	 * @return {number} - The ID of the base at the given territory index.
-	 */
-	baseAtIndex(territoryIndex: CellIndex<"territory">): BaseId
-	{
-		// the map holds base ids, NO_BASE where no base claims the cell
-		return baseId(this.basesMap.map[territoryIndex]);
-	}
-
-	/**
-	 * @param {number} territoryIndex
 	 */
 	removeBaseFromTerritoryIndex(territoryIndex: CellIndex<"territory">): void
 	{
-		const baseID = this.baseAtIndex(territoryIndex);
+		const baseID = this.territory.baseAt(territoryIndex);
 		if (baseID === NO_BASE)
 		{
 			return;
@@ -947,7 +852,7 @@ export class BasesManager
 		{
 			aiWarn(" problem in headquarters::updateTerritories without base " + baseID);
 		}
-		this.basesMap.map[territoryIndex] = 0;
+		this.territory.clear(territoryIndex);
 	}
 
 	/**
@@ -959,7 +864,7 @@ export class BasesManager
 		passabilityMap: CommonPassabilityMap,
 	): boolean
 	{
-		if (this.baseAtIndex(territoryIndex) !== 0)
+		if (this.territory.baseAt(territoryIndex) !== 0)
 		{
 			return false;
 		}
@@ -1015,7 +920,7 @@ export class BasesManager
 		{
 			territoryBase.territoryIndices.push(territoryIndex);
 		}
-		this.basesMap.map[territoryIndex] = baseID;
+		this.territory.assign(territoryIndex, baseID);
 		return true;
 	}
 

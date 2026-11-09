@@ -130,7 +130,11 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     food comes from, `HQ.economy`), `seaRoute.ts` (ship routing round
     enemy shooters), `shipTraffic.ts` (fading enemy ship heatmap on naval maps,
     places towers), `baseResources.ts` (dropsite supplies per base), `bases.ts`
-    (read-only `BaseView`), `captureTally.ts` (our units' capture strength per
+    (read-only `BaseView`), `baseTerritory.ts` (which base each territory
+    cell belongs to, owned by the bases manager, read as
+    `gameState.ai.bases.territory`), `gatherTally.ts` (the turn's gatherers
+    booked and the gather rates, owned by the bases manager, read as
+    `gameState.ai.bases.tally`), `captureTally.ts` (our units' capture strength per
     target, owned by HQ, exposed as `gameState.ai.captures`), `enemyLands.ts`
     (the enemies on each land, counted once a turn, owned by HQ, exposed as
     `gameState.ai.enemyLands`), `fishing.ts` (a shoal's sea and whether it

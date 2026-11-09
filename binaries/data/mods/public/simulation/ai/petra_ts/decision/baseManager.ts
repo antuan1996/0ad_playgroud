@@ -1129,7 +1129,7 @@ export class BaseManager
 			--num;
 			ent.stopMoving();
 			ent.setMetadata(PlayerID, "gather-type", to);
-			this.basesManager.AddTCResGatherer(to);
+			this.basesManager.tally.bookForResource(to);
 		}
 		return num;
 	}
@@ -1216,7 +1216,7 @@ export class BaseManager
 			}
 			ent.setMetadata(PlayerID, "subrole", Worker.SUBROLE_GATHERER);
 			ent.setMetadata(PlayerID, "gather-type", needed.type);
-			this.basesManager.AddTCResGatherer(needed.type);
+			this.basesManager.tally.bookForResource(needed.type);
 			return;
 		}
 	}
@@ -1738,17 +1738,17 @@ export class BaseManager
 
 	AddTCGatherer(supplyID: EntityId): void
 	{
-		return this.basesManager.AddTCGatherer(supplyID);
+		return this.basesManager.tally.bookGatherer(supplyID);
 	}
 
 	RemoveTCGatherer(supplyID: EntityId): void
 	{
-		this.basesManager.RemoveTCGatherer(supplyID);
+		this.basesManager.tally.unbookGatherer(supplyID);
 	}
 
 	GetTCGatherer(supplyID: EntityId): number
 	{
-		return this.basesManager.GetTCGatherer(supplyID);
+		return this.basesManager.tally.gatherersBooked(supplyID);
 	}
 
 	Serialize(): SerializedBaseManager

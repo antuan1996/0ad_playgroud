@@ -121,7 +121,7 @@ function awayFromWood(gameState: CommonGameState, placement: InfoMap<"territory"
 /** Whether a territory cell belongs to the base named, or to any base of ours when none is */
 function inBase(gameState: CommonGameState, cell: CellIndex<"territory">, base: BaseId | undefined): boolean
 {
-	const at = gameState.ai.bases.baseAtIndex(cell);
+	const at = gameState.ai.bases.territory.baseAt(cell);
 	return base !== undefined ? at === base : at !== 0;
 }
 
@@ -340,7 +340,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const territorypos = placement.gamePosToMapPos(worldPos(x, z));
 		const territoryIndex = cellIndex(placement, territorypos[0] + territorypos[1] * placement.width);
 		// default angle = 3*Math.PI/4;
-		return { x: x, z: z, angle: 3 * Math.PI / 4, base: gameState.ai.bases.baseAtIndex(territoryIndex) };
+		return { x: x, z: z, angle: 3 * Math.PI / 4, base: gameState.ai.bases.territory.baseAt(territoryIndex) };
 	}
 
 	/** recompute the best dropsite location in case some conditions have changed */
@@ -568,7 +568,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 			{
 				placement.map[j] = 0;
 			}
-			else if (base === undefined && favoredBase && gameState.ai.bases.baseAtIndex(j) === favoredBase)
+			else if (base === undefined && favoredBase && gameState.ai.bases.territory.baseAt(j) === favoredBase)
 			{
 				placement.set(j, placement.map[j] + 100);
 			}

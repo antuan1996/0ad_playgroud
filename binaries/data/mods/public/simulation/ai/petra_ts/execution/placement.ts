@@ -58,7 +58,7 @@ export interface PlacementHQ
 	readonly geography: Geography;
 	readonly navalManager: { readonly transportShips: { readonly length: number; }; };
 	readonly tradeManager: { readonly minimalGain: number; };
-	readonly basesManager: { baseAtIndex(j: CellIndex<"territory">): BaseId; };
+	readonly basesManager: { readonly territory: { baseAt(j: CellIndex<"territory">): BaseId; }; };
 	readonly town: {
 		isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean;
 		/** the searches' own judgement of a civic centre's spot (execution/placementSearches.ts) */
@@ -815,7 +815,7 @@ function bestMarketSpot(
 		{
 			continue;
 		}
-		if (hq.basesManager.baseAtIndex(j) === NO_BASE)
+		if (hq.basesManager.territory.baseAt(j) === NO_BASE)
 		{ // only in our territory
 			continue;
 		}
@@ -887,7 +887,7 @@ function marketResult(
 	}
 	else
 	{
-		idx = hq.basesManager.baseAtIndex(bestJdx);
+		idx = hq.basesManager.territory.baseAt(bestJdx);
 	}
 
 	const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
@@ -945,7 +945,7 @@ function defensiveCell(hq: PlacementHQ, j: CellIndex<"territory">, guardingWonde
 	{
 		return false;
 	}
-	return hq.basesManager.baseAtIndex(j) !== NO_BASE; // inaccessible cell
+	return hq.basesManager.territory.baseAt(j) !== NO_BASE; // inaccessible cell
 }
 
 /**
@@ -1025,7 +1025,7 @@ export function findDefensiveSpot(
 
 	const x = (bestIdx % obstructions.width + 0.5) * obstructions.cellSize;
 	const z = (Math.floor(bestIdx / obstructions.width) + 0.5) * obstructions.cellSize;
-	return [x, z, hq.basesManager.baseAtIndex(bestJdx)];
+	return [x, z, hq.basesManager.territory.baseAt(bestJdx)];
 }
 
 /**
@@ -1080,7 +1080,7 @@ export function findShoreTowerSpot(
 		{
 			continue;
 		}
-		const base = hq.basesManager.baseAtIndex(j);
+		const base = hq.basesManager.territory.baseAt(j);
 		if (base === NO_BASE)
 		{
 			continue;
