@@ -161,7 +161,7 @@ export class PlacementSearches
 		{
 			return true;
 		}
-		const enemies = this.hq.attackManager.enemiesByLand(gameState).get(land);
+		const enemies = this.hq.town.attacks.enemiesByLand(gameState).get(land);
 		if (!enemies)
 		{
 			return false;

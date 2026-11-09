@@ -91,7 +91,7 @@ function onTrainingFinished(hq: Headquarters, gameState: CommonGameState, events
 			const plan = ent.getMetadata(PlayerID, "plan");
 			if (plan !== undefined && plan >= 0)
 			{
-				const attack = hq.attackManager.getPlan(plan);
+				const attack = hq.town.attacks.getPlan(plan);
 				if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
 				{
 					ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);

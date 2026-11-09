@@ -62,7 +62,7 @@ export function trainMoreWorkers(hq: Headquarters, gameState: CommonGameState, q
 	// soldiers or support units (decision/workforce.ts)
 	const alpha = supportAlpha(
 		hq.attackManager.rushNumber < hq.attackManager.maxRushes ||
-			hq.attackManager.upcomingAttacks[AttackPlan.TYPE_RUSH].length > 0,
+			hq.town.attacks.upcomingAttacks[AttackPlan.TYPE_RUSH].length > 0,
 		gameState.isCeasefireActive() ? gameState.ceasefireTimeRemaining : undefined,
 	);
 	const supportNum = supportShare(

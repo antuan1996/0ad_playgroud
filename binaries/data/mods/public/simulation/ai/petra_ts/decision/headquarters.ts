@@ -90,7 +90,7 @@ export type HeadquartersSerializedData = {
 	defenseManager: ReturnType<DefenseManager["Serialize"]>;
 	tradeManager: ReturnType<TradeManager["Serialize"]>;
 	navalManager: ReturnType<NavalManager["Serialize"]>;
-	/** the town's own state: the transports under way */
+	/** the town's own state: the transports and attacks under way */
 	town: ReturnType<Town["Serialize"]>;
 	researchManager: ReturnType<ResearchManager["Serialize"]>;
 	diplomacyManager: ReturnType<DiplomacyManager["Serialize"]>;
@@ -378,15 +378,9 @@ export class Headquarters
 
 			this.basesManager = new BasesManager(this.Config, gameState, this, saved.basesManager);
 			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager, this);
-			// the transports, whose ships the naval manager's collections hold
+			// the transports, whose ships the naval manager's collections hold, and the attacks
 			this.town.resume(gameState, saved.town);
-			this.attackManager = AttackManager.restore(
-				this.Config,
-				gameState,
-				saved.attackManager,
-				this.canBuildUnits,
-				this,
-			);
+			this.attackManager = AttackManager.restore(this.Config, gameState, saved.attackManager, this);
 
 			this.buildManager = BuildManager.restore(saved.buildManager);
 			this.defenseManager = DefenseManager.restore(this.Config, gameState, geography, saved.defenseManager, this);
@@ -883,7 +877,7 @@ export class Headquarters
 		}
 		if (this.turnCache.numAround[ent.id()] === undefined)
 		{
-			this.turnCache.numAround[ent.id()] = this.attackManager.numAttackingUnitsAround(ent.position(), 130);
+			this.turnCache.numAround[ent.id()] = this.town.attacks.numAttackingUnitsAround(ent.position(), 130);
 		}
 		return +this.turnCache.numAround[ent.id()] > 8;
 	}

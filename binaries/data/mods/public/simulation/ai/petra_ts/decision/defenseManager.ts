@@ -15,6 +15,7 @@ import { getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from "../ada
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
+import type { ArmyRelease, AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { DefenseArmy, type SerializedDefenseArmy } from "../execution/defenseArmy.ts";
 import { isLent } from "../execution/unitPlan.ts";
@@ -22,7 +23,6 @@ import { Worker, marchesWithAttack } from "../execution/worker.ts";
 import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
-import type { ArmyRelease, AttackManager } from "./attackManager.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { BasesManager } from "./basesManager.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
@@ -91,7 +91,7 @@ type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garris
 export type DefenseHQ = Pick<Headquarters, "isDefendable" | "trainEmergencyUnits"> & {
 	readonly victoryManager: Pick<VictoryManager, "criticalEnts">;
 	readonly basesManager: Pick<BasesManager, "hasActiveBase" | "getBaseByID" | "baseManagers">;
-	readonly attackManager: Pick<AttackManager, "getPlan" | "switchDefenseToAttack">;
+	readonly town: { readonly attacks: Pick<AttackDesk, "getPlan" | "switchDefenseToAttack">; };
 	readonly garrisonManager: DefenseGarrison;
 };
 
@@ -1291,7 +1291,7 @@ export class DefenseManager
 		const plan = target.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan >= 0)
 		{
-			const attack = this.hq.attackManager.getPlan(plan);
+			const attack = this.hq.town.attacks.getPlan(plan);
 			if (attack && attack.state !== AttackPlan.STATE_UNEXECUTED)
 			{
 				return;
@@ -1419,7 +1419,7 @@ export class DefenseManager
 				// One of our cc has been captured.
 				if (ent && ent.hasClass("CivCentre"))
 				{
-					this.hq.attackManager.switchDefenseToAttack(
+					this.hq.town.attacks.switchDefenseToAttack(
 						gameState,
 						ent,
 						releaseArmies(this.armies, { range: 150 }),
@@ -1550,7 +1550,7 @@ export class DefenseManager
 		const plan = ent.getMetadata(PlayerID, "plan");
 		if (plan !== undefined && plan >= 0)
 		{
-			const attackPlan = this.hq.attackManager.getPlan(plan);
+			const attackPlan = this.hq.town.attacks.getPlan(plan);
 			if (attackPlan)
 			{
 				attackPlan.removeUnit(ent, true);
@@ -1646,7 +1646,7 @@ export class DefenseManager
 				{
 					continue;
 				}
-				this.hq.attackManager.switchDefenseToAttack(
+				this.hq.town.attacks.switchDefenseToAttack(
 					gameState,
 					target,
 					releaseArmies(this.armies, { armyID: army.ID }),

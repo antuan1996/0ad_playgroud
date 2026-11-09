@@ -10,7 +10,7 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import type { Config } from "../world/config.ts";
 import type { EconomyPlan } from "../world/economyPlan.ts";
 import { seaBetween } from "../world/geography.ts";
-import { AttackDesk, type AttackHQ } from "./attackDesk.ts";
+import { AttackDesk, type AttackHQ, type SerializedAttacks } from "./attackDesk.ts";
 import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
 import { TransportDesk, type SerializedTransports, type TransportHQ } from "./transportDesk.ts";
@@ -74,20 +74,21 @@ export class Town
 		this.hq = hq;
 		this.sites = new SiteDesk(hq);
 		this.guard = new GuardDesk(hq);
-		this.attacks = new AttackDesk(hq);
+		this.attacks = new AttackDesk(config, hq);
 		this.transports = new TransportDesk(config, hq);
 	}
 
 	/** The town's own state, as the headquarters saves it with its own */
-	Serialize(): { transports: SerializedTransports; }
+	Serialize(): { transports: SerializedTransports; attacks: SerializedAttacks; }
 	{
-		return { transports: this.transports.Serialize() };
+		return { transports: this.transports.Serialize(), attacks: this.attacks.Serialize() };
 	}
 
 	/** The saved state back, once the managers it reads are restored */
 	resume(gameState: CommonGameState, data: ReturnType<Town["Serialize"]>): void
 	{
 		this.transports.resume(gameState, data.transports);
+		this.attacks.resume(gameState, data.attacks);
 	}
 
 	/** A headquarters turn starts: what was worked out for the last one is forgotten */

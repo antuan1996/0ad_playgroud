@@ -20,7 +20,7 @@ type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior
  * version is refused with a message, and the bot starts afresh from the game
  * as it stands, as it does in a new game.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** The version a save says it is of, if it says one. */
 function savedVersion(data: unknown): unknown

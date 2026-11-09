@@ -1,6 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, getSeaAccess, requireMetadata, requireValue, setSeaAccess } from "../adapter/entityExtend.ts";
+import type { AttackDesk } from "../execution/attackDesk.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
@@ -27,7 +28,6 @@ import { plansIn } from "../execution/attackConstants.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
-import type { AttackManager } from "./attackManager.ts";
 import type { BasesManager } from "./basesManager.ts";
 import type { Headquarters } from "./headquarters.ts";
 import type { TradeManager } from "./tradeManager.ts";
@@ -40,9 +40,9 @@ import type { TradeManager } from "./tradeManager.ts";
  */
 export type NavalHQ = Pick<Headquarters, "navalMap" | "getAccountedPopulation" | "canBuild"> & {
 	readonly tradeManager: Pick<TradeManager, "traders">;
-	readonly attackManager: Pick<AttackManager, "upcomingAttacks">;
 	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers">;
 	readonly town: {
+		readonly attacks: Pick<AttackDesk, "upcomingAttacks">;
 		readonly transports: Pick<
 			TransportDesk,
 			"plans" | "update" | "checkShipsLost" | "waitingForShips" | "isShipBoarding" | "getPlan"
@@ -816,7 +816,7 @@ export class NavalManager
 		const priorities = this.Config.priorities;
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
 		const waiting = this.hq.town.transports.waitingForShips() ||
-			[...plansIn(this.hq.attackManager.upcomingAttacks)].some((plan) =>
+			[...plansIn(this.hq.town.attacks.upcomingAttacks)].some((plan) =>
 				plan.overseas !== 0 && plan.unitCollection.hasEntities() &&
 				!this.fleet(plan.overseas)?.transports.length
 			);

@@ -158,10 +158,12 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     decision layer, with the turn's cache, gather needs and danger queries)
     and its desks `siteDesk.ts` (`town.sites`: builders, unbuildables, where
     to build), `guardDesk.ts` (`town.guard`: raids, defense armies, critical
-    units, relics), `attackDesk.ts` (`town.attacks`), `transportDesk.ts`
-    (`town.transports`: ships, transports, fishing); each reaches the HQ and
-    its managers only through its own private view (`TownHQ`, `SiteHQ`,
-    `GuardHQ`, `AttackHQ`, `TransportHQ`).
+    units, relics), `attackDesk.ts` (`town.attacks`: owns the attack plans,
+    runs them, bombing, local fights, defense armies turned to attacks) and
+    `transportDesk.ts` (`town.transports`: owns the transport plans; ships,
+    fishing); each reaches the HQ and its managers only through its own
+    private view (`TownHQ`, `SiteHQ`, `GuardHQ`, `AttackHQ`, `TransportHQ`).
+    The town's plans are saved with the HQ (`town`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 

@@ -4,6 +4,7 @@ import * as chat from "../adapter/chatHelper.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { AttackDesk } from "../execution/attackDesk.ts";
 import type { Town } from "../execution/town.ts";
 import type { Config } from "../world/config.ts";
 import type { AttackManager } from "./attackManager.ts";
@@ -16,8 +17,10 @@ import type { Headquarters } from "./headquarters.ts";
  * the one it targets, and the attacks to call off against a new ally.
  */
 export type DiplomacyHQ = Pick<Headquarters, "economy"> & {
-	readonly town: Pick<Town, "pickMostNeededResources">;
-	readonly attackManager: Pick<AttackManager, "defeated" | "currentEnemyPlayer" | "cancelAttacksAgainstPlayer">;
+	readonly town: Pick<Town, "pickMostNeededResources"> & {
+		readonly attacks: Pick<AttackDesk, "cancelAttacksAgainstPlayer">;
+	};
+	readonly attackManager: Pick<AttackManager, "defeated" | "currentEnemyPlayer">;
 };
 
 type DiplomacyRequestType = "ally" | "neutral";
@@ -747,7 +750,7 @@ export class DiplomacyManager
 	{
 		if (gameState.isPlayerEnemy(player) && (newDiplomaticStance === "ally" || newDiplomaticStance === "neutral"))
 		{
-			this.hq.attackManager.cancelAttacksAgainstPlayer(gameState, player);
+			this.hq.town.attacks.cancelAttacksAgainstPlayer(gameState, player);
 		}
 		postCommand({ type: "diplomacy", player: player, to: newDiplomaticStance });
 		debugWarn(this.Config, 1, () => "diplomacy stance with player " + player + " is now " + newDiplomaticStance);

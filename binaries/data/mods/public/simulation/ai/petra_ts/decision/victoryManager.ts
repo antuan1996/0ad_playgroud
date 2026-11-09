@@ -3,6 +3,7 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { NO_BASE, seconds } from "../adapter/brands.ts";
 import { getAttackBonus, getLandAccess, requireValue, returnResources } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
@@ -25,11 +26,14 @@ import { buildWonder } from "./townBuildings.ts";
  * critical unit out of, and the ships to carry its guards.
  */
 export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
-	readonly attackManager: Pick<AttackManager, "getPlan" | "outOfPlan" | "raidTargetEntity">;
+	readonly attackManager: Pick<AttackManager, "outOfPlan" | "raidTargetEntity">;
 	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers" | "baselessBase" | "baseManagers">;
 	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
 	readonly garrisonManager: Pick<GarrisonManager, "cancelGarrison">;
-	readonly town: { readonly transports: Pick<TransportDesk, "requireTransport">; };
+	readonly town: {
+		readonly attacks: Pick<AttackDesk, "getPlan">;
+		readonly transports: Pick<TransportDesk, "requireTransport">;
+	};
 };
 
 /**
@@ -72,7 +76,7 @@ function addCaptureStrength(capture: number, units: CommonEntityCollection, reli
 /** Whether a unit of ours may join a raid on the relic: free, on its land, in no plan but one still preparing. */
 function mayRaidRelic(
 	gameState: CommonGameState,
-	attacks: VictoryHQ["attackManager"],
+	attacks: VictoryHQ["town"]["attacks"],
 	ent: CommonEntity,
 	relic: CommonEntity,
 	access: AccessIndex,
@@ -163,7 +167,7 @@ function withdrawFromFight(
 
 	if (plan !== undefined && plan >= 0)
 	{
-		const attackPlan = hq.attackManager.getPlan(plan);
+		const attackPlan = hq.town.attacks.getPlan(plan);
 		if (attackPlan)
 		{
 			attackPlan.removeUnit(target, true);
@@ -1127,7 +1131,7 @@ export class VictoryManager
 		const plans = this.targetedGaiaRelics.get(relic.id()) ?? [];
 		for (const plan of plans)
 		{
-			const attack = this.hq.attackManager.getPlan(plan);
+			const attack = this.hq.town.attacks.getPlan(plan);
 			if (attack)
 			{
 				capture = addCaptureStrength(capture, attack.unitCollection, relic);
@@ -1141,7 +1145,7 @@ export class VictoryManager
 		const relicPosition = relic.position();
 		const access = getLandAccess(gameState, relic);
 		const units = gameState.getOwnUnits().filter((ent) =>
-			mayRaidRelic(gameState, this.hq.attackManager, ent, relic, access)
+			mayRaidRelic(gameState, this.hq.town.attacks, ent, relic, access)
 		).filterNearest(relicPosition);
 		const expedition = [];
 		for (const ent of units.values())
@@ -1216,7 +1220,7 @@ export class VictoryManager
 		const relicPlans = this.targetedGaiaRelics.get(relicId) ?? [];
 		for (const plan of relicPlans)
 		{
-			const attack = this.hq.attackManager.getPlan(plan);
+			const attack = this.hq.town.attacks.getPlan(plan);
 			if (attack)
 			{
 				attack.Abort(gameState);
