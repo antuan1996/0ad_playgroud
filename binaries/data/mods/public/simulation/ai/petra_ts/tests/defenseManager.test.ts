@@ -21,8 +21,8 @@ import { ENEMY, GAIA, PLAYER, makeWorld, type World } from "./harness/world.ts";
 
 import { armyId, baseId, entityId, playerId, seconds, worldPos } from "../adapter/brands.ts";
 import { DefenseManager, garrisonSiegeUnit, releaseArmies } from "../decision/defenseManager.ts";
-import { GarrisonManager } from "../decision/garrisonManager.ts";
 import type { DefenseArmy } from "../execution/defenseArmy.ts";
+import { GarrisonManager } from "../execution/garrisonManager.ts";
 
 /** reads the diplomacy row the engine keeps, to name an ally per test */
 function allyRow(world: World): { isAlly: boolean[]; isMutualAlly: boolean[]; isEnemy: boolean[]; }
@@ -1844,7 +1844,7 @@ describe("garrisoning by hand", () =>
 	it("keeps melee fighters down when the office says so", () =>
 	{
 		const { world, manager, tower } = towerWorld();
-		world.ai.HQ.garrisonManager.allowMelee = () => false;
+		world.ai.town.garrisons.allowMelee = () => false;
 		world.addEntity(archer(3000, ["Ranged"]));
 		world.addEntity(archer(3001, ["Melee"]));
 
@@ -1914,7 +1914,7 @@ describe("garrisoning by hand", () =>
 		near.setMetadata(PLAYER, "base", baseId(1));
 		world.addEntity(near);
 
-		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(ram)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.town.garrisons, placed(ram)), true);
 		assert.deepEqual(
 			world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]),
 			[[3000, 5001]],
@@ -1942,7 +1942,7 @@ describe("garrisoning by hand", () =>
 		world.garrisonCounts.set(5000, 4);
 
 		assert.equal(
-			garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(ram)),
+			garrisonSiegeUnit(world.gameState, world.ai.town.garrisons, placed(ram)),
 			false,
 			"the fortress is full",
 		);
@@ -2526,7 +2526,7 @@ describe("rarer turns of the defence", () =>
 			makeEntity({ id: 3000, owner: PLAYER, position: [20, 20], classes: ["Unit", "Siege", "StoneThrower"] }),
 		);
 
-		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.HQ.garrisonManager, placed(catapult)), true);
+		assert.equal(garrisonSiegeUnit(world.gameState, world.ai.town.garrisons, placed(catapult)), true);
 		assert.deepEqual(world.garrisonCalls.map(([unit, target]) => [unit.id(), target.id()]), [[3000, 5005]]);
 	});
 

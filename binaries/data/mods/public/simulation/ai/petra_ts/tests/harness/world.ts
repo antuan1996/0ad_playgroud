@@ -357,20 +357,6 @@ export function makeWorld(options: WorldOptions = {}): World
 				decayGarrisonCalls.push([target, data]);
 			},
 		},
-		garrisonManager: {
-			// like the engine: garrisoning fills the target's slots; like GarrisonManager.garrison, a full one takes nobody
-			garrison: (_gs: CommonGameState, unit: CommonEntity, target: CommonEntity, type: string) =>
-			{
-				if ((garrisonCounts.get(target.id()) ?? 0) >= target.garrisonMax())
-				{
-					return;
-				}
-				garrisonCalls.push([unit, target, type]);
-				garrisonCounts.set(target.id(), (garrisonCounts.get(target.id()) ?? 0) + 1);
-			},
-			numberOfGarrisonedSlots: (target: CommonEntity) => garrisonCounts.get(target.id()) ?? 0,
-			allowMelee: () => undefined,
-		},
 		victoryManager: {
 			criticalEnts: new Map(),
 			targetedGaiaRelics,
@@ -414,6 +400,21 @@ export function makeWorld(options: WorldOptions = {}): World
 		getSeaBetweenIndices: () => knobs.sea,
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
+		// the garrisons (execution/garrisonManager.ts), a stub:
+		garrisons: {
+			// like the engine: garrisoning fills the target's slots; like GarrisonManager.garrison, a full one takes nobody
+			garrison: (_gs: CommonGameState, unit: CommonEntity, target: CommonEntity, type: string) =>
+			{
+				if ((garrisonCounts.get(target.id()) ?? 0) >= target.garrisonMax())
+				{
+					return;
+				}
+				garrisonCalls.push([unit, target, type]);
+				garrisonCounts.set(target.id(), (garrisonCounts.get(target.id()) ?? 0) + 1);
+			},
+			numberOfGarrisonedSlots: (target: CommonEntity) => garrisonCounts.get(target.id()) ?? 0,
+			allowMelee: () => undefined,
+		},
 		// the town's desks, real over the stub managers
 		sites: new SiteDesk(ai.HQ),
 		guard: new GuardDesk(ai.HQ),

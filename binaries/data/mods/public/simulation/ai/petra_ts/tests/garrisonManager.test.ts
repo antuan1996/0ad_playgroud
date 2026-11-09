@@ -23,7 +23,7 @@ import { emptyEvents, eventsWith, makeEntity, orders, type Methods } from "./har
 import { ENEMY, GAIA, PLAYER, makeWorld, type World } from "./harness/world.ts";
 
 import { entityId, seconds } from "../adapter/brands.ts";
-import { GarrisonManager, type GarrisonHolderData } from "../decision/garrisonManager.ts";
+import { GarrisonManager, type GarrisonHolderData } from "../execution/garrisonManager.ts";
 import { Worker } from "../execution/worker.ts";
 
 /** the manager of one headquarters as the constructor builds it */
@@ -1374,7 +1374,9 @@ describe("garrisonManager", () =>
 
 			const saved = manager.Serialize();
 			assert.deepEqual(Object.keys(saved).sort(), ["decayingStructures", "holders"]);
-			const fresh = GarrisonManager.restore(world.ai.Config, saved, world.ai.HQ);
+			// as the town resumes it
+			const fresh = new GarrisonManager(world.ai.Config, world.ai.HQ);
+			fresh.resume(saved);
 
 			assert.equal(leaf(fresh, 5000).list.length, 1, "the march is booked again");
 			assert.equal(fresh.allowMelee(tower), true);

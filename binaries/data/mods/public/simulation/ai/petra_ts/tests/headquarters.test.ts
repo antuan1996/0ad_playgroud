@@ -58,7 +58,6 @@ import { requireValue } from "../adapter/entityExtend.ts";
 import { BasesManager } from "../decision/basesManager.ts";
 import { BuildManager } from "../decision/buildManager.ts";
 import { buildNewBase, checkBaseExpansion, provideForDryLand } from "../decision/expansion.ts";
-import { GarrisonManager } from "../decision/garrisonManager.ts";
 import { DRY_WOOD, type Headquarters } from "../decision/headquarters.ts";
 import { buildMoreHouses } from "../decision/houseBuilding.ts";
 import { checkEvents, handleNewBase } from "../decision/hqEvents.ts";
@@ -77,6 +76,7 @@ import {
 import { STALLED_IDLE, trainMoreWorkers, workforceStalled } from "../decision/workforceTraining.ts";
 import { AttackPlan, byAttackType } from "../execution/attackPlan.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
+import { GarrisonManager } from "../execution/garrisonManager.ts";
 import { SHORE_TOWER_TRAFFIC } from "../execution/placement.ts";
 import { CC_ENEMY_AVOID, CC_ORDER_WAIT, CC_SPOT_MEMORY } from "../execution/placementSearches.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -453,8 +453,8 @@ describe("checkEvents: the wall that decays (captured or fading)", () =>
 			eventsWith({ OwnershipChanged: [{ entity: entityId(61), from: GAIA, to: PLAYER }] }),
 		);
 		// the garrison manager keeps its bet: ceil((6-1)/2) = 3 men minimum
-		assert.deepEqual([...hq.garrisonManager.decayingStructures.keys()], [61]);
-		assert.deepEqual([...hq.garrisonManager.decayingStructures.values()], [3]);
+		assert.deepEqual([...hq.town.garrisons.decayingStructures.keys()], [61]);
+		assert.deepEqual([...hq.town.garrisons.decayingStructures.values()], [3]);
 		assert.ok(!hq.decayingStructures.has(entityId(61)));
 	});
 
@@ -477,7 +477,7 @@ describe("checkEvents: the wall that decays (captured or fading)", () =>
 		);
 		// a bare wall cannot be defended by garrison; the plain book keeps it
 		assert.ok(hq.decayingStructures.has(entityId(62)));
-		assert.deepEqual([...hq.garrisonManager.decayingStructures.keys()], []);
+		assert.deepEqual([...hq.town.garrisons.decayingStructures.keys()], []);
 	});
 });
 
@@ -585,8 +585,8 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 			eventsWith({ TrainingFinished: [{ entities: [entityId(82)], owner: PLAYER }] }),
 		);
 		// registration only: nobody has marched into the holder through this call
-		assert.ok(hq.garrisonManager.holders.has(entityId(81)));
-		assert.deepEqual(hq.garrisonManager.holders.get(entityId(81))?.list, []);
+		assert.ok(hq.town.garrisons.holders.has(entityId(81)));
+		assert.deepEqual(hq.town.garrisons.holders.get(entityId(81))?.list, []);
 	});
 
 	it("a unit the rally point garrisoned but not trained to garrison comes out again", () =>
@@ -618,7 +618,7 @@ describe("checkEvents: training finished — landing and stale plans", () =>
 			eventsWith({ TrainingFinished: [{ entities: [entityId(86)], owner: PLAYER }] }),
 		);
 		assert.deepEqual(unloaded, [86]);
-		assert.equal(hq.garrisonManager.holders.has(entityId(85)), false, "no holder of ours to keep it in");
+		assert.equal(hq.town.garrisons.holders.has(entityId(85)), false, "no holder of ours to keep it in");
 		void unit;
 	});
 
@@ -764,7 +764,7 @@ describe("checkEvents: territory decay events", () =>
 			}),
 		);
 		assert.ok(hq.decayingStructures.has(entityId(91)));
-		assert.ok(hq.garrisonManager.decayingStructures.has(entityId(92)));
+		assert.ok(hq.town.garrisons.decayingStructures.has(entityId(92)));
 		assert.ok(!hq.decayingStructures.has(entityId(92)));
 	});
 
@@ -786,13 +786,13 @@ describe("checkEvents: territory decay events", () =>
 				defaultRegenRate: () => 1,
 			}),
 		);
-		hq.garrisonManager.decayingStructures.set(entityId(92), 3);
+		hq.town.garrisons.decayingStructures.set(entityId(92), 3);
 		checkEvents(
 			hq,
 			world.gameState,
 			eventsWith({ TerritoryDecayChanged: [{ entity: entityId(92), to: false, rate: 1 }] }),
 		);
-		assert.ok(!hq.garrisonManager.decayingStructures.has(entityId(92)));
+		assert.ok(!hq.town.garrisons.decayingStructures.has(entityId(92)));
 	});
 
 	it("a foundation and a foreign wall are not decayed property yet", () =>

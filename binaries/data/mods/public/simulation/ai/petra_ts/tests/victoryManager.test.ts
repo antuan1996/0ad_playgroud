@@ -15,6 +15,7 @@ import {
 	PLAYER,
 	doorCalls,
 	doorManagers,
+	doorStub,
 	makeHqEntity,
 	makeHqWorld,
 	recordPassages,
@@ -37,7 +38,7 @@ function raids(manager: VictoryManager): Map<EntityId, number[]>
 const PlayerID = PLAYER;
 
 /** the military offices are doors here too: the guards and raids are recorded, not run */
-const victoryDoors = [...doorManagers, "attackManager", "garrisonManager"];
+const victoryDoors = [...doorManagers, "attackManager"];
 
 /** an office on the plain, playing the given victory conditions */
 function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions> = {})
@@ -51,6 +52,8 @@ function seat(victoryConditions: string[] = [], options: Partial<HqWorldOptions>
 		e.getMetadata(PlayerID, "plan") === -1
 	);
 	hq.defenseManager.getArmy = () => undefined;
+	// the town's garrisons, a recorded door
+	Object.assign(hq.town, { garrisons: doorStub() });
 	const manager = new VictoryManager(hq.Config, hq);
 	return { world, hq, manager, queues: world.ai.queues };
 }
@@ -265,10 +268,10 @@ describe("regicide: the hero under attack", () =>
 
 		manager.checkEvents(world.gameState, events({ Attacked: [{ target: 600 }] }));
 
-		assert.ok(doorCalls(hq.garrisonManager).some(([m]) => m === "cancelGarrison"));
+		assert.ok(doorCalls(hq.town.garrisons).some(([m]) => m === "cancelGarrison"));
 		assert.equal(manager.criticalEnts.get(entityId(600))?.garrisonEmergency, true);
 		manager.checkEvents(world.gameState, events({ Attacked: [{ target: 600 }] }));
-		assert.equal(doorCalls(hq.garrisonManager).filter(([m]) => m === "cancelGarrison").length, 1, "once");
+		assert.equal(doorCalls(hq.town.garrisons).filter(([m]) => m === "cancelGarrison").length, 1, "once");
 	});
 
 	it("a hero garrisoned in a building has its guards gather round it; healers on their way to heal stay", () =>

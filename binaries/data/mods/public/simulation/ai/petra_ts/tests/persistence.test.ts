@@ -22,13 +22,13 @@ import { BuildManager, type SerializedBuildManager } from "../decision/buildMana
 import { DefenseManager, type DefenseHQ, type SerializedDefenseManager } from "../decision/defenseManager.ts";
 import { DiplomacyManager, type DiplomacyHQ, type SerializedDiplomacyManager } from "../decision/diplomacyManager.ts";
 import { EmergencyManager, type SerializedEmergencyManager } from "../decision/emergencyManager.ts";
-import { GarrisonManager, type GarrisonSiblings, type SerializedGarrisonManager } from "../decision/garrisonManager.ts";
 import { Headquarters, type HeadquartersSerializedData } from "../decision/headquarters.ts";
 import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager, type TradeHQ } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager, type VictoryHQ } from "../decision/victoryManager.ts";
 import { AttackDesk, type SerializedAttacks } from "../execution/attackDesk.ts";
+import { GarrisonManager, type GarrisonHQ, type SerializedGarrisonManager } from "../execution/garrisonManager.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -99,13 +99,13 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "GarrisonManager",
-			original: () => new GarrisonManager(makeConfig(), fake<GarrisonSiblings>({})),
+			original: () => new GarrisonManager(makeConfig(), fake<GarrisonHQ>({})),
 			fromSave: (data) =>
-				GarrisonManager.restore(
-					makeConfig(),
-					fake<SerializedGarrisonManager>(data),
-					fake<GarrisonSiblings>({}),
-				),
+			{
+				const garrisons = new GarrisonManager(makeConfig(), fake<GarrisonHQ>({}));
+				garrisons.resume(fake<SerializedGarrisonManager>(data));
+				return garrisons;
+			},
 		}, makeFakeGameState().gameState);
 	});
 
