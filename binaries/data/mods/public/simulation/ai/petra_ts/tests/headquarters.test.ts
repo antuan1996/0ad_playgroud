@@ -3396,7 +3396,7 @@ describe("canBuild: which stones the office will book", () =>
 
 		// the season rolls on and a builder walks in with the template in hand
 		seatBuilder(world, ["structures/{civ}/house"]);
-		hq.buildManager.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(2201) }] }));
+		hq.buildManager.builders.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(2201) }] }));
 		world.ai.elapsedTime = seconds(150);
 		assert.equal(
 			hq.canBuild(world.gameState, "structures/{civ}/house"),

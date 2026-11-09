@@ -73,11 +73,11 @@ describe("the builder book: who can raise what", () =>
 		const mgr = BuildManager.start(world.gameState);
 
 		assert.deepEqual(
-			[...mgr.builders.keys()],
+			[...mgr.builders.Serialize().keys()],
 			["structures/athen/house"],
 			"the {civ} stand-in came out as the player's civ",
 		);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3001]);
 	});
 
 	it("a unit with no Builder tag raises nothing, and a structure raises nothing", () =>
@@ -90,7 +90,7 @@ describe("the builder book: who can raise what", () =>
 
 		const mgr = BuildManager.start(world.gameState);
 
-		assert.equal(mgr.builders.size, 0, "no template is booked");
+		assert.equal(mgr.builders.Serialize().size, 0, "no template is booked");
 	});
 
 	it("two builders share a template entry, and the ids keep their order", () =>
@@ -101,8 +101,8 @@ describe("the builder book: who can raise what", () =>
 
 		const mgr = BuildManager.start(world.gameState);
 
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001, 3002]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3001]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3001, 3002]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/storehouse")), [3001]);
 	});
 });
 
@@ -114,9 +114,9 @@ describe("the book over one turn's events", () =>
 		const mgr = BuildManager.start(world.gameState);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
-		mgr.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(3001) }] }));
+		mgr.builders.checkEvents(world.gameState, eventsWith({ Create: [{ entity: entityId(3001) }] }));
 
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3001]);
 	});
 
 	it("a unit created and destroyed the same turn is never booked", () =>
@@ -125,12 +125,12 @@ describe("the book over one turn's events", () =>
 		const mgr = BuildManager.start(world.gameState);
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 
-		mgr.checkEvents(
+		mgr.builders.checkEvents(
 			world.gameState,
 			eventsWith({ Create: [{ entity: entityId(3001) }], Destroy: [{ entity: entityId(3001) }] }),
 		);
 
-		assert.equal(mgr.builders.size, 0, "the birth that was undone leaves no entry");
+		assert.equal(mgr.builders.Serialize().size, 0, "the birth that was undone leaves no entry");
 	});
 
 	it("a destroyed builder leaves every entry it filled, empty list behind", () =>
@@ -140,13 +140,16 @@ describe("the book over one turn's events", () =>
 		world.addEntity(builderUnit(3002, ["structures/{civ}/house"]));
 		const mgr = BuildManager.start(world.gameState);
 
-		mgr.checkEvents(world.gameState, eventsWith({ Destroy: [{ entity: entityId(3001) }] }));
+		mgr.builders.checkEvents(world.gameState, eventsWith({ Destroy: [{ entity: entityId(3001) }] }));
 
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3002]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3002]);
 		// the storehouse entry had only this builder: the removal splices his
 		// id out and the now-empty list stays as the template's book page
-		assert.deepEqual([...mgr.builders.keys()], ["structures/athen/house", "structures/athen/storehouse"]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), []);
+		assert.deepEqual([...mgr.builders.Serialize().keys()], [
+			"structures/athen/house",
+			"structures/athen/storehouse",
+		]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/storehouse")), []);
 	});
 
 	it("a captured builder takes his skills over", () =>
@@ -157,12 +160,12 @@ describe("the book over one turn's events", () =>
 		// and the new owner, the office asks its template
 		world.ents.set(3001, builderUnit(3001, ["structures/{civ}/house"]));
 
-		mgr.checkEvents(
+		mgr.builders.checkEvents(
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(3001), from: ENEMY, to: PLAYER }] }),
 		);
 
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3001]);
 	});
 
 	it("a builder captured away leaves the book, whoever raises stones", () =>
@@ -173,7 +176,7 @@ describe("the book over one turn's events", () =>
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 		const mgr = BuildManager.start(world.gameState);
 
-		mgr.checkEvents(
+		mgr.builders.checkEvents(
 			world.gameState,
 			eventsWith({ OwnershipChanged: [{ entity: entityId(3001), from: PLAYER, to: ENEMY }] }),
 		);
@@ -181,9 +184,12 @@ describe("the book over one turn's events", () =>
 		// the storehouse entry stands untouched; the captured builder's id is
 		// spliced out of the house list, and the emptied page stays as the
 		// template's book page
-		assert.deepEqual([...mgr.builders.keys()], ["structures/athen/storehouse", "structures/athen/house"]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3002]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), []);
+		assert.deepEqual([...mgr.builders.Serialize().keys()], [
+			"structures/athen/storehouse",
+			"structures/athen/house",
+		]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/storehouse")), [3002]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), []);
 	});
 
 	it("an overhaul of the Builder component dumps and rebuilds the whole book", () =>
@@ -199,7 +205,7 @@ describe("the book over one turn's events", () =>
 		world.removeEntity(3001);
 		world.addEntity(builderUnit(3002, ["structures/athen/storehouse", "structures/{civ}/house"]));
 
-		mgr.checkEvents(
+		mgr.builders.checkEvents(
 			world.gameState,
 			eventsWith({
 				ValueModification: [{
@@ -210,9 +216,12 @@ describe("the book over one turn's events", () =>
 			}),
 		);
 
-		assert.deepEqual([...mgr.builders.keys()], ["structures/athen/storehouse", "structures/athen/house"]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3002]);
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/storehouse")), [3002]);
+		assert.deepEqual([...mgr.builders.Serialize().keys()], [
+			"structures/athen/storehouse",
+			"structures/athen/house",
+		]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3002]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/storehouse")), [3002]);
 	});
 
 	it("an overhaul of some other component leaves the book alone", () =>
@@ -221,7 +230,7 @@ describe("the book over one turn's events", () =>
 		world.addEntity(builderUnit(3001, ["structures/{civ}/house"]));
 		const mgr = BuildManager.start(world.gameState);
 
-		mgr.checkEvents(
+		mgr.builders.checkEvents(
 			world.gameState,
 			eventsWith({
 				// the wrong component, and the right one touched on a value the
@@ -234,7 +243,7 @@ describe("the book over one turn's events", () =>
 			}),
 		);
 
-		assert.deepEqual(mgr.builders.get(templateName("structures/athen/house")), [3001]);
+		assert.deepEqual(mgr.builders.Serialize().get(templateName("structures/athen/house")), [3001]);
 	});
 });
 
@@ -253,7 +262,7 @@ describe("what a project needs in the book", () =>
 		// the game disables the tower per civ
 		world.gameState.isTemplateDisabled = (name: string) => name === "structures/athen/defense_tower";
 
-		const every = mgr.findStructuresByFilter(world.gameState, { func: () => true, dynamicProperties: [] });
+		const every = mgr.builders.findStructuresByFilter(world.gameState, { func: () => true, dynamicProperties: [] });
 
 		assert.deepEqual(
 			every,
@@ -271,7 +280,7 @@ describe("what a project needs in the book", () =>
 		const mgr = BuildManager.start(world.gameState);
 
 		assert.equal(
-			mgr.findStructureWithClass(world.gameState, ["Tower"]),
+			mgr.builders.findStructureWithClass(world.gameState, ["Tower"]),
 			undefined,
 			"no booked template carries the class",
 		);
@@ -288,8 +297,8 @@ describe("what a project needs in the book", () =>
 		// both buildings share the Economic class; the book's own order picks
 		// which template the office reads first (TODO in the source: when
 		// several available, choose the best one)
-		assert.equal(mgr.findStructureWithClass(world.gameState, ["Economic"]), "structures/athen/storehouse");
-		assert.equal(mgr.findStructureWithClass(world.gameState, ["House"]), "structures/athen/house");
+		assert.equal(mgr.builders.findStructureWithClass(world.gameState, ["Economic"]), "structures/athen/storehouse");
+		assert.equal(mgr.builders.findStructureWithClass(world.gameState, ["House"]), "structures/athen/house");
 	});
 
 	it("hasBuilder answers the booked id list, and stays silent with no entry", () =>
@@ -299,19 +308,19 @@ describe("what a project needs in the book", () =>
 		const mgr = BuildManager.start(world.gameState);
 
 		assert.equal(
-			mgr.hasBuilder(templateName("structures/athen/house")),
+			mgr.builders.hasBuilder(templateName("structures/athen/house")),
 			true,
 			"the id list counts somebody — the office answers just true, not the list",
 		);
 		assert.equal(
-			mgr.hasBuilder(templateName("structures/athen/fortress")),
+			mgr.builders.hasBuilder(templateName("structures/athen/fortress")),
 			undefined,
 			"a template nobody raised in the book answers `undefined`",
 		);
 		// the empty page a removal stranded: the `numBuilders && length > 0`
 		// read answers false
-		mgr.builders.set(templateName("structures/athen/fortress"), []);
-		assert.equal(mgr.hasBuilder(templateName("structures/athen/fortress")), false);
+		mgr.builders.Serialize().set(templateName("structures/athen/fortress"), []);
+		assert.equal(mgr.builders.hasBuilder(templateName("structures/athen/fortress")), false);
 	});
 });
 
@@ -415,7 +424,7 @@ describe("the parking lot: unbuildables and their waits", () =>
 
 		assert.deepEqual(restored.Serialize(), saved);
 		// and the loaded book keeps its meaning as well
-		assert.equal(restored.hasBuilder(templateName("structures/athen/house")), true);
+		assert.equal(restored.builders.hasBuilder(templateName("structures/athen/house")), true);
 		const bookedIds = saved.builders.get(templateName("structures/athen/house"));
 		assert.deepEqual(bookedIds, [3001]);
 		assert.deepEqual(restored.unbuildables.get("structures/athen/fortress"), { reason: "limit", time: 190 });
