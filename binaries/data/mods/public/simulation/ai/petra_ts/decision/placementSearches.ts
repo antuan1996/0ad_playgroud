@@ -67,7 +67,7 @@ export class PlacementSearches
 			{
 				continue;
 			}
-			const sea = this.hq.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
+			const sea = this.hq.town.getSeaBetweenIndices(gameState, base.accessIndex, indexIdx);
 			if (sea !== undefined)
 			{
 				this.hq.navalManager.setMinimalTransportShips(gameState, sea, 1);

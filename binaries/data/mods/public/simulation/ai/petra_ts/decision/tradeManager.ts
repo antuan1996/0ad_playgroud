@@ -11,6 +11,7 @@ import { requiredStateWithin } from "../adapter/unitState.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import type { Town } from "../execution/town.ts";
 import { gatherTreasure } from "../execution/treasure.ts";
 import { Worker } from "../execution/worker.ts";
 import { Config } from "../world/config.ts";
@@ -31,17 +32,16 @@ import type { ResearchManager } from "./researchManager.ts";
  * to sail merchants and traders, the bases' stocks and rates, the buildable
  * market and dock, and the trade bonus research.
  */
-export type TradeHQ =
-	& Pick<Headquarters, "pickMostNeededResources" | "GetWantedGatherRates" | "canBuild" | "canBarter" | "placement">
-	& {
-		readonly navalManager: Pick<NavalManager, "fleet" | "requireTransport">;
-		readonly basesManager: Pick<
-			BasesManager,
-			"getTotalResourceLevel" | "GetCurrentGatherRates" | "baselessBase" | "baseManagers"
-		>;
-		readonly buildManager: Pick<BuildManager, "setBuildable" | "setUnbuildable">;
-		readonly researchManager: Pick<ResearchManager, "researchTradeBonus">;
-	};
+export type TradeHQ = Pick<Headquarters, "canBuild" | "canBarter" | "placement"> & {
+	readonly town: Pick<Town, "pickMostNeededResources" | "GetWantedGatherRates">;
+	readonly navalManager: Pick<NavalManager, "fleet" | "requireTransport">;
+	readonly basesManager: Pick<
+		BasesManager,
+		"getTotalResourceLevel" | "GetCurrentGatherRates" | "baselessBase" | "baseManagers"
+	>;
+	readonly buildManager: Pick<BuildManager, "setBuildable" | "setUnbuildable">;
+	readonly researchManager: Pick<ResearchManager, "researchTradeBonus">;
+};
 
 export type TradeRoute = { source: EntityId; target: EntityId; gain: number; land?: AccessIndex; sea?: SeaIndex; };
 
@@ -476,8 +476,8 @@ export class TradeManager
 		}
 		// first, try to anticipate future needs
 		const stocks = this.hq.basesManager.getTotalResourceLevel(gameState);
-		const mostNeeded = this.hq.pickMostNeededResources(gameState, resTradeCodes);
-		const wantedRates = this.hq.GetWantedGatherRates(gameState);
+		const mostNeeded = this.hq.town.pickMostNeededResources(gameState, resTradeCodes);
+		const wantedRates = this.hq.town.GetWantedGatherRates(gameState);
 		let remaining = 100;
 		let targetNum = this.Config.Economy.targetNumTraders;
 		for (const res of resTradeCodes)

@@ -8,6 +8,7 @@ import { isPlaced } from "../adapter/placed.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
 import { type PlanMetadata } from "../execution/queueplan.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import { Town } from "../execution/town.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import { CaptureTally, type CaptureEntry } from "../world/captureTally.ts";
@@ -16,7 +17,7 @@ import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import { EconomyPlan } from "../world/economyPlan.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
-import { restoreGeography, seaBetween, type Geography } from "../world/geography.ts";
+import { restoreGeography, type Geography } from "../world/geography.ts";
 import * as mapMask from "../world/mapMask.ts";
 import { createTerritoryMap, type TerritoryMap } from "../world/mapModule.ts";
 import { ProductionLoad } from "../world/production.ts";
@@ -52,10 +53,6 @@ import { type TrainableRequirement } from "./workforce.ts";
 import { trainMoreWorkers } from "./workforceTraining.ts";
 
 type HeadquartersTurnCache = {
-	buildingBuilt?: boolean;
-	allowDistantFood?: boolean;
-	wantedRates?: Record<string, number>;
-	firingStructures?: CommonEntityCollection<CommonPlacedEntity>;
 	numAround?: Record<number, number>;
 	accountedPopulation?: number;
 	accountedWorkers?: number;
@@ -274,6 +271,8 @@ export class Headquarters
 	tradeManager: TradeManager;
 	treasures: CommonEntityCollection<CommonPlacedEntity>;
 	turnCache: HeadquartersTurnCache;
+	/** the town as the execution layer sees it (`gameState.ai.town`), its one door to this headquarters */
+	readonly town: Town;
 	victoryManager: VictoryManager;
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
@@ -355,6 +354,7 @@ export class Headquarters
 
 		// Cache various quantities.
 		this.turnCache = {};
+		this.town = new Town(config, this);
 		this.lastFailedGather = {};
 
 		// Workers configuration.
@@ -451,38 +451,11 @@ export class Headquarters
 	/**
 	 * initialization needed after deserialization (only called when deserialization)
 	 */
-	/**
-	 * returns the sea index linking regions 1 and region 2 (supposed to be different land region)
-	 * otherwise return undefined
-	 * for the moment, only the case land-sea-land is supported
-	 */
-	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined
-	{
-		return seaBetween(gameState, index1, index2, this.Config.debug);
-	}
-
 	/** A phase research started: we no longer phase towards it, and we are in it. */
 	phaseResearched(gameState: CommonGameState, phase: number): void
 	{
 		this.phasing = 0;
 		this.OnPhaseUp(gameState, phase);
-	}
-
-	/** Whether gatherers may go far for food this turn: only while no field or corral can be built (worked out once a turn). */
-	allowsDistantFood(gameState: CommonGameState): boolean
-	{
-		if (this.turnCache.allowDistantFood === undefined)
-		{
-			this.turnCache.allowDistantFood = !this.canBuild(gameState, "structures/{civ}/field") &&
-				!this.canBuild(gameState, "structures/{civ}/corral");
-		}
-		return this.turnCache.allowDistantFood;
-	}
-
-	/** A construction plan laid its foundation this turn. */
-	markBuildingStarted(): void
-	{
-		this.turnCache.buildingBuilt = true;
 	}
 
 	/** A worker found nothing left to gather of `resource`, now. */
@@ -573,81 +546,6 @@ export class Headquarters
 			}
 		}
 		return parameters;
-	}
-
-	/**
-	 * Returns the wanted gather rate.
-	 */
-	GetWantedGatherRates(gameState: CommonGameState): Record<string, number>
-	{
-		if (!this.turnCache.wantedRates)
-		{
-			this.turnCache.wantedRates = gameState.ai.queueManager.wantedGatherRates(gameState);
-		}
-
-		return this.turnCache.wantedRates;
-	}
-
-	/**
-	 * Pick the resource which most needs another worker
-	 * How this works:
-	 * We get the rates we would want to have to be able to deal with our plans
-	 * We get our current rates
-	 * We compare; we pick the one where the discrepancy is highest.
-	 * Need to balance long-term needs and possible short-term needs.
-	 */
-	pickMostNeededResources(
-		gameState: CommonGameState,
-		allowedResources: string[] = [],
-	): Array<{ type: string; wanted: number; current: number; }>
-	{
-		const wantedRates = this.GetWantedGatherRates(gameState);
-		const currentRates = this.basesManager.GetCurrentGatherRates(gameState);
-		if (!allowedResources.length)
-		{
-			allowedResources = Resources.GetCodes();
-		}
-
-		const needed = [];
-		for (const res of allowedResources)
-		{
-			needed.push({ type: res, wanted: wantedRates[res], current: currentRates[res] });
-		}
-
-		needed.sort(
-			(
-				a: { type: string; wanted: number; current: number; },
-				b: { type: string; wanted: number; current: number; },
-			): number =>
-			{
-				if (a.current < a.wanted && b.current < b.wanted)
-				{
-					if (a.current && b.current)
-					{
-						return b.wanted / b.current - a.wanted / a.current;
-					}
-					if (a.current)
-					{
-						return 1;
-					}
-					if (b.current)
-					{
-						return -1;
-					}
-					return b.wanted - a.wanted;
-				}
-				if (a.current < a.wanted || a.wanted && !b.wanted)
-				{
-					return -1;
-				}
-				if (b.current < b.wanted || b.wanted && !a.wanted)
-				{
-					return 1;
-				}
-				return a.current - a.wanted - b.current + b.wanted;
-			},
-		);
-		return needed;
 	}
 
 	/**
@@ -936,43 +834,12 @@ export class Headquarters
 		}
 	}
 
-	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean
-	{
-		return this.isNearInvadingArmy(pos) || this.isUnderEnemyFire(gameState, pos, radius);
-	}
-
 	/** Check that the chosen position is not too near from an invading army */
 	isNearInvadingArmy(pos: CommonPosition): boolean
 	{
 		for (const army of this.defenseManager.armies)
 		{
 			if (army.foePosition && SquareVectorDistance(army.foePosition, pos) < 12000)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	isUnderEnemyFire(gameState: CommonGameState, pos: CommonPosition, radius: number = 0): boolean
-	{
-		if (!this.turnCache.firingStructures)
-		{
-			this.turnCache.firingStructures = gameState.updatingCollection(
-				"diplo-FiringStructures",
-				filters.hasDefensiveFire(),
-				gameState.getEnemyStructures(),
-			);
-		}
-		for (const ent of this.turnCache.firingStructures.values())
-		{
-			const ranged = ent.attackRange("Ranged");
-			if (!ranged)
-			{
-				continue;
-			}
-			const range = radius + ranged.max;
-			if (SquareVectorDistance(ent.position(), pos) < range * range)
 			{
 				return true;
 			}
@@ -1141,6 +1008,7 @@ export class Headquarters
 	{
 		profiled("HQ emergency", () => this.emergencyManager.update(gameState));
 		this.turnCache = {};
+		this.town.newTurn();
 		profiled("HQ gatherEconomy", () => this.gatherEconomy.update(gameState));
 		profiled("HQ productionLoad", () => this.productionLoad.update(gameState));
 		profiled("HQ territoryMap", () =>

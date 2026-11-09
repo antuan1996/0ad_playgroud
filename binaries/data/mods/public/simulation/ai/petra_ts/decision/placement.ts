@@ -64,7 +64,7 @@ interface PlacementHQ
 		isAvoidedCCSpot(pos: CommonPosition): boolean;
 		isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean;
 	};
-	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean;
+	readonly town: { isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean; };
 }
 
 /** What a civic centre at cell j would reach: twice the resource and once the others but food (plus ROOM_VALUE for room) */
@@ -677,7 +677,7 @@ export function findEconomicCCTile(
 			(allowContested ?
 				hq.placement.isAvoidedCCSpot(pos) :
 				hq.placement.isContestedCCSpot(gameState, pos, index)) ||
-			hq.isDangerousLocation(gameState, pos, halfSize)
+			hq.town.isDangerousLocation(gameState, pos, halfSize)
 		)
 		{
 			continue;
@@ -756,7 +756,10 @@ export function findStrategicCCTile(
 		{
 			continue;
 		}
-		if (hq.placement.isContestedCCSpot(gameState, pos, index) || hq.isDangerousLocation(gameState, pos, halfSize))
+		if (
+			hq.placement.isContestedCCSpot(gameState, pos, index) ||
+			hq.town.isDangerousLocation(gameState, pos, halfSize)
+		)
 		{
 			continue;
 		}
@@ -831,7 +834,7 @@ function bestMarketSpot(
 		{
 			continue;
 		}
-		if (hq.isDangerousLocation(gameState, pos, halfSize))
+		if (hq.town.isDangerousLocation(gameState, pos, halfSize))
 		{
 			continue;
 		}
@@ -1004,7 +1007,7 @@ export function findDefensiveSpot(
 		{
 			continue;
 		}
-		if (hq.isDangerousLocation(gameState, pos, halfSize))
+		if (hq.town.isDangerousLocation(gameState, pos, halfSize))
 		{
 			continue;
 		}
@@ -1093,7 +1096,7 @@ export function findShoreTowerSpot(
 			(Math.floor(i / obstructions.width) + 0.5) * obstructions.cellSize,
 		);
 		const spotScore = traffic.within(spot, range, ownDefenses);
-		if (spotScore <= best || hq.isDangerousLocation(gameState, spot, footprintHalves(template).halfSize))
+		if (spotScore <= best || hq.town.isDangerousLocation(gameState, spot, footprintHalves(template).halfSize))
 		{
 			continue;
 		}

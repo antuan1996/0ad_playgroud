@@ -39,8 +39,8 @@ declare namespace PetraRuntime
 		victory: import("./execution/services.ts").VictoryService;
 		build: import("./execution/services.ts").BuildRules;
 		trade: import("./execution/services.ts").TradeService;
-		/** The headquarters' own services to the execution layer (execution/services.ts's HeadquartersService). */
-		town: import("./execution/services.ts").HeadquartersService;
+		/** The town (HQ.town, execution/town.ts): the execution layer's one door to the headquarters. */
+		town: import("./execution/town.ts").Town;
 		/** The placement searches (HQ.placement as execution/services.ts's PlacementService). */
 		placement: import("./execution/services.ts").PlacementService;
 		/** baseAI: passability/terrain analyzer built once per game from the first state dump. */

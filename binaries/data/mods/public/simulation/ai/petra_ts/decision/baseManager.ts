@@ -17,6 +17,7 @@ import { isPlaced, isStructure } from "../adapter/placed.ts";
 import { footprintHalves } from "../adapter/templateData.ts";
 import { isInState } from "../adapter/unitState.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
+import type { Town } from "../execution/town.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import { BaseResources, type ResourceSupply } from "../world/baseResources.ts";
@@ -268,7 +269,6 @@ function spacedFromDropsites(total: number, pos: CommonPosition, dpEnts: CommonP
 export type BaseHQ =
 	& Pick<
 		Headquarters,
-		| "isDangerousLocation"
 		| "isNearInvadingArmy"
 		| "canBuild"
 		| "canBuildUnits"
@@ -277,12 +277,14 @@ export type BaseHQ =
 		| "economy"
 		| "gatherEconomy"
 		| "navalMap"
-		| "pickMostNeededResources"
 		| "lastFailedGather"
 		| "phasing"
 		| "trainEmergencyUnits"
 	>
-	& { readonly buildManager: Pick<BuildManager, "findStructuresByFilter">; };
+	& {
+		readonly buildManager: Pick<BuildManager, "findStructuresByFilter">;
+		readonly town: Pick<Town, "isDangerousLocation" | "pickMostNeededResources">;
+	};
 
 /** The bases getBestBase picks among: the bases manager's, and its base for the units of none */
 export type BaseSearch = Pick<BasesManager, "baselessBase" | "baseManagers">;
@@ -743,7 +745,7 @@ export class BaseManager
 				continue;
 			}
 
-			if (this.hq.isDangerousLocation(gameState, pos, halfSize))
+			if (this.hq.town.isDangerousLocation(gameState, pos, halfSize))
 			{
 				continue;
 			}
@@ -1016,7 +1018,7 @@ export class BaseManager
 		this.timeNextIdleCheck = seconds(gameState.ai.elapsedTime + 8);
 		// change resource only towards one which is more needed, and if changing will not change this order
 		let nb = 1; // no more than 1 change per turn (otherwise we should update the rates)
-		const mostNeeded = this.hq.pickMostNeededResources(gameState);
+		const mostNeeded = this.hq.town.pickMostNeededResources(gameState);
 		let sumWanted = 0;
 		let sumCurrent = 0;
 		for (const need of mostNeeded)
@@ -1196,7 +1198,7 @@ export class BaseManager
 	/** The gatherer takes the most needed resource it can gather, not failed lately nor exhausted */
 	private gatherMostNeeded(gameState: CommonGameState, ent: CommonEntity): void
 	{
-		const mostNeeded = this.hq.pickMostNeededResources(gameState);
+		const mostNeeded = this.hq.town.pickMostNeededResources(gameState);
 		for (const needed of mostNeeded)
 		{
 			if (!ent.canGather(needed.type))

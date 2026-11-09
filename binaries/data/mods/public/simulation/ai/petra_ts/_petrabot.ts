@@ -10,12 +10,12 @@ import type {
 	AttackRegistry,
 	BuildRules,
 	DefenseService,
-	HeadquartersService,
 	NavalService,
 	PlacementService,
 	TradeService,
 	VictoryService,
 } from "./execution/services.ts";
+import type { Town } from "./execution/town.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
@@ -239,10 +239,10 @@ export class PetraBot extends BaseAI
 		return requireValue(this.HQ).placement;
 	}
 
-	/** The headquarters' own services, as `gameState.ai.town` (PetraRuntime.AIState, execution/services.ts) */
-	get town(): HeadquartersService
+	/** The headquarters' town, as `gameState.ai.town` (PetraRuntime.AIState, execution/town.ts) */
+	get town(): Town
 	{
-		return requireValue(this.HQ);
+		return requireValue(this.HQ).town;
 	}
 
 	/** The defense manager's services, as `gameState.ai.defense` (PetraRuntime.AIState, execution/services.ts) */

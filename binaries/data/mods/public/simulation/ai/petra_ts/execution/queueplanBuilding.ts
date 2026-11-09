@@ -141,7 +141,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 
 	canStart(gameState: CommonGameState): PlanStart | undefined
 	{
-		if (gameState.ai.town.turnCache.buildingBuilt)
+		if (gameState.ai.town.buildingStarted)
 		{ // do not start another building if already one this turn
 			return undefined;
 		}

@@ -4,6 +4,7 @@ import * as chat from "../adapter/chatHelper.ts";
 import { postCommand } from "../adapter/commands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { isPlaced } from "../adapter/placed.ts";
+import type { Town } from "../execution/town.ts";
 import type { Config } from "../world/config.ts";
 import type { AttackManager } from "./attackManager.ts";
 import type { Headquarters } from "./headquarters.ts";
@@ -14,7 +15,8 @@ import type { Headquarters } from "./headquarters.ts";
  * tribute while saving); and of the attack manager: the defeated players and
  * the one it targets, and the attacks to call off against a new ally.
  */
-export type DiplomacyHQ = Pick<Headquarters, "pickMostNeededResources" | "economy"> & {
+export type DiplomacyHQ = Pick<Headquarters, "economy"> & {
+	readonly town: Pick<Town, "pickMostNeededResources">;
 	readonly attackManager: Pick<AttackManager, "defeated" | "currentEnemyPlayer" | "cancelAttacksAgainstPlayer">;
 };
 
@@ -204,12 +206,12 @@ export class DiplomacyManager
 		{
 			return;
 		}
-		let mostNeeded: ReturnType<DiplomacyHQ["pickMostNeededResources"]> | undefined;
+		let mostNeeded: ReturnType<Town["pickMostNeededResources"]> | undefined;
 		const stock: TributeStock = {
 			codes: resTribCodes,
 			total: gameState.getResources(),
 			available: gameState.ai.queueManager.getAvailableResources(gameState),
-			mostNeeded: () => mostNeeded ??= this.hq.pickMostNeededResources(gameState, resTribCodes),
+			mostNeeded: () => mostNeeded ??= this.hq.town.pickMostNeededResources(gameState, resTribCodes),
 		};
 		for (let iIndex = 1; iIndex < gameState.sharedScript.playersData.length; ++iIndex)
 		{
@@ -724,7 +726,7 @@ export class DiplomacyManager
 			this.receivedDiplomacyRequests.set(player, { requestType: requestType, status: "declinedRequest" });
 			return undefined;
 		}
-		const requiredTribute = this.hq.pickMostNeededResources(gameState, resTribCodes)[0];
+		const requiredTribute = this.hq.town.pickMostNeededResources(gameState, resTribCodes)[0];
 		requiredTribute.wanted = Math.max(1000, gameState.getOwnUnits().length * (requestType === "ally" ? 10 : 5));
 		this.receivedDiplomacyRequests.set(player, {
 			status: "waitingForTribute",

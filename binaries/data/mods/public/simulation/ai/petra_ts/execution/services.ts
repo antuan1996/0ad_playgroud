@@ -1,9 +1,9 @@
 /**
  * The services the decision layer gives the execution layer, declared here, below it (PLAN.md §3.4): execution
  * code depends on these interfaces only, never on decision/'s classes, and reaches them on `gameState.ai`
- * (PetraRuntime.AIState, the bot's getters return the managers, which satisfy them as they are).
+ * (PetraRuntime.AIState, the bot's getters return the managers, which satisfy them as they are). The headquarters'
+ * own services are the town (execution/town.ts).
  */
-import type { EconomyPlan } from "../world/economyPlan.ts";
 import { AttackType } from "./attackConstants.ts";
 import type { AttackPlan } from "./attackPlan.ts";
 import type { DefenseArmy } from "./defenseArmy.ts";
@@ -96,50 +96,6 @@ export interface TradeService
 	/** whether a trade route exists, looked for anew */
 	checkRoutes(gameState: CommonGameState): boolean;
 	isNewMarketWorth(expectedGain: number): boolean;
-}
-
-/** A trainable unit's weights for findBestTrainableUnit: a name, a weight and its arguments (decision/workforce.ts) */
-type TrainableWeight = [string, number, ...string[]];
-
-/**
- * The headquarters' own services (decision/headquarters.ts, `gameState.ai.town`): the town's state of the moment,
- * the placement and economy searches, the sea between two lands, and what a plan reports back. Read-only to
- * execution code but for the reports. Where to build is PlacementService.
- */
-export interface HeadquartersService
-{
-	readonly canBuildUnits: boolean;
-	/** what the town saves for and where its food comes from */
-	readonly economy: Readonly<EconomyPlan>;
-	readonly requireHouses: boolean | undefined;
-	/** the turn's bookkeeping: whether a building was started this turn */
-	readonly turnCache: Readonly<{ buildingBuilt?: boolean; }>;
-
-	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean;
-	isNearInvadingArmy(pos: CommonPosition): boolean;
-
-	canBuild(gameState: CommonGameState, structure: string): boolean;
-	findBestTrainableUnit(
-		gameState: CommonGameState,
-		classes: Array<string | string[]>,
-		requirements: TrainableWeight[],
-		gatherersOnly?: boolean,
-	): TemplateName | undefined;
-	GetWantedGatherRates(gameState: CommonGameState): Record<string, number>;
-	houseNeeded(gameState: CommonGameState): boolean;
-	pickMostNeededResources(
-		gameState: CommonGameState,
-		allowedResources?: string[],
-	): Array<{ type: string; wanted: number; current: number; }>;
-
-	/** the sea joining two lands, if any */
-	getSeaBetweenIndices(gameState: CommonGameState, index1: AccessIndex, index2: AccessIndex): SeaIndex | undefined;
-
-	allowsDistantFood(gameState: CommonGameState): boolean;
-	markBuildingStarted(): void;
-	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void;
-	noteNothingToGather(resource: string, time: GameSeconds): void;
-	phaseResearched(gameState: CommonGameState, phase: number): void;
 }
 
 /** The placement searches (decision/placementSearches.ts, `gameState.ai.placement`): where to build. */
