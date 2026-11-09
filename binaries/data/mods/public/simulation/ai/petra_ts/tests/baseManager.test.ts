@@ -2050,8 +2050,8 @@ describe("the rest of the turn: idle hands already spoken for, docks with no tow
 				"gather-type": "wood",
 			});
 		}
-		// the office's turn cache holds what the queues ask of each resource this turn
-		hq.turnCache.wantedRates = { food: 0.5, wood: 3, stone: 0, metal: 0 };
+		// what the queues ask of each resource this turn
+		hq.town.GetWantedGatherRates = () => ({ food: 0.5, wood: 3, stone: 0, metal: 0 });
 
 		base.setWorkersIdleByPriority(world.gameState);
 

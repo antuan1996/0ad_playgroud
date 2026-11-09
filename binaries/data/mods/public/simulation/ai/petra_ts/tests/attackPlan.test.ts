@@ -2043,7 +2043,7 @@ describe("obstructions along the path", () =>
 		const target = makeTarget(world, {}, 2005);
 		const plan = makePlan(world, { name: 1, data: { target } });
 		// a dangerous spot near the border: the rally retreats a waypoint
-		world.ai.HQ.isDangerousLocation = (gameState: CommonGameState, pos: [number, number], minDist: number) =>
+		world.ai.town.isDangerousLocation = (gameState: CommonGameState, pos: [number, number], minDist: number) =>
 			minDist === 20 && Math.round(pos[0]) === 14;
 
 		withPath([{ x: 24, y: 26 }, { x: 14, y: 14 }, { x: 12, y: 12 }], () =>

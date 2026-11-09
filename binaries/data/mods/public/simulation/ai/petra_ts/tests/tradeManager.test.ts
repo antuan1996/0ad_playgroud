@@ -518,8 +518,8 @@ describe("what traders carry and what the market barters", () =>
 	{
 		const { world, hq, manager } = seat();
 		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 100, stone: 300, metal: 2000 });
-		hq.GetWantedGatherRates = () => ({ food: 10, wood: 30, stone: 0, metal: 0 });
-		hq.pickMostNeededResources =
+		hq.town.GetWantedGatherRates = () => ({ food: 10, wood: 30, stone: 0, metal: 0 });
+		hq.town.pickMostNeededResources =
 			() => [{ type: "wood", wanted: 30, current: 0 }, { type: "food", wanted: 10, current: 0 }];
 		const base = hq.Config.Economy.targetNumTraders;
 
@@ -537,8 +537,8 @@ describe("what traders carry and what the market barters", () =>
 	{
 		const { world, hq, manager } = seat();
 		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
-		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
-		hq.pickMostNeededResources =
+		hq.town.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
+		hq.town.pickMostNeededResources =
 			() => [{ type: "metal", wanted: 10, current: 0 }, { type: "food", wanted: 0, current: 0 }];
 		manager.setTradingGoods(world.gameState);
 		assert.deepEqual(sent("set-trading-goods")[0].tradingGoods, { food: 0, wood: 0, stone: 0, metal: 100 });
@@ -548,8 +548,8 @@ describe("what traders carry and what the market barters", () =>
 	{
 		const { world, hq, manager } = seat();
 		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 700, stone: 5000, metal: 5000 });
-		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
-		hq.pickMostNeededResources =
+		hq.town.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
+		hq.town.pickMostNeededResources =
 			() => [{ type: "metal", wanted: 10, current: 0 }, { type: "food", wanted: 0, current: 0 }];
 		const base = hq.Config.Economy.targetNumTraders;
 		manager.setTradingGoods(world.gameState);
@@ -877,8 +877,8 @@ describe("the trade office through its turn: update", () =>
 		manager.assignTrader(trader(world, 301, [60, 40], { idle: false }).ent);
 		hq.canBarter = true;
 		hq.basesManager.getTotalResourceLevel = () => ({ food: 5000, wood: 5000, stone: 5000, metal: 5000 });
-		hq.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
-		hq.pickMostNeededResources = () => [{ type: "metal", wanted: 10, current: 0 }];
+		hq.town.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 0, metal: 0 });
+		hq.town.pickMostNeededResources = () => [{ type: "metal", wanted: 10, current: 0 }];
 		hq.placement.findMarketLocation = () => false;
 		hq.canBuild = () => false;
 		manager.targetNumTraders = 6;

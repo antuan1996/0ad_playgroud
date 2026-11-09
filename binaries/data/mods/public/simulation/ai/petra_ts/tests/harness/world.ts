@@ -15,6 +15,7 @@ import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { ArmyRelease } from "../../decision/attackManager.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
+import type { Town } from "../../execution/town.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
 
@@ -34,7 +35,7 @@ export interface WorldOptions
 	enemyPlayer?: number | undefined;
 	/** getAccessValue's answer for positions not named in accessAt. */
 	accessibilityFallback?: number;
-	/** HQ.getSeaBetweenIndices' answer. */
+	/** the town's getSeaBetweenIndices answer. */
 	sea?: number | undefined;
 	/** HQ.navalMap. */
 	navalMap?: boolean;
@@ -320,7 +321,6 @@ export function makeWorld(options: WorldOptions = {}): World
 		},
 		navalMap: knobs.navalMap,
 		canBuildUnits: knobs.canBuildUnits,
-		getSeaBetweenIndices: () => knobs.sea,
 		navalManager: {
 			// the fleet per sea: none on sea 4
 			fleets: new Map([[4, {
@@ -416,8 +416,6 @@ export function makeWorld(options: WorldOptions = {}): World
 			getOwner: (pos: [number, number]) => territory.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? PLAYER,
 			isBlinking: (pos: [number, number]) => blinking.get(`${Math.round(pos[0])},${Math.round(pos[1])}`) ?? false,
 		},
-		isDangerousLocation: () => false,
-		findBestTrainableUnit: () => knobs.bestTrainable,
 		capturableTargets: captures.targets,
 		basesManager: {
 			baseManagers: bases,
@@ -444,7 +442,17 @@ export function makeWorld(options: WorldOptions = {}): World
 	Object.defineProperty(ai, "victory", { get: () => ai.HQ.victoryManager, configurable: true });
 	Object.defineProperty(ai, "build", { get: () => ai.HQ.buildManager, configurable: true });
 	Object.defineProperty(ai, "trade", { get: () => ai.HQ.tradeManager, configurable: true });
-	Object.defineProperty(ai, "town", { get: () => ai.HQ, configurable: true });
+	// the town (PetraBot.town, execution/town.ts): the stub HQ's state, the searches answered by the knobs
+	const town = fake<Town>({
+		get canBuildUnits()
+		{
+			return ai.HQ.canBuildUnits;
+		},
+		getSeaBetweenIndices: () => knobs.sea,
+		isDangerousLocation: () => false,
+		findBestTrainableUnit: () => knobs.bestTrainable,
+	});
+	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
 	Object.defineProperty(ai, "placement", { get: () => ai.HQ.placement, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.

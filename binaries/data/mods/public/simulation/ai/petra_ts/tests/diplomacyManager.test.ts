@@ -67,7 +67,7 @@ function seat(players: PlayerSpec[], options: Partial<HqWorldOptions> = {}, chan
 	const attack = doorStub({ defeated: {}, currentEnemyPlayer: undefined });
 	hq.attackManager = attack;
 	// what the town needs most, as the office ranks it
-	hq.pickMostNeededResources =
+	hq.town.pickMostNeededResources =
 		() => [{ type: "wood", wanted: 50, current: 10 }, { type: "food", wanted: 30, current: 20 }];
 	setPlayers(world, players);
 	resetRecorder();

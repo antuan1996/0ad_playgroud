@@ -2019,7 +2019,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const { world, hq, base, worker } = seat();
 		rawSupply(world, 7161, [260, 10], "food", "fruit");
 		bookCentreSupplies(world, base);
-		hq.turnCache.allowDistantFood = false;
+		hq.town.allowsDistantFood = () => false;
 		const gathered: number[] = [];
 		const ent = hand(world, base, 7162, { "gather-type": "food" }, { gather: ids(gathered) });
 		const work = prime(worker, ent);

@@ -23,7 +23,8 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { seconds } from "../adapter/brands.ts";
 import { Queue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, isQueueName } from "../execution/queueManager.ts";
-import type { HeadquartersService, NavalService } from "../execution/services.ts";
+import type { NavalService } from "../execution/services.ts";
+import type { Town } from "../execution/town.ts";
 import type { BasesView } from "../world/bases.ts";
 import { Config } from "../world/config.ts";
 import { EconomyPlan } from "../world/economyPlan.ts";
@@ -896,10 +897,7 @@ describe("QueueManager", () =>
 		override(gameState, { getPopulation: () => 42 });
 		override(gameState, { getOwnUnits: () => [] });
 		gameState.ai.bases = fake<BasesView>({ hasPotentialBase: () => true, GetCurrentGatherRates: () => ({}) });
-		gameState.ai.town = fake<HeadquartersService>({
-			GetWantedGatherRates: () => ({}),
-			pickMostNeededResources: () => [],
-		});
+		gameState.ai.town = fake<Town>({ GetWantedGatherRates: () => ({}), pickMostNeededResources: () => [] });
 		gameState.ai.elapsedTime = seconds(20);
 		gameState.ai.playedTurn = 50;
 		gameState.countOwnEntitiesAndQueuedWithRole = () => 100;
@@ -1090,7 +1088,7 @@ describe("QueueManager", () =>
 			}],
 		});
 		gameState.ai.bases = fake<BasesView>({ GetCurrentGatherRates: () => ({ food: 0.5 }) });
-		gameState.ai.town = fake<HeadquartersService>({
+		gameState.ai.town = fake<Town>({
 			GetWantedGatherRates: () => ({ food: 1 }),
 			pickMostNeededResources: () => ["food"],
 		});
@@ -1218,7 +1216,7 @@ describe("QueueManager", () =>
 			const { gameState } = makeFakeGameState(stateOptions);
 			override(gameState, { getResources: () => new ResourcesManager({}) });
 			gameState.ai.bases = fake<BasesView>(bases);
-			gameState.ai.town = fake<HeadquartersService>({ economy: Object.assign(new EconomyPlan(), economy) });
+			gameState.ai.town = fake<Town>({ economy: Object.assign(new EconomyPlan(), economy) });
 			gameState.countOwnEntitiesAndQueuedWithRole = () => numWorkers;
 			return gameState;
 		}

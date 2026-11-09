@@ -144,9 +144,9 @@ describe("headquarters and the queues: what the workers should gather", () =>
 		const hq = seatHQ(world, { stubs: doorManagers });
 
 		// on turn 0 the wanted rates are the config's first-turn table
-		const rates = hq.GetWantedGatherRates(world.gameState);
+		const rates = hq.town.GetWantedGatherRates(world.gameState);
 		assert.deepEqual(rates, { food: 10, wood: 10, stone: 0, metal: 0 });
-		assert.equal(hq.GetWantedGatherRates(world.gameState), rates); // cached
+		assert.equal(hq.town.GetWantedGatherRates(world.gameState), rates); // cached
 	});
 });
 
@@ -167,13 +167,68 @@ describe("headquarters and the next worker: the resource that starves first", ()
 			return { food: 1, wood: 0, stone: 0, metal: 0 };
 		};
 
-		const needed = hq.pickMostNeededResources(world.gameState);
+		const needed = hq.town.pickMostNeededResources(world.gameState);
 		assert.equal(asked, 1);
 		// the two shortfalls order first: wood (no gatherer at all) before food
 		assert.deepEqual(needed.map((item: { type: string; }) => item.type).slice(0, 2), ["wood", "food"]);
 		// the wanted table the office compared against
 		assert.equal(needed[0].wanted, 10);
 		assert.equal(needed[2].wanted, 0); // stone fills its nothing
+	});
+
+	it("of two resources both short, the one furthest below its wanted rate per gatherer goes first", () =>
+	{
+		const { world, hq } = seat();
+		// the queues want 10 food and 6 wood; food is gathered at 2, wood at 3:
+		// food is five times short of its want, wood only twice
+		hq.town.GetWantedGatherRates = () => ({ food: 10, wood: 6, stone: 0, metal: 0 });
+		hq.basesManager.GetCurrentGatherRates = () => ({ food: 2, wood: 3, stone: 0, metal: 0 });
+
+		const needed = hq.town.pickMostNeededResources(world.gameState, ["wood", "food"]);
+
+		assert.deepEqual(needed.map((item) => item.type), ["food", "wood"]);
+	});
+
+	it("a short resource with gatherers waits behind one nobody gathers yet", () =>
+	{
+		const { world, hq } = seat();
+		hq.town.GetWantedGatherRates = () => ({ food: 10, wood: 6, stone: 0, metal: 0 });
+		hq.basesManager.GetCurrentGatherRates = () => ({ food: 2, wood: 0, stone: 0, metal: 0 });
+
+		assert.deepEqual(hq.town.pickMostNeededResources(world.gameState, ["food", "wood"]).map((item) => item.type), [
+			"wood",
+			"food",
+		]);
+		assert.deepEqual(hq.town.pickMostNeededResources(world.gameState, ["wood", "food"]).map((item) => item.type), [
+			"wood",
+			"food",
+		]);
+	});
+
+	it("a resource the queues want, though fed, goes before one they do not want", () =>
+	{
+		const { world, hq } = seat();
+		// stone is gathered above its want; nothing queued needs metal
+		hq.town.GetWantedGatherRates = () => ({ food: 0, wood: 0, stone: 2, metal: 0 });
+		hq.basesManager.GetCurrentGatherRates = () => ({ food: 0, wood: 0, stone: 3, metal: 1 });
+
+		assert.deepEqual(
+			hq.town.pickMostNeededResources(world.gameState, ["metal", "stone"]).map((item) => item.type),
+			["stone", "metal"],
+		);
+		assert.deepEqual(
+			hq.town.pickMostNeededResources(world.gameState, ["stone", "metal"]).map((item) => item.type),
+			["stone", "metal"],
+		);
+	});
+
+	it("the town tells the plans whether units may be trained, as its headquarters decided", () =>
+	{
+		const { hq } = seat();
+		hq.canBuildUnits = false;
+		assert.equal(hq.town.canBuildUnits, false, "a town without a trainer: attacks bring what they have");
+		hq.canBuildUnits = true;
+		assert.equal(hq.town.canBuildUnits, true);
 	});
 });
 
@@ -2109,7 +2164,8 @@ describe("headquarters and the recruit choice: what the weights pick", () =>
 		const { world, hq } = seat({ stock: { food: 1000, wood: 1000 } });
 		trainerTown(world);
 
-		const best = hq.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry", "Melee"]], [[
+		// asked through the town, as an attack plan asks it
+		const best = hq.town.findBestTrainableUnit(world.gameState, [["CitizenSoldier", "Infantry", "Melee"]], [[
 			"speed",
 			0.5,
 		]]);
@@ -2998,8 +3054,8 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 	{
 		const { world, hq } = seat({ territoryOwner: () => 0 });
 		world.ai.elapsedTime = seconds(1000);
-		hq.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
-		hq.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
+		hq.town.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
+		hq.town.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
 		centre(world, 5001, [62, 198], 0);
 
 		world.ai.elapsedTime = seconds(1000 + CC_ORDER_WAIT - 1);
@@ -3025,8 +3081,8 @@ describe("civic centres overseas: followed orders and contested spots", () =>
 	{
 		const { world, hq } = seat({ territoryOwner: () => 0 });
 		world.ai.elapsedTime = seconds(1000);
-		hq.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
-		hq.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
+		hq.town.noteCivCentreOrdered(world.gameState, worldPos(200, 200));
+		hq.town.noteCivCentreOrdered(world.gameState, worldPos(60, 200));
 		const lost = centre(world, 5001, [200, 200], 30);
 		centre(world, 5002, [60, 200], 50);
 		followCivCentreOrders(hq, world.gameState);
@@ -3919,12 +3975,12 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		firingTower(world, 2201, [100, 100]);
 
 		assert.equal(
-			hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
+			hq.town.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
 			true,
 			"50 squares out, inside the 80 of the tower",
 		);
 		assert.equal(
-			hq.isUnderEnemyFire(world.gameState, worldPos(250, 100)),
+			hq.town.isUnderEnemyFire(world.gameState, worldPos(250, 100)),
 			false,
 			"150 squares out, past the tower's reach",
 		);
@@ -3937,12 +3993,12 @@ describe("the danger lights: what keeps the office from building under fire", ()
 
 		// the radius stands for the ground a to-be structure occupies
 		assert.equal(
-			hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 60),
+			hq.town.isUnderEnemyFire(world.gameState, worldPos(230, 100), 60),
 			true,
 			"the 140 of range and radius reaches the 130-square mark",
 		);
 		assert.equal(
-			hq.isUnderEnemyFire(world.gameState, worldPos(230, 100), 40),
+			hq.town.isUnderEnemyFire(world.gameState, worldPos(230, 100), 40),
 			false,
 			"the 120 of the pair does not reach the 130-square mark",
 		);
@@ -3954,12 +4010,12 @@ describe("the danger lights: what keeps the office from building under fire", ()
 		firingTower(world, 2201, [100, 100]);
 
 		assert.equal(
-			hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
+			hq.town.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
 			false,
 			"no column, no fire: the meadow is free",
 		);
 		assert.equal(
-			hq.isDangerousLocation(world.gameState, worldPos(150, 100), 0),
+			hq.town.isDangerousLocation(world.gameState, worldPos(150, 100), 0),
 			true,
 			"no column, but the tower's fire reaches it",
 		);
@@ -3967,7 +4023,7 @@ describe("the danger lights: what keeps the office from building under fire", ()
 			foePosition: [340, 150],
 		}];
 		assert.equal(
-			hq.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
+			hq.town.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
 			true,
 			"the column stands within reach of the field's edge",
 		);
@@ -3977,13 +4033,13 @@ describe("the danger lights: what keeps the office from building under fire", ()
 	{
 		const { world, hq } = seat();
 		firingTower(world, 2201, [100, 100]);
-		assert.equal(hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)), true);
+		assert.equal(hq.town.isUnderEnemyFire(world.gameState, worldPos(150, 100)), true);
 
 		// the tower demolished after the question: the turn's sealed book
 		// still answers with what the map held when it was written
 		world.ents.delete(2201);
 		assert.equal(
-			hq.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
+			hq.town.isUnderEnemyFire(world.gameState, worldPos(150, 100)),
 			true,
 			"the same turn answers the same firing book",
 		);
@@ -4813,14 +4869,14 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 			regionTypes: { 2: "land", 3: "land", 8: "water" },
 		});
 
-		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), 8);
+		assert.equal(hq.town.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), 8);
 	});
 
 	it("a land bridge between the shores names no sea", () =>
 	{
 		const { world, hq } = seat({ trajectories: { "2,3": [2, 3] }, regionTypes: { 2: "land", 3: "land" } });
 
-		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
+		assert.equal(hq.town.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
 	});
 
 	it("a route through land in the middle is not a sea crossing", () =>
@@ -4830,7 +4886,7 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 			regionTypes: { 2: "land", 3: "land", 8: "land" },
 		});
 
-		assert.equal(hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
+		assert.equal(hq.town.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)), undefined);
 	});
 
 	it("no known route between the two regions names no sea", () =>
@@ -4838,7 +4894,7 @@ describe("a strait between two shores: getSeaBetweenIndices", () =>
 		const { world, hq } = seat({ regionTypes: { 2: "land", 3: "land", 8: "water" } });
 
 		assert.equal(
-			hq.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)),
+			hq.town.getSeaBetweenIndices(world.gameState, landRegion(2), landRegion(3)),
 			undefined,
 			"the engine answers no trajectory at all, so nothing to cross",
 		);

@@ -111,7 +111,7 @@ describe("a building plan asked whether it may start: canStart", () =>
 		const { world, hq } = seat();
 		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
-		hq.turnCache.buildingBuilt = true;
+		hq.town.markBuildingStarted();
 
 		assert.equal(new ConstructionPlan(world.gameState, barracks).canStart(world.gameState), undefined);
 	});
@@ -248,7 +248,7 @@ describe("a building plan laying its foundation: start", () =>
 			{ base: hq.basesManager.baseAtIndex(territoryCellAt([x, z])), access: 2 },
 			"the foundation answers to the town it stands in, on its land",
 		);
-		assert.equal(hq.turnCache.buildingBuilt, true, "no other building starts this turn");
+		assert.equal(hq.town.buildingStarted, true, "no other building starts this turn");
 	});
 
 	it("keeps the town the plan was made for", () =>
@@ -271,7 +271,7 @@ describe("a building plan laying its foundation: start", () =>
 
 		new ConstructionPlan(world.gameState, barracks).start(world.gameState);
 
-		assert.notEqual(hq.turnCache.buildingBuilt, true, "another building may still start");
+		assert.equal(hq.town.buildingStarted, false, "another building may still start");
 	});
 
 	it("marks the card unbuildable for a while when the town has no room for it", () =>
