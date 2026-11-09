@@ -766,10 +766,7 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 	Object.defineProperty(world.ai, "attacks", { get: () => world.ai.HQ.attackManager, configurable: true });
 	Object.defineProperty(world.ai, "defense", { get: () => world.ai.HQ.defenseManager, configurable: true });
 	Object.defineProperty(world.ai, "victory", { get: () => world.ai.HQ.victoryManager, configurable: true });
-	Object.defineProperty(world.ai, "build", { get: () => world.ai.HQ.buildManager, configurable: true });
-	Object.defineProperty(world.ai, "trade", { get: () => world.ai.HQ.tradeManager, configurable: true });
 	Object.defineProperty(world.ai, "town", { get: () => world.ai.HQ.town, configurable: true });
-	Object.defineProperty(world.ai, "placement", { get: () => world.ai.HQ.placement, configurable: true });
 
 	if (options.seatBases ?? true)
 	{

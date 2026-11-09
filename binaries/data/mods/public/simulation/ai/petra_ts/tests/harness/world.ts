@@ -15,6 +15,7 @@ import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { ArmyRelease } from "../../decision/attackManager.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
+import { SiteDesk } from "../../execution/siteDesk.ts";
 import type { Town } from "../../execution/town.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
@@ -440,8 +441,6 @@ export function makeWorld(options: WorldOptions = {}): World
 	Object.defineProperty(ai, "attacks", { get: () => ai.HQ.attackManager, configurable: true });
 	Object.defineProperty(ai, "defense", { get: () => ai.HQ.defenseManager, configurable: true });
 	Object.defineProperty(ai, "victory", { get: () => ai.HQ.victoryManager, configurable: true });
-	Object.defineProperty(ai, "build", { get: () => ai.HQ.buildManager, configurable: true });
-	Object.defineProperty(ai, "trade", { get: () => ai.HQ.tradeManager, configurable: true });
 	// the town (PetraBot.town, execution/town.ts): the stub HQ's state, the searches answered by the knobs
 	const town = fake<Town>({
 		get canBuildUnits()
@@ -451,9 +450,10 @@ export function makeWorld(options: WorldOptions = {}): World
 		getSeaBetweenIndices: () => knobs.sea,
 		isDangerousLocation: () => false,
 		findBestTrainableUnit: () => knobs.bestTrainable,
+		// the town's desks, real over the stub managers
+		sites: new SiteDesk(ai.HQ),
 	});
 	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
-	Object.defineProperty(ai, "placement", { get: () => ai.HQ.placement, configurable: true });
 
 	// one base, anchoring a civil centre on land 2 — the world's rally point.
 	const anchor = makeEntity({
