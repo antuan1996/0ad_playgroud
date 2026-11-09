@@ -133,7 +133,8 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     (read-only `BaseView`), `captureTally.ts` (our units' capture strength per
     target, owned by HQ, exposed as `gameState.ai.captures`), `enemyLands.ts`
     (the enemies on each land, counted once a turn, owned by HQ, exposed as
-    `gameState.ai.enemyLands`), `capture.ts`
+    `gameState.ai.enemyLands`), `fishing.ts` (a shoal's sea and whether it
+    is safe), `capture.ts`
     (`allowCapture`), `territory.ts` (territory helpers over
     `gameState.ai.geography`, the HQ's geography). World code reaches AI
     state only through such exposed world objects, never `gameState.ai.HQ`.
@@ -167,7 +168,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     plans, runs them, local fights, defense armies turned to attacks) with
     `bombardment.ts` (`town.bombing`, also the attack manager's: idle siege
     sent to bomb what is in range), `transportDesk.ts` (`town.transports`, the naval manager's,
-    `NavalFleet`: owns the transport plans; ships, fishing), `defenseDesk.ts`
+    `NavalFleet`: owns the transport plans; ships) with `fishingDesk.ts`
+    (`town.fishing`, also the naval manager's: a shoal's sea and safety, the
+    report of a sea fished out), `defenseDesk.ts`
     (`town.defense`, the defense manager's, `DefenseDecisions`: raids, armies,
     shelter), `victoryDesk.ts` (`town.victory`, the victory manager's:
     critical units, relics) and `garrisonManager.ts` (`town.garrisons`, made

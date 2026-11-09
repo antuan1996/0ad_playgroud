@@ -2,11 +2,13 @@ import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, getSeaAccess, requireMetadata, requireValue, setSeaAccess } from "../adapter/entityExtend.ts";
 import type { AttackDesk } from "../execution/attackDesk.ts";
+import { FishingDesk } from "../execution/fishingDesk.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { TransportDesk } from "../execution/transportDesk.ts";
 import { type SeaFleet } from "../execution/transportPlan.ts";
 import { gatherTreasure } from "../execution/treasure.ts";
+import { fishSea } from "../world/fishing.ts";
 import { threatsAt } from "../world/seaRoute.ts";
 
 /** Warships wanted on a sea where the enemy fishes or trades (huntWithFleet). */
@@ -21,7 +23,7 @@ const DEFAULT_TOWER_REACH = 60;
 /** Food of fish per fishing boat wanted on a sea (fishByWhatIsLeft), and the most boats a sea gets. */
 export const FISH_PER_BOAT = 1500;
 export const FISH_MAX_BOATS = 8;
-import { GAIA, NO_BASE, cellIndex, seaRegion } from "../adapter/brands.ts";
+import { GAIA, NO_BASE, seaRegion } from "../adapter/brands.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isInState, stateIs, unitState } from "../adapter/unitState.ts";
 import { plansIn } from "../execution/attackConstants.ts";
@@ -201,100 +203,6 @@ function setNewShipsSeas(gameState: CommonGameState, events: EngineAIEvents): vo
 	}
 }
 
-const FISH_RAYS = [[-0.7, 0.7], [0, 1], [0.7, 0.7], [1, 0], [0.7, -0.7], [0, -1], [-0.7, -0.7], [-1, 0]];
-
-/** The cell index of the t-th of ntry steps towards pos from radius*ntry cells in direction a, or undefined off the map */
-function ringCell(
-	ring: { pos: number[]; radius: number; ntry: number; width: number; },
-	a: number[],
-	t: number,
-): number | undefined
-{
-	const { pos, radius, ntry, width } = ring;
-	const i = pos[0] + Math.round(a[0] * radius * (ntry - t));
-	const j = pos[1] + Math.round(a[1] * radius * (ntry - t));
-	if (i < 0 || i >= width || j < 0 || j >= width)
-	{
-		return undefined;
-	}
-	return i + j * width;
-}
-
-/** Whether every ray of ntry steps from 120 m out towards fishPos satisfies checkCell */
-function everyFishRay(
-	map: { cellSize: number; width: number; gamePosToMapPos(pos: CommonPosition): MapPos; },
-	fishPos: CommonPosition,
-	ntry: number,
-	checkCell: (cell: number) => "pass" | "next" | "fail",
-): boolean
-{
-	const pos = map.gamePosToMapPos(fishPos);
-	const width = map.width;
-	const radius = 120 / map.cellSize / ntry;
-	return FISH_RAYS.every((a) =>
-	{
-		for (let t = 0; t < ntry; ++t)
-		{
-			const cell = ringCell({ pos, radius, ntry, width }, a, t);
-			if (cell === undefined)
-			{
-				continue;
-			}
-			const step = checkCell(cell);
-			if (step !== "next")
-			{
-				return step === "pass";
-			}
-		}
-		return true;
-	});
-}
-
-/** Get the sea a fish is in, cache it, and check whether it lies in open sea */
-function fishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
-{
-	let sea = fish.getMetadata(PlayerID, "sea");
-	if (sea)
-	{
-		return sea;
-	}
-	const access = gameState.ai.accessibility;
-	const pos = access.gamePosToMapPos(fish.position());
-	const k = pos[0] + pos[1] * access.width;
-	sea = access.navalPassMap[k];
-	fish.setMetadata(PlayerID, "sea", sea);
-	if (
-		everyFishRay(access, fish.position(), 4, (cell) =>
-		{
-			if (access.landPassMap[cell] !== 1)
-			{
-				return "fail";
-			}
-			const navalPass = access.navalPassMap[cell];
-			return navalPass === sea ? "pass" : navalPass === 1 ? "next" : "fail";
-		})
-	)
-	{
-		fish.setMetadata(PlayerID, "opensea", true);
-	}
-	return sea;
-}
-
-/** Whether no enemy territory lies near a fish */
-function fishIsSafe(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
-{
-	if (fish.getMetadata(PlayerID, "opensea"))
-	{
-		return true;
-	}
-	const territoryMap = gameState.ai.geography.territoryMap;
-	return everyFishRay(territoryMap, fish.position(), 2, (cell) =>
-	{
-		const owner = territoryMap.getOwnerIndex(cellIndex(territoryMap, cell));
-		return owner !== 0 && gameState.isPlayerEnemy(owner) ? "fail" : "next";
-	});
-}
-
 /**
  * Whether a ship under way is blocked: neither moved nor turned for
  * STUCK_SECONDS (then counted again from now). Petra took a ship unmoved
@@ -444,12 +352,15 @@ export class NavalManager
 	readonly hq: NavalHQ;
 	/** the transport plans, made, run and kept on the execution side (execution/transportDesk.ts): its desk in the town */
 	readonly desk: TransportDesk;
+	/** what the fishers ask and report, on the execution side (execution/fishingDesk.ts) */
+	readonly fishing: FishingDesk;
 
 	constructor(Config: Config, gameState: CommonGameState, geography: Geography, hq: NavalHQ)
 	{
 		this.Config = Config;
 		this.hq = hq;
 		this.desk = new TransportDesk(Config, this);
+		this.fishing = new FishingDesk(this);
 		// docks
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
 		this.docks.registerUpdates();
@@ -478,7 +389,7 @@ export class NavalManager
 		const availableFishes: Record<number, number> = {};
 		for (const fish of gameState.getFishableSupplies().values())
 		{
-			const sea = this.getFishSea(gameState, fish);
+			const sea = fishSea(gameState, fish);
 			const amount = fish.resourceSupplyAmount();
 			if (sea && availableFishes[sea])
 			{
@@ -578,7 +489,7 @@ export class NavalManager
 		const fishLeft: Record<number, number> = {};
 		for (const fish of gameState.getFishableSupplies().values())
 		{
-			const sea = this.getFishSea(gameState, fish);
+			const sea = fishSea(gameState, fish);
 			if (sea)
 			{
 				fishLeft[sea] = (fishLeft[sea] ?? 0) + (fish.resourceSupplyAmount() ?? 0);
@@ -614,18 +525,6 @@ export class NavalManager
 		{
 			this.wantedFishShips.fill(0);
 		}
-	}
-
-	/** Get the sea, cache it if not yet done and check if in opensea */
-	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
-	{
-		return fishSea(gameState, fish);
-	}
-
-	/** check if we can safely fish at the fish position */
-	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
-	{
-		return fishIsSafe(gameState, fish);
 	}
 
 	/** get the list of seas (or lands) around this region not connected by a dock */

@@ -5,7 +5,7 @@
  *
  * Its parts are desks, each the execution side of a decision manager. The core managers make their own desk and
  * hold it, and the desk holds its manager through a view of what it asks (`attacks` and `bombing`: the attack manager's,
- * `transports`: the naval manager's, `defense` and `garrisons`: the defense manager's, `victory`: the victory
+ * `transports` and `fishing`: the naval manager's, `defense` and `garrisons`: the defense manager's, `victory`: the victory
  * manager's); the town gathers them once the managers are made. The town makes the parts that serve the
  * headquarters as a whole (`sites`, `placement`), over its view of it (decision/headquarters.ts, which builds the
  * town after its managers and passes itself as TownHQ).
@@ -18,6 +18,7 @@ import { seaBetween } from "../world/geography.ts";
 import type { AttackDesk, SerializedAttacks } from "./attackDesk.ts";
 import type { Bombardment } from "./bombardment.ts";
 import type { DefenseDesk } from "./defenseDesk.ts";
+import type { FishingDesk } from "./fishingDesk.ts";
 import type { GarrisonManager, SerializedGarrisonManager } from "./garrisonManager.ts";
 import { PlacementSearches, type PlacementSearchHQ } from "./placementSearches.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
@@ -58,7 +59,7 @@ interface TownHQ
 interface ManagerDesks
 {
 	readonly attackManager: { readonly desk: AttackDesk; readonly bombing: Bombardment; };
-	readonly navalManager: { readonly desk: TransportDesk; };
+	readonly navalManager: { readonly desk: TransportDesk; readonly fishing: FishingDesk; };
 	readonly defenseManager: { readonly desk: DefenseDesk; readonly garrisons: GarrisonManager; };
 	readonly victoryManager: { readonly desk: VictoryDesk; };
 }
@@ -89,6 +90,8 @@ export class Town
 	readonly bombing: Bombardment;
 	/** the ships, the transports between lands, and the fishing grounds */
 	readonly transports: TransportDesk;
+	/** the fishers' questions and reports */
+	readonly fishing: FishingDesk;
 	private readonly config: Config;
 	private readonly hq: TownHQ;
 	private turnCache: TownTurnCache = {};
@@ -105,6 +108,7 @@ export class Town
 		this.attacks = hq.attackManager.desk;
 		this.bombing = hq.attackManager.bombing;
 		this.transports = hq.navalManager.desk;
+		this.fishing = hq.navalManager.fishing;
 	}
 
 	/** The town's own state, as the headquarters saves it with its own */

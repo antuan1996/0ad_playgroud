@@ -2,7 +2,7 @@
  * The town's transports (`gameState.ai.town.transports`, part of execution/town.ts): the transport plans that carry
  * our units between lands — made when a unit asks a passage, split when the ships cannot take all, given free
  * ships, closed when done, and saved with the town — and what units, plans and workers ask of the naval manager:
- * our ships and fleets, where ships may land, the ships a sea needs, and the fishing grounds. It reaches the naval
+ * our ships and fleets, and the ships a sea needs (the fishing is execution/fishingDesk.ts). It reaches the naval
  * manager, which makes the desk, only through NavalFleet.
  */
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
@@ -22,9 +22,6 @@ export interface NavalFleet
 	readonly transportShips: CommonEntityCollection;
 	fleet(sea: number): SeaFleet | undefined;
 	setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void;
-	resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void;
-	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number;
-	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean;
 }
 
 export class TransportDesk
@@ -343,22 +340,6 @@ export class TransportDesk
 	setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void
 	{
 		this.naval.setMinimalTransportShips(gameState, sea, number);
-	}
-
-	/** the fishing boats (of a sea, or all) look for fish anew */
-	resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void
-	{
-		this.naval.resetFishingBoats(gameState, sea);
-	}
-
-	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
-	{
-		return this.naval.getFishSea(gameState, fish);
-	}
-
-	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
-	{
-		return this.naval.canFishSafely(gameState, fish);
 	}
 
 	Serialize(): SerializedTransports

@@ -1231,7 +1231,7 @@ export class UnitWork
 		const resources = gameState.getFishableSupplies();
 		if (!resources.hasEntities())
 		{
-			gameState.ai.town.transports.resetFishingBoats(gameState);
+			gameState.ai.town.fishing.resetFishingBoats(gameState);
 			this.ent.destroy();
 			return false;
 		}
@@ -1255,7 +1255,7 @@ export class UnitWork
 		resources.forEach((supply) =>
 		{
 			// check that it is accessible
-			if (gameState.ai.town.transports.getFishSea(gameState, supply) !== fisherSea)
+			if (gameState.ai.town.fishing.getFishSea(gameState, supply) !== fisherSea)
 			{
 				return;
 			}
@@ -1280,7 +1280,7 @@ export class UnitWork
 
 		if (exhausted)
 		{
-			gameState.ai.town.transports.resetFishingBoats(gameState, fisherSea);
+			gameState.ai.town.fishing.resetFishingBoats(gameState, fisherSea);
 			this.ent.destroy();
 			return false;
 		}
@@ -1313,7 +1313,7 @@ export class UnitWork
 		}
 
 		// Avoid ennemy territory
-		return gameState.ai.town.transports.canFishSafely(gameState, supply);
+		return gameState.ai.town.fishing.canFishSafely(gameState, supply);
 	}
 
 	gatherNearestField(
