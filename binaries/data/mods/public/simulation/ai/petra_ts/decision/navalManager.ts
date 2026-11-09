@@ -4,7 +4,7 @@ import { getLandAccess, getSeaAccess, requireMetadata, requireValue, setSeaAcces
 import type { AttackDesk } from "../execution/attackDesk.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import type { TransportDesk } from "../execution/transportDesk.ts";
+import { TransportDesk } from "../execution/transportDesk.ts";
 import { type SeaFleet } from "../execution/transportPlan.ts";
 import { gatherTreasure } from "../execution/treasure.ts";
 import { threatsAt } from "../world/seaRoute.ts";
@@ -41,13 +41,7 @@ import type { TradeManager } from "./tradeManager.ts";
 export type NavalHQ = Pick<Headquarters, "navalMap" | "getAccountedPopulation" | "canBuild"> & {
 	readonly tradeManager: Pick<TradeManager, "traders">;
 	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers">;
-	readonly town: {
-		readonly attacks: Pick<AttackDesk, "upcomingAttacks">;
-		readonly transports: Pick<
-			TransportDesk,
-			"plans" | "update" | "checkShipsLost" | "waitingForShips" | "isShipBoarding" | "getPlan"
-		>;
-	};
+	readonly town: { readonly attacks: Pick<AttackDesk, "upcomingAttacks">; };
 };
 
 /**
@@ -448,11 +442,14 @@ export class NavalManager
 	neededWarShips: number[] = [];
 
 	readonly hq: NavalHQ;
+	/** the transport plans, made, run and kept on the execution side (execution/transportDesk.ts): its desk in the town */
+	readonly desk: TransportDesk;
 
 	constructor(Config: Config, gameState: CommonGameState, geography: Geography, hq: NavalHQ)
 	{
 		this.Config = Config;
 		this.hq = hq;
+		this.desk = new TransportDesk(Config, this);
 		// docks
 		this.docks = gameState.getOwnStructures().filter(filters.byClasses(["Dock", "Shipyard"]));
 		this.docks.registerUpdates();
@@ -654,7 +651,7 @@ export class NavalManager
 	checkEvents(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
 		setNewShipsSeas(gameState, events);
-		this.hq.town.transports.checkShipsLost(gameState, events.Destroy);
+		this.desk.checkShipsLost(gameState, events.Destroy);
 
 		for (const evt of events.OwnershipChanged)
 		{ // capture events
@@ -696,7 +693,7 @@ export class NavalManager
 			this.neededTransportShips[sea] = 0;
 		}
 
-		for (const plan of this.hq.town.transports.plans)
+		for (const plan of this.desk.plans)
 		{
 			if (!plan.needTransportShips || plan.units.length < 2)
 			{
@@ -738,7 +735,7 @@ export class NavalManager
 	{
 		const priorities = this.Config.priorities;
 		// a transport with units waiting for ships, or an attack preparing for a sea without any
-		const waiting = this.hq.town.transports.waitingForShips() ||
+		const waiting = this.desk.waitingForShips() ||
 			[...plansIn(this.hq.town.attacks.upcomingAttacks)].some((plan) =>
 				plan.overseas !== 0 && plan.unitCollection.hasEntities() &&
 				!this.fleet(plan.overseas)?.transports.length
@@ -888,7 +885,7 @@ export class NavalManager
 				continue;
 			}
 			const shipPosition = ship.position();
-			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.hq.town.transports.isShipBoarding(ship))
+			if (ship.getMetadata(PlayerID, "transporter") !== undefined && this.desk.isShipBoarding(ship))
 			{
 				continue;
 			}
@@ -899,7 +896,7 @@ export class NavalManager
 				// a ship its transport sails by a route is left to it: its plan
 				// judges it stuck by its headway, and a nudge here threw its route
 				// away, the plan sending it again (FINDINGS §45)
-				if (transporter === undefined || !this.hq.town.transports.getPlan(transporter)?.routes[ship.id()])
+				if (transporter === undefined || !this.desk.getPlan(transporter)?.routes[ship.id()])
 				{
 					nudgeIfBlocked(ship, shipPosition);
 				}
@@ -1074,7 +1071,7 @@ export class NavalManager
 		Engine.ProfileStart("Naval Manager update");
 
 		// close finished transport plans, and assign free ships to plans which need them
-		this.hq.town.transports.update(gameState);
+		this.desk.update(gameState);
 
 		if (gameState.ai.playedTurn % 20 === 11)
 		{

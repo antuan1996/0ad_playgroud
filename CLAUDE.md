@@ -158,21 +158,25 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     and its desks `siteDesk.ts` (`town.sites`: builders, unbuildables, a
     market's worth), `placementSearches.ts` (`town.placement`: where to build,
     over the scoring of `placement.ts`; civic centre orders followed),
-    `guardDesk.ts` (`town.guard`: raids, defense armies, critical
-    units, relics), `garrisonManager.ts` (`town.garrisons`: garrison orders
-    carried out and released), `attackDesk.ts` (`town.attacks`: owns the attack plans,
-    runs them, bombing, local fights, defense armies turned to attacks) and
-    `transportDesk.ts` (`town.transports`: owns the transport plans; ships,
-    fishing); each reaches the HQ and its managers only through its own
-    private view (`TownHQ`, `SiteHQ`, `PlacementSearchHQ`, `GuardHQ`,
-    `GarrisonHQ`, `AttackHQ`, `TransportHQ`).
-    The town's plans are saved with the HQ (`town`).
+    and the core managers' desks, each made by its manager (`manager.desk`)
+    and holding it through a view of what it asks: `attackDesk.ts`
+    (`town.attacks`, the attack manager's, `AttackDecisions`: owns the attack
+    plans, runs them, bombing, local fights, defense armies turned to
+    attacks), `transportDesk.ts` (`town.transports`, the naval manager's,
+    `NavalFleet`: owns the transport plans; ships, fishing), `defenseDesk.ts`
+    (`town.defense`, the defense manager's, `DefenseDecisions`: raids, armies,
+    shelter), `victoryDesk.ts` (`town.victory`, the victory manager's:
+    critical units, relics) and `garrisonManager.ts` (`town.garrisons`, made
+    by the defense manager, `GarrisonDefense`: garrison orders carried out and
+    released). The town's own parts read the HQ through `TownHQ`, `SiteHQ`,
+    `PlacementSearchHQ`. The town's plans are saved with the HQ (`town`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).
 
 Control flow: `_petrabot.ts` (`PetraBot extends BaseAI`) → on the first turn
 `startingStrategy.analyseMap` creates `Geography`, `new Headquarters(config,
-gameState, geography)` constructs all managers whole (no two-step `init`), and
+gameState, geography)` constructs all managers whole (no two-step `init`),
+then the town from their desks, and
 `gameAnalysis` runs first-turn actions; on load `Headquarters.restore` (and each
 manager's/plan's `restore` factory) rebuilds from save data. Then one turn in
 eight (offset by player id) `Headquarters.update` drives the managers and
@@ -256,8 +260,8 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
 - Execution code (`execution/`) never reaches `Headquarters` or a decision
   manager's class: it uses the decision layer only through
   `gameState.ai.town` (`execution/town.ts`) and its desks, which hold their
-  views of the HQ privately (the HQ passes itself; the views read its
-  managers when asked, so a test may replace one). It reads bases through `gameState.ai.bases` and `world/bases.ts`
+  manager (or, for the town's own parts, the HQ) privately through a view.
+  It reads bases through `gameState.ai.bases` and `world/bases.ts`
   (`BaseView`), and mutates them only through capability
   interfaces (`SupplyBooking`, `SupplyUpkeep`, `IdleWorkers`). A member
   execution needs is added to the town or a desk and its view, never reached
@@ -269,7 +273,11 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   `Headquarters` and of its other managers); the HQ passes itself. Its module
   functions take the one manager they ask. A member a manager needs is added
   to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
-  `expandFor`).
+  `expandFor`). A core manager talks to its own desk directly (`this.desk`,
+  and the defense's `this.garrisons`); another manager's desk it reaches
+  through `town` in its view. The HQ builds its town after its managers,
+  gathering their desks (a test that replaces a manager puts its desk in the
+  town; `seatHQ` does so for the doors).
 - Methods never called (in port and original) are marked
   `/** TODO never called ... */`.
 - Port fixes go in a commit separate from tests. Commit messages end with

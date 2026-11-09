@@ -9,6 +9,7 @@ import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
 import { PLAN_LENT_FROM_PLAN, PLAN_RESERVE, isLent } from "../execution/unitPlan.ts";
+import { VictoryDesk } from "../execution/victoryDesk.ts";
 import { Worker } from "../execution/worker.ts";
 import type { Config } from "../world/config.ts";
 import type { AttackManager } from "./attackManager.ts";
@@ -229,9 +230,12 @@ export class VictoryManager
 	tryCaptureGaiaRelic: boolean;
 	tryCaptureGaiaRelicLapseTime: GameSeconds;
 	readonly hq: VictoryHQ;
+	/** what the execution side asks of the victory conditions: its desk in the town (execution/victoryDesk.ts) */
+	readonly desk: VictoryDesk;
 
 	constructor(Config: Config, hq: VictoryHQ)
 	{
+		this.desk = new VictoryDesk(this);
 		this.Config = Config;
 		this.hq = hq;
 		this.criticalEnts = new Map();

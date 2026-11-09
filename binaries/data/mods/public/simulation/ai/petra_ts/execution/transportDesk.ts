@@ -3,7 +3,7 @@
  * our units between lands — made when a unit asks a passage, split when the ships cannot take all, given free
  * ships, closed when done, and saved with the town — and what units, plans and workers ask of the naval manager:
  * our ships and fleets, where ships may land, the ships a sea needs, and the fishing grounds. It reaches the naval
- * manager only through TransportHQ.
+ * manager, which makes the desk, only through NavalFleet.
  */
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { debugWarn } from "../adapter/debug.ts";
@@ -15,31 +15,29 @@ import { TransportPlan, type SeaFleet } from "./transportPlan.ts";
 /** The transport plans as the town saves them, keyed by their place in the list */
 export type SerializedTransports = Record<string, ReturnType<TransportPlan["Serialize"]>>;
 
-/** What the transports desk asks of the headquarters (decision/headquarters.ts satisfies it as it is) */
-export interface TransportHQ
+/** What the transports desk asks of its naval manager (decision/navalManager.ts, which makes it and passes itself) */
+export interface NavalFleet
 {
-	readonly navalManager: {
-		readonly ships: CommonEntityCollection;
-		readonly transportShips: CommonEntityCollection;
-		fleet(sea: number): SeaFleet | undefined;
-		setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void;
-		resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void;
-		getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number;
-		canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean;
-	};
+	readonly ships: CommonEntityCollection;
+	readonly transportShips: CommonEntityCollection;
+	fleet(sea: number): SeaFleet | undefined;
+	setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void;
+	resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void;
+	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number;
+	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean;
 }
 
 export class TransportDesk
 {
 	private readonly config: Config;
-	private readonly hq: TransportHQ;
+	private readonly naval: NavalFleet;
 	/** the transports under way, in the order they were made */
 	private transportPlans: TransportPlan[] = [];
 
-	constructor(config: Config, hq: TransportHQ)
+	constructor(config: Config, naval: NavalFleet)
 	{
 		this.config = config;
-		this.hq = hq;
+		this.naval = naval;
 	}
 
 	/** the transports under way, in the order they were made */
@@ -51,19 +49,19 @@ export class TransportDesk
 	/** our ships */
 	get ships(): CommonEntityCollection
 	{
-		return this.hq.navalManager.ships;
+		return this.naval.ships;
 	}
 
 	/** our ships that carry units */
 	get transportShips(): CommonEntityCollection
 	{
-		return this.hq.navalManager.transportShips;
+		return this.naval.transportShips;
 	}
 
 	/** our ships on a sea, by kind */
 	fleet(sea: number): SeaFleet | undefined
 	{
-		return this.hq.navalManager.fleet(sea);
+		return this.naval.fleet(sea);
 	}
 
 	/** The transports' turn: those with no unit left close and free their ships, then free ships go to those in need */
@@ -286,7 +284,7 @@ export class TransportDesk
 			return;
 		}
 
-		for (const ship of this.hq.navalManager.ships.values())
+		for (const ship of this.naval.ships.values())
 		{
 			if (!ship.isGarrisonHolder() || !ship.garrisoned().length)
 			{
@@ -344,23 +342,23 @@ export class TransportDesk
 	/** at least `number` transport ships wanted on the sea */
 	setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void
 	{
-		this.hq.navalManager.setMinimalTransportShips(gameState, sea, number);
+		this.naval.setMinimalTransportShips(gameState, sea, number);
 	}
 
 	/** the fishing boats (of a sea, or all) look for fish anew */
 	resetFishingBoats(gameState: CommonGameState, sea?: SeaIndex): void
 	{
-		this.hq.navalManager.resetFishingBoats(gameState, sea);
+		this.naval.resetFishingBoats(gameState, sea);
 	}
 
 	getFishSea(gameState: CommonGameState, fish: CommonPlacedEntity): number
 	{
-		return this.hq.navalManager.getFishSea(gameState, fish);
+		return this.naval.getFishSea(gameState, fish);
 	}
 
 	canFishSafely(gameState: CommonGameState, fish: CommonPlacedEntity): boolean
 	{
-		return this.hq.navalManager.canFishSafely(gameState, fish);
+		return this.naval.canFishSafely(gameState, fish);
 	}
 
 	Serialize(): SerializedTransports

@@ -1291,7 +1291,7 @@ export class AttackPlan
 		{
 			return false;
 		}
-		if (gameState.ai.town.guard.isCritical(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
+		if (gameState.ai.town.victory.isCritical(ent.id()) && (this.overseas || ent.healthLevel() < 0.8))
 		{
 			return false;
 		}
@@ -1415,7 +1415,7 @@ export class AttackPlan
 			target.hasClass("Relic")
 		)
 		{
-			gameState.ai.town.guard.planRelicRaid(target.id(), this.name);
+			gameState.ai.town.victory.planRelicRaid(target.id(), this.name);
 		}
 		// Rushes can change their enemy target if nothing found with the preferred enemy
 		// Obstruction also can change the enemy target

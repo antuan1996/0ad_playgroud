@@ -1,21 +1,27 @@
 /**
  * The town as the execution layer sees it (`gameState.ai.town`): the state of the moment the plans and workers
  * share, the economy and danger queries they ask, and what they report back. It is the execution layer's one
- * door to the decision layer (decision/headquarters.ts, which owns it and passes itself as TownHQ): no other
- * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `placement`, `guard`, `garrisons`, `attacks`, `transports`) reach
- * them only through their private views.
+ * door to the decision layer: no other execution module holds the headquarters or a manager.
+ *
+ * Its parts are desks, each the execution side of a decision manager. The core managers make their own desk and
+ * hold it, and the desk holds its manager through a view of what it asks (`attacks`: the attack manager's,
+ * `transports`: the naval manager's, `defense` and `garrisons`: the defense manager's, `victory`: the victory
+ * manager's); the town gathers them once the managers are made. The town makes the parts that serve the
+ * headquarters as a whole (`sites`, `placement`), over its view of it (decision/headquarters.ts, which builds the
+ * town after its managers and passes itself as TownHQ).
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import type { Config } from "../world/config.ts";
 import type { EconomyPlan } from "../world/economyPlan.ts";
 import { seaBetween } from "../world/geography.ts";
-import { AttackDesk, type AttackHQ, type SerializedAttacks } from "./attackDesk.ts";
-import { GarrisonManager, type GarrisonHQ, type SerializedGarrisonManager } from "./garrisonManager.ts";
-import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
+import type { AttackDesk, SerializedAttacks } from "./attackDesk.ts";
+import type { DefenseDesk } from "./defenseDesk.ts";
+import type { GarrisonManager, SerializedGarrisonManager } from "./garrisonManager.ts";
 import { PlacementSearches, type PlacementSearchHQ } from "./placementSearches.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
-import { TransportDesk, type SerializedTransports, type TransportHQ } from "./transportDesk.ts";
+import type { SerializedTransports, TransportDesk } from "./transportDesk.ts";
+import type { VictoryDesk } from "./victoryDesk.ts";
 
 /** A trainable unit's weights for findBestTrainableUnit: a name, a weight and its arguments (decision/workforce.ts) */
 type TrainableWeight = [string, number, ...string[]];
@@ -47,6 +53,15 @@ interface TownHQ
 	phaseResearched(gameState: CommonGameState, phase: number): void;
 }
 
+/** The desks the core managers made, which the town gathers */
+interface ManagerDesks
+{
+	readonly attackManager: { readonly desk: AttackDesk; };
+	readonly navalManager: { readonly desk: TransportDesk; };
+	readonly defenseManager: { readonly desk: DefenseDesk; readonly garrisons: GarrisonManager; };
+	readonly victoryManager: { readonly desk: VictoryDesk; };
+}
+
 /** What the town works out once a headquarters turn (cleared by newTurn) */
 type TownTurnCache = {
 	buildingBuilt?: boolean;
@@ -61,8 +76,10 @@ export class Town
 	readonly sites: SiteDesk;
 	/** where to build, and the civic centres ordered followed until they stand */
 	readonly placement: PlacementSearches;
-	/** the defense and the victory conditions: raids, armies, shelter, critical units, relics */
-	readonly guard: GuardDesk;
+	/** the defense: raids, armies, shelter for a hurt unit */
+	readonly defense: DefenseDesk;
+	/** the victory conditions: critical units, relics */
+	readonly victory: VictoryDesk;
 	/** the garrison orders, carried out, followed and released */
 	readonly garrisons: GarrisonManager;
 	/** the attack plans, whom they attack, and the units between plans */
@@ -73,16 +90,17 @@ export class Town
 	private readonly hq: TownHQ;
 	private turnCache: TownTurnCache = {};
 
-	constructor(config: Config, hq: TownHQ & SiteHQ & PlacementSearchHQ & GuardHQ & GarrisonHQ & AttackHQ & TransportHQ)
+	constructor(config: Config, hq: TownHQ & SiteHQ & PlacementSearchHQ & ManagerDesks)
 	{
 		this.config = config;
 		this.hq = hq;
 		this.sites = new SiteDesk(hq);
 		this.placement = new PlacementSearches(hq);
-		this.guard = new GuardDesk(hq);
-		this.garrisons = new GarrisonManager(config, hq);
-		this.attacks = new AttackDesk(config, hq);
-		this.transports = new TransportDesk(config, hq);
+		this.defense = hq.defenseManager.desk;
+		this.victory = hq.victoryManager.desk;
+		this.garrisons = hq.defenseManager.garrisons;
+		this.attacks = hq.attackManager.desk;
+		this.transports = hq.navalManager.desk;
 	}
 
 	/** The town's own state, as the headquarters saves it with its own */
@@ -95,11 +113,11 @@ export class Town
 		};
 	}
 
-	/** The saved state back, once the managers it reads are restored */
+	/** The saved state back (the managers it reads are restored before the town is made) */
 	resume(gameState: CommonGameState, data: ReturnType<Town["Serialize"]>): void
 	{
 		this.transports.resume(gameState, data.transports);
-		this.attacks.resume(gameState, data.attacks);
+		this.attacks.resume(gameState, data.attacks, this.hq.canBuildUnits);
 		this.garrisons.resume(data.garrisons);
 	}
 

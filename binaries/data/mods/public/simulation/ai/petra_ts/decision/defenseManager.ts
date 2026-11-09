@@ -18,6 +18,7 @@ import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitSt
 import type { ArmyRelease, AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { DefenseArmy, type SerializedDefenseArmy } from "../execution/defenseArmy.ts";
+import { DefenseDesk } from "../execution/defenseDesk.ts";
 import { GarrisonManager } from "../execution/garrisonManager.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { Worker, marchesWithAttack } from "../execution/worker.ts";
@@ -91,10 +92,7 @@ type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garris
 export type DefenseHQ = Pick<Headquarters, "isDefendable" | "trainEmergencyUnits"> & {
 	readonly victoryManager: Pick<VictoryManager, "criticalEnts">;
 	readonly basesManager: Pick<BasesManager, "hasActiveBase" | "getBaseByID" | "baseManagers">;
-	readonly town: {
-		readonly attacks: Pick<AttackDesk, "getPlan" | "switchDefenseToAttack">;
-		readonly garrisons: DefenseGarrison;
-	};
+	readonly town: { readonly attacks: Pick<AttackDesk, "getPlan" | "switchDefenseToAttack">; };
 };
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
@@ -479,9 +477,15 @@ export class DefenseManager
 	/** The headquarters' map of the world: the territory map is the turn's own */
 	geography: Geography;
 	readonly hq: DefenseHQ;
+	/** what the execution side asks of the defense: its desk in the town (execution/defenseDesk.ts) */
+	readonly desk: DefenseDesk;
+	/** the garrison orders it gives, carried out on the execution side (execution/garrisonManager.ts) */
+	readonly garrisons: GarrisonManager;
 
 	constructor(Config: Config, geography: Geography, hq: DefenseHQ)
 	{
+		this.desk = new DefenseDesk(this);
+		this.garrisons = new GarrisonManager(Config, this);
 		this.hq = hq;
 		this.geography = geography;
 		// Array of "army" Objects.
@@ -1382,7 +1386,7 @@ export class DefenseManager
 		}
 		if (target.hasClass("StoneThrower"))
 		{
-			garrisonSiegeUnit(gameState, this.hq.town.garrisons, target);
+			garrisonSiegeUnit(gameState, this.garrisons, target);
 			return true;
 		}
 		return false;
@@ -1450,7 +1454,7 @@ export class DefenseManager
 			return false;
 		}
 		const minGarrison = data.min || target.garrisonMax();
-		if (this.hq.town.garrisons.numberOfGarrisonedSlots(target) >= minGarrison)
+		if (this.garrisons.numberOfGarrisonedSlots(target) >= minGarrison)
 		{
 			return false;
 		}
@@ -1458,9 +1462,9 @@ export class DefenseManager
 		{
 			return false;
 		}
-		const garrisonManager = this.hq.town.garrisons;
+		const garrisonManager = this.garrisons;
 		const typeGarrison = data.type || GarrisonManager.TYPE_PROTECTION;
-		let allowMelee = this.hq.town.garrisons.allowMelee(target);
+		let allowMelee = this.garrisons.allowMelee(target);
 		if (allowMelee === undefined)
 		{
 			// Should be kept in sync with garrisonManager to avoid garrisoning-ungarrisoning some units.
@@ -1573,7 +1577,7 @@ export class DefenseManager
 	 */
 	garrisonAttackedUnit(gameState: CommonGameState, unit: CommonPlacedEntity, emergency: boolean = false): boolean
 	{
-		const garrisonManager = this.hq.town.garrisons;
+		const garrisonManager = this.garrisons;
 		const nearest = nearestHolder(
 			gameState,
 			unit,

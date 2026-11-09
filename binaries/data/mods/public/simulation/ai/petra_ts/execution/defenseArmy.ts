@@ -334,7 +334,7 @@ export class DefenseArmy
 		}
 		if (
 			ent.healthLevel() < this.Config.garrisonHealthLevel.low &&
-			gameState.ai.town.guard.garrisonAttackedUnit(gameState, ent)
+			gameState.ai.town.defense.garrisonAttackedUnit(gameState, ent)
 		)
 		{
 			return;

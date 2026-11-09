@@ -347,7 +347,6 @@ export class Headquarters
 
 		// Cache various quantities.
 		this.turnCache = {};
-		this.town = new Town(config, this);
 		this.lastFailedGather = {};
 
 		// Workers configuration.
@@ -369,8 +368,6 @@ export class Headquarters
 
 			this.basesManager = new BasesManager(this.Config, gameState, this, saved.basesManager);
 			this.navalManager = NavalManager.restore(this.Config, gameState, geography, saved.navalManager, this);
-			// the transports, whose ships the naval manager's collections hold, and the attacks
-			this.town.resume(gameState, saved.town);
 			this.attackManager = AttackManager.restore(this.Config, gameState, saved.attackManager, this);
 
 			this.buildManager = BuildManager.restore(saved.buildManager);
@@ -382,6 +379,9 @@ export class Headquarters
 			this.diplomacyManager = DiplomacyManager.restore(this.Config, saved.diplomacyManager, this);
 			this.victoryManager = VictoryManager.restore(this.Config, saved.victoryManager, this);
 			this.emergencyManager = EmergencyManager.restore(this.Config, saved.emergencyManager);
+			// the town gathers the managers' desks; then its plans and garrisons come back
+			this.town = new Town(config, this);
+			this.town.resume(gameState, saved.town);
 			return;
 		}
 
@@ -395,6 +395,8 @@ export class Headquarters
 		this.diplomacyManager = new DiplomacyManager(this.Config, false, this);
 		this.victoryManager = new VictoryManager(this.Config, this);
 		this.emergencyManager = EmergencyManager.start(this.Config, gameState);
+		// the town gathers the managers' desks
+		this.town = new Town(config, this);
 	}
 
 	/** A saved headquarters' own state, as it was saved */

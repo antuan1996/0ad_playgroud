@@ -3,7 +3,8 @@
  * to keep — those in preparation and those under way, numbered as they are made, run each turn, started, aborted
  * and closed, and saved with the town — with the local fights a leaving plan leaves, the defense armies turned to
  * an attack, the siege units sent to bomb what is in range meanwhile, and the enemies on each land. The attack
- * manager decides which attacks to make and whom they fight; the desk reaches it only through AttackHQ.
+ * manager decides which attacks to make and whom they fight; it makes the desk, which reaches it only through
+ * AttackDecisions.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
@@ -143,15 +144,12 @@ function bombingSpot(
 	return targetPos;
 }
 
-/** What the attacks desk asks of the headquarters (decision/headquarters.ts satisfies it as it is) */
-export interface AttackHQ
+/** What the attacks desk asks of its attack manager (decision/attackManager.ts, which makes it and passes itself) */
+export interface AttackDecisions
 {
-	readonly canBuildUnits: boolean;
-	readonly attackManager: {
-		readonly outOfPlan: CommonEntityCollection;
-		readonly defeated: Readonly<Record<number, boolean>>;
-		getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined;
-	};
+	readonly outOfPlan: CommonEntityCollection;
+	readonly defeated: Readonly<Record<number, boolean>>;
+	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined;
 }
 
 export class AttackDesk
@@ -170,30 +168,30 @@ export class AttackDesk
 	private enemyLands = new Map<AccessIndex, CommonPlacedEntity[]>();
 	private enemyLandsTurn = -1;
 	private readonly config: Config;
-	private readonly hq: AttackHQ;
+	private readonly manager: AttackDecisions;
 
-	constructor(config: Config, hq: AttackHQ)
+	constructor(config: Config, manager: AttackDecisions)
 	{
 		this.config = config;
-		this.hq = hq;
+		this.manager = manager;
 	}
 
 	/** units that left a plan, ready for the next one */
 	get outOfPlan(): CommonEntityCollection
 	{
-		return this.hq.attackManager.outOfPlan;
+		return this.manager.outOfPlan;
 	}
 
 	/** Whether the player was found defeated */
 	isDefeated(player: PlayerId): boolean
 	{
-		return !!this.hq.attackManager.defeated[player];
+		return !!this.manager.defeated[player];
 	}
 
 	/** the player an attack should go for */
 	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
 	{
-		return this.hq.attackManager.getEnemyPlayer(gameState, attack);
+		return this.manager.getEnemyPlayer(gameState, attack);
 	}
 
 	/** A new plan of the type to prepare, numbered next; none when it has nowhere to start from */
@@ -799,12 +797,12 @@ export class AttackDesk
 	}
 
 	/** The saved plans back, as the headquarters can build units or not */
-	resume(gameState: CommonGameState, data: SerializedAttacks): void
+	resume(gameState: CommonGameState, data: SerializedAttacks, canBuildUnits: boolean): void
 	{
 		this.totalNumber = data.totalNumber;
 		this.debugTime = data.debugTime;
 		const restore = (dataAttack: SerializedAttackPlan): AttackPlan =>
-			AttackPlan.restore(gameState, this.config, dataAttack, this.hq.canBuildUnits);
+			AttackPlan.restore(gameState, this.config, dataAttack, canBuildUnits);
 		this.upcomingAttacks = byAttackType((type) => data.upcomingAttacks[type].map(restore));
 		this.startedAttacks = byAttackType((type) => data.startedAttacks[type].map(restore));
 	}

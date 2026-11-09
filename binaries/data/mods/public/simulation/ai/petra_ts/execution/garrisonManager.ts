@@ -43,32 +43,30 @@ function mayThreaten(ent: CommonEntity): boolean
  */
 
 /**
- * What the garrisons ask of the headquarters (decision/headquarters.ts satisfies it as it is): the defense, to fill
- * a decaying structure.
+ * What the garrisons ask of the defense manager (decision/defenseManager.ts, which makes them and passes itself):
+ * to fill a decaying structure.
  */
-export interface GarrisonHQ
+export interface GarrisonDefense
 {
-	readonly defenseManager: {
-		garrisonUnitsInside(
-			gameState: CommonGameState,
-			target: CommonPlacedEntity,
-			data: { min?: number; type?: string; attacker?: CommonPlacedEntity; },
-		): boolean;
-	};
+	garrisonUnitsInside(
+		gameState: CommonGameState,
+		target: CommonPlacedEntity,
+		data: { min?: number; type?: string; attacker?: CommonPlacedEntity; },
+	): boolean;
 }
 
 export class GarrisonManager
 {
 	Config: Config;
-	private readonly siblings: GarrisonHQ;
+	private readonly defense: GarrisonDefense;
 
 	holders = new Map<EntityId, GarrisonHolderData>();
 	decayingStructures = new Map<EntityId, number>();
 
-	constructor(Config: Config, siblings: GarrisonHQ)
+	constructor(Config: Config, defense: GarrisonDefense)
 	{
 		this.Config = Config;
-		this.siblings = siblings;
+		this.defense = defense;
 	}
 
 	static TYPE_FORCE = "force";
@@ -120,10 +118,7 @@ export class GarrisonManager
 			}
 			else if (this.numberOfGarrisonedSlots(ent) < gmin)
 			{
-				this.siblings.defenseManager.garrisonUnitsInside(gameState, ent, {
-					min: gmin,
-					type: GarrisonManager.TYPE_DECAY,
-				});
+				this.defense.garrisonUnitsInside(gameState, ent, { min: gmin, type: GarrisonManager.TYPE_DECAY });
 			}
 		}
 	}

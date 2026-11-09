@@ -92,7 +92,7 @@ export function resetUnit(gameState: CommonGameState, ent: CommonEntity): void
 	const partOfArmy = ent.getMetadata(PlayerID, "PartOfArmy");
 	if (partOfArmy)
 	{
-		const army = gameState.ai.town.guard.getArmy(partOfArmy);
+		const army = gameState.ai.town.defense.getArmy(partOfArmy);
 		if (army)
 		{
 			army.removeOwn(gameState, ent.id());

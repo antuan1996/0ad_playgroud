@@ -349,7 +349,7 @@ export function findRushTarget(
 export function raidTargetFinder(gameState: CommonGameState): CommonEntityCollection
 {
 	const targets = new EntityCollection(gameState.sharedScript);
-	for (const targetId of gameState.ai.town.guard.raidTargets)
+	for (const targetId of gameState.ai.town.defense.raidTargets)
 	{
 		const target = gameState.getEntityById(targetId);
 		if (target && isPlaced(target))
@@ -371,7 +371,7 @@ export function targetDistance(
 	const { land, targetPlayer, type } = query;
 	if (
 		targetPlayer === 0 && gameState.getVictoryConditions().has("capture_the_relic") &&
-		(!ent.hasClass("Relic") || gameState.ai.town.guard.isRelicRaided(ent.id()))
+		(!ent.hasClass("Relic") || gameState.ai.town.victory.isRelicRaided(ent.id()))
 	)
 	{
 		return undefined;
