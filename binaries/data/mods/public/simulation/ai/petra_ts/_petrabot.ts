@@ -6,7 +6,7 @@ import { Headquarters } from "./decision/headquarters.ts";
 import type { HeadquartersEvents, HeadquartersSerializedData } from "./decision/headquarters.ts";
 import { gameAnalysis } from "./decision/startingStrategy.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "./execution/queueManager.ts";
-import type { AttackRegistry, DefenseService, NavalService, VictoryService } from "./execution/services.ts";
+import type { AttackRegistry, NavalService } from "./execution/services.ts";
 import type { Town } from "./execution/town.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
@@ -229,18 +229,6 @@ export class PetraBot extends BaseAI
 	get town(): Town
 	{
 		return requireValue(this.HQ).town;
-	}
-
-	/** The defense manager's services, as `gameState.ai.defense` (PetraRuntime.AIState, execution/services.ts) */
-	get defense(): DefenseService
-	{
-		return requireValue(this.HQ).defenseManager;
-	}
-
-	/** The victory manager's services, as `gameState.ai.victory` */
-	get victory(): VictoryService
-	{
-		return requireValue(this.HQ).victoryManager;
 	}
 
 	/** The attack manager's services, as `gameState.ai.attacks` (PetraRuntime.AIState, execution/services.ts) */

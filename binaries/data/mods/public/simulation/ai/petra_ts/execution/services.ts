@@ -6,7 +6,6 @@
  */
 import { AttackType } from "./attackConstants.ts";
 import type { AttackPlan } from "./attackPlan.ts";
-import type { DefenseArmy } from "./defenseArmy.ts";
 import type { SeaFleet, TransportPlan } from "./transportPlan.ts";
 
 /** The naval manager's services (decision/navalManager.ts, `gameState.ai.naval`): ships, transports, fishing. */
@@ -60,24 +59,4 @@ export interface AttackRegistry
 	enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonPlacedEntity[]>;
 	/** the soldiers of a leaving plan beside enemies on another land stay there, as attacks of their own */
 	splitLocalFights(gameState: CommonGameState, leaving: AttackPlan, targetLand: AccessIndex | undefined): void;
-}
-
-/** The defense manager's services (decision/defenseManager.ts, `gameState.ai.defense`). */
-export interface DefenseService
-{
-	/** the enemy foundations whose builders we attacked, for the raids */
-	readonly targetList: readonly EntityId[];
-	getArmy(partOfArmy: ArmyId): DefenseArmy | undefined;
-	/** a hurt unit sent into the nearest holder that heals it (any, in an emergency) */
-	garrisonAttackedUnit(gameState: CommonGameState, unit: CommonPlacedEntity, emergency?: boolean): boolean;
-}
-
-/** The victory manager's services (decision/victoryManager.ts, `gameState.ai.victory`): critical units, relics. */
-export interface VictoryService
-{
-	/** the units the victory conditions protect (heroes in regicide, ...) */
-	readonly criticalEnts: ReadonlyMap<EntityId, unknown>;
-	isRelicRaided(relicId: EntityId): boolean;
-	/** an attack plan that chose a gaia relic as its target raids it, alone */
-	planRelicRaid(relicId: EntityId, plan: AttackPlanId): void;
 }
