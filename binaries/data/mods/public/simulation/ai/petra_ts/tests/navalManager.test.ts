@@ -247,37 +247,6 @@ describe("the fleet counted at the start: init", () =>
 		assert.equal(s.naval.fleet(WEST), undefined, "a land keeps no fleet");
 	});
 
-	it("maps where units can board and land: the shallows of each land on each sea", () =>
-	{
-		const s = seat();
-		init(s);
-
-		const width = MAP_CELLS * 4;
-		for (const [land, from, to] of [[WEST, 152, 160], [ISLAND, 240, 248]])
-		{
-			const zone = s.naval.landingZones[land]?.[SEA];
-			assert.ok(zone && zone.size > 0, `land ${land} has landing spots`);
-			for (const i of zone)
-			{
-				const x = 2 * (i % width);
-				assert.ok(x >= from && x < to, `in the shallows, got x = ${x}`);
-			}
-		}
-	});
-
-	it("leaves out a lone shallow cell with no room around it", () =>
-	{
-		const s = seat();
-		// a single flooded cell inside our land: land 2 and sea 5 at once
-		const width = MAP_CELLS * 4;
-		const naval = s.world.map.navalPassMap;
-		const lone = 20 + 80 * width;
-		naval[lone] = SEA;
-		init(s);
-
-		assert.equal(s.naval.landingZones[WEST][SEA].has(lone), false);
-	});
-
 	it("tells each dock of ours which sea it opens on", () =>
 	{
 		const s = seat();
@@ -285,19 +254,6 @@ describe("the fleet counted at the start: init", () =>
 		init(s);
 
 		assert.equal(harbour.getMetadata(PlayerID, "sea"), SEA);
-	});
-
-	it("on a loaded game, keeps the landing spots it saved rather than mapping them anew", () =>
-	{
-		const s = seat();
-		init(s);
-		const saved = s.naval.Serialize();
-		// a save from a game whose spots were mapped otherwise
-		saved.properties.landingZones = { [WEST]: { [SEA]: new Set([7]) } };
-
-		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved, s.hq);
-
-		assert.deepEqual(loaded.landingZones, { [WEST]: { [SEA]: new Set([7]) } });
 	});
 });
 
@@ -1476,7 +1432,7 @@ describe("the fleet through its turn: update", () =>
 
 describe("the fleet saved and loaded", () =>
 {
-	it("comes back with the same wanted ships, landing spots and passages", () =>
+	it("comes back with the same wanted ships and passages", () =>
 	{
 		const s = seat();
 		init(s);
@@ -1497,7 +1453,6 @@ describe("the fleet saved and loaded", () =>
 		s.hq.town.resume(s.world.gameState, savedTown);
 
 		assert.equal(loaded.wantedTransportShips[SEA], 2);
-		assert.equal(loaded.landingZones, saved.properties.landingZones);
 		assert.equal(s.transports.plans.length, 1);
 		assert.equal(s.transports.plans[0].units.length, 1, "the passage finds its unit again");
 		assert.deepEqual(s.hq.town.Serialize(), savedTown);

@@ -34,7 +34,7 @@ import type { BaseManager } from "../../decision/baseManager.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { Config } from "../../world/config.ts";
-import { Geography } from "../../world/geography.ts";
+import { Geography, findLandingZones } from "../../world/geography.ts";
 import { createBorderMap, createTerritoryMap } from "../../world/mapModule.ts";
 
 /** re-exported so the suites draw every name from one place */
@@ -772,7 +772,7 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 		landRegions: options.landRegions ?? { 2: true },
 		navalMap: options.navalMap ?? false,
 		navalRegions: options.navalRegions ?? {},
-	});
+	}, findLandingZones(world.gameState));
 	const hq = new Headquarters(config, world.gameState, geography);
 	world.ai.HQ = hq;
 	// as the bot's getter (PetraBot.captures): the tally of whichever HQ is seated, a restored one too

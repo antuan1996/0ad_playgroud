@@ -8,7 +8,7 @@
  *
  * The strips 152 <= x < 160 and 240 <= x < 248 are shallows: both a land
  * region and the sea, as the engine's passability grids overlap at a shore.
- * The naval manager's landing zones are made of exactly those cells. As in the
+ * The geography's landing zones are made of exactly those cells. As in the
  * engine's accessibility analysis, a cell that is no land (or no sea) carries
  * region 1 on that grid, never 0. With `island: false` the sea runs to the
  * map's east edge.

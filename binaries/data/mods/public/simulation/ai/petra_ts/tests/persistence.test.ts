@@ -54,7 +54,7 @@ function bareGeography(world: CommonGameState): Geography
 		landRegions: {},
 		navalRegions: {},
 		navalMap: false,
-	});
+	}, {});
 }
 
 function emptyWorldWithMap(): CommonGameState
