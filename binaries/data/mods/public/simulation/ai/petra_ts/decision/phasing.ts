@@ -4,11 +4,13 @@
  */
 import { debugWarn } from "../adapter/debug.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
-import type { BuildManager } from "./buildManager.ts";
+import type { Builders } from "../world/builders.ts";
 import type { HeadquartersQueues, TownState } from "./headquarters.ts";
 
 /** What the phasing asks of the headquarters: its state, and the structures it has of a class */
-type PhasingHQ = TownState & { readonly buildManager: Pick<BuildManager, "findStructureWithClass">; };
+type PhasingHQ = TownState & {
+	readonly buildManager: { readonly builders: Pick<Builders, "findStructureWithClass">; };
+};
 
 /** Ensure that all requirements are met when phasing up*/
 export function checkPhaseRequirements(hq: PhasingHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
@@ -79,7 +81,7 @@ function phasePlanWithClass(
 	{
 		return undefined;
 	}
-	const structure = hq.buildManager.findStructureWithClass(gameState, [className]);
+	const structure = hq.buildManager.builders.findStructureWithClass(gameState, [className]);
 	if (structure && hq.canBuild(gameState, structure))
 	{
 		return { plan: new ConstructionPlan(gameState, structure, { phaseUp: true }), queue };

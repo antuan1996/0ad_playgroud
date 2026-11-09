@@ -730,7 +730,7 @@ export class Headquarters
 			return false;
 		}
 
-		if (!this.buildManager.hasBuilder(type))
+		if (!this.buildManager.builders.hasBuilder(type))
 		{
 			this.buildManager.setUnbuildable(gameState, type, 120, "nobuilder");
 			return false;

@@ -9,7 +9,7 @@
 export interface SiteHQ
 {
 	readonly buildManager: {
-		hasBuilder(template: TemplateName): boolean | undefined;
+		readonly builders: { hasBuilder(template: TemplateName): boolean | undefined; };
 		isUnbuildable(gameState: CommonGameState, template: string): boolean;
 		setUnbuildable(gameState: CommonGameState, template: string, time?: number, reason?: string): void;
 	};
@@ -31,7 +31,7 @@ export class SiteDesk
 	/** Whether one of our units can build the template (undefined while nobody was counted) */
 	hasBuilder(template: TemplateName): boolean | undefined
 	{
-		return this.hq.buildManager.hasBuilder(template);
+		return this.hq.buildManager.builders.hasBuilder(template);
 	}
 
 	isUnbuildable(gameState: CommonGameState, template: string): boolean

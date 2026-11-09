@@ -10,15 +10,15 @@ import { AttackPlan } from "../execution/attackPlan.ts";
 import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
+import type { Builders } from "../world/builders.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import type { BasesManager } from "./basesManager.ts";
-import type { BuildManager } from "./buildManager.ts";
 import type { Headquarters, HeadquartersEvents, TownState } from "./headquarters.ts";
 import { configFirstBase, type FirstBaseConfigHQ } from "./startingStrategy.ts";
 
 /** What the events ask of the headquarters: its state, the decaying structures, the managers' event handling */
 type EventsHQ = TownState & FirstBaseConfigHQ & Pick<Headquarters, "updateTerritories" | "decayingStructures"> & {
-	readonly buildManager: Pick<BuildManager, "checkEvents">;
+	readonly buildManager: { readonly builders: Pick<Builders, "checkEvents">; };
 	readonly basesManager: Pick<BasesManager, "checkEvents">;
 	readonly town: {
 		readonly garrisons: Pick<
@@ -31,7 +31,7 @@ type EventsHQ = TownState & FirstBaseConfigHQ & Pick<Headquarters, "updateTerrit
 
 export function checkEvents(hq: EventsHQ, gameState: CommonGameState, events: HeadquartersEvents): void
 {
-	hq.buildManager.checkEvents(gameState, events);
+	hq.buildManager.builders.checkEvents(gameState, events);
 	hq.updateTerritories(gameState);
 
 	// Reset the entities collections which depend on diplomacy

@@ -134,7 +134,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     cell belongs to, owned by the bases manager, read as
     `gameState.ai.bases.territory`), `gatherTally.ts` (the turn's gatherers
     booked and the gather rates, owned by the bases manager, read as
-    `gameState.ai.bases.tally`), `captureTally.ts` (our units' capture strength per
+    `gameState.ai.bases.tally`), `builders.ts` (which structures our units
+    can build, owned and saved by the build manager, `buildManager.builders`),
+    `captureTally.ts` (our units' capture strength per
     target, owned by HQ, exposed as `gameState.ai.captures`), `enemyLands.ts`
     (the enemies on each land, counted once a turn, owned by HQ, exposed as
     `gameState.ai.enemyLands`), `fishing.ts` (a shoal's sea and whether it

@@ -21,12 +21,12 @@ import type { Town } from "../execution/town.ts";
 import { isLent } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import { BaseResources, type ResourceSupply } from "../world/baseResources.ts";
+import type { Builders } from "../world/builders.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { isNotWorthBuilding } from "../world/territory.ts";
 import type { BasesManager } from "./basesManager.ts";
-import type { BuildManager } from "./buildManager.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
@@ -282,7 +282,7 @@ export type BaseHQ =
 		| "trainEmergencyUnits"
 	>
 	& {
-		readonly buildManager: Pick<BuildManager, "findStructuresByFilter">;
+		readonly buildManager: { readonly builders: Pick<Builders, "findStructuresByFilter">; };
 		readonly town: Pick<Town, "isDangerousLocation" | "pickMostNeededResources">;
 	};
 
@@ -667,7 +667,12 @@ export class BaseManager
 			pos: worldPos(0, 0),
 			templateName: NO_TEMPLATE,
 		};
-		for (const templateName of this.hq.buildManager.findStructuresByFilter(gameState, filters.isDropsite(resource)))
+		for (
+			const templateName of this.hq.buildManager.builders.findStructuresByFilter(
+				gameState,
+				filters.isDropsite(resource),
+			)
+		)
 		{
 			const dp = this.findBestDropsiteLocation(gameState, resource, templateName);
 			if (dp.quality < bestResult.quality)
