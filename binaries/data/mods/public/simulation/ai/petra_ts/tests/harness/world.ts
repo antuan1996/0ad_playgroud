@@ -14,6 +14,7 @@ import { byClass } from "simulation/ai/common-api/filters.js";
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { ArmyRelease } from "../../decision/attackManager.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
+import { AttackDesk } from "../../execution/attackDesk.ts";
 import { GuardDesk } from "../../execution/guardDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
@@ -439,7 +440,6 @@ export function makeWorld(options: WorldOptions = {}): World
 	Object.defineProperty(ai, "treasures", { get: () => ai.HQ.treasures, configurable: true });
 	// the managers' services to execution (execution/services.ts), as the bot's getters give them
 	Object.defineProperty(ai, "naval", { get: () => ai.HQ.navalManager, configurable: true });
-	Object.defineProperty(ai, "attacks", { get: () => ai.HQ.attackManager, configurable: true });
 	// the town (PetraBot.town, execution/town.ts): the stub HQ's state, the searches answered by the knobs
 	const town = fake<Town>({
 		get canBuildUnits()
@@ -452,6 +452,7 @@ export function makeWorld(options: WorldOptions = {}): World
 		// the town's desks, real over the stub managers
 		sites: new SiteDesk(ai.HQ),
 		guard: new GuardDesk(ai.HQ),
+		attacks: new AttackDesk(ai.HQ),
 	});
 	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
 
