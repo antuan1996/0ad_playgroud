@@ -853,8 +853,12 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 
 		bs.assignGatherers();
 
-		assert.equal(bs.GetTCGatherer(entityId(5001)), 1, "the pack-man is on the tally for the supply he carries");
-		assert.equal(bs.GetTCGatherer(entityId(4000)), 0, "the crops' former bush is not counted");
+		assert.equal(
+			bs.tally.gatherersBooked(entityId(5001)),
+			1,
+			"the pack-man is on the tally for the supply he carries",
+		);
+		assert.equal(bs.tally.gatherersBooked(entityId(4000)), 0, "the crops' former bush is not counted");
 	});
 
 	it("a gatherer whose order no longer names its supply is not counted", () =>
@@ -867,7 +871,7 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 
 		bs.assignGatherers();
 
-		assert.equal(bs.GetTCGatherer(entityId(5011)), 0);
+		assert.equal(bs.tally.gatherersBooked(entityId(5011)), 0);
 	});
 
 	it("a gatherer leaving a supply counted on an earlier turn seeds the tally without dipping past zero", () =>
@@ -881,13 +885,10 @@ describe("the office's turn tally: gatherers and their supplies", () =>
 		// the release is tallied through the base's own counters, as the turn order does
 		(base as unknown as { RemoveTCGatherer(id: number): void; }).RemoveTCGatherer(5021);
 
-		const tally =
-			(hq.basesManager as unknown as { turnCache: { resourceGatherer: Record<number, number>; }; }).turnCache
-				.resourceGatherer;
-		assert.equal(tally[5021], -1, "the leave is seeded, not doubled");
-		hq.basesManager.AddTCGatherer(entityId(5021));
+		assert.equal(hq.basesManager.tally.gatherersBooked(entityId(5021)), -1, "the leave is seeded, not doubled");
+		hq.basesManager.tally.bookGatherer(entityId(5021));
 		assert.equal(
-			hq.basesManager.GetTCGatherer(entityId(5021)),
+			hq.basesManager.tally.gatherersBooked(entityId(5021)),
 			0,
 			"a hand taking and leaving the same supply nets zero",
 		);

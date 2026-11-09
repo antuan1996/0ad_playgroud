@@ -246,7 +246,7 @@ describe("a building plan laying its foundation: start", () =>
 		assert.equal(angle, 3 * Math.PI / 4);
 		assert.deepEqual(
 			metadata,
-			{ base: hq.basesManager.baseAtIndex(territoryCellAt([x, z])), access: 2 },
+			{ base: hq.basesManager.territory.baseAt(territoryCellAt([x, z])), access: 2 },
 			"the foundation answers to the town it stands in, on its land",
 		);
 		assert.equal(hq.town.buildingStarted, true, "no other building starts this turn");
@@ -580,7 +580,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		);
 
 		assert.ok(pos, "the colony has room");
-		assert.equal(hq.basesManager.baseAtIndex(territoryCellAt([pos.x, pos.z])), colony.ID);
+		assert.equal(hq.basesManager.territory.baseAt(territoryCellAt([pos.x, pos.z])), colony.ID);
 	});
 
 	it("a building with a favoured town goes there when it can", () =>
@@ -593,7 +593,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		);
 
 		assert.ok(
-			pos && hq.basesManager.baseAtIndex(territoryCellAt([pos.x, pos.z])) === colony.ID,
+			pos && hq.basesManager.territory.baseAt(territoryCellAt([pos.x, pos.z])) === colony.ID,
 			JSON.stringify(pos),
 		);
 	});
@@ -609,7 +609,7 @@ describe("where the town puts an ordinary building: findGoodPosition", () =>
 		);
 
 		assert.ok(
-			pos && hq.basesManager.baseAtIndex(territoryCellAt([pos.x, pos.z])) === colony.ID,
+			pos && hq.basesManager.territory.baseAt(territoryCellAt([pos.x, pos.z])) === colony.ID,
 			JSON.stringify(pos),
 		);
 	});

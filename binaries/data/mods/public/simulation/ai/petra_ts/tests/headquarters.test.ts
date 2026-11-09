@@ -1007,7 +1007,7 @@ describe("updateTerritories: the town's borders move", () =>
 		// whole owned ground, ring included)
 		assert.equal(base.territoryIndices.length, 40 * 40);
 		const middle = 20 + 20 * 40;
-		assert.equal(hq.basesManager.basesMap.map[middle], base.ID);
+		assert.equal(hq.basesManager.territory.baseAt(cellIndex(hq.territoryMap, middle)), base.ID);
 	});
 
 	it("a cell captured by the enemy leaves the base's book and draws the frontier", async () =>
@@ -1019,7 +1019,7 @@ describe("updateTerritories: the town's borders move", () =>
 		world.map.setTerritoryOwner(12, 12, ENEMY);
 		hq.updateTerritories(world.gameState);
 
-		assert.equal(hq.basesManager.basesMap.map[j], 0);
+		assert.equal(hq.basesManager.territory.baseAt(cellIndex(hq.territoryMap, j)), 0);
 		assert.ok(!base.territoryIndices.includes(cellIndex(hq.territoryMap, j)));
 		assert.ok(base.territoryIndices.includes(cellIndex(hq.territoryMap, 20 + 20 * 40)));
 
@@ -6414,7 +6414,11 @@ describe("the rest of the placing and the training: round sites, sea and speed",
 
 		for (const j of base.territoryIndices)
 		{
-			assert.equal(reloaded.basesMap.map[j], base.ID, "every cell of the base's ground answers its base again");
+			assert.equal(
+				reloaded.territory.baseAt(j),
+				base.ID,
+				"every cell of the base's ground answers its base again",
+			);
 		}
 	});
 
