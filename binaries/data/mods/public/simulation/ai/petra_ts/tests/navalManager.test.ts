@@ -26,6 +26,7 @@ import {
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
+import { fishIsSafe, fishSea } from "../world/fishing.ts";
 
 const PlayerID = PLAYER;
 
@@ -82,7 +83,7 @@ const init = (s: ReturnType<typeof seat>) =>
 {
 	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography, s.hq);
 	// the town gathers the new manager's desk, as the headquarters' town does when it is made
-	Object.assign(s.hq.town, { transports: s.hq.navalManager.desk });
+	Object.assign(s.hq.town, { transports: s.hq.navalManager.desk, fishing: s.hq.navalManager.fishing });
 	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 };
 
@@ -291,7 +292,7 @@ describe("how many fishing boats a sea gets", () =>
 	});
 });
 
-describe("where fish can be caught: getFishSea and canFishSafely", () =>
+describe("where fish can be caught: world/fishing.ts's fishSea and fishIsSafe", () =>
 {
 	it("a shoal far from any shore is in the open sea, safe from everyone", () =>
 	{
@@ -299,9 +300,9 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const shoal = fish(s.world, 400, [300, 160]);
 		init(s);
 
-		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), SEA);
+		assert.equal(fishSea(s.world.gameState, placed(shoal)), SEA);
 		assert.equal(shoal.getMetadata(PlayerID, "opensea"), true);
-		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), true);
+		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), true);
 	});
 
 	it("a shoal by rocks, or by the edge of a round map, is still in the open sea; by land it is not", () =>
@@ -331,11 +332,11 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const shoal = fish(s.world, 400, [200, 160]);
 		init(s);
 
-		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), SEA);
+		assert.equal(fishSea(s.world.gameState, placed(shoal)), SEA);
 		assert.equal(shoal.getMetadata(PlayerID, "opensea"), undefined);
 		assert.equal(shoal.getMetadata(PlayerID, "sea"), SEA);
 		shoal.setMetadata(PlayerID, "sea", seaRegion(9));
-		assert.equal(s.naval.getFishSea(s.world.gameState, placed(shoal)), 9, "read back, not measured again");
+		assert.equal(fishSea(s.world.gameState, placed(shoal)), 9, "read back, not measured again");
 	});
 
 	it("a shoal near enemy ground is not safe to fish", () =>
@@ -343,14 +344,10 @@ describe("where fish can be caught: getFishSea and canFishSafely", () =>
 		const s = seat();
 		const shoal = fish(s.world, 400, [200, 160]);
 		init(s);
-		assert.equal(
-			s.naval.canFishSafely(s.world.gameState, placed(shoal)),
-			true,
-			"our ground and the open water around it",
-		);
+		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), true, "our ground and the open water around it");
 
 		s.world.map.setTerritoryOwner(33, 20, ENEMY); // on the island, 60 m east
-		assert.equal(s.naval.canFishSafely(s.world.gameState, placed(shoal)), false);
+		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), false);
 	});
 });
 

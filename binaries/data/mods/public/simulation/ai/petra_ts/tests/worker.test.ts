@@ -26,7 +26,7 @@ import {
 	type HqWorldOptions,
 } from "./harness/hqWorld.ts";
 
-import { entityId, landRegion, playerId, seconds, worldPos } from "../adapter/brands.ts";
+import { entityId, landRegion, playerId, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { BaseManager } from "../decision/baseManager.ts";
@@ -784,10 +784,11 @@ describe("a fisher on the shoals: startFishing", () =>
 
 	it("a fisher casts at the nearest shoal beside its dock", () =>
 	{
-		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		const { world, base, worker } = seat();
 		const { fish } = fishingGround(world, base, 5);
+		// the shoal's sea, noted on it once measured, and it lies in open sea (world/fishing.ts)
+		fish.setMetadata(PlayerID, "sea", seaRegion(5));
+		fish.setMetadata(PlayerID, "opensea", true);
 		const gathered: number[] = [];
 		const ent = world.addEntity(
 			makeHqEntity({ id: 6403, owner: PLAYER, position: [60, 60], classes: ["Unit", "Ship", "FishingBoat"] }, {
@@ -801,13 +802,12 @@ describe("a fisher on the shoals: startFishing", () =>
 		assert.equal(work.startFishing(world.gameState), true);
 		assert.deepEqual(gathered, [6402], "the fisher casts at the shoal");
 		assert.equal(ent.getMetadata(PlayerID, "supply"), 6402);
-		void fish;
 	});
 
 	it("a fisher over a shoal it cannot gather is idled for the turn", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
+		hq.town.fishing.getFishSea = () => 5;
 		fishingGround(world, base, 5);
 		// the fisher's nets do not suit this shoal's kind
 		const ent = world.addEntity(
@@ -1013,8 +1013,8 @@ describe("a worker returning to its trade: retryWorking", () =>
 	it("a fisher asked to retry casts again", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = () => true;
 		world.addEntity(
 			makeHqEntity({
 				id: 6631,
@@ -1443,8 +1443,8 @@ describe("a worker in a fight: update while UnitAI has it in combat", () =>
 	it("a fisher UnitAI sent after a whale goes back to the shoals", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = () => true;
 		world.addEntity(
 			makeHqEntity({
 				id: 6901,
@@ -2196,7 +2196,7 @@ describe("a worker's smaller judgements", () =>
 	it("a fisher whose sea holds no more shoals is scuttled, and only its sea's fleet is told", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 6;
+		hq.town.fishing.getFishSea = () => 6;
 		world.addEntity(
 			makeGaiaSupply({
 				id: 7321,
@@ -2670,8 +2670,8 @@ describe("a hunter and a fisher through their turn: update", () =>
 	it("a fishing boat that drifted into enemy waters goes back to a safe shoal", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = () => true;
 		dock(world, 7541, [30, 30], 5);
 		shoal(world, 7542, [40, 60]);
 		world.map.setTerritoryOwner(12, 12, ENEMY);
@@ -2990,8 +2990,8 @@ describe("which crop a worker passes over: startGathering and startHunting", () 
 	it("a fisher passes over a full shoal, a fished-out one and one in unsafe waters", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = (_g: unknown, e: CommonEntity) => e.id() !== 7813;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = (_g: unknown, e: CommonEntity) => e.id() !== 7813;
 		shoal(world, 7811, [40, 60], { resourceSupplyNumGatherers: () => 8 });
 		shoal(world, 7812, [50, 60], { resourceSupplyNumGatherers: () => 1 }, 40);
 		shoal(world, 7813, [60, 60]);
@@ -3281,8 +3281,8 @@ describe("allies' dropsites, when shared", () =>
 	it("a fisher casts at the shoal beside an ally's shared dock", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = () => true;
 		ally(world, 3);
 		shareDropsites(world);
 		shoal(world, 8241, [60, 200]);
@@ -3299,8 +3299,8 @@ describe("allies' dropsites, when shared", () =>
 	it("a fisher reckons only docks on its own sea, and allies' it may use", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getFishSea = () => 5;
-		hq.navalManager.canFishSafely = () => true;
+		hq.town.fishing.getFishSea = () => 5;
+		hq.town.fishing.canFishSafely = () => true;
 		ally(world, 3);
 		shareDropsites(world);
 		shoal(world, 8251, [200, 60]);

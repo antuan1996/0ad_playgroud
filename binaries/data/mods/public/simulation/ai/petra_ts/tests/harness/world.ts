@@ -16,6 +16,7 @@ import type { Headquarters } from "../../decision/headquarters.ts";
 import { AttackDesk, type ArmyRelease } from "../../execution/attackDesk.ts";
 import { Bombardment } from "../../execution/bombardment.ts";
 import { DefenseDesk } from "../../execution/defenseDesk.ts";
+import { FishingDesk } from "../../execution/fishingDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
 import type { Town } from "../../execution/town.ts";
@@ -438,6 +439,7 @@ export function makeWorld(options: WorldOptions = {}): World
 				leavingPlans.push([plan.name, targetLand]),
 		}),
 		bombing: new Bombardment(),
+		fishing: new FishingDesk(ai.HQ.navalManager),
 		transports: override(new TransportDesk(ai.Config, ai.HQ.navalManager), {
 			// the passages asked, noted and granted, not made
 			requireTransport: (
