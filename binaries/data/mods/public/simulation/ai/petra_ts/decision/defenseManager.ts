@@ -15,8 +15,8 @@ import { getLandAccess, getMaxStrength, isSiegeUnit, requireValue } from "../ada
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { activityOf, hasActivity, isInState, unitState } from "../adapter/unitState.ts";
-import type { ArmyRelease, AttackDesk } from "../execution/attackDesk.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { STATE_UNEXECUTED } from "../execution/attackConstants.ts";
+import type { ArmyRelease, AttackDesk, AttackPlanRegistry } from "../execution/attackDesk.ts";
 import { DefenseArmy, type SerializedDefenseArmy } from "../execution/defenseArmy.ts";
 import { DefenseDesk } from "../execution/defenseDesk.ts";
 import { GarrisonManager } from "../execution/garrisonManager.ts";
@@ -92,7 +92,9 @@ type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garris
 export type DefenseHQ = Pick<Headquarters, "isDefendable" | "trainEmergencyUnits"> & {
 	readonly victoryManager: Pick<VictoryManager, "criticalEnts">;
 	readonly basesManager: Pick<BasesManager, "hasActiveBase" | "getBaseByID" | "baseManagers">;
-	readonly town: { readonly attacks: Pick<AttackDesk, "getPlan" | "switchDefenseToAttack">; };
+	readonly town: {
+		readonly attacks: Pick<AttackPlanRegistry, "getPlan"> & Pick<AttackDesk, "switchDefenseToAttack">;
+	};
 };
 
 type DefenseManagerEvents = Omit<EngineAIEvents, "Attacked"> & {
@@ -1298,7 +1300,7 @@ export class DefenseManager
 		if (plan !== undefined && plan >= 0)
 		{
 			const attack = this.hq.town.attacks.getPlan(plan);
-			if (attack && attack.state !== AttackPlan.STATE_UNEXECUTED)
+			if (attack && attack.state !== STATE_UNEXECUTED)
 			{
 				return;
 			}

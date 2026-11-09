@@ -294,7 +294,12 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
   `expandFor`). A core manager talks to its own desk directly (`this.desk`,
   and the defense's `this.garrisons`); another manager's desk it reaches
-  through `town` in its view. The HQ builds its town after its managers,
+  through `town` in its view. Decision code sees an attack plan only as
+  `AttackPlanView` (`execution/attackPlan.ts`: name, type, state, target
+  player, units, sea, rally point, `requested`, `forceStart`, `Abort`,
+  `removeUnit`), handed out by `AttackPlanRegistry` (`attackDesk.ts`), and
+  takes plan states and types from `execution/attackConstants.ts`, never
+  from the class. The HQ builds its town after its managers,
   gathering their desks (a test that replaces a manager puts its desk in the
   town; `seatHQ` does so for the doors).
 - Methods never called (in port and original) are marked

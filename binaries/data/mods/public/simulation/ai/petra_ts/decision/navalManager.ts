@@ -1,7 +1,7 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { getLandAccess, getSeaAccess, requireMetadata, requireValue, setSeaAccess } from "../adapter/entityExtend.ts";
-import type { AttackDesk } from "../execution/attackDesk.ts";
+import type { AttackPlanRegistry } from "../execution/attackDesk.ts";
 import { FishingDesk } from "../execution/fishingDesk.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
@@ -43,7 +43,7 @@ import type { TradeManager } from "./tradeManager.ts";
 export type NavalHQ = Pick<Headquarters, "navalMap" | "getAccountedPopulation" | "canBuild"> & {
 	readonly tradeManager: Pick<TradeManager, "traders">;
 	readonly basesManager: Pick<BasesManager, "hasPotentialBase" | "baseManagers">;
-	readonly town: { readonly attacks: Pick<AttackDesk, "upcomingAttacks">; };
+	readonly town: { readonly attacks: Pick<AttackPlanRegistry, "upcomingAttacks">; };
 };
 
 /**

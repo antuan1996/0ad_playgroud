@@ -5,8 +5,8 @@
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { NO_BASE } from "../adapter/brands.ts";
-import type { AttackDesk } from "../execution/attackDesk.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { TYPE_RUSH } from "../execution/attackConstants.ts";
+import type { AttackPlanRegistry } from "../execution/attackDesk.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import type { AttackManager } from "./attackManager.ts";
@@ -19,7 +19,7 @@ type WorkforceHQ =
 	& Pick<Headquarters, "targetNumWorkers" | "supportRatio" | "landRunDry" | "findBestTrainableUnit">
 	& {
 		readonly attackManager: Pick<AttackManager, "rushNumber" | "maxRushes">;
-		readonly town: { readonly attacks: Pick<AttackDesk, "upcomingAttacks">; };
+		readonly town: { readonly attacks: Pick<AttackPlanRegistry, "upcomingAttacks">; };
 	};
 
 /** This code trains citizen workers, trying to keep close to a ratio of worker/soldiers */
@@ -73,7 +73,7 @@ export function trainMoreWorkers(hq: WorkforceHQ, gameState: CommonGameState, qu
 	// soldiers or support units (decision/workforce.ts)
 	const alpha = supportAlpha(
 		hq.attackManager.rushNumber < hq.attackManager.maxRushes ||
-			hq.town.attacks.upcomingAttacks[AttackPlan.TYPE_RUSH].length > 0,
+			hq.town.attacks.upcomingAttacks[TYPE_RUSH].length > 0,
 		gameState.isCeasefireActive() ? gameState.ceasefireTimeRemaining : undefined,
 	);
 	const supportNum = supportShare(

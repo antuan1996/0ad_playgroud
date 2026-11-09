@@ -152,6 +152,26 @@ export function byAttackType<T>(make: (type: AttackType) => T): Record<AttackTyp
  */
 /** What a new plan is asked for: a target, a unique target, a rush's size. */
 export type AttackPlanData = { target?: CommonEntity; uniqueTargetId?: EntityId; targetSize?: number; };
+
+/**
+ * An attack plan as the decision layer sees it: its name, type and state, whom it attacks, its units, the sea it
+ * crosses and its rally point, whether an ally asked for it; and what may be asked of it: to start now, to stop,
+ * to let a unit go. The plan's running is execution's (the town's attacks, execution/attackDesk.ts).
+ */
+export type AttackPlanView = Pick<
+	AttackPlan,
+	| "name"
+	| "type"
+	| "state"
+	| "targetPlayer"
+	| "unitCollection"
+	| "overseas"
+	| "rallyPoint"
+	| "requested"
+	| "forceStart"
+	| "Abort"
+	| "removeUnit"
+>;
 /** Where a plan gathers its army, and the sea to cross to its target (0: none). */
 type AttackStart = { rallyPoint: CommonPosition; overseas: SeaIndex | 0; };
 

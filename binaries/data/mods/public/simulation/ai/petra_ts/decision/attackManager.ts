@@ -1,9 +1,17 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import * as chat from "../adapter/chatHelper.ts";
 import { debugWarn } from "../adapter/debug.ts";
-import { plansIn, type AttackType } from "../execution/attackConstants.ts";
-import { AttackDesk } from "../execution/attackDesk.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import {
+	STATE_COMPLETING,
+	TYPE_DEFAULT,
+	TYPE_HUGE_ATTACK,
+	TYPE_RAID,
+	TYPE_RUSH,
+	plansIn,
+	type AttackType,
+} from "../execution/attackConstants.ts";
+import { AttackDesk, type AttackPlanRegistry } from "../execution/attackDesk.ts";
+import type { AttackPlanView } from "../execution/attackPlan.ts";
 import { Bombardment } from "../execution/bombardment.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Config } from "../world/config.ts";
@@ -65,6 +73,14 @@ export class AttackManager
 		this.desk = new AttackDesk(config, this);
 		this.outOfPlan = gameState.getOwnUnits().filter(filters.byMetadata(PlayerID, "plan", PLAN_RESERVE));
 		this.outOfPlan.registerUpdates();
+	}
+
+	/** its plans as it reads them: each an AttackPlanView, and the turn's running of them */
+	private get plans():
+		& AttackPlanRegistry
+		& Pick<AttackDesk, "debugTime" | "warnAttacks" | "updateUpcomingAttacks" | "updateStartedAttacks">
+	{
+		return this.desk;
 	}
 
 	/** A saved attack manager (its plans are the town's, saved with it) */
@@ -134,12 +150,12 @@ export class AttackManager
 
 			if (aimed.available > 12)
 			{ // launch the attack immediately
-				for (const attack of plansIn(this.desk.upcomingAttacks))
+				for (const attack of plansIn(this.plans.upcomingAttacks))
 				{
 					// every non-completing attack was re-aimed at targetPlayer by the
 					// loop above, so the original targetPlayer re-check here could
 					// never fire and was dropped
-					if (attack.state === AttackPlan.STATE_COMPLETING || attack.unitCollection.length < 3)
+					if (attack.state === STATE_COMPLETING || attack.unitCollection.length < 3)
 					{
 						continue;
 					}
@@ -168,9 +184,9 @@ export class AttackManager
 	{
 		let available = 0;
 		let other;
-		for (const attack of plansIn(this.desk.upcomingAttacks))
+		for (const attack of plansIn(this.plans.upcomingAttacks))
 		{
-			if (attack.state === AttackPlan.STATE_COMPLETING)
+			if (attack.state === STATE_COMPLETING)
 			{
 				if (attack.targetPlayer === targetPlayer)
 				{
@@ -199,19 +215,19 @@ export class AttackManager
 	 */
 	update(gameState: CommonGameState, queues: PetraRuntime.QueueCollection, events: EngineAIEvents): void
 	{
-		if (this.Config.debug > 2 && gameState.ai.elapsedTime > this.desk.debugTime + 60)
+		if (this.Config.debug > 2 && gameState.ai.elapsedTime > this.plans.debugTime + 60)
 		{
-			this.desk.warnAttacks(gameState);
+			this.plans.warnAttacks(gameState);
 		}
 
 		Engine.ProfileStart("attacks checkEvents");
 		this.checkEvents(gameState, events);
 		Engine.ProfileStop();
 		Engine.ProfileStart("attacks upcoming");
-		const unexecutedAttacks = this.desk.updateUpcomingAttacks(gameState, events);
+		const unexecutedAttacks = this.plans.updateUpcomingAttacks(gameState, events);
 		Engine.ProfileStop();
 		Engine.ProfileStart("attacks started");
-		this.desk.updateStartedAttacks(gameState, events);
+		this.plans.updateStartedAttacks(gameState, events);
 		Engine.ProfileStop();
 
 		// creating plans after updating because an aborted plan might be reused in that case.
@@ -220,7 +236,7 @@ export class AttackManager
 		this.createAttacks(gameState, unexecutedAttacks);
 		Engine.ProfileStop();
 
-		if (unexecutedAttacks[AttackPlan.TYPE_RAID] === 0 && this.siblings.defenseManager.targetList.length)
+		if (unexecutedAttacks[TYPE_RAID] === 0 && this.siblings.defenseManager.targetList.length)
 		{
 			let target;
 			for (const targetId of this.siblings.defenseManager.targetList)
@@ -255,7 +271,7 @@ export class AttackManager
 		const barracksNb = gameState.getOwnEntitiesByClass("Barracks", true).filter(filters.isBuilt()).length;
 		if (this.rushNumber < this.maxRushes && barracksNb >= 1)
 		{
-			if (unexecutedAttacks[AttackPlan.TYPE_RUSH] === 0)
+			if (unexecutedAttacks[TYPE_RUSH] === 0)
 			{
 				this.createRush(gameState);
 			}
@@ -278,7 +294,7 @@ export class AttackManager
 	private createRush(gameState: CommonGameState): void
 	{
 		const data = { targetSize: this.rushSize[this.rushNumber] };
-		const attackPlan = this.desk.prepareAttack(gameState, AttackPlan.TYPE_RUSH, data);
+		const attackPlan = this.plans.prepareAttack(gameState, TYPE_RUSH, data);
 		if (attackPlan)
 		{
 			debugWarn(
@@ -296,10 +312,10 @@ export class AttackManager
 	 */
 	private wantsMainAttack(gameState: CommonGameState, unexecutedAttacks: Record<AttackType, number>): boolean
 	{
-		const started = this.desk.startedAttacks[AttackPlan.TYPE_DEFAULT].length +
-			this.desk.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length;
-		return unexecutedAttacks[AttackPlan.TYPE_DEFAULT] === 0 &&
-			unexecutedAttacks[AttackPlan.TYPE_HUGE_ATTACK] === 0 &&
+		const started = this.plans.startedAttacks[TYPE_DEFAULT].length +
+			this.plans.startedAttacks[TYPE_HUGE_ATTACK].length;
+		return unexecutedAttacks[TYPE_DEFAULT] === 0 &&
+			unexecutedAttacks[TYPE_HUGE_ATTACK] === 0 &&
 			started < Math.min(2, 1 + Math.round(gameState.getPopulationMax() / 100)) &&
 			(started === 0 || gameState.getPopulationMax() - gameState.getPopulation() > 12);
 	}
@@ -307,10 +323,10 @@ export class AttackManager
 	/** A default attack, or a huge one after two attacks while none is started */
 	private createMainAttack(gameState: CommonGameState): void
 	{
-		const type = this.attackNumber < 2 || this.desk.startedAttacks[AttackPlan.TYPE_HUGE_ATTACK].length > 0 ?
-			AttackPlan.TYPE_DEFAULT :
-			AttackPlan.TYPE_HUGE_ATTACK;
-		const attackPlan = this.desk.prepareAttack(gameState, type);
+		const type = this.attackNumber < 2 || this.plans.startedAttacks[TYPE_HUGE_ATTACK].length > 0 ?
+			TYPE_DEFAULT :
+			TYPE_HUGE_ATTACK;
+		const attackPlan = this.plans.prepareAttack(gameState, type);
 		// the original wrote a write-only "attackPlansEncounteredWater" hack flag
 		// on failure; nothing ever read it, so the port drops the dead write
 		if (attackPlan)
@@ -325,7 +341,7 @@ export class AttackManager
 	 * attack.targetPlayer is undefined and in that case, we keep track of the chosen target
 	 * for future attacks.
 	 */
-	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
+	getEnemyPlayer(gameState: CommonGameState, attack: AttackPlanView): PlayerId | undefined
 	{
 		return getEnemyPlayerFor(gameState, attack, this);
 	}
@@ -333,15 +349,15 @@ export class AttackManager
 	/**
 	 * Target the player with the most relics (including gaia).
 	 */
-	getRelicEnemyPlayer(gameState: CommonGameState, attack: AttackPlan): PlayerId | undefined
+	getRelicEnemyPlayer(gameState: CommonGameState, attack: AttackPlanView): PlayerId | undefined
 	{
 		return getRelicEnemyPlayerFor(gameState, attack, this);
 	}
 
-	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlan | undefined
+	raidTargetEntity(gameState: CommonGameState, ent: CommonEntity): AttackPlanView | undefined
 	{
 		const data = { target: ent };
-		const attackPlan = this.desk.prepareAttack(gameState, AttackPlan.TYPE_RAID, data);
+		const attackPlan = this.plans.prepareAttack(gameState, TYPE_RAID, data);
 		if (!attackPlan)
 		{
 			return undefined;

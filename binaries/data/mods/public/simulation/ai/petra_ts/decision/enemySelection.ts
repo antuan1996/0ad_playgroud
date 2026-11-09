@@ -3,7 +3,8 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { playerId } from "../adapter/brands.ts";
 import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { TYPE_HUGE_ATTACK, TYPE_RUSH } from "../execution/attackConstants.ts";
+import type { AttackPlanView } from "../execution/attackPlan.ts";
 import type { VictoryManager } from "./victoryManager.ts";
 
 /** The attack manager's memory of whom it fights: the defeated, and the foe it last chose. */
@@ -106,7 +107,7 @@ function stillToFight(gameState: CommonGameState, targeting: EnemyTargeting, pla
 /** The players not to attack: the defeated, and for a rush those too well defended (i.e. iberians) */
 function vetoedPlayers(
 	gameState: CommonGameState,
-	attack: AttackPlan,
+	attack: AttackPlanView,
 	targeting: EnemyTargeting,
 ): Record<number, boolean>
 {
@@ -115,7 +116,7 @@ function vetoedPlayers(
 	{
 		veto[i] = true;
 	}
-	if (attack.type !== AttackPlan.TYPE_RUSH)
+	if (attack.type !== TYPE_RUSH)
 	{
 		return veto;
 	}
@@ -152,7 +153,7 @@ function vetoedPlayers(
  */
 function wonderEnemyPlayer(
 	gameState: CommonGameState,
-	attack: AttackPlan,
+	attack: AttackPlanView,
 	targeting: EnemyTargeting,
 ): PlayerId | undefined
 {
@@ -196,7 +197,7 @@ function wonderEnemyPlayer(
  */
 export function getEnemyPlayer(
 	gameState: CommonGameState,
-	attack: AttackPlan,
+	attack: AttackPlanView,
 	targeting: EnemyTargeting,
 ): PlayerId | undefined
 {
@@ -227,7 +228,7 @@ export function getEnemyPlayer(
 
 	// then if not a huge attack, continue attacking our previous target as long as it has some entities,
 	// otherwise target the most accessible one
-	if (attack.type !== AttackPlan.TYPE_HUGE_ATTACK)
+	if (attack.type !== TYPE_HUGE_ATTACK)
 	{
 		if (
 			attack.targetPlayer === undefined && targeting.currentEnemyPlayer !== undefined &&
@@ -264,7 +265,7 @@ export function getEnemyPlayer(
  */
 export function getRelicEnemyPlayer(
 	gameState: CommonGameState,
-	attack: AttackPlan,
+	attack: AttackPlanView,
 	targeting: EnemyTargeting,
 ): PlayerId | undefined
 {

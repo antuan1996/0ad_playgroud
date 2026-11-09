@@ -3,8 +3,8 @@ import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { NO_BASE, seconds } from "../adapter/brands.ts";
 import { getAttackBonus, getLandAccess, requireValue, returnResources } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import type { AttackDesk } from "../execution/attackDesk.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { STATE_UNEXECUTED, TYPE_RAID } from "../execution/attackConstants.ts";
+import type { AttackPlanRegistry } from "../execution/attackDesk.ts";
 import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import type { TransportDesk } from "../execution/transportDesk.ts";
@@ -31,7 +31,7 @@ export type VictoryHQ = Pick<Headquarters, "canBuild" | "economy"> & {
 	readonly basesManager: Pick<BasesManager, "getBaseByID" | "bulkPickWorkers" | "baselessBase" | "baseManagers">;
 	readonly defenseManager: Pick<DefenseManager, "getArmy" | "garrisonAttackedUnit">;
 	readonly town: {
-		readonly attacks: Pick<AttackDesk, "getPlan">;
+		readonly attacks: Pick<AttackPlanRegistry, "getPlan">;
 		readonly garrisons: Pick<GarrisonManager, "cancelGarrison">;
 		readonly transports: Pick<TransportDesk, "requireTransport">;
 	};
@@ -103,7 +103,7 @@ function mayRaidRelic(
 	if (plan !== undefined && plan >= 0)
 	{
 		const attack = attacks.getPlan(plan);
-		if (attack && (attack.state !== AttackPlan.STATE_UNEXECUTED || attack.type === AttackPlan.TYPE_RAID))
+		if (attack && (attack.state !== STATE_UNEXECUTED || attack.type === TYPE_RAID))
 		{
 			return false;
 		}

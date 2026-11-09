@@ -5,8 +5,8 @@
 import { playerId } from "../adapter/brands.ts";
 import { setSeaAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import type { AttackDesk } from "../execution/attackDesk.ts";
-import { AttackPlan } from "../execution/attackPlan.ts";
+import { STATE_UNEXECUTED } from "../execution/attackConstants.ts";
+import type { AttackPlanRegistry } from "../execution/attackDesk.ts";
 import type { GarrisonManager } from "../execution/garrisonManager.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
@@ -25,7 +25,7 @@ type EventsHQ = TownState & FirstBaseConfigHQ & Pick<Headquarters, "updateTerrit
 			GarrisonManager,
 			"registerHolder" | "removeDecayingStructure" | "addDecayingStructure"
 		>;
-		readonly attacks: Pick<AttackDesk, "getPlan">;
+		readonly attacks: Pick<AttackPlanRegistry, "getPlan">;
 	};
 };
 
@@ -109,7 +109,7 @@ function onTrainingFinished(hq: EventsHQ, gameState: CommonGameState, events: He
 			if (plan !== undefined && plan >= 0)
 			{
 				const attack = hq.town.attacks.getPlan(plan);
-				if (!attack || attack.state !== AttackPlan.STATE_UNEXECUTED)
+				if (!attack || attack.state !== STATE_UNEXECUTED)
 				{
 					ent.setMetadata(PlayerID, "plan", PLAN_RESERVE);
 				}

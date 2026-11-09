@@ -15,7 +15,13 @@ import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import type { Config } from "../world/config.ts";
 import { ATTACK_TYPES, plansIn, type AttackType } from "./attackConstants.ts";
-import { AttackPlan, byAttackType, type AttackPlanData, type SerializedAttackPlan } from "./attackPlan.ts";
+import {
+	AttackPlan,
+	byAttackType,
+	type AttackPlanData,
+	type AttackPlanView,
+	type SerializedAttackPlan,
+} from "./attackPlan.ts";
 import { Worker } from "./worker.ts";
 
 /** The attack plans as the town saves them */
@@ -92,6 +98,15 @@ function enlistDefender(
 		unit.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
 		attackPlan.unitCollection.updateEnt(unit);
 	}
+}
+
+/** The plans as the decision layer reads them, each an AttackPlanView (AttackDesk is one) */
+export interface AttackPlanRegistry
+{
+	readonly upcomingAttacks: Readonly<Record<AttackType, readonly AttackPlanView[]>>;
+	readonly startedAttacks: Readonly<Record<AttackType, readonly AttackPlanView[]>>;
+	getPlan(planName: UnitPlan | undefined): AttackPlanView | undefined;
+	prepareAttack(gameState: CommonGameState, type: AttackType, data?: AttackPlanData): AttackPlanView | undefined;
 }
 
 /** What the attacks desk asks of its attack manager (decision/attackManager.ts, which makes it and passes itself) */
