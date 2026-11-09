@@ -1,10 +1,11 @@
 export const CC_ENEMY_AVOID = 150;
 
 /**
- * Where to build (moved out of decision/headquarters.ts; the scoring helpers are decision/placement.ts): a new
- * civic centre for the economy or for strategy, a market, a defensive structure, a shore tower, the base for a
- * military building. Owned by the headquarters (HQ.placement); the construction plans reach it through the town's
- * sites (execution/siteDesk.ts).
+ * Where to build (`gameState.ai.town.placement`, part of execution/town.ts; the scoring helpers are
+ * execution/placement.ts): a new civic centre for the economy or for strategy, a market, a defensive structure, a
+ * shore tower, the base for a military building; and the civic centres ordered, followed until they stand, their
+ * spots avoided a while when they did not. The construction plans ask it where, and the headquarters' decisions
+ * whether there is a spot. It reads the headquarters only through PlacementSearchHQ.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
@@ -13,7 +14,7 @@ import { getLandAccess } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { isStructureTemplate } from "../adapter/templateData.ts";
 import * as mapMask from "../world/mapMask.ts";
-import type { Headquarters } from "./headquarters.ts";
+import type { ShipTraffic } from "../world/shipTraffic.ts";
 import {
 	findDefensiveSpot,
 	findEconomicCCTile,
@@ -21,15 +22,99 @@ import {
 	findShoreTowerSpot,
 	findStrategicCCTile,
 	type EconomicCCOptions,
+	type PlacementHQ,
 } from "./placement.ts";
+
+/** What the searches read and call on the headquarters, beyond what the scoring helpers do */
+export interface PlacementSearchHQ extends PlacementHQ
+{
+	readonly navalManager: PlacementHQ["navalManager"] & {
+		setMinimalTransportShips(gameState: CommonGameState, sea: SeaIndex, number: number): void;
+	};
+	readonly basesManager: PlacementHQ["basesManager"] & {
+		readonly baseManagers: ReadonlyArray<
+			{ readonly accessIndex: AccessIndex | undefined; readonly anchor: unknown; }
+		>;
+	};
+	readonly shipTraffic: ShipTraffic | undefined;
+	readonly town: PlacementHQ["town"] & {
+		getSeaBetweenIndices(
+			gameState: CommonGameState,
+			index1: AccessIndex,
+			index2: AccessIndex,
+		): SeaIndex | undefined;
+		readonly attacks: {
+			enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonPlacedEntity[]>;
+		};
+	};
+}
+
+/** A civic centre ordered at a spot, and when; seen once its foundation stood */
+type CivCentreOrder = { pos: CommonPosition; time: number; seen: boolean; };
 
 export class PlacementSearches
 {
-	readonly hq: Headquarters;
+	/** The civic centres ordered, followed until they stand (followCivCentreOrders); not saved. */
+	ccOrders: CivCentreOrder[] = [];
+	/** The civic centre spots that failed, avoided until a time (followCivCentreOrders); not saved. */
+	ccSpotsAvoided: Array<{ pos: CommonPosition; until: number; }> = [];
+	private readonly hq: PlacementSearchHQ;
 
-	constructor(hq: Headquarters)
+	constructor(hq: PlacementSearchHQ)
 	{
 		this.hq = hq;
+	}
+
+	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
+	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void
+	{
+		this.ccOrders.push({ pos, time: gameState.ai.elapsedTime, seen: false });
+	}
+
+	/**
+	 * Follows the civic centres ordered: one whose foundation did not appear
+	 * within CC_ORDER_WAIT seconds (the spot taken, by another player's
+	 * foundation most often), or whose foundation was lost before it was
+	 * built, has its spot avoided for CC_SPOT_MEMORY seconds. Petra ordered
+	 * the same spot again and again: in a 4-player Dodecanese match three
+	 * players went for the same spot of the same neutral island, one ordering
+	 * it 6 times in a minute (FINDINGS §39).
+	 */
+	followCivCentreOrders(gameState: CommonGameState): void
+	{
+		const now = gameState.ai.elapsedTime;
+		this.ccSpotsAvoided = this.ccSpotsAvoided.filter((spot) => spot.until > now);
+		if (!this.ccOrders.length)
+		{
+			return;
+		}
+		const centres = gameState.getOwnStructures().filter(filters.byClass("CivCentre")).toEntityArray();
+		this.ccOrders = this.ccOrders.filter((order) => this.stillFollowed(order, centres, now));
+	}
+
+	/** Whether an order is still followed; one that failed has its spot avoided */
+	private stillFollowed(order: CivCentreOrder, centres: CommonEntity[], now: number): boolean
+	{
+		const centre = centres.find((ent) =>
+		{
+			const pos = ent.position();
+			return !!pos && SquareVectorDistance(pos, order.pos) < 40 * 40;
+		});
+		if (centre)
+		{
+			if (centre.foundationProgress() === undefined)
+			{
+				return false;
+			}
+			order.seen = true;
+			return true;
+		}
+		if (!order.seen && now - order.time < CC_ORDER_WAIT)
+		{
+			return true;
+		}
+		this.ccSpotsAvoided.push({ pos: order.pos, until: now + CC_SPOT_MEMORY });
+		return false;
 	}
 
 	/**
@@ -150,9 +235,7 @@ export class PlacementSearches
 	/** Whether a civic centre spot is remembered as failed (followCivCentreOrders). */
 	isAvoidedCCSpot(pos: CommonPosition): boolean
 	{
-		return this.hq.ccSpotsAvoided.some((spot) =>
-			SquareVectorDistance(spot.pos, pos) < CC_SPOT_AVOID * CC_SPOT_AVOID
-		);
+		return this.ccSpotsAvoided.some((spot) => SquareVectorDistance(spot.pos, pos) < CC_SPOT_AVOID * CC_SPOT_AVOID);
 	}
 
 	isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean
@@ -316,3 +399,9 @@ function bestBaseForMilitary(gameState: CommonGameState): number | undefined
 
 /** Metres around such a spot avoided, and around enemy soldiers. */
 const CC_SPOT_AVOID = 80;
+
+/** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
+export const CC_ORDER_WAIT = 20;
+
+/** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
+export const CC_SPOT_MEMORY = 600;

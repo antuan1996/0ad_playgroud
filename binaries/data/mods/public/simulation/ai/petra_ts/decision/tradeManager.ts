@@ -32,8 +32,8 @@ import type { ResearchManager } from "./researchManager.ts";
  * to sail merchants and traders, the bases' stocks and rates, the buildable
  * market and dock, and the trade bonus research.
  */
-export type TradeHQ = Pick<Headquarters, "canBuild" | "canBarter" | "placement"> & {
-	readonly town: Pick<Town, "pickMostNeededResources" | "GetWantedGatherRates" | "transports">;
+export type TradeHQ = Pick<Headquarters, "canBuild" | "canBarter"> & {
+	readonly town: Pick<Town, "pickMostNeededResources" | "GetWantedGatherRates" | "transports" | "placement">;
 	readonly navalManager: Pick<NavalManager, "fleet">;
 	readonly basesManager: Pick<
 		BasesManager,
@@ -1043,7 +1043,7 @@ export class TradeManager
 		// canBuild() above already verified that the template exists.
 		const template = requireStructureTemplate(gameState, gameState.applyCiv("structures/{civ}/market"));
 		this.checkRoutes(gameState);
-		const marketPos = this.hq.placement.findMarketLocation(gameState, template);
+		const marketPos = this.hq.town.placement.findMarketLocation(gameState, template);
 		if (!marketPos || marketPos[3] === 0)
 		{ // marketPos[3] is the expected gain
 			// no position found

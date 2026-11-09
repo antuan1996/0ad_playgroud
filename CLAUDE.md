@@ -138,11 +138,10 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   - `decision/`: `headquarters.ts` (the HQ: its update, saves, and the queries
     other managers and execution use), the HQ's parts as functions taking it
     (`hqEvents.ts`, `phasing.ts`, `workforceTraining.ts`, `houseBuilding.ts`,
-    `townBuildings.ts`, `militaryBuildings.ts`, `expansion.ts`) and
-    `placementSearches.ts` (`PlacementSearches`, `HQ.placement`),
+    `townBuildings.ts`, `militaryBuildings.ts`, `expansion.ts`),
     `startingStrategy.ts`, managers (`attack`, `base`, `bases`, `build`,
     `defense`, `diplomacy`, `emergency`, `garrison`, `naval`, `research`,
-    `trade`, `victory`), `placement.ts`, `enemySelection.ts`, and pure/utility
+    `trade`, `victory`), `enemySelection.ts`, and pure/utility
     modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`, `fields.ts`,
     `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
   - `execution/`: `attackPlan.ts` (the `AttackPlan` class: its state, saves,
@@ -156,13 +155,16 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `treasure.ts`, `captureOrders.ts` (capture or destroy, every 3 s),
     `town.ts` (`Town`, `HQ.town`: the execution layer's one door to the
     decision layer, with the turn's cache, gather needs and danger queries)
-    and its desks `siteDesk.ts` (`town.sites`: builders, unbuildables, where
-    to build), `guardDesk.ts` (`town.guard`: raids, defense armies, critical
+    and its desks `siteDesk.ts` (`town.sites`: builders, unbuildables, a
+    market's worth), `placementSearches.ts` (`town.placement`: where to build,
+    over the scoring of `placement.ts`; civic centre orders followed),
+    `guardDesk.ts` (`town.guard`: raids, defense armies, critical
     units, relics), `attackDesk.ts` (`town.attacks`: owns the attack plans,
     runs them, bombing, local fights, defense armies turned to attacks) and
     `transportDesk.ts` (`town.transports`: owns the transport plans; ships,
     fishing); each reaches the HQ and its managers only through its own
-    private view (`TownHQ`, `SiteHQ`, `GuardHQ`, `AttackHQ`, `TransportHQ`).
+    private view (`TownHQ`, `SiteHQ`, `PlacementSearchHQ`, `GuardHQ`,
+    `AttackHQ`, `TransportHQ`).
     The town's plans are saved with the HQ (`town`).
 - `petra_out/` — generated, gitignored ("Petra TS" bot, VFS imports rewritten by
   `build/petra_ts/prepare-bot.ts`).

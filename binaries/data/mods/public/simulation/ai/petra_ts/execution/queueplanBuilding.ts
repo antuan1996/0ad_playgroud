@@ -391,7 +391,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		}
 		else if (template.hasClasses(["Tower", "Fortress", "ArmyCamp"]))
 		{
-			const pos = gameState.ai.town.sites.findDefensiveLocation(gameState, template);
+			const pos = gameState.ai.town.placement.findDefensiveLocation(gameState, template);
 			if (pos)
 			{
 				return { x: pos[0], z: pos[1], angle: 3 * Math.PI / 4, base: pos[2] };
@@ -418,7 +418,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		let pos;
 		if (this.metadata && this.metadata.room)
 		{
-			pos = gameState.ai.town.sites.findEconomicCCLocation(gameState, template, "wood", {
+			pos = gameState.ai.town.placement.findEconomicCCLocation(gameState, template, "wood", {
 				fromStrategic: true,
 				forRoom: true,
 			});
@@ -426,13 +426,13 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		else if (this.metadata && this.metadata.resource)
 		{
 			const proximity = this.metadata.proximity ? this.metadata.proximity : undefined;
-			pos = gameState.ai.town.sites.findEconomicCCLocation(gameState, template, this.metadata.resource, {
+			pos = gameState.ai.town.placement.findEconomicCCLocation(gameState, template, this.metadata.resource, {
 				proximity,
 			});
 		}
 		else
 		{
-			pos = gameState.ai.town.sites.findStrategicCCLocation(gameState, template);
+			pos = gameState.ai.town.placement.findStrategicCCLocation(gameState, template);
 		}
 
 		if (pos)
@@ -459,7 +459,7 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 	/** A market in a base of its own, with the gain expected; undefined to search as for any, false for none */
 	private marketSpot(gameState: CommonGameState, template: CommonStructureTemplate): BuildingPosition | undefined
 	{
-		const pos = gameState.ai.town.sites.findMarketLocation(gameState, template);
+		const pos = gameState.ai.town.placement.findMarketLocation(gameState, template);
 		const base = pos ? pos[2] : -1;
 		// a base of its own (not -1, nor a cell no base claims): there
 		if (pos && base !== -1 && base !== NO_BASE)
@@ -544,7 +544,9 @@ export class ConstructionPlan extends QueuePlan<CommonStructureTemplate, "buildi
 		const disfavorBorder = gameState.currentPhase() > 1 && !template.hasDefensiveFire();
 		const favoredBase = this.metadata &&
 			(this.metadata.favoredBase ||
-				(this.metadata.militaryBase ? gameState.ai.town.sites.findBestBaseForMilitary(gameState) : undefined));
+				(this.metadata.militaryBase ?
+					gameState.ai.town.placement.findBestBaseForMilitary(gameState) :
+					undefined));
 		const base = this.metadata ? this.metadata.base : undefined;
 		for (let jIndex = 0; jIndex < placement.map.length; ++jIndex)
 		{

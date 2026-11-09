@@ -28,7 +28,7 @@ import { BuildManager } from "./buildManager.ts";
 import { DefenseManager } from "./defenseManager.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
-import { buildNewBase, checkBaseExpansion, followCivCentreOrders, provideForDryLand } from "./expansion.ts";
+import { buildNewBase, checkBaseExpansion, provideForDryLand } from "./expansion.ts";
 import { GarrisonManager } from "./garrisonManager.ts";
 import { buildMoreHouses } from "./houseBuilding.ts";
 import { houseNeeded } from "./housing.ts";
@@ -36,7 +36,6 @@ import { checkEvents, handleNewBase } from "./hqEvents.ts";
 import { DefenseSchedule, buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
 import { NavalManager } from "./navalManager.ts";
 import { checkPhaseRequirements, notePhase } from "./phasing.ts";
-import { PlacementSearches } from "./placementSearches.ts";
 import { ResearchManager } from "./researchManager.ts";
 import {
 	buildEarlyMarket,
@@ -248,8 +247,6 @@ export class Headquarters
 	/** whether we can train units at all, and expand: set by the first turn's analysis (startingStrategy) */
 	canBuildUnits = false;
 	canExpand = false;
-	/** where to build: the placement searches (decision/placementSearches.ts) */
-	placement: PlacementSearches = new PlacementSearches(this);
 	/** the capture strength our units set on each target (world/captureTally.ts), saved through the accessors below */
 	captures = new CaptureTally();
 	currentPhase: number;
@@ -279,10 +276,6 @@ export class Headquarters
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
 	geography: Geography;
-	/** The civic centres ordered, followed until they stand (followCivCentreOrders); not saved. */
-	ccOrders: Array<{ pos: CommonPosition; time: number; seen: boolean; }> = [];
-	/** Civic centre spots that failed or lost their foundation, avoided until then (game seconds); not saved. */
-	ccSpotsAvoided: Array<{ pos: CommonPosition; until: number; }> = [];
 	/** Where the enemy's ships go, on naval maps (world/shipTraffic.ts); not saved, it fills again. */
 	shipTraffic: ShipTraffic | undefined = undefined;
 	/** How fast each resource comes in per gatherer, measured (world/gatherEconomy.ts). */
@@ -554,12 +547,6 @@ export class Headquarters
 	 * for performance reasons.
 	 */
 
-	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
-	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void
-	{
-		this.ccOrders.push({ pos, time: gameState.ai.elapsedTime, seen: false });
-	}
-
 	/**
 	 * Whether a civic centre spot is contested (FINDINGS §39): remembered as
 	 * failed, on a land with enemy buildings where we have no base, or with
@@ -796,7 +783,7 @@ export class Headquarters
 			else
 			{
 				// Update the frontier
-				const frontier = this.placement.frontierAt(gameState, j, {
+				const frontier = this.town.placement.frontierAt(gameState, j, {
 					around,
 					alliedVictory,
 					insideSmall,
@@ -1013,7 +1000,7 @@ export class Headquarters
 		{
 			this.geography.territoryMap = createTerritoryMap(gameState);
 		});
-		profiled("HQ followCivCentreOrders", () => followCivCentreOrders(this, gameState));
+		profiled("HQ followCivCentreOrders", () => this.town.placement.followCivCentreOrders(gameState));
 		if (gameState.ai.playedTurn % 10 === 3)
 		{
 			provideForDryLand(this, gameState, queues);

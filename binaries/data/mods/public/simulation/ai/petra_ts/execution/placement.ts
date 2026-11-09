@@ -51,20 +51,22 @@ type EconomicCCSearch = {
 	cut: number;
 };
 
-/** What the placement searches read and call on the headquarters */
-interface PlacementHQ
+/** What the placement searches read and call on the headquarters (decision/headquarters.ts satisfies it as it is) */
+export interface PlacementHQ
 {
 	readonly Config: Config;
 	readonly geography: Geography;
 	readonly navalManager: { readonly transportShips: { readonly length: number; }; };
 	readonly tradeManager: { readonly minimalGain: number; };
 	readonly basesManager: { baseAtIndex(j: CellIndex<"territory">): BaseId; };
-	/** the searches' own judgement of a civic centre's spot (decision/placementSearches.ts) */
-	readonly placement: {
-		isAvoidedCCSpot(pos: CommonPosition): boolean;
-		isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean;
+	readonly town: {
+		isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean;
+		/** the searches' own judgement of a civic centre's spot (execution/placementSearches.ts) */
+		readonly placement: {
+			isAvoidedCCSpot(pos: CommonPosition): boolean;
+			isContestedCCSpot(gameState: CommonGameState, pos: CommonPosition, land: AccessIndex): boolean;
+		};
 	};
-	readonly town: { isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, halfSize: number): boolean; };
 }
 
 /** What a civic centre at cell j would reach: twice the resource and once the others but food (plus ROOM_VALUE for room) */
@@ -675,8 +677,8 @@ export function findEconomicCCTile(
 		}
 		if (
 			(allowContested ?
-				hq.placement.isAvoidedCCSpot(pos) :
-				hq.placement.isContestedCCSpot(gameState, pos, index)) ||
+				hq.town.placement.isAvoidedCCSpot(pos) :
+				hq.town.placement.isContestedCCSpot(gameState, pos, index)) ||
 			hq.town.isDangerousLocation(gameState, pos, halfSize)
 		)
 		{
@@ -757,7 +759,7 @@ export function findStrategicCCTile(
 			continue;
 		}
 		if (
-			hq.placement.isContestedCCSpot(gameState, pos, index) ||
+			hq.town.placement.isContestedCCSpot(gameState, pos, index) ||
 			hq.town.isDangerousLocation(gameState, pos, halfSize)
 		)
 		{

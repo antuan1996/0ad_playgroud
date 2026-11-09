@@ -2,7 +2,7 @@
  * The town as the execution layer sees it (`gameState.ai.town`): the state of the moment the plans and workers
  * share, the economy and danger queries they ask, and what they report back. It is the execution layer's one
  * door to the decision layer (decision/headquarters.ts, which owns it and passes itself as TownHQ): no other
- * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `guard`, `attacks`, `transports`) reach
+ * execution module holds the headquarters or a manager, and the town and its parts (its desks: `sites`, `placement`, `guard`, `attacks`, `transports`) reach
  * them only through their private views.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
@@ -12,6 +12,7 @@ import type { EconomyPlan } from "../world/economyPlan.ts";
 import { seaBetween } from "../world/geography.ts";
 import { AttackDesk, type AttackHQ, type SerializedAttacks } from "./attackDesk.ts";
 import { GuardDesk, type GuardHQ } from "./guardDesk.ts";
+import { PlacementSearches, type PlacementSearchHQ } from "./placementSearches.ts";
 import { SiteDesk, type SiteHQ } from "./siteDesk.ts";
 import { TransportDesk, type SerializedTransports, type TransportHQ } from "./transportDesk.ts";
 
@@ -41,7 +42,6 @@ interface TownHQ
 	houseNeeded(gameState: CommonGameState): boolean;
 	isNearInvadingArmy(pos: CommonPosition): boolean;
 
-	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void;
 	noteNothingToGather(resource: string, time: GameSeconds): void;
 	phaseResearched(gameState: CommonGameState, phase: number): void;
 }
@@ -58,6 +58,8 @@ export class Town
 {
 	/** the building sites: builders, what may not be built, where to build */
 	readonly sites: SiteDesk;
+	/** where to build, and the civic centres ordered followed until they stand */
+	readonly placement: PlacementSearches;
 	/** the defense and the victory conditions: raids, armies, shelter, critical units, relics */
 	readonly guard: GuardDesk;
 	/** the attack plans, whom they attack, and the units between plans */
@@ -68,11 +70,12 @@ export class Town
 	private readonly hq: TownHQ;
 	private turnCache: TownTurnCache = {};
 
-	constructor(config: Config, hq: TownHQ & SiteHQ & GuardHQ & AttackHQ & TransportHQ)
+	constructor(config: Config, hq: TownHQ & SiteHQ & PlacementSearchHQ & GuardHQ & AttackHQ & TransportHQ)
 	{
 		this.config = config;
 		this.hq = hq;
 		this.sites = new SiteDesk(hq);
+		this.placement = new PlacementSearches(hq);
 		this.guard = new GuardDesk(hq);
 		this.attacks = new AttackDesk(config, hq);
 		this.transports = new TransportDesk(config, hq);
@@ -246,7 +249,7 @@ export class Town
 	/** A civic centre was ordered at `pos` (ConstructionPlan.start): followed until it stands. */
 	noteCivCentreOrdered(gameState: CommonGameState, pos: CommonPosition): void
 	{
-		this.hq.noteCivCentreOrdered(gameState, pos);
+		this.placement.noteCivCentreOrdered(gameState, pos);
 	}
 
 	/** A worker found nothing left to gather of `resource`, now. */

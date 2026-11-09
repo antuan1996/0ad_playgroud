@@ -3,7 +3,6 @@
  * run dry, and the civic centres ordered at a spot.
  */
 import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { NEW_BASE } from "../adapter/brands.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -156,52 +155,3 @@ export function provideForDryLand(hq: Headquarters, gameState: CommonGameState, 
 		hq.economy.maxFields = false;
 	}
 }
-
-/**
- * Follows the civic centres ordered: one whose foundation did not appear
- * within CC_ORDER_WAIT seconds (the spot taken, by another player's
- * foundation most often), or whose foundation was lost before it was
- * built, has its spot avoided for CC_SPOT_MEMORY seconds. Petra ordered
- * the same spot again and again: in a 4-player Dodecanese match three
- * players went for the same spot of the same neutral island, one ordering
- * it 6 times in a minute (FINDINGS §39).
- */
-export function followCivCentreOrders(hq: Headquarters, gameState: CommonGameState): void
-{
-	const now = gameState.ai.elapsedTime;
-	hq.ccSpotsAvoided = hq.ccSpotsAvoided.filter((spot) => spot.until > now);
-	if (!hq.ccOrders.length)
-	{
-		return;
-	}
-	const centres = gameState.getOwnStructures().filter(filters.byClass("CivCentre")).toEntityArray();
-	hq.ccOrders = hq.ccOrders.filter((order) =>
-	{
-		const centre = centres.find((ent) =>
-		{
-			const pos = ent.position();
-			return !!pos && SquareVectorDistance(pos, order.pos) < 40 * 40;
-		});
-		if (centre)
-		{
-			if (centre.foundationProgress() === undefined)
-			{
-				return false;
-			}
-			order.seen = true;
-			return true;
-		}
-		if (!order.seen && now - order.time < CC_ORDER_WAIT)
-		{
-			return true;
-		}
-		hq.ccSpotsAvoided.push({ pos: order.pos, until: now + CC_SPOT_MEMORY });
-		return false;
-	});
-}
-
-/** Seconds a civic centre's foundation may take to appear once ordered (followCivCentreOrders). */
-export const CC_ORDER_WAIT = 20;
-
-/** Seconds a civic centre spot that failed, or whose foundation was lost, is avoided. */
-export const CC_SPOT_MEMORY = 600;
