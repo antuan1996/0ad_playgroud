@@ -32,7 +32,12 @@ import { cellIndex, templateName, worldPos } from "../../adapter/brands.ts";
 import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
+import { AttackDesk, type AttackDecisions } from "../../execution/attackDesk.ts";
+import { DefenseDesk, type DefenseDecisions } from "../../execution/defenseDesk.ts";
+import { GarrisonManager, type GarrisonDefense } from "../../execution/garrisonManager.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
+import { TransportDesk, type NavalFleet } from "../../execution/transportDesk.ts";
+import { VictoryDesk, type VictoryDecisions } from "../../execution/victoryDesk.ts";
 import { Config } from "../../world/config.ts";
 import { Geography, findLandingZones } from "../../world/geography.ts";
 import { createBorderMap, createTerritoryMap } from "../../world/mapModule.ts";
@@ -803,6 +808,29 @@ export function seatHQ(world: HqWorld, options: HqSeatOptions = {}): Headquarter
 				Object.entries(fields).map(([field, value]) => [field, Array.isArray(value) ? [...value] : value]),
 			),
 		);
+		// the town gathers the desk of the manager seated, a door's as a real one's
+		Object.assign(hq.town, deskOver(name, hq.Config, managers[name]));
 	}
 	return hq;
+}
+
+/** The town's desk of a manager seated as a door: made over the door, as the manager makes its own */
+function deskOver(name: string, config: Config, door: unknown): Record<string, unknown>
+{
+	switch (name)
+	{
+		case "attackManager":
+			return { attacks: new AttackDesk(config, fake<AttackDecisions>(door)) };
+		case "navalManager":
+			return { transports: new TransportDesk(config, fake<NavalFleet>(door)) };
+		case "defenseManager":
+			return {
+				defense: new DefenseDesk(fake<DefenseDecisions>(door)),
+				garrisons: new GarrisonManager(config, fake<GarrisonDefense>(door)),
+			};
+		case "victoryManager":
+			return { victory: new VictoryDesk(fake<VictoryDecisions>(door)) };
+		default:
+			return {};
+	}
 }

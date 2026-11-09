@@ -73,10 +73,14 @@ function makeDefender(
 	}, metadata);
 }
 
-/** A manager wired to one world as headquarters owns it. */
+/**
+ * A manager wired to one world as headquarters owns it. Its garrison orders go to the world's recording
+ * garrisons (the stub town's), which fill slots as the engine does, instead of the garrisons it made.
+ */
 function makeDefenseManager(world: World): DefenseManager
 {
-	return new DefenseManager(world.ai.Config, world.ai.HQ.geography, world.ai.HQ);
+	const manager = new DefenseManager(world.ai.Config, world.ai.HQ.geography, world.ai.HQ);
+	return Object.assign(manager, { garrisons: world.ai.town.garrisons });
 }
 
 /** A manager that has run one quiet startup tick on an empty world, so it

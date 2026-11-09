@@ -14,11 +14,12 @@ import { byClass } from "simulation/ai/common-api/filters.js";
 import { GAIA, playerId, templateName } from "../../adapter/brands.ts";
 import type { Headquarters } from "../../decision/headquarters.ts";
 import { AttackDesk, type ArmyRelease } from "../../execution/attackDesk.ts";
-import { GuardDesk } from "../../execution/guardDesk.ts";
+import { DefenseDesk } from "../../execution/defenseDesk.ts";
 import { QueueManager, configuredQueues } from "../../execution/queueManager.ts";
 import { SiteDesk } from "../../execution/siteDesk.ts";
 import type { Town } from "../../execution/town.ts";
 import { TransportDesk } from "../../execution/transportDesk.ts";
+import { VictoryDesk } from "../../execution/victoryDesk.ts";
 import { CaptureTally } from "../../world/captureTally.ts";
 import { Config } from "../../world/config.ts";
 
@@ -415,10 +416,11 @@ export function makeWorld(options: WorldOptions = {}): World
 			numberOfGarrisonedSlots: (target: CommonEntity) => garrisonCounts.get(target.id()) ?? 0,
 			allowMelee: () => undefined,
 		},
-		// the town's desks, real over the stub managers
+		// the managers' desks, real over the stub managers, and the town's own
 		sites: new SiteDesk(ai.HQ),
-		guard: new GuardDesk(ai.HQ),
-		attacks: override(new AttackDesk(ai.Config, ai.HQ), {
+		defense: new DefenseDesk(ai.HQ.defenseManager),
+		victory: new VictoryDesk(ai.HQ.victoryManager),
+		attacks: override(new AttackDesk(ai.Config, ai.HQ.attackManager), {
 			// the defense handovers, local fights and lands of enemies, as the suites set and record them
 			switchDefenseToAttack: (
 				_gs: CommonGameState,
@@ -443,7 +445,7 @@ export function makeWorld(options: WorldOptions = {}): World
 					}),
 				])),
 		}),
-		transports: override(new TransportDesk(ai.Config, ai.HQ), {
+		transports: override(new TransportDesk(ai.Config, ai.HQ.navalManager), {
 			// the passages asked, noted and granted, not made
 			requireTransport: (
 				_gs: CommonGameState,

@@ -18,7 +18,7 @@ import { ENEMY, GAIA, PLAYER, makeWorld, type World, type WorldOptions } from ".
 import { attackPlanId, entityId, landRegion, playerId, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import { AttackManager } from "../decision/attackManager.ts";
-import { AttackDesk, type ArmyRelease } from "../execution/attackDesk.ts";
+import type { ArmyRelease, AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
 import { QueueManager } from "../execution/queueManager.ts";
 import { Config } from "../world/config.ts";
@@ -46,23 +46,18 @@ function worldConfig(world: World, overrides: Partial<Config> = {}): Config
 	return Object.assign(new Config(world.ai.Config.difficulty), world.ai.Config, { chat: true, ...overrides });
 }
 
-/** Each manager's town attacks (execution/attackDesk.ts): the plans it makes and the town runs and keeps */
-const desks = new WeakMap<AttackManager, AttackDesk>();
-
-/** The plans of the manager's town */
+/** The plans the manager makes, run and kept by its desk (execution/attackDesk.ts) */
 function desk(manager: AttackManager): AttackDesk
 {
-	return requireValue(desks.get(manager));
+	return manager.desk;
 }
 
-/** The manager wired to one world, as headquarters owns it, and the town's attacks beside it, of the same config */
+/** The manager wired to one world, as headquarters owns it, its desk the town's attacks */
 function makeManager(world: World, config: Config): AttackManager
 {
 	const manager = new AttackManager(config, world.gameState, world.ai.HQ);
 	world.ai.HQ.attackManager = manager;
-	const attacks = new AttackDesk(config, world.ai.HQ);
-	Object.assign(world.ai.town, { attacks });
-	desks.set(manager, attacks);
+	Object.assign(world.ai.town, { attacks: manager.desk });
 	return manager;
 }
 
@@ -1700,9 +1695,8 @@ describe("attack manager", () =>
 			fresh.ai.queues = fresh.ai.queueManager.queues;
 			const restored = AttackManager.restore(worldConfig(fresh), fresh.gameState, saved, fresh.ai.HQ);
 			fresh.ai.HQ.attackManager = restored;
-			const restoredPlans = new AttackDesk(worldConfig(fresh), fresh.ai.HQ);
-			restoredPlans.resume(fresh.gameState, savedPlans);
-			desks.set(restored, restoredPlans);
+			// as the town resumes them, once the managers are restored
+			restored.desk.resume(fresh.gameState, savedPlans, fresh.ai.HQ.canBuildUnits);
 
 			assert.equal(desk(restored).totalNumber, 5, "the counters came back");
 			assert.equal(restored.attackNumber, 3);

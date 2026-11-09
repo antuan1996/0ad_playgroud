@@ -81,6 +81,8 @@ function backToBoarding(p: TransportPlan): void
 const init = (s: ReturnType<typeof seat>) =>
 {
 	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography, s.hq);
+	// the town gathers the new manager's desk, as the headquarters' town does when it is made
+	Object.assign(s.hq.town, { transports: s.hq.navalManager.desk });
 	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 };
 

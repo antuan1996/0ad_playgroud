@@ -27,8 +27,8 @@ import { NavalManager, type NavalHQ } from "../decision/navalManager.ts";
 import { ResearchManager, type ResearchHQ } from "../decision/researchManager.ts";
 import { TradeManager, type SerializedTradeManager, type TradeHQ } from "../decision/tradeManager.ts";
 import { VictoryManager, type SerializedVictoryManager, type VictoryHQ } from "../decision/victoryManager.ts";
-import { AttackDesk, type SerializedAttacks } from "../execution/attackDesk.ts";
-import { GarrisonManager, type GarrisonHQ, type SerializedGarrisonManager } from "../execution/garrisonManager.ts";
+import { AttackDesk, type AttackDecisions, type SerializedAttacks } from "../execution/attackDesk.ts";
+import { GarrisonManager, type GarrisonDefense, type SerializedGarrisonManager } from "../execution/garrisonManager.ts";
 import { Queue, type SerializedQueue } from "../execution/queue.ts";
 import { QueueManager, configuredQueues, type SerializedQueueManager } from "../execution/queueManager.ts";
 import { ConstructionPlan } from "../execution/queueplanBuilding.ts";
@@ -99,10 +99,10 @@ describe("save and reload", () =>
 	{
 		assertRoundTrip({
 			label: "GarrisonManager",
-			original: () => new GarrisonManager(makeConfig(), fake<GarrisonHQ>({})),
+			original: () => new GarrisonManager(makeConfig(), fake<GarrisonDefense>({})),
 			fromSave: (data) =>
 			{
-				const garrisons = new GarrisonManager(makeConfig(), fake<GarrisonHQ>({}));
+				const garrisons = new GarrisonManager(makeConfig(), fake<GarrisonDefense>({}));
 				garrisons.resume(fake<SerializedGarrisonManager>(data));
 				return garrisons;
 			},
@@ -198,11 +198,11 @@ describe("save and reload", () =>
 		const world = emptyWorldWithMap();
 		assertRoundTrip({
 			label: "AttackDesk",
-			original: () => new AttackDesk(makeConfig(), world.ai.HQ),
+			original: () => new AttackDesk(makeConfig(), fake<AttackDecisions>({})),
 			fromSave: (data, gameState) =>
 			{
-				const attacks = new AttackDesk(makeConfig(), world.ai.HQ);
-				attacks.resume(gameState, fake<SerializedAttacks>(data));
+				const attacks = new AttackDesk(makeConfig(), fake<AttackDecisions>({}));
+				attacks.resume(gameState, fake<SerializedAttacks>(data), true);
 				return attacks;
 			},
 			notSaved: {
