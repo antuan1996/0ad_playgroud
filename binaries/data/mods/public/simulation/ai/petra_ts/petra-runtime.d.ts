@@ -24,6 +24,8 @@ declare namespace PetraRuntime
 		HQ: import("./decision/headquarters.ts").Headquarters;
 		/** The headquarters' capture tally (HQ.captures), for world/capture.ts, which may not reach the HQ. */
 		captures: import("./world/captureTally.ts").CaptureTally;
+		/** The enemies on each land (HQ.enemyLands), counted once a turn. */
+		enemyLands: import("./world/enemyLands.ts").EnemyLands;
 		/** The headquarters' geography (HQ.geography), for world/ code, which may not reach the HQ. */
 		geography: import("./world/geography.ts").Geography;
 		/** The headquarters' bases as a world view (HQ.basesManager through world/bases.ts's BasesView). */

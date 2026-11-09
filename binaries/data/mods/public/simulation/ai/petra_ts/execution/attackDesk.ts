@@ -2,24 +2,21 @@
  * The town's attacks (`gameState.ai.town.attacks`, part of execution/town.ts): the attack plans, execution's own
  * to keep — those in preparation and those under way, numbered as they are made, run each turn, started, aborted
  * and closed, and saved with the town — with the local fights a leaving plan leaves, the defense armies turned to
- * an attack, the siege units sent to bomb what is in range meanwhile, and the enemies on each land. The attack
+ * an attack (the siege sent to bomb meanwhile is execution/bombardment.ts, the enemies on each land
+ * world/enemyLands.ts). The attack
  * manager decides which attacks to make and whom they fight; it makes the desk, which reaches it only through
  * AttackDecisions.
  */
-import * as filters from "simulation/ai/common-api/filters.js";
-import { SquareVectorDistance, VectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
-import { GAIA, worldPos } from "../adapter/brands.ts";
+import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import { worldPos } from "../adapter/brands.ts";
 import * as chat from "../adapter/chatHelper.ts";
 import { debugWarn } from "../adapter/debug.ts";
 import { getLandAccess, requireValue } from "../adapter/entityExtend.ts";
-import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced } from "../adapter/placed.ts";
-import { allowCapture } from "../world/capture.ts";
 import type { Config } from "../world/config.ts";
 import { ATTACK_TYPES, plansIn, type AttackType } from "./attackConstants.ts";
 import { AttackPlan, byAttackType, type AttackPlanData, type SerializedAttackPlan } from "./attackPlan.ts";
-import { isLent } from "./unitPlan.ts";
-import { Worker, marchesWithAttack } from "./worker.ts";
+import { Worker } from "./worker.ts";
 
 /** The attack plans as the town saves them */
 export type SerializedAttacks = {
@@ -97,53 +94,6 @@ function enlistDefender(
 	}
 }
 
-/** Whether a bomber still has the target as its last order and is lent to nothing */
-function stillBombing(ent: CommonEntity, targetId: EntityId): boolean
-{
-	const plan = ent.getMetadata(PlayerID, "plan");
-	const orders = ordersOf(ent);
-	const lastOrder = orders && orders.length ? orders[orders.length - 1] : null;
-	return !!lastOrder && !!lastOrder.target && lastOrder.target === targetId && !isLent(plan);
-}
-
-/**
- * Where a bomber out of range goes to shoot the structure: at range on the line to it, on our territory and land,
- * with the structure's surroundings not the enemy's; undefined if there is no such place.
- */
-function bombingSpot(
-	gameState: CommonGameState,
-	from: { pos: CommonPosition; access: AccessIndex; },
-	struct: CommonStructureEntity,
-	dist: number,
-	range: number,
-): CommonPosition | undefined
-{
-	const entPos = from.pos;
-	const structPos = struct.position();
-	const safety = struct.footprintRadius() + 30;
-	const safePos = worldPos(
-		structPos[0] + (entPos[0] - structPos[0]) * safety / dist,
-		structPos[1] + (entPos[1] - structPos[1]) * safety / dist,
-	);
-	const owner = gameState.ai.geography.territoryMap.getOwner(safePos);
-	if (owner !== 0 && gameState.isPlayerEnemy(owner))
-	{
-		return undefined;
-	}
-	const targetPos = worldPos(
-		structPos[0] + (entPos[0] - structPos[0]) * range / dist,
-		structPos[1] + (entPos[1] - structPos[1]) * range / dist,
-	);
-	if (
-		gameState.ai.geography.territoryMap.getOwner(targetPos) !== PlayerID ||
-		gameState.ai.accessibility.getAccessValue(targetPos) !== from.access
-	)
-	{
-		return undefined;
-	}
-	return targetPos;
-}
-
 /** What the attacks desk asks of its attack manager (decision/attackManager.ts, which makes it and passes itself) */
 export interface AttackDecisions
 {
@@ -158,15 +108,10 @@ export class AttackDesk
 	upcomingAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
 	/** the plans under way, by type */
 	startedAttacks: Record<AttackType, AttackPlan[]> = byAttackType(() => []);
-	/** Temporary attacks for siege units while waiting their current attack to start, by target */
-	bombingAttacks = new Map<EntityId, Set<EntityId>>();
 	/** the plans made so far: the next one's number */
 	totalNumber = 0;
 	/** when the plans were last listed (debug) */
 	debugTime = 0;
-	/** enemiesByLand's answer and the turn it was counted on (not saved). */
-	private enemyLands = new Map<AccessIndex, CommonPlacedEntity[]>();
-	private enemyLandsTurn = -1;
 	private readonly config: Config;
 	private readonly manager: AttackDecisions;
 
@@ -205,154 +150,6 @@ export class AttackDesk
 		this.totalNumber++;
 		this.upcomingAttacks[type].push(attackPlan);
 		return attackPlan;
-	}
-
-	/** A bombing's target or bomber renamed (packed or unpacked) */
-	renameInBombings(entity: EntityId, newentity: EntityId): void
-	{
-		for (const [targetId, unitIds] of this.bombingAttacks)
-		{
-			if (targetId === entity)
-			{
-				this.bombingAttacks.set(newentity, unitIds);
-				this.bombingAttacks.delete(entity);
-			}
-			else if (unitIds.has(entity))
-			{
-				unitIds.add(newentity);
-				unitIds.delete(entity);
-			}
-		}
-	}
-
-	/**
-	 * Check for any structure in range from within our territory, and bomb it
-	 */
-	assignBombers(gameState: CommonGameState): void
-	{
-		this.cleanBombings(gameState);
-
-		const bombers = gameState.updatingCollection(
-			"bombers",
-			filters.byClasses(["BoltShooter", "StoneThrower"]),
-			gameState.getOwnUnits(),
-		);
-		for (const ent of bombers.values())
-		{
-			// Filtered on having a Ranged attack, so attackRange("Ranged") is defined.
-			const ranged = ent.attackRange("Ranged");
-			if (!isPlaced(ent) || !ent.isIdle() || !ranged)
-			{
-				continue;
-			}
-			if (isLent(ent.getMetadata(PlayerID, "plan")))
-			{
-				continue;
-			}
-			if (marchesWithAttack(ent))
-			{
-				continue;
-			}
-			if (this.isBombing(ent.id()))
-			{
-				break;
-			}
-			this.bombAStructure(gameState, ent, ranged.max);
-		}
-	}
-
-	/** The bombings drop their units gone or sent elsewhere, and the targets gone or no more enemy */
-	private cleanBombings(gameState: CommonGameState): void
-	{
-		for (const [targetId, unitIds] of this.bombingAttacks)
-		{
-			const target = gameState.getEntityById(targetId);
-			if (!target || !gameState.isPlayerEnemy(target.owner()))
-			{
-				this.bombingAttacks.delete(targetId);
-				continue;
-			}
-			for (const entId of unitIds.values())
-			{
-				const ent = gameState.getEntityById(entId);
-				if (ent && ent.owner() === PlayerID && stillBombing(ent, targetId))
-				{
-					continue;
-				}
-				unitIds.delete(entId);
-			}
-			if (!unitIds.size)
-			{
-				this.bombingAttacks.delete(targetId);
-			}
-		}
-	}
-
-	/** Whether the unit bombs a target already */
-	private isBombing(id: EntityId): boolean
-	{
-		for (const unitIds of this.bombingAttacks.values())
-		{
-			if (unitIds.has(id))
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** The bomber attacks the first enemy structure it can reach from our territory, unless 5 bomb it already */
-	private bombAStructure(gameState: CommonGameState, ent: CommonPlacedEntity, range: number): void
-	{
-		const entPos = ent.position();
-		const access = getLandAccess(gameState, ent);
-		for (const struct of gameState.getEnemyStructures().values())
-		{
-			if (!ent.canAttackTarget(struct, allowCapture(gameState, ent, struct)))
-			{
-				continue;
-			}
-
-			const structPos = struct.position();
-			if (struct.hasClass("Field"))
-			{
-				if (
-					!struct.resourceSupplyNumGatherers() ||
-					!gameState.isPlayerEnemy(gameState.ai.geography.territoryMap.getOwner(structPos))
-				)
-				{
-					continue;
-				}
-			}
-			const dist = VectorDistance(entPos, structPos);
-			// targetPos holds the position to move to when out of range.
-			let targetPos: CommonPosition | undefined;
-			if (dist > range)
-			{
-				targetPos = bombingSpot(gameState, { pos: entPos, access }, struct, dist, range);
-				if (!targetPos)
-				{
-					continue;
-				}
-			}
-			let attackingUnits = this.bombingAttacks.get(struct.id());
-			if (attackingUnits && attackingUnits.size > 4)
-			{
-				continue; // already enough units against that target
-			}
-			if (!attackingUnits)
-			{
-				attackingUnits = new Set<EntityId>();
-				this.bombingAttacks.set(struct.id(), attackingUnits);
-			}
-			attackingUnits.add(ent.id());
-			if (targetPos)
-			{
-				ent.move(targetPos[0], targetPos[1]);
-			}
-			ent.attack(struct.id(), false, dist > range);
-			return;
-		}
 	}
 
 	/** Debug: the plans in preparation and the started ones */
@@ -630,47 +427,6 @@ export class AttackDesk
 	}
 
 	/**
-	 * Each land's enemy soldiers, heroes, siege engines and buildings (not
-	 * gaia's, no ships), counted once a turn: where our soldiers have enemies
-	 * beside them (FINDINGS §34).
-	 */
-	enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonPlacedEntity[]>
-	{
-		if (this.enemyLandsTurn === gameState.ai.playedTurn)
-		{
-			return this.enemyLands;
-		}
-		this.enemyLandsTurn = gameState.ai.playedTurn;
-		this.enemyLands = new Map();
-		for (const enemy of gameState.getEnemyEntities().values())
-		{
-			if (
-				enemy.owner() === GAIA || !isPlaced(enemy) || enemy.hasClass("Ship") ||
-				!enemy.hasClasses(["Soldier", "Hero", "Siege", "Structure"])
-			)
-			{
-				continue;
-			}
-			// 1 marks an impassable cell (a cliff's edge, the map's), no land
-			const land = getLandAccess(gameState, enemy);
-			if (land === undefined || land <= 1)
-			{
-				continue;
-			}
-			const list = this.enemyLands.get(land);
-			if (list)
-			{
-				list.push(enemy);
-			}
-			else
-			{
-				this.enemyLands.set(land, [enemy]);
-			}
-		}
-		return this.enemyLands;
-	}
-
-	/**
 	 * When an attack sets off, its soldiers standing on a land where enemies
 	 * stand (enemiesByLand), other than the target's, stay there as one attack
 	 * per land, started at once against the nearest enemy building there, else
@@ -681,7 +437,7 @@ export class AttackDesk
 	 */
 	splitLocalFights(gameState: CommonGameState, leaving: AttackPlan, targetLand: AccessIndex | undefined): void
 	{
-		const enemiesByLand = this.enemiesByLand(gameState);
+		const enemiesByLand = gameState.ai.enemyLands.byLand(gameState);
 		const soldiersByLand = new Map<AccessIndex, CommonPlacedEntity[]>();
 		for (const ent of leaving.unitCollection.values())
 		{

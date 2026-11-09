@@ -213,7 +213,7 @@ export function fastenEndGame(plan: AttackPlan, gameState: CommonGameState): voi
 export function gatherAtRallyPoint(plan: AttackPlan, gameState: CommonGameState): void
 {
 	// Remove those units which were in a temporary bombing attack
-	for (const unitIds of gameState.ai.town.attacks.bombingAttacks.values())
+	for (const unitIds of gameState.ai.town.bombing.bombingAttacks.values())
 	{
 		for (const entId of unitIds.values())
 		{

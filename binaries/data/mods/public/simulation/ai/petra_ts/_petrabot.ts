@@ -10,6 +10,7 @@ import type { Town } from "./execution/town.ts";
 import type { BasesView } from "./world/bases.ts";
 import type { CaptureTally } from "./world/captureTally.ts";
 import { Config, type SerializedConfig } from "./world/config.ts";
+import type { EnemyLands } from "./world/enemyLands.ts";
 import { analyseMap, type Geography } from "./world/geography.ts";
 
 type PetraBotSettings = Record<string, unknown> & { difficulty: number; behavior?: string; };
@@ -246,6 +247,12 @@ export class PetraBot extends BaseAI
 	get captures(): CaptureTally
 	{
 		return requireValue(this.HQ).captures;
+	}
+
+	/** The enemies on each land, as `gameState.ai.enemyLands` (PetraRuntime.AIState) */
+	get enemyLands(): EnemyLands
+	{
+		return requireValue(this.HQ).enemyLands;
 	}
 
 	constructor(settings: PetraBotSettings)

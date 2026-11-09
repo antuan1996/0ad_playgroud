@@ -91,7 +91,7 @@ export function targetOnLand(plan: AttackPlan, gameState: CommonGameState, land:
 	{
 		return undefined;
 	}
-	const buildings = (gameState.ai.town.attacks.enemiesByLand(gameState).get(land) ?? []).filter((enemy) =>
+	const buildings = (gameState.ai.enemyLands.byLand(gameState).get(land) ?? []).filter((enemy) =>
 		enemy.hasClass("Structure")
 	);
 	if (!buildings.length)

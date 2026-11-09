@@ -140,6 +140,5 @@ export function besideEnemies(gameState: CommonGameState, ent: CommonEntity, ral
 {
 	const land = ent.position() ? getLandAccess(gameState, ent) : undefined;
 	// 1 marks an impassable cell (a hunter at a cliff's edge), no land: no island of its own
-	return land !== undefined && land > 1 && land !== rallyLand &&
-		gameState.ai.town.attacks.enemiesByLand(gameState).has(land);
+	return land !== undefined && land > 1 && land !== rallyLand && gameState.ai.enemyLands.byLand(gameState).has(land);
 }

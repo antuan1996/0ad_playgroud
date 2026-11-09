@@ -4,7 +4,7 @@
  * door to the decision layer: no other execution module holds the headquarters or a manager.
  *
  * Its parts are desks, each the execution side of a decision manager. The core managers make their own desk and
- * hold it, and the desk holds its manager through a view of what it asks (`attacks`: the attack manager's,
+ * hold it, and the desk holds its manager through a view of what it asks (`attacks` and `bombing`: the attack manager's,
  * `transports`: the naval manager's, `defense` and `garrisons`: the defense manager's, `victory`: the victory
  * manager's); the town gathers them once the managers are made. The town makes the parts that serve the
  * headquarters as a whole (`sites`, `placement`), over its view of it (decision/headquarters.ts, which builds the
@@ -16,6 +16,7 @@ import type { Config } from "../world/config.ts";
 import type { EconomyPlan } from "../world/economyPlan.ts";
 import { seaBetween } from "../world/geography.ts";
 import type { AttackDesk, SerializedAttacks } from "./attackDesk.ts";
+import type { Bombardment } from "./bombardment.ts";
 import type { DefenseDesk } from "./defenseDesk.ts";
 import type { GarrisonManager, SerializedGarrisonManager } from "./garrisonManager.ts";
 import { PlacementSearches, type PlacementSearchHQ } from "./placementSearches.ts";
@@ -56,7 +57,7 @@ interface TownHQ
 /** The desks the core managers made, which the town gathers */
 interface ManagerDesks
 {
-	readonly attackManager: { readonly desk: AttackDesk; };
+	readonly attackManager: { readonly desk: AttackDesk; readonly bombing: Bombardment; };
 	readonly navalManager: { readonly desk: TransportDesk; };
 	readonly defenseManager: { readonly desk: DefenseDesk; readonly garrisons: GarrisonManager; };
 	readonly victoryManager: { readonly desk: VictoryDesk; };
@@ -84,6 +85,8 @@ export class Town
 	readonly garrisons: GarrisonManager;
 	/** the attack plans, whom they attack, and the units between plans */
 	readonly attacks: AttackDesk;
+	/** the siege sent to bomb what is in range while it waits */
+	readonly bombing: Bombardment;
 	/** the ships, the transports between lands, and the fishing grounds */
 	readonly transports: TransportDesk;
 	private readonly config: Config;
@@ -100,6 +103,7 @@ export class Town
 		this.victory = hq.victoryManager.desk;
 		this.garrisons = hq.defenseManager.garrisons;
 		this.attacks = hq.attackManager.desk;
+		this.bombing = hq.attackManager.bombing;
 		this.transports = hq.navalManager.desk;
 	}
 

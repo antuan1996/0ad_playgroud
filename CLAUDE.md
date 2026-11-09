@@ -131,7 +131,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     enemy shooters), `shipTraffic.ts` (fading enemy ship heatmap on naval maps,
     places towers), `baseResources.ts` (dropsite supplies per base), `bases.ts`
     (read-only `BaseView`), `captureTally.ts` (our units' capture strength per
-    target, owned by HQ, exposed as `gameState.ai.captures`), `capture.ts`
+    target, owned by HQ, exposed as `gameState.ai.captures`), `enemyLands.ts`
+    (the enemies on each land, counted once a turn, owned by HQ, exposed as
+    `gameState.ai.enemyLands`), `capture.ts`
     (`allowCapture`), `territory.ts` (territory helpers over
     `gameState.ai.geography`, the HQ's geography). World code reaches AI
     state only through such exposed world objects, never `gameState.ai.HQ`.
@@ -162,8 +164,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     and the core managers' desks, each made by its manager (`manager.desk`)
     and holding it through a view of what it asks: `attackDesk.ts`
     (`town.attacks`, the attack manager's, `AttackDecisions`: owns the attack
-    plans, runs them, bombing, local fights, defense armies turned to
-    attacks), `transportDesk.ts` (`town.transports`, the naval manager's,
+    plans, runs them, local fights, defense armies turned to attacks) with
+    `bombardment.ts` (`town.bombing`, also the attack manager's: idle siege
+    sent to bomb what is in range), `transportDesk.ts` (`town.transports`, the naval manager's,
     `NavalFleet`: owns the transport plans; ships, fishing), `defenseDesk.ts`
     (`town.defense`, the defense manager's, `DefenseDecisions`: raids, armies,
     shelter), `victoryDesk.ts` (`town.victory`, the victory manager's:
@@ -257,7 +260,8 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   keep get/set accessors for saves and tests. Below `decision/` they are read
   through `gameState.ai` (`PetraRuntime.AIState`, getters on the bot and in
   the harnesses): `geography`, `bases` (`world/bases.ts` `BasesView`),
-  `treasures`, `captures` (`world/captureTally.ts`).
+  `treasures`, `captures` (`world/captureTally.ts`), `enemyLands`
+  (`world/enemyLands.ts`).
 - Execution code (`execution/`) never reaches `Headquarters` or a decision
   manager's class: it uses the decision layer only through
   `gameState.ai.town` (`execution/town.ts`) and its desks, which hold their

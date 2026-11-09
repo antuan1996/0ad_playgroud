@@ -17,6 +17,7 @@ import { censusOf } from "../world/census.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import { EconomyPlan } from "../world/economyPlan.ts";
+import { EnemyLands } from "../world/enemyLands.ts";
 import { GatherEconomy } from "../world/gatherEconomy.ts";
 import { restoreGeography, type Geography } from "../world/geography.ts";
 import * as mapMask from "../world/mapMask.ts";
@@ -255,6 +256,8 @@ export class Headquarters
 	canExpand = false;
 	/** the capture strength our units set on each target (world/captureTally.ts), saved through the accessors below */
 	captures = new CaptureTally();
+	/** the enemies on each land, counted once a turn (world/enemyLands.ts); not saved */
+	readonly enemyLands = new EnemyLands();
 	currentPhase: number;
 	decayingStructures: Set<EntityId> = new Set();
 	defenseManager: DefenseManager;

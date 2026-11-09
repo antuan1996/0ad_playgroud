@@ -43,9 +43,6 @@ export interface PlacementSearchHQ extends PlacementHQ
 			index1: AccessIndex,
 			index2: AccessIndex,
 		): SeaIndex | undefined;
-		readonly attacks: {
-			enemiesByLand(gameState: CommonGameState): ReadonlyMap<AccessIndex, readonly CommonPlacedEntity[]>;
-		};
 	};
 }
 
@@ -244,7 +241,7 @@ export class PlacementSearches
 		{
 			return true;
 		}
-		const enemies = this.hq.town.attacks.enemiesByLand(gameState).get(land);
+		const enemies = gameState.ai.enemyLands.byLand(gameState).get(land);
 		if (!enemies)
 		{
 			return false;

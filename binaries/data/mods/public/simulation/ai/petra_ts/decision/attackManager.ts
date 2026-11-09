@@ -4,6 +4,7 @@ import { debugWarn } from "../adapter/debug.ts";
 import { plansIn, type AttackType } from "../execution/attackConstants.ts";
 import { AttackDesk } from "../execution/attackDesk.ts";
 import { AttackPlan } from "../execution/attackPlan.ts";
+import { Bombardment } from "../execution/bombardment.ts";
 import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Config } from "../world/config.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
@@ -44,6 +45,8 @@ export class AttackManager
 	readonly siblings: AttackSiblings;
 	/** the attack plans, made, run and kept on the execution side (execution/attackDesk.ts): its desk in the town */
 	readonly desk: AttackDesk;
+	/** the siege sent to bomb meanwhile, on the execution side (execution/bombardment.ts) */
+	readonly bombing = new Bombardment();
 	/** Our units held in reserve, out of any plan */
 	outOfPlan: CommonEntityCollection;
 
@@ -109,7 +112,7 @@ export class AttackManager
 
 		for (const evt of events.EntityRenamed)
 		{ // take care of packing units in bombing attacks
-			this.desk.renameInBombings(evt.entity, evt.newentity);
+			this.bombing.renameInBombings(evt.entity, evt.newentity);
 		}
 	}
 
@@ -242,7 +245,7 @@ export class AttackManager
 		// Check if we have some unused ranged siege unit which could do something useful while waiting
 		if (this.Config.difficulty > difficulty.VERY_EASY && gameState.ai.playedTurn % 5 === 0)
 		{
-			this.desk.assignBombers(gameState);
+			this.bombing.assignBombers(gameState);
 		}
 	}
 
