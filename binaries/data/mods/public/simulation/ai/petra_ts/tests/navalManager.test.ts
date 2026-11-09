@@ -7,11 +7,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { emptyEvents, eventsWith, fake, makeTemplate, override, placed } from "./harness/fakes.ts";
-import { ENEMY, MAP_CELLS, PLAYER, makeGaiaSupply, makeHqEntity, structureTemplate } from "./harness/hqWorld.ts";
-import { ISLAND, SEA, WEST, board, navalWorld, ship, soldier, type HqWorld } from "./harness/navalWorld.ts";
+import { emptyEvents, eventsWith, makeTemplate, override } from "./harness/fakes.ts";
+import { ENEMY, PLAYER, makeHqEntity, structureTemplate } from "./harness/hqWorld.ts";
+import { backToBoarding, boarding, dock, fish, init, queues, seat, setSail, shipCard } from "./harness/navalSeat.ts";
+import { ISLAND, SEA, WEST, navalWorld, ship, soldier } from "./harness/navalWorld.ts";
 
-import { entityId, landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
+import { landRegion, seaRegion, seconds, worldPos } from "../adapter/brands.ts";
 import { requireValue } from "../adapter/entityExtend.ts";
 import * as baseModule from "../decision/baseManager.ts";
 import { BuildManager } from "../decision/buildManager.ts";
@@ -24,129 +25,8 @@ import {
 	getBestShip,
 } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
-import type { TransportDesk } from "../execution/transportDesk.ts";
-import { TransportPlan } from "../execution/transportPlan.ts";
-import { fishIsSafe, fishSea } from "../world/fishing.ts";
 
 const PlayerID = PLAYER;
-
-/** the naval board, its naval manager not yet initialised */
-function seat(options: Parameters<typeof navalWorld>[0] = {})
-{
-	const s = navalWorld(options);
-	// the trade office's merchants, as TradeManager.init collects them (role trader)
-	const traders = s.world.gameState.getOwnUnits().filter((e: CommonEntity) =>
-		e.getMetadata(PlayerID, "role") === "trader"
-	);
-	traders.registerUpdates();
-	s.hq.tradeManager.traders = traders;
-	return {
-		...s,
-		get naval(): NavalManager
-		{
-			return s.hq.navalManager;
-		},
-		/** the town's transports, where the passages are made and kept */
-		get transports(): TransportDesk
-		{
-			return s.hq.town.transports;
-		},
-	};
-}
-
-/**
- * The naval manager made as the headquarters makes it, on the world as the
- * test laid it out (its fleet, the fish, the landing zones), with the sea of
- * each dock and ship noted, as at the start of a game.
- */
-
-/** a plan at sea, as onBoarding leaves it, with its ships' points as they were */
-function setSail(p: TransportPlan): void
-{
-	p.stage = {
-		state: TransportPlan.SAILING,
-		landingPos: p.shipPoints(),
-		nTry: {},
-		unloaded: [],
-		recovered: [],
-		canceled: undefined,
-	};
-}
-
-/** a plan back at the shore, its points kept: a test's set-up only (a plan never goes back) */
-function backToBoarding(p: TransportPlan): void
-{
-	p.stage = { state: TransportPlan.BOARDING, boardingPos: p.shipPoints(), nTry: {}, needSplit: [] };
-}
-
-const init = (s: ReturnType<typeof seat>) =>
-{
-	s.hq.navalManager = new NavalManager(s.hq.Config, s.world.gameState, s.hq.geography, s.hq);
-	// the town gathers the new manager's desk, as the headquarters' town does when it is made
-	Object.assign(s.hq.town, { transports: s.hq.navalManager.desk, fishing: s.hq.navalManager.fishing });
-	s.hq.navalManager.assignStartingSeas(s.world.gameState);
-};
-
-const queues = (world: HqWorld) => world.ai.queues;
-
-/** a shoal of fish */
-function fish(world: HqWorld, id: number, position: [number, number], amount = 1000)
-{
-	return world.addEntity(
-		makeGaiaSupply({ id, position, generic: "food", specific: "fish", classes: ["SeaCreature"], amount }),
-	);
-}
-
-/** a dock of ours, which may train the given ships */
-function dock(
-	world: HqWorld,
-	id: number,
-	position: [number, number],
-	trainable: string[] = [],
-	options: { foundation?: boolean; classes?: string[]; owner?: number; } = {},
-)
-{
-	return world.addEntity(
-		makeHqEntity({
-			id,
-			owner: options.owner ?? PLAYER,
-			position,
-			classes: options.classes ?? ["Structure", "Dock"],
-			templateName: (options.foundation ? "foundation|" : "") + "structures/athen/dock",
-		}, {
-			trainingQueue: () => [],
-			trainableEntities: () => trainable,
-			foundationProgress: () => options.foundation ? 0.5 : undefined,
-		}),
-	);
-}
-
-/** a ship card, answering what the common-api Template reads for ships */
-function shipCard(
-	world: HqWorld,
-	name: string,
-	detail: {
-		classes?: string[];
-		capacity?: number;
-		arrows?: number;
-		garrisonable?: string[];
-		available?: boolean;
-		category?: string;
-	} = {},
-): string
-{
-	world.templates[name] = fake<CommonTemplate>({
-		...makeTemplate(name, {
-			classes: detail.classes ?? ["Unit", "Ship"],
-			available: detail.available ?? true,
-			trainingCategory: detail.category,
-		}),
-		getDefaultArrow: () => detail.arrows,
-		garrisonMax: () => detail.capacity,
-		garrisonableClasses: () => detail.garrisonable ?? ["Infantry"],
-	});
-	return name;
-}
 
 describe("the fleet counted at the start: init", () =>
 {
@@ -292,65 +172,6 @@ describe("how many fishing boats a sea gets", () =>
 	});
 });
 
-describe("where fish can be caught: world/fishing.ts's fishSea and fishIsSafe", () =>
-{
-	it("a shoal far from any shore is in the open sea, safe from everyone", () =>
-	{
-		const s = seat({ island: false });
-		const shoal = fish(s.world, 400, [300, 160]);
-		init(s);
-
-		assert.equal(fishSea(s.world.gameState, placed(shoal)), SEA);
-		assert.equal(shoal.getMetadata(PlayerID, "opensea"), true);
-		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), true);
-	});
-
-	it("a shoal by rocks, or by the edge of a round map, is still in the open sea; by land it is not", () =>
-	{
-		const access = (s: ReturnType<typeof seat>) =>
-			s.world.ai.accessibility as unknown as { landPassMap: Uint8Array; navalPassMap: Uint8Array; };
-		// the farthest sample north of the shoal, 120 m off: passability cell (150, 140)
-		const sample = 150 + 140 * MAP_CELLS * 4;
-
-		const rocks = seat({ island: false });
-		const byRocks = fish(rocks.world, 400, [300, 160]);
-		access(rocks).landPassMap[sample] = 1; // neither land nor sea: region 1 on both grids
-		access(rocks).navalPassMap[sample] = 1;
-		init(rocks); // counting the fish measures each shoal's sea
-		assert.equal(byRocks.getMetadata(PlayerID, "opensea"), true, "the next sample inward is open water");
-
-		const islet = seat({ island: false });
-		const byLand = fish(islet.world, 400, [300, 160]);
-		access(islet).landPassMap[sample] = WEST; // a scrap of land there instead
-		init(islet);
-		assert.equal(byLand.getMetadata(PlayerID, "opensea"), undefined);
-	});
-
-	it("a shoal near a shore is not in the open sea, and its sea is remembered", () =>
-	{
-		const s = seat();
-		const shoal = fish(s.world, 400, [200, 160]);
-		init(s);
-
-		assert.equal(fishSea(s.world.gameState, placed(shoal)), SEA);
-		assert.equal(shoal.getMetadata(PlayerID, "opensea"), undefined);
-		assert.equal(shoal.getMetadata(PlayerID, "sea"), SEA);
-		shoal.setMetadata(PlayerID, "sea", seaRegion(9));
-		assert.equal(fishSea(s.world.gameState, placed(shoal)), 9, "read back, not measured again");
-	});
-
-	it("a shoal near enemy ground is not safe to fish", () =>
-	{
-		const s = seat();
-		const shoal = fish(s.world, 400, [200, 160]);
-		init(s);
-		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), true, "our ground and the open water around it");
-
-		s.world.map.setTerritoryOwner(33, 20, ENEMY); // on the island, 60 m east
-		assert.equal(fishIsSafe(s.world.gameState, placed(shoal)), false);
-	});
-});
-
 describe("which seas a land still needs a dock on: getUnconnectedSeas", () =>
 {
 	it("a land with no dock lacks every sea it touches; a dock connects its sea", () =>
@@ -375,197 +196,6 @@ describe("which seas a land still needs a dock on: getUnconnectedSeas", () =>
 		yard.setMetadata(PlayerID, "sea", SEA);
 
 		assert.deepEqual(s.naval.getUnconnectedSeas(s.world.gameState, WEST), [SEA]);
-	});
-});
-
-describe("units asking to cross the sea: requireTransport", () =>
-{
-	it("a unit that cannot board a ship gets no passage", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160], {}, { canGarrison: () => false });
-		init(s);
-
-		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
-		assert.equal(s.transports.plans.length, 0);
-	});
-
-	it("a unit already booked on a passage gets no second one", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160], { transport: 7 });
-		init(s);
-
-		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
-	});
-
-	it("the first unit opens a passage, the next on the same route joins it, the way back is another", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160]);
-		const b = soldier(s.world, 101, [140, 170]);
-		const c = soldier(s.world, 102, [260, 170]);
-		init(s);
-
-		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), true);
-		assert.equal(s.transports.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(290, 160)), true);
-		assert.equal(s.transports.requireTransport(s.world.gameState, c.ent, ISLAND, WEST, worldPos(100, 160)), true);
-
-		assert.equal(s.transports.plans.length, 2);
-		assert.equal(s.transports.plans[0].units.length, 2);
-		assert.deepEqual(b.ent.getMetadata(PlayerID, "endPos"), [290, 160], "each keeps its own goal");
-	});
-
-	// only the port passes: the original sorts the waiting passages with a
-	// one-argument function, which orders nothing; the port joins the unit to
-	// the passage with the fewest units, as the code intends
-	it("a unit joins the emptier of two passages waiting on its route, whichever was opened first", () =>
-	{
-		for (const smallFirst of [false, true])
-		{
-			const s = seat();
-			const big = [0, 1, 2].map((k) => soldier(s.world, 100 + k, [140, 150 + 5 * k]));
-			const lone = soldier(s.world, 110, [140, 200]);
-			const newcomer = soldier(s.world, 120, [140, 210]);
-			init(s);
-			const open = (units: Array<ReturnType<typeof soldier>>) =>
-			{
-				for (const u of units)
-				{
-					s.transports.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
-				}
-				// close it to newcomers while the other one opens
-				setSail(requireValue(s.transports.plans.at(-1)));
-			};
-			if (smallFirst)
-			{
-				open([lone]);
-				open(big);
-			}
-			else
-			{
-				open(big);
-				open([lone]);
-			}
-			for (const p of s.transports.plans)
-			{
-				backToBoarding(p);
-			}
-
-			s.transports.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
-
-			assert.equal(
-				newcomer.ent.getMetadata(PlayerID, "transport"),
-				lone.ent.getMetadata(PlayerID, "transport"),
-				smallFirst ? "the small passage opened first" : "the small passage opened second",
-			);
-		}
-	});
-
-	it("a passage already at sea takes no one more", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160]);
-		const b = soldier(s.world, 101, [140, 170]);
-		init(s);
-		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		setSail(s.transports.plans[0]);
-
-		s.transports.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(280, 160));
-
-		assert.equal(s.transports.plans.length, 2);
-	});
-
-	it("a passage with four siege engines takes no fifth", () =>
-	{
-		const s = seat();
-		const rams = [0, 1, 2, 3, 4].map((k) =>
-			soldier(s.world, 110 + k, [140, 150 + k * 4], {}, {
-				hasClasses: (list: string[]) => list.includes("Siege"),
-			})
-		);
-		init(s);
-
-		for (const ram of rams)
-		{
-			s.transports.requireTransport(s.world.gameState, ram.ent, WEST, ISLAND, worldPos(280, 160));
-		}
-
-		assert.equal(s.transports.plans.length, 2);
-		assert.equal(s.transports.plans[0].units.length, 4);
-	});
-
-	it("a route with no sea between the lands gets no passage", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160]);
-		init(s);
-
-		assert.equal(
-			s.transports.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)),
-			false,
-		);
-		assert.equal(s.transports.plans.length, 0);
-		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
-	});
-
-	it("a split with no unit left to move makes no new passage", () =>
-	{
-		const s = seat();
-		const a = soldier(s.world, 100, [140, 160]);
-		init(s);
-		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.transports.plans[0];
-		a.ent.setMetadata(PlayerID, "onBoard", entityId(202));
-		assert.equal(s.transports.splitTransport(s.world.gameState, p, [a.ent]), false);
-		assert.equal(s.transports.plans.length, 1);
-	});
-});
-
-describe("a ship that starts the game with units aboard: createTransportIfNeeded", () =>
-{
-	/** a ship at sea with two soldiers aboard */
-	function loaded(s: ReturnType<typeof seat>, id = 200, metadata: Record<string, unknown> = {})
-	{
-		const carrier = ship(s.world, id, [200, 160], { metadata });
-		for (const k of [0, 1])
-		{
-			board(soldier(s.world, id * 10 + k, undefined), carrier);
-		}
-		return carrier;
-	}
-
-	it("carries its units to the land of the first building, from the sea where it waits", () =>
-	{
-		const s = seat();
-		const carrier = loaded(s);
-		ship(s.world, 201, [200, 200]); // an empty ship has nothing to carry
-		init(s);
-
-		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
-
-		assert.equal(s.transports.plans.length, 1);
-		const p = s.transports.plans[0];
-		assert.equal(p.startIndex, 1, "from aboard");
-		assert.equal(p.endIndex, ISLAND);
-		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), p.ID);
-		assert.equal(p.units.length, 2);
-	});
-
-	it("does nothing for a ship already carrying for a plan, from land, or towards no land", () =>
-	{
-		const s = seat();
-		loaded(s, 200, { transporter: 99 });
-		loaded(s, 201);
-		init(s);
-
-		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(140, 160), worldPos(280, 160), ISLAND);
-		// (the first building's caller always knows its land: ConstructionPlan.start sets it)
-		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(200, 160), landRegion(1));
-		assert.equal(s.transports.plans.length, 0);
-
-		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
-		assert.equal(s.transports.plans.length, 1, "only the free ship");
 	});
 });
 
@@ -664,7 +294,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	});
 });
 
-describe("ships trained and handed out: maintainFleet, getBestShip and assignShipsToPlans", () =>
+describe("ships trained: maintainFleet and getBestShip", () =>
 {
 	/** a dock on our coast training the given ships */
 	function yard(s: ReturnType<typeof seat>, trainable: string[])
@@ -773,67 +403,10 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 
 		assert.equal(getBestShip(s.world.gameState, SEA, "transport"), plain);
 	});
-
-	it("hands free ships to the passages waiting for one", () =>
-	{
-		const s = seat();
-		const carrier = ship(s.world, 200, [200, 160]);
-		init(s);
-		s.transports.requireTransport(
-			s.world.gameState,
-			soldier(s.world, 100, [140, 160]).ent,
-			WEST,
-			ISLAND,
-			worldPos(280, 160),
-		);
-
-		s.transports.assignShipsToPlans(s.world.gameState);
-
-		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), s.transports.plans[0].ID);
-	});
 });
 
-describe("ships boarding and ships in the way: isShipBoarding and moveApart", () =>
+describe("ships in the way: moveApart", () =>
 {
-	/** a passage with its ship sent to our shore */
-	function boarding(s: ReturnType<typeof seat>)
-	{
-		const carrier = ship(s.world, 200, [200, 160]);
-		init(s);
-		s.transports.requireTransport(
-			s.world.gameState,
-			soldier(s.world, 100, [140, 160]).ent,
-			WEST,
-			ISLAND,
-			worldPos(280, 160),
-		);
-		const p = s.transports.plans[0];
-		s.transports.assignShipsToPlans(s.world.gameState);
-		p.update(s.world.gameState);
-		return { carrier, p };
-	}
-
-	it("a ship of a passage is boarding once at its landing spot, not before", () =>
-	{
-		const s = seat();
-		const { carrier, p } = boarding(s);
-		assert.equal(s.transports.isShipBoarding(carrier.ent), false, "still at sea");
-
-		carrier.state.pos = p.shipPoints()[200];
-		assert.equal(s.transports.isShipBoarding(carrier.ent), true);
-
-		carrier.state.pos = undefined;
-		assert.equal(s.transports.isShipBoarding(carrier.ent), false, "a ship with no position is not boarding");
-	});
-
-	it("a ship of no passage is not boarding", () =>
-	{
-		const s = seat();
-		const free = ship(s.world, 200, [200, 160]);
-		init(s);
-		assert.equal(s.transports.isShipBoarding(free.ent), false);
-	});
-
 	it("a transport with no route, still for STUCK_SECONDS, nudges itself, and pushes idle ships out of its way", () =>
 	{
 		const s = seat();
@@ -1330,77 +903,6 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		{
 			assert.equal(ent.getMetadata(PlayerID, "sea"), undefined);
 		}
-	});
-
-	it("a passage whose ship sank at sea leaves the units still aboard another of its ships alone", () =>
-	{
-		const s = seat();
-		ship(s.world, 200, [200, 160]);
-		const aboard = soldier(s.world, 100, [140, 160]);
-		init(s);
-		s.transports.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.transports.plans[0];
-		setSail(p);
-		aboard.state.pos = undefined; // aboard the plan's other ship
-		s.world.removeEntity(200);
-
-		s.naval.checkEvents(
-			s.world.gameState,
-			queues(s.world),
-			events({ Destroy: [{ entity: 200, metadata: { [PlayerID]: { transporter: p.ID } } }] }),
-		);
-
-		assert.equal(aboard.ent.getMetadata(PlayerID, "transport"), p.ID);
-	});
-
-	it("a passage whose ship sank while boarding waits for another ship", () =>
-	{
-		const s = seat();
-		const carrier = ship(s.world, 200, [200, 160]);
-		const a = soldier(s.world, 100, [140, 160]);
-		init(s);
-		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.transports.plans[0];
-		s.transports.assignShipsToPlans(s.world.gameState);
-		p.update(s.world.gameState);
-		s.world.removeEntity(200);
-
-		s.naval.checkEvents(
-			s.world.gameState,
-			queues(s.world),
-			events({ Destroy: [{ entity: 200, metadata: { [PlayerID]: { transporter: p.ID } } }] }),
-		);
-
-		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
-		assert.equal(p.needTransportShips, true);
-		void carrier;
-	});
-
-	it("a passage whose ship sank at sea lets the survivors ashore ask again from where they stand", () =>
-	{
-		const s = seat();
-		ship(s.world, 200, [200, 160]);
-		const a = soldier(s.world, 100, [140, 160]);
-		const b = soldier(s.world, 101, [140, 170]);
-		init(s);
-		for (const u of [a, b])
-		{
-			s.transports.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
-		}
-		const p = s.transports.plans[0];
-		setSail(p);
-		b.state.pos = [250, 160]; // already landed on the island
-		s.world.removeEntity(200);
-
-		s.naval.checkEvents(
-			s.world.gameState,
-			queues(s.world),
-			events({ Destroy: [{ entity: 200, metadata: { [PlayerID]: { transporter: p.ID } } }, { entity: 999 }] }),
-		);
-
-		assert.notEqual(a.ent.getMetadata(PlayerID, "transport"), p.ID);
-		assert.equal(s.transports.plans.length, 2, "a new passage for the one still on our land");
-		assert.equal(b.ent.getMetadata(PlayerID, "transport"), undefined, "the one at its goal needs none");
 	});
 });
 

@@ -100,6 +100,9 @@ supplies both.
 | `harness/world.ts` | a world of entities around a stub headquarters (`makeWorld`) |
 | `harness/hqWorld.ts` | a real Headquarters on a small map, its co-managers as recorded doors (`makeHqWorld`, `seatHQ`) |
 | `harness/navalWorld.ts` | the hq world split by a sea, with ships and transports |
+| `harness/hqSeat.ts` | the office seated on the plain and its structure cards (HQ, town, placement suites) |
+| `harness/navalSeat.ts` | the naval manager on its board, shoals, docks, plan states (naval, transport, fishing) |
+| `harness/attackSeat.ts` | configs, an attack manager on a world, plan stubs (attack, desk, bombardment suites) |
 | `harness/bareState.ts` | a game state with only a config, queues and templates (`makeFakeGameState`) |
 | `harness/diplomacy.ts` | the players' table and its diplomacy (`setPlayers`) |
 | `harness/persistence.ts` | the save/reload checks |

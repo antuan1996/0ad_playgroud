@@ -213,7 +213,8 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
 - Fakes: `fakes.ts` (`makeEntity`, `makeTemplate`, `emptyEvents`/`eventsWith`,
   `stubGlobal`/`restoreEngine`, `fake<T>()`, `override(target, { method })`),
   `world.ts` (`makeWorld`), `hqWorld.ts` (`makeHqWorld`/`seatHQ` with
-  `doorStub`/`doorManagers`), `navalWorld.ts`, `bareState.ts`
+  `doorStub`/`doorManagers`), `navalWorld.ts`, the suites' shared seats
+  (`hqSeat.ts`, `navalSeat.ts`, `attackSeat.ts`), `bareState.ts`
   (`makeFakeGameState`), `diplomacy.ts` (`setPlayers`), `persistence.ts`
   (save/reload round trips).
 - Fake entities and stubs **throw on any undeclared method**: declare only what
