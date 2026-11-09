@@ -1068,7 +1068,7 @@ describe("a worker and the far side of the water", () =>
 		const store = storehouse(world, 6642, [230, 230]);
 		const tree = rawSupply(world, 6643, [235, 235], "wood", "tree");
 		island.assignEntity(world.gameState, store);
-		hq.navalManager.requireTransport = () => true;
+		hq.town.transports.requireTransport = () => true;
 		const ent = hand(world, base, 6644, { "gather-type": "wood" });
 		const work = prime(worker, ent);
 
@@ -1145,7 +1145,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 	{
 		const { world, hq, base, worker } = seat();
 		const removed: number[] = [];
-		hq.navalManager.getPlan = () => boardingPlan(3, removed);
+		hq.town.transports.getPlan = () => boardingPlan(3, removed);
 		const ent = hand(world, base, 6701, {
 			"subrole": Worker.SUBROLE_BUILDER,
 			"target-foundation": 9999,
@@ -1170,7 +1170,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 			}, { foundationProgress: () => 0.2, needsRepair: () => true }),
 		);
 		const removed: number[] = [];
-		hq.navalManager.getPlan = () => boardingPlan(3, removed);
+		hq.town.transports.getPlan = () => boardingPlan(3, removed);
 		const ent = hand(world, base, 6712, {
 			"subrole": Worker.SUBROLE_BUILDER,
 			"target-foundation": 6711,
@@ -1200,7 +1200,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 			),
 		);
 		const removed: number[] = [];
-		hq.navalManager.getPlan = () => boardingPlan(3, removed);
+		hq.town.transports.getPlan = () => boardingPlan(3, removed);
 		const ent = hand(world, base, 6722, { "gather-type": "wood", "transport": 42 });
 
 		worker.update(world.gameState, ent);
@@ -1218,7 +1218,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 			}),
 		);
 		const removed: number[] = [];
-		hq.navalManager.getPlan = () => boardingPlan(3, removed);
+		hq.town.transports.getPlan = () => boardingPlan(3, removed);
 		const ent = hand(world, base, 6732, { "gather-type": "wood", "transport": 42 });
 
 		worker.update(world.gameState, ent);
@@ -1244,7 +1244,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 		);
 		bookCentreSupplies(world, base);
 		const removed: number[] = [];
-		hq.navalManager.getPlan = () =>
+		hq.town.transports.getPlan = () =>
 			boardingPlan(3, removed, (e: CommonEntity) => e.setMetadata(PlayerID, "transport", undefined));
 		// a hunter carries no gather-type: the quay check reads it as food
 		const ent = rider(world, base, 6742, { transport: 42 });
@@ -1264,7 +1264,7 @@ describe("a worker waiting at the quay: update with a transport booked", () =>
 	it("a gatherer whose boat is gone from the books keeps waiting rather than failing the turn", () =>
 	{
 		const { world, hq, base, worker } = seat();
-		hq.navalManager.getPlan = () => undefined;
+		hq.town.transports.getPlan = () => undefined;
 		const ent = hand(world, base, 6751, { "gather-type": "wood", "transport": 42 });
 
 		worker.update(world.gameState, ent);
@@ -2034,7 +2034,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const island = secondTown(world, hq, 7171, [240, 240]);
 		field(world, 7172, [230, 230], island.ID, 3);
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7173, { "gather-type": "food" });
 		const work = prime(worker, ent);
 
@@ -2049,7 +2049,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		const island = secondTown(world, hq, 7181, [240, 240]);
 		fieldFoundation(world, 7182, [230, 230], island.ID, 3);
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7183, { "gather-type": "food" });
 		const work = prime(worker, ent);
 
@@ -2067,7 +2067,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		rawSupply(world, 7192, [230, 110], "wood", "tree");
 		island.assignEntity(world.gameState, storehouse(world, 7193, [230, 230]));
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7194, { "gather-type": "wood" });
 		const work = prime(worker, ent);
 
@@ -2086,7 +2086,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 		rawSupply(world, 7202, [300, 10], "wood", "tree");
 		island.assignEntity(world.gameState, storehouse(world, 7203, [230, 230]));
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7204, { "gather-type": "wood" });
 		const work = prime(worker, ent);
 
@@ -2117,7 +2117,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 			}, { base: island.ID, access: 3 }),
 		);
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7212, { "gather-type": "wood" });
 		const work = prime(worker, ent);
 
@@ -2149,7 +2149,7 @@ describe("a worker seeking its crop in other towns and over the water: startGath
 			}, { base: island.ID, access: 3 }),
 		);
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = hand(world, base, 7222, { "gather-type": "wood" });
 		const work = prime(worker, ent);
 
@@ -2593,7 +2593,7 @@ describe("a builder through its turn: update", () =>
 		const { world, hq, base, worker } = islandSeat();
 		scaffold(world, 7471, [240, 240], { access: 3 });
 		const passages: unknown[] = [];
-		hq.navalManager.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
+		hq.town.transports.requireTransport = (...args: unknown[]) => passages.push(args[3]) > 0;
 		const ent = builder(world, base, 7472, 7471, "INDIVIDUAL.IDLE");
 
 		worker.update(world.gameState, ent);

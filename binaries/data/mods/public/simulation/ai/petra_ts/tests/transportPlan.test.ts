@@ -34,7 +34,7 @@ function initNaval(s: ReturnType<typeof seat>): void
 	s.hq.navalManager.assignStartingSeas(s.world.gameState);
 }
 
-/** a plan, initialised and handed to the naval manager, as requireTransport makes one */
+/** a plan, initialised and handed to the town's transports, as requireTransport makes one */
 function plan(
 	s: ReturnType<typeof seat>,
 	units: CommonEntity[],
@@ -45,7 +45,7 @@ function plan(
 {
 	const p = TransportPlan.create(s.world.gameState, units, { startIndex: start, endIndex, endPos: end });
 	assert.ok(p, "a sea to cross");
-	s.hq.navalManager.transportPlans.push(p);
+	s.hq.town.transports.addPlan(p);
 	return p;
 }
 
@@ -293,7 +293,7 @@ describe("a transport plan counting room aboard", () =>
 
 		p.update(s.world.gameState);
 
-		const plans = s.hq.navalManager.transportPlans;
+		const plans = s.hq.town.transports.plans;
 		assert.equal(plans.length, 2);
 		const [first, second] = [a, b].map((u) => u.ent.getMetadata(PlayerID, "transport"));
 		assert.equal(first, p.ID);
@@ -315,7 +315,7 @@ describe("a transport plan counting room aboard", () =>
 		p.update(s.world.gameState);
 
 		assert.equal(a.ent.getMetadata(PlayerID, "onBoard"), undefined);
-		assert.equal(s.hq.navalManager.transportPlans.length, 1, "no unit is put aside for a second plan");
+		assert.equal(s.hq.town.transports.plans.length, 1, "no unit is put aside for a second plan");
 	});
 });
 
@@ -1252,7 +1252,7 @@ describe("a transport plan saved and loaded", () =>
 		p.update(s.world.gameState);
 		const saved = JSON.parse(JSON.stringify(p.Serialize()));
 
-		const loaded = TransportPlan.restore(s.world.gameState, s.hq.navalManager, saved);
+		const loaded = TransportPlan.restore(s.world.gameState, s.hq.town.transports, saved);
 		assert.ok(loaded, "its sea has a fleet");
 
 		assert.deepEqual(JSON.parse(JSON.stringify(loaded.Serialize())), saved);

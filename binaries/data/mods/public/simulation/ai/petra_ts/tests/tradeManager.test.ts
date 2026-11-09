@@ -17,6 +17,7 @@ import {
 	doorManagers,
 	makeHqEntity,
 	makeHqWorld,
+	recordPassages,
 	seatHQ,
 	structureTemplate,
 	type HqWorld,
@@ -443,26 +444,28 @@ describe("a trader sent on its way: updateTrader", () =>
 	it("a trader on another land asks for a passage to the nearer market", () =>
 	{
 		const { world, hq, manager } = routed();
+		const passages = recordPassages(hq);
 		world.accessAt.set("260,200", 3);
 		world.ai.accessibility.regionType[3] = "land";
 		const far = trader(world, 300, [260, 200]);
 
 		manager.updateTrader(world.gameState, far.ent);
 
-		const call = doorCalls(hq.navalManager).find(([m]) => m === "requireTransport");
+		const call = passages.find(([m]) => m === "requireTransport");
 		assert.deepEqual(call?.[1].slice(2), [3, 2, [280, 40]]);
 	});
 
 	it("a trader on another land nearer the first market asks for a passage to that one", () =>
 	{
 		const { world, hq, manager } = routed();
+		const passages = recordPassages(hq);
 		world.accessAt.set("60,200", 3);
 		world.ai.accessibility.regionType[3] = "land";
 		const far = trader(world, 300, [60, 200]);
 
 		manager.updateTrader(world.gameState, far.ent);
 
-		const call = doorCalls(hq.navalManager).find(([m]) => m === "requireTransport");
+		const call = passages.find(([m]) => m === "requireTransport");
 		assert.deepEqual(call?.[1].slice(2), [3, 2, [40, 40]]);
 	});
 

@@ -23,6 +23,7 @@ import {
 	passLand,
 	passShore,
 	passWater,
+	recordPassages,
 	seatHQ,
 	structureTemplate,
 	territoryCellAt,
@@ -334,12 +335,13 @@ describe("a building plan laying its foundation: start", () =>
 	it("asks the fleet for a passage when the building stands near a far landing", () =>
 	{
 		const { world, hq } = seat();
+		const passages = recordPassages(hq);
 		const barracks = card(world, "barracks", { classes: ["Structure", "Military"] });
 		builder(world, hq, [barracks]);
 
 		new ConstructionPlan(world.gameState, barracks, { proximity: worldPos(300, 300) }).start(world.gameState);
 
-		assert.ok(doorCalls(hq.navalManager).some(([m]) => m === "createTransportIfNeeded"));
+		assert.ok(passages.some(([m]) => m === "createTransportIfNeeded"));
 	});
 });
 

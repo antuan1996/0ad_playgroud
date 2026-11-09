@@ -17,6 +17,7 @@ import {
 	doorManagers,
 	makeHqEntity,
 	makeHqWorld,
+	recordPassages,
 	seatHQ,
 	structureTemplate,
 	type HqWorld,
@@ -643,6 +644,7 @@ describe("sending a guard to its post: assignGuardToCriticalEnt", () =>
 	it("a guard on another land asks for a passage", () =>
 	{
 		const { world, hq, manager } = seat(["regicide"]);
+		const passages = recordPassages(hq);
 		unit(world, 600, ["Hero"], [60, 60]);
 		manager.findCriticalEnts(world.gameState);
 		world.accessAt.set("250,250", 3);
@@ -650,7 +652,7 @@ describe("sending a guard to its post: assignGuardToCriticalEnt", () =>
 
 		assert.equal(manager.assignGuardToCriticalEnt(world.gameState, guard.ent, entityId(600)), true);
 
-		assert.ok(doorCalls(hq.navalManager).some(([m]) => m === "requireTransport"));
+		assert.ok(passages.some(([m]) => m === "requireTransport"));
 		assert.equal(manager.guardEnts.get(entityId(610)), false, "not guarding yet");
 		assert.equal(guard.ent.getMetadata(PlayerID, "guardedEnt"), 600);
 	});

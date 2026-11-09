@@ -337,7 +337,7 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { transport: 12 }));
-		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
+		world.ai.town.transports.getPlan = (name: TransportPlanId | undefined) =>
 			name === 12 ?
 				{
 					state: TransportPlan.BOARDING,
@@ -357,7 +357,7 @@ describe("calling defenders", () =>
 		world.addEntity(makeSoldier(2000, [40, 40]));
 		const boardingCalls: number[] = [];
 		world.addEntity(makeDefender(3000, [10, 10], {}, { transport: 13 }));
-		world.ai.HQ.navalManager.getPlan = (name: TransportPlanId | undefined) =>
+		world.ai.town.transports.getPlan = (name: TransportPlanId | undefined) =>
 			name === 13 ?
 				{
 					state: "sailing",

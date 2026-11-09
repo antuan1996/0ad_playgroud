@@ -24,6 +24,7 @@ import {
 	getBestShip,
 } from "../decision/navalManager.ts";
 import { TrainingPlan } from "../execution/queueplanTraining.ts";
+import type { TransportDesk } from "../execution/transportDesk.ts";
 import { TransportPlan } from "../execution/transportPlan.ts";
 
 const PlayerID = PLAYER;
@@ -43,6 +44,11 @@ function seat(options: Parameters<typeof navalWorld>[0] = {})
 		get naval(): NavalManager
 		{
 			return s.hq.navalManager;
+		},
+		/** the town's transports, where the passages are made and kept */
+		get transports(): TransportDesk
+		{
+			return s.hq.town.transports;
 		},
 	};
 }
@@ -425,8 +431,8 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160], {}, { canGarrison: () => false });
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
-		assert.equal(s.naval.transportPlans.length, 0);
+		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
+		assert.equal(s.transports.plans.length, 0);
 	});
 
 	it("a unit already booked on a passage gets no second one", () =>
@@ -435,7 +441,7 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160], { transport: 7 });
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
+		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), false);
 	});
 
 	it("the first unit opens a passage, the next on the same route joins it, the way back is another", () =>
@@ -446,12 +452,12 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const c = soldier(s.world, 102, [260, 170]);
 		init(s);
 
-		assert.equal(s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), true);
-		assert.equal(s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(290, 160)), true);
-		assert.equal(s.naval.requireTransport(s.world.gameState, c.ent, ISLAND, WEST, worldPos(100, 160)), true);
+		assert.equal(s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160)), true);
+		assert.equal(s.transports.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(290, 160)), true);
+		assert.equal(s.transports.requireTransport(s.world.gameState, c.ent, ISLAND, WEST, worldPos(100, 160)), true);
 
-		assert.equal(s.naval.transportPlans.length, 2);
-		assert.equal(s.naval.transportPlans[0].units.length, 2);
+		assert.equal(s.transports.plans.length, 2);
+		assert.equal(s.transports.plans[0].units.length, 2);
 		assert.deepEqual(b.ent.getMetadata(PlayerID, "endPos"), [290, 160], "each keeps its own goal");
 	});
 
@@ -471,10 +477,10 @@ describe("units asking to cross the sea: requireTransport", () =>
 			{
 				for (const u of units)
 				{
-					s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
+					s.transports.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 				}
 				// close it to newcomers while the other one opens
-				setSail(requireValue(s.naval.transportPlans.at(-1)));
+				setSail(requireValue(s.transports.plans.at(-1)));
 			};
 			if (smallFirst)
 			{
@@ -486,12 +492,12 @@ describe("units asking to cross the sea: requireTransport", () =>
 				open(big);
 				open([lone]);
 			}
-			for (const p of s.naval.transportPlans)
+			for (const p of s.transports.plans)
 			{
 				backToBoarding(p);
 			}
 
-			s.naval.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
+			s.transports.requireTransport(s.world.gameState, newcomer.ent, WEST, ISLAND, worldPos(280, 160));
 
 			assert.equal(
 				newcomer.ent.getMetadata(PlayerID, "transport"),
@@ -507,12 +513,12 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const a = soldier(s.world, 100, [140, 160]);
 		const b = soldier(s.world, 101, [140, 170]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		setSail(s.naval.transportPlans[0]);
+		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
+		setSail(s.transports.plans[0]);
 
-		s.naval.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(280, 160));
+		s.transports.requireTransport(s.world.gameState, b.ent, WEST, ISLAND, worldPos(280, 160));
 
-		assert.equal(s.naval.transportPlans.length, 2);
+		assert.equal(s.transports.plans.length, 2);
 	});
 
 	it("a passage with four siege engines takes no fifth", () =>
@@ -527,11 +533,11 @@ describe("units asking to cross the sea: requireTransport", () =>
 
 		for (const ram of rams)
 		{
-			s.naval.requireTransport(s.world.gameState, ram.ent, WEST, ISLAND, worldPos(280, 160));
+			s.transports.requireTransport(s.world.gameState, ram.ent, WEST, ISLAND, worldPos(280, 160));
 		}
 
-		assert.equal(s.naval.transportPlans.length, 2);
-		assert.equal(s.naval.transportPlans[0].units.length, 4);
+		assert.equal(s.transports.plans.length, 2);
+		assert.equal(s.transports.plans[0].units.length, 4);
 	});
 
 	it("a route with no sea between the lands gets no passage", () =>
@@ -541,10 +547,10 @@ describe("units asking to cross the sea: requireTransport", () =>
 		init(s);
 
 		assert.equal(
-			s.naval.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)),
+			s.transports.requireTransport(s.world.gameState, a.ent, WEST, landRegion(7), worldPos(280, 160)),
 			false,
 		);
-		assert.equal(s.naval.transportPlans.length, 0);
+		assert.equal(s.transports.plans.length, 0);
 		assert.equal(a.ent.getMetadata(PlayerID, "transport"), undefined);
 	});
 
@@ -553,11 +559,11 @@ describe("units asking to cross the sea: requireTransport", () =>
 		const s = seat();
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.naval.transportPlans[0];
+		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
+		const p = s.transports.plans[0];
 		a.ent.setMetadata(PlayerID, "onBoard", entityId(202));
-		assert.equal(s.naval.splitTransport(s.world.gameState, p, [a.ent]), false);
-		assert.equal(s.naval.transportPlans.length, 1);
+		assert.equal(s.transports.splitTransport(s.world.gameState, p, [a.ent]), false);
+		assert.equal(s.transports.plans.length, 1);
 	});
 });
 
@@ -581,10 +587,10 @@ describe("a ship that starts the game with units aboard: createTransportIfNeeded
 		ship(s.world, 201, [200, 200]); // an empty ship has nothing to carry
 		init(s);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
+		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
 
-		assert.equal(s.naval.transportPlans.length, 1);
-		const p = s.naval.transportPlans[0];
+		assert.equal(s.transports.plans.length, 1);
+		const p = s.transports.plans[0];
 		assert.equal(p.startIndex, 1, "from aboard");
 		assert.equal(p.endIndex, ISLAND);
 		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), p.ID);
@@ -598,13 +604,13 @@ describe("a ship that starts the game with units aboard: createTransportIfNeeded
 		loaded(s, 201);
 		init(s);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(140, 160), worldPos(280, 160), ISLAND);
+		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(140, 160), worldPos(280, 160), ISLAND);
 		// (the first building's caller always knows its land: ConstructionPlan.start sets it)
-		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(200, 160), landRegion(1));
-		assert.equal(s.naval.transportPlans.length, 0);
+		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(200, 160), landRegion(1));
+		assert.equal(s.transports.plans.length, 0);
 
-		s.naval.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
-		assert.equal(s.naval.transportPlans.length, 1, "only the free ship");
+		s.transports.createTransportIfNeeded(s.world.gameState, worldPos(200, 160), worldPos(280, 160), ISLAND);
+		assert.equal(s.transports.plans.length, 1, "only the free ship");
 	});
 });
 
@@ -628,7 +634,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	{
 		for (const k of [0, 1])
 		{
-			s.naval.requireTransport(
+			s.transports.requireTransport(
 				s.world.gameState,
 				soldier(s.world, first + k, [140, 150 + 10 * k]).ent,
 				WEST,
@@ -653,7 +659,7 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 	{
 		const lone = seat();
 		init(lone);
-		lone.naval.requireTransport(
+		lone.transports.requireTransport(
 			lone.world.gameState,
 			soldier(lone.world, 100, [140, 160]).ent,
 			WEST,
@@ -689,9 +695,9 @@ describe("how many transport ships a sea wants: setMinimalTransportShips and che
 		{
 			waiting(s, first);
 			// each its own passage
-			setSail(requireValue(s.naval.transportPlans.at(-1)));
+			setSail(requireValue(s.transports.plans.at(-1)));
 		}
-		for (const p of s.naval.transportPlans)
+		for (const p of s.transports.plans)
 		{
 			backToBoarding(p);
 		}
@@ -818,7 +824,7 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 		const s = seat();
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(
+		s.transports.requireTransport(
 			s.world.gameState,
 			soldier(s.world, 100, [140, 160]).ent,
 			WEST,
@@ -826,9 +832,9 @@ describe("ships trained and handed out: maintainFleet, getBestShip and assignShi
 			worldPos(280, 160),
 		);
 
-		s.naval.assignShipsToPlans(s.world.gameState);
+		s.transports.assignShipsToPlans(s.world.gameState);
 
-		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), s.naval.transportPlans[0].ID);
+		assert.equal(carrier.ent.getMetadata(PlayerID, "transporter"), s.transports.plans[0].ID);
 	});
 });
 
@@ -839,15 +845,15 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	{
 		const carrier = ship(s.world, 200, [200, 160]);
 		init(s);
-		s.naval.requireTransport(
+		s.transports.requireTransport(
 			s.world.gameState,
 			soldier(s.world, 100, [140, 160]).ent,
 			WEST,
 			ISLAND,
 			worldPos(280, 160),
 		);
-		const p = s.naval.transportPlans[0];
-		s.naval.assignShipsToPlans(s.world.gameState);
+		const p = s.transports.plans[0];
+		s.transports.assignShipsToPlans(s.world.gameState);
 		p.update(s.world.gameState);
 		return { carrier, p };
 	}
@@ -856,13 +862,13 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 	{
 		const s = seat();
 		const { carrier, p } = boarding(s);
-		assert.equal(s.naval.isShipBoarding(carrier.ent), false, "still at sea");
+		assert.equal(s.transports.isShipBoarding(carrier.ent), false, "still at sea");
 
 		carrier.state.pos = p.shipPoints()[200];
-		assert.equal(s.naval.isShipBoarding(carrier.ent), true);
+		assert.equal(s.transports.isShipBoarding(carrier.ent), true);
 
 		carrier.state.pos = undefined;
-		assert.equal(s.naval.isShipBoarding(carrier.ent), false, "a ship with no position is not boarding");
+		assert.equal(s.transports.isShipBoarding(carrier.ent), false, "a ship with no position is not boarding");
 	});
 
 	it("a ship of no passage is not boarding", () =>
@@ -870,7 +876,7 @@ describe("ships boarding and ships in the way: isShipBoarding and moveApart", ()
 		const s = seat();
 		const free = ship(s.world, 200, [200, 160]);
 		init(s);
-		assert.equal(s.naval.isShipBoarding(free.ent), false);
+		assert.equal(s.transports.isShipBoarding(free.ent), false);
 	});
 
 	it("a transport with no route, still for STUCK_SECONDS, nudges itself, and pushes idle ships out of its way", () =>
@@ -1377,8 +1383,8 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		ship(s.world, 200, [200, 160]);
 		const aboard = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.naval.transportPlans[0];
+		s.transports.requireTransport(s.world.gameState, aboard.ent, WEST, ISLAND, worldPos(280, 160));
+		const p = s.transports.plans[0];
 		setSail(p);
 		aboard.state.pos = undefined; // aboard the plan's other ship
 		s.world.removeEntity(200);
@@ -1398,9 +1404,9 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		const carrier = ship(s.world, 200, [200, 160]);
 		const a = soldier(s.world, 100, [140, 160]);
 		init(s);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
-		const p = s.naval.transportPlans[0];
-		s.naval.assignShipsToPlans(s.world.gameState);
+		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
+		const p = s.transports.plans[0];
+		s.transports.assignShipsToPlans(s.world.gameState);
 		p.update(s.world.gameState);
 		s.world.removeEntity(200);
 
@@ -1424,9 +1430,9 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		init(s);
 		for (const u of [a, b])
 		{
-			s.naval.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
+			s.transports.requireTransport(s.world.gameState, u.ent, WEST, ISLAND, worldPos(280, 160));
 		}
-		const p = s.naval.transportPlans[0];
+		const p = s.transports.plans[0];
 		setSail(p);
 		b.state.pos = [250, 160]; // already landed on the island
 		s.world.removeEntity(200);
@@ -1438,7 +1444,7 @@ describe("the fleet hearing the turn's events: checkEvents", () =>
 		);
 
 		assert.notEqual(a.ent.getMetadata(PlayerID, "transport"), p.ID);
-		assert.equal(s.naval.transportPlans.length, 2, "a new passage for the one still on our land");
+		assert.equal(s.transports.plans.length, 2, "a new passage for the one still on our land");
 		assert.equal(b.ent.getMetadata(PlayerID, "transport"), undefined, "the one at its goal needs none");
 	});
 });
@@ -1452,17 +1458,17 @@ describe("the fleet through its turn: update", () =>
 		const done = ship(s.world, 201, [200, 260]);
 		init(s);
 		const a = soldier(s.world, 100, [140, 160]);
-		s.naval.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
+		s.transports.requireTransport(s.world.gameState, a.ent, WEST, ISLAND, worldPos(280, 160));
 		const finished = soldier(s.world, 101, [140, 260]);
-		s.naval.requireTransport(s.world.gameState, finished.ent, ISLAND, WEST, worldPos(100, 260));
-		const old = s.naval.transportPlans[1];
+		s.transports.requireTransport(s.world.gameState, finished.ent, ISLAND, WEST, worldPos(100, 260));
+		const old = s.transports.plans[1];
 		done.ent.setMetadata(PlayerID, "transporter", old.ID);
 		s.world.removeEntity(101); // its last unit died
 
 		s.world.ai.playedTurn = 3;
 		s.naval.update(s.world.gameState, queues(s.world), emptyEvents());
 
-		assert.equal(s.naval.transportPlans.length, 1, "the empty passage is closed");
+		assert.equal(s.transports.plans.length, 1, "the empty passage is closed");
 		assert.equal(done.ent.getMetadata(PlayerID, "transporter"), undefined, "and its ship freed");
 		assert.ok(carrier.ent.getMetadata(PlayerID, "transporter") !== undefined, "the waiting passage got a ship");
 	});
@@ -1474,7 +1480,7 @@ describe("the fleet saved and loaded", () =>
 	{
 		const s = seat();
 		init(s);
-		s.naval.requireTransport(
+		s.transports.requireTransport(
 			s.world.gameState,
 			soldier(s.world, 100, [140, 160]).ent,
 			WEST,
@@ -1483,14 +1489,17 @@ describe("the fleet saved and loaded", () =>
 		);
 		s.naval.wantedTransportShips[SEA] = 2;
 		const saved = s.naval.Serialize();
+		// the passages are saved with the town
+		const savedTown = s.hq.town.Serialize();
 
 		const loaded = NavalManager.restore(s.hq.Config, s.world.gameState, s.hq.geography, saved, s.hq);
 		s.hq.navalManager = loaded;
+		s.hq.town.resume(s.world.gameState, savedTown);
 
 		assert.equal(loaded.wantedTransportShips[SEA], 2);
 		assert.equal(loaded.landingZones, saved.properties.landingZones);
-		assert.equal(loaded.transportPlans.length, 1);
-		assert.equal(loaded.transportPlans[0].units.length, 1, "the passage finds its unit again");
-		assert.deepEqual(loaded.Serialize().transports, saved.transports);
+		assert.equal(s.transports.plans.length, 1);
+		assert.equal(s.transports.plans[0].units.length, 1, "the passage finds its unit again");
+		assert.deepEqual(s.hq.town.Serialize(), savedTown);
 	});
 });

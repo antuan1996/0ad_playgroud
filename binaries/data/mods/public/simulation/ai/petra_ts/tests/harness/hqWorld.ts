@@ -692,6 +692,24 @@ export function doorCalls(stub: object): Array<[string, unknown[]]>
 }
 
 /**
+ * The town's passages as a recorded door (execution/transportDesk.ts): the
+ * passages asked, by requireTransport and createTransportIfNeeded, noted and
+ * granted but not made, for a suite whose walls leave the fleet out.
+ */
+export function recordPassages(hq: Headquarters): Array<[string, unknown[]]>
+{
+	const calls: Array<[string, unknown[]]> = [];
+	override(hq.town.transports, {
+		requireTransport: (...args: unknown[]) => calls.push(["requireTransport", args]) > 0,
+		createTransportIfNeeded: (...args: unknown[]) =>
+		{
+			calls.push(["createTransportIfNeeded", args]);
+		},
+	});
+	return calls;
+}
+
+/**
  * The co-managers a suite usually keeps outside its walls, as recorded doors:
  * naval, trade, research, diplomacy, victory and defense each run their own
  * campaign.

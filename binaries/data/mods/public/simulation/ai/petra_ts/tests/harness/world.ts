@@ -6,7 +6,7 @@
  * answer of the headquarters come from here, declared per test. A suite that
  * needs the real Headquarters seats one over this world (hqWorld.ts).
  */
-import { fake, makeEntity } from "./fakes.ts";
+import { fake, makeEntity, override } from "./fakes.ts";
 
 import { EntityCollection } from "simulation/ai/common-api/entitycollection.js";
 import { byClass } from "simulation/ai/common-api/filters.js";
@@ -339,14 +339,6 @@ export function makeWorld(options: WorldOptions = {}): World
 			},
 			setMinimalTransportShips: (_gs: CommonGameState, sea: number, needed: number) =>
 				minimalShipCalls.push([sea, needed]),
-			requireTransport: (
-				_gs: CommonGameState,
-				ent: CommonEntity,
-				from: number,
-				to: number,
-				toPos: [number, number] | undefined,
-			) => transportCalls.push([ent, from, to, toPos]),
-			getPlan: () => undefined,
 		},
 		// the houses have room (AttackPlan.cannotGrow reads it)
 		buildManager: { isUnbuildable: () => false },
@@ -452,7 +444,16 @@ export function makeWorld(options: WorldOptions = {}): World
 		sites: new SiteDesk(ai.HQ),
 		guard: new GuardDesk(ai.HQ),
 		attacks: new AttackDesk(ai.HQ),
-		transports: new TransportDesk(ai.HQ),
+		transports: override(new TransportDesk(ai.Config, ai.HQ), {
+			// the passages asked, noted and granted, not made
+			requireTransport: (
+				_gs: CommonGameState,
+				ent: CommonEntity,
+				from: number,
+				to: number,
+				toPos: [number, number] | undefined,
+			) => transportCalls.push([ent, from, to, toPos]) > 0,
+		}),
 	});
 	Object.defineProperty(ai, "town", { value: town, writable: true, configurable: true });
 
