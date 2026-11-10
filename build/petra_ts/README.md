@@ -60,8 +60,7 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - `view-only`: no decision module imports an execution class it sees
     through a view (`VIEW_ONLY` in `structure.ts`: `AttackPlan`, seen as
     `AttackPlanView`, its states and types from `attackConstants.ts`).
-- **Baseline counts (`structure-baseline.json`, all 0 but `whole-hq` — lower
-  them, never raise them)**:
+- **Baseline counts (`structure-baseline.json`, all 0 — keep them 0)**:
   - Layer violations (`adapter < world < execution < decision < root`,
     `PLAN.md` §3.4; type-only imports included).
   - `layer-access` (0): members of a higher layer reached at run time with no
@@ -79,7 +78,7 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   - `whole-hq`: values (parameters, fields, variables, returns) typed as the
     whole `Headquarters` outside `decision/headquarters.ts` and the bot's root,
     where a view of what they use (`TownState` and the members they add)
-    would do; 4, the first-turn functions of `startingStrategy.ts`.
+    would do.
 - **Cohesion baseline (`cohesion-baseline.json`, `--check` fails when one
   worsens)**: each class's core LCOM4 and each class-with-parts' LCOM4; a
   class the baseline does not know may have 4 (`NEW_CLASS_CORE_MAX`). The

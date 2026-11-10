@@ -97,10 +97,10 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
   members reached without an import, however reached: `gameState.ai.HQ` from
   `adapter/` or `world/`, a decision manager's method from `execution/`).
   `view-only` (rule): no decision module imports `AttackPlan` (decision sees
-  `AttackPlanView`; `VIEW_ONLY` in `structure.ts`). `whole-hq` (baseline 4,
-  ratcheted): values typed as the whole `Headquarters` outside it and the
-  root. Cohesion is ratcheted in `build/petra_ts/cohesion-baseline.json`: each
-  class's core LCOM4 (forwarders apart, only collaborators as hubs) and each
+  `AttackPlanView`; `VIEW_ONLY` in `structure.ts`). `whole-hq` (at **0**):
+  values typed as the whole `Headquarters` outside it and the root. Cohesion
+  is ratcheted in `build/petra_ts/cohesion-baseline.json`: each class's core
+  LCOM4 (forwarders apart, only collaborators as hubs) and each
   class-with-parts' LCOM4 may not rise; a new class may have 4. Lower the
   baselines with `--update-baseline` when a class improves.
   It also reports, untracked (`build/petra_ts/coupling.ts`): each class with its
@@ -294,12 +294,12 @@ Read `petra_ts/tests/README.md` before writing tests. Use `grep` + sliced `read`
   `DiplomacyHQ`, `DefenseHQ`, `VictoryHQ`, `BasesHQ`/`BaseHQ`: `Pick`s of
   `Headquarters` and of its other managers); the HQ passes itself. Its module
   functions take the one manager they ask. The HQ's part modules (and
-  `startingStrategy.ts`'s first-base functions) take a view too:
+  `startingStrategy.ts`'s first-turn functions) take a view too:
   `TownState` (`Config`, `canBuild`, `economy`, `currentPhase`, `phasing`)
   and the few members they add (`EventsHQ`, `PhasingHQ`, `ExpansionHQ`,
   `HousingHQ`, `TownBuildingsHQ`, `MilitaryHQ`, `WorkforceHQ`,
-  `FirstBaseHQ`, `FirstBaseConfigHQ`). A member a manager needs is added
-  to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
+  `FirstBaseHQ`, `FirstBaseConfigHQ`, `FirstTurnHQ`). A member a manager
+  needs is added to its view; an HQ part function it needs gets an HQ method (`onNewBase`,
   `expandFor`). A core manager talks to its own desk directly (`this.desk`,
   and the defense's `this.garrisons`); another manager's desk it reaches
   through `town` in its view. Decision code sees an attack plan only as

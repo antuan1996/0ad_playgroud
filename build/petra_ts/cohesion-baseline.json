@@ -35,7 +35,6 @@
 	"execution/worker.ts:UnitWork": 1,
 	"execution/worker.ts:Worker": 1,
 	"parts decision/baseManager.ts:BaseManager": 9,
-	"parts decision/headquarters.ts:Headquarters": 12,
 	"parts execution/attackPlan.ts:AttackPlan": 7,
 	"parts execution/defenseArmy.ts:DefenseArmy": 4,
 	"parts world/captureTally.ts:CaptureTally": 1,

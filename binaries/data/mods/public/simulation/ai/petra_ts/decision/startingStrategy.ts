@@ -11,8 +11,10 @@ import { gatherTreasure } from "../execution/treasure.ts";
 import * as difficulty from "../world/difficultyLevel.ts";
 import type { AttackManager } from "./attackManager.ts";
 import type { BasesManager } from "./basesManager.ts";
+import type { DiplomacyManager } from "./diplomacyManager.ts";
 import type { Headquarters, TownState } from "./headquarters.ts";
 import type { NavalManager } from "./navalManager.ts";
+import type { TradeManager } from "./tradeManager.ts";
 
 /** What the first base asks of the headquarters: its state, and the docks it has */
 export type FirstBaseHQ = TownState & { readonly navalManager: Pick<NavalManager, "docks">; };
@@ -24,12 +26,30 @@ export type FirstBaseConfigHQ = TownState & Pick<Headquarters, "geography" | "ca
 	readonly navalManager: Pick<NavalManager, "updateFishingBoats">;
 };
 
+/** What the starting units' sorting asks of the headquarters: the map, and the bases and traders taking them */
+type StartingEntitiesHQ = Pick<Headquarters, "geography"> & {
+	readonly basesManager: Pick<BasesManager, "assignEntity">;
+	readonly tradeManager: Pick<TradeManager, "assignTrader">;
+};
+
+/** What the first turn asks of the headquarters: what its steps ask, and the managers' first-turn calls */
+type FirstTurnHQ =
+	& FirstBaseHQ
+	& FirstBaseConfigHQ
+	& StartingEntitiesHQ
+	& Pick<Headquarters, "bAdvanced" | "canExpand" | "updateTerritories">
+	& {
+		readonly basesManager: Pick<BasesManager, "createStartingBases" | "hasPotentialBase">;
+		readonly diplomacyManager: Pick<DiplomacyManager, "answerStartingStances">;
+		readonly navalManager: Pick<NavalManager, "assignStartingSeas">;
+	};
+
 /**
  * Determines the strategy to adopt when starting a new game,
  * depending on the initial conditions
  */
 
-export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): boolean
+export function gameAnalysis(HQ: FirstTurnHQ, gameState: CommonGameState): boolean
 {
 	// the map was analysed (world/geography.ts analyseMap) and the managers made with the headquarters
 	HQ.navalManager.assignStartingSeas(gameState);
@@ -77,7 +97,7 @@ export function gameAnalysis(HQ: Headquarters, gameState: CommonGameState): bool
 /**
  * Assign the starting entities to the different bases
  */
-function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): void
+function assignStartingEntities(HQ: StartingEntitiesHQ, gameState: CommonGameState): void
 {
 	for (const ent of gameState.getOwnEntities().values())
 	{
@@ -142,7 +162,7 @@ function assignStartingEntities(HQ: Headquarters, gameState: CommonGameState): v
  * load units and buildings from the config files
  * TODO: change that to something dynamic
  */
-function structureAnalysis(HQ: Headquarters, gameState: CommonGameState): void
+function structureAnalysis(HQ: Pick<Headquarters, "Config" | "bAdvanced">, gameState: CommonGameState): void
 {
 	const civref = gameState.playerData.civ;
 	const civ = civref in HQ.Config.buildings ? civref : "default";
@@ -354,7 +374,7 @@ function startingPoints(gameState: CommonGameState): StartingPoint[]
  *   - if one of our allies has a cc, affect a small fraction of our army for his defense, the rest will attack
  *   - otherwise all units will attack
  */
-function dispatchUnits(HQ: Headquarters, gameState: CommonGameState): void
+function dispatchUnits(HQ: Pick<Headquarters, "Config">, gameState: CommonGameState): void
 {
 	const allycc = gameState.getExclusiveAllyEntities().filter(filters.byClass("CivCentre")).toEntityArray();
 	if (!allycc.length)
