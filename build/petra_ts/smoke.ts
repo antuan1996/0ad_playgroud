@@ -8,7 +8,8 @@
  *
  * The games are the reference's 12 map/AI seed pairs, each played from both
  * slots on its own map (6 on random/mainland, 6 on random/dodecanese, the
- * island map; athen, very hard, conquest, ended at 90 game minutes), as one
+ * island map; athen, very hard, conquest, ended at 60 game minutes,
+ * SMOKE_LIMIT_MINUTES), as one
  * batch (batch.ts, J at a time, default 12) into
  * build/petra_ts/batches/smoke-<time>/. Each game's fingerprint hashes the
  * game time of the decision and both players' end statistics
@@ -60,6 +61,9 @@ interface ReferenceGame
 	decided: number;
 	fingerprint: string;
 }
+
+/** Game minutes a smoke game may last before it ends on the time limit (match.sh -L) */
+const SMOKE_LIMIT_MINUTES = 60;
 
 const COLUMNS = ["game", "map", "mapSeed", "aiSeed", "swapped", "outcome", "reason", "decided", "fingerprint"] as const;
 
@@ -191,6 +195,10 @@ function play(pairs: string, jobs: number): string
 		String(jobs),
 		"--out",
 		out,
+		// match.sh: end an undecided game at SMOKE_LIMIT_MINUTES rather than 90
+		"--",
+		"-L",
+		String(SMOKE_LIMIT_MINUTES),
 	];
 	for (let attempt = 0; attempt < 3; ++attempt)
 	{
@@ -219,9 +227,9 @@ function record(rows: BatchRow[], batch: string): void
 		"# The smoke test's reference (build/petra_ts/smoke.ts, npm run test:petra:smoke):",
 		"# 12 map/AI seed pairs, each from both slots (swapped: petra_parity is player 1),",
 		"# petra_out against petra_parity, 6 pairs on random/dodecanese (the island map,",
-		"# pairs decided in both slots within 60 game minutes against petra_parity with no",
+		"# pairs decided in both slots within 58 game minutes against petra_parity with no",
 		"# script error) and 6 on random/mainland, athen, difficulty 5 (very hard),",
-		"# conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the",
+		`# conquest, ended at ${SMOKE_LIMIT_MINUTES} game minutes (match.sh -n -T -B -L ${SMOKE_LIMIT_MINUTES}); the fingerprint hashes the`,
 		"# decision's game time and both players' end statistics (match-report.ts).",
 		`# Recorded from commit ${git("rev-parse", "HEAD")}${dirty ? " with uncommitted changes to the game" : ""},`,
 		`# petra_parity from tag petra-ts-parity (${git("rev-parse", "--short", "petra-ts-parity^{commit}")}); batch ${

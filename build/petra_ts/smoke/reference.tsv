@@ -1,12 +1,12 @@
 # The smoke test's reference (build/petra_ts/smoke.ts, npm run test:petra:smoke):
 # 12 map/AI seed pairs, each from both slots (swapped: petra_parity is player 1),
 # petra_out against petra_parity, 6 pairs on random/dodecanese (the island map,
-# pairs decided in both slots within 60 game minutes against petra_parity with no
+# pairs decided in both slots within 58 game minutes against petra_parity with no
 # script error) and 6 on random/mainland, athen, difficulty 5 (very hard),
-# conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the
+# conquest, ended at 60 game minutes (match.sh -n -T -B -L 60); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit 5012d7370da65b1ba3bffe52453e6d5c096beee1,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-new-reference.
+# Recorded from commit abde67f0ddc4b72a6433fd6d200a110be3bf2e95,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261110-221854.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	map	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint

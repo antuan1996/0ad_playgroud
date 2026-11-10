@@ -199,7 +199,8 @@ same seeds and code produce the same game and fingerprint.
   12, ~3 min): plays 24 headless games (`petra_out` vs `petra_parity` across the
   12 seed pairs of `build/petra_ts/smoke/reference.tsv` from both slots, each on
   its own map: 6 pairs on `random/dodecanese`, the island map, and 6 on
-  `random/mainland`). The island pairs are ones decided in both slots within 60
+  `random/mainland`), each ended at 60 game minutes if undecided (`match.sh -L
+  60`). The island pairs are ones decided in both slots within 58
   game minutes against `petra_parity` with no script error: many island games
   end in a draw at 90 minutes, `petra_parity` throws in some (its transports
   lose units' `endPos`/`posGarrison`), and a few hang the engine.
