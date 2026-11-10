@@ -10,10 +10,13 @@
  *             "bases":[..],"queues":{..},"attacks":{..},"defenseArmies":..}
  * It also logs the attack plans' lives (attacks.txt with match.sh -b, one line
  * per event):
- *   ATTACKLOG {"t":..,"player":..,"event":"created"|"started"|"aborted"|"finished"|"progress",
+ *   ATTACKLOG {"t":..,"player":..,"event":"created"|"started"|"aborted"|"finished"|"progress"|"local",
  *              "name":..,"type":..,"age":..,..}
  * created, started, aborted (it left the upcoming plans without starting) and
- * finished (a started plan ended) as they happen, seen turn by turn; progress
+ * finished (a started plan ended) as they happen, seen turn by turn; local (a
+ * plan started without preparing: soldiers fighting the enemies beside them on
+ * their land, or defense armies turned to an attack, with its units, its
+ * target's kind and owner and the land its soldiers stand on); progress
  * every minute for each plan in preparation. An abort carries the plan's last
  * snapshot (the turn before it went): its units per category against the
  * minimum and the target, units queued for it and whether its queues were
@@ -221,9 +224,9 @@ export class PetraBotState extends PetraBot
 		return {
 			"phase": HQ.currentPhase,
 			"phasing": HQ.phasing,
-			"saveResources": !!HQ.saveResources,
-			"saveSpace": !!HQ.saveSpace,
-			"needFarm": !!HQ.needFarm,
+			"saveResources": !!HQ.economy.saveResources,
+			"saveSpace": !!HQ.economy.saveSpace,
+			"needFarm": !!HQ.economy.needFarm,
 			"canBuildUnits": HQ.canBuildUnits,
 			"targetNumWorkers": HQ.targetNumWorkers,
 			"popPhase2": this.Config.Economy.popPhase2,
@@ -232,7 +235,7 @@ export class PetraBotState extends PetraBot
 			"markets": this.gameState.getOwnEntitiesByClass("Market", true).length,
 			"marketUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/market")),
 			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
-			"maxFields": HQ.maxFields,
+			"maxFields": HQ.economy.maxFields,
 			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),
 			"fieldUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/field")),
 			// seconds since a worker last found nothing to gather, per resource
@@ -243,7 +246,7 @@ export class PetraBotState extends PetraBot
 			// per sea: transports wanted, transports we have, and the ship queue's priority
 			"naval": Object.fromEntries(HQ.navalManager.wantedTransportShips.map((wanted, sea) => [sea, wanted])
 				.filter(([, wanted]) => wanted > 0)
-				.map(([sea, wanted]) => [sea, [wanted, HQ.navalManager.seaTransportShips[sea]?.length ?? -1]])),
+				.map(([sea, wanted]) => [sea, [wanted, HQ.navalManager.fleet(sea)?.transports.length ?? -1]])),
 			"shipsPriority": this.gameState.ai.queueManager.getPriority("ships"),
 			"docksBuilt": this.gameState.getOwnStructures().filter(ent => ent.hasClass("Dock") && ent.foundationProgress() === undefined).length,
 			// our ships' ids by kind, to read their orders in commands.txt
@@ -277,8 +280,8 @@ export class PetraBotState extends PetraBot
 			"missingRoom": HQ.buildManager.numberMissingRoom(this.gameState),
 			"queued": this.gameState.ai.queues.civilCentre.plans.length,
 			"priority": this.gameState.ai.queueManager.getPriority("civilCentre"),
-			"orders": HQ.ccOrders?.length,
-			"avoided": HQ.ccSpotsAvoided?.length
+			"orders": HQ.town.placement.ccOrders?.length,
+			"avoided": HQ.town.placement.ccSpotsAvoided?.length
 		};
 	}
 
@@ -300,7 +303,7 @@ export class PetraBotState extends PetraBot
 			if (map.getOwnerIndex(j) !== PlayerID)
 				continue;
 			++own;
-			const base = HQ.baseAtIndex(j);
+			const base = HQ.basesManager.territory.baseAt(j);
 			if (!base)
 				continue;
 			++based;
@@ -321,7 +324,7 @@ export class PetraBotState extends PetraBot
 		if (!template)
 			return undefined;
 		const range = template.attackRange("Ranged")?.max ?? 60;
-		const spot = HQ.findShoreTowerLocation(this.gameState, template);
+		const spot = HQ.town.placement.findShoreTowerLocation(this.gameState, template);
 		// the most traffic within reach of any cell of our territory, the stretches watched counted a third
 		const map = HQ.geography.territoryMap;
 		const towers = this.gameState.getOwnStructures().filter(ent => ent.hasClass("Tower") || ent.hasClass("Fortress"))
@@ -349,13 +352,13 @@ export class PetraBotState extends PetraBot
 				reason = "ourDefense30m";	// the tower itself must stand 60 m from another (its template), counted as noTile in the port
 			else if (near(enemyDefenses, pos, 6400))
 				reason = "enemyDefense80m";
-			else if (HQ.baseAtIndex(j) === 0)
+			else if (HQ.basesManager.territory.baseAt(j) === 0)
 				reason = "noBase";
 			else
 			{
-				if (HQ.isNearInvadingArmy(pos))
+				if (HQ.defenseManager.isNearInvadingArmy(pos))
 					reason = "invadingArmy";
-				else if (HQ.isUnderEnemyFire(this.gameState, pos, 7))
+				else if (HQ.town.isUnderEnemyFire(this.gameState, pos, 7))
 					reason = "enemyFire";
 			}
 			refused[reason] = (refused[reason] ?? 0) + 1;
@@ -475,27 +478,26 @@ export class PetraBotState extends PetraBot
 		const HQ = this.HQ;
 		const basesManager = HQ.basesManager;
 		const codes = Resources.GetCodes();
-		const hadCurrent = "currentRates" in basesManager.turnCache;
-		const current = basesManager.turnCache.currentRates;
-		const hadWanted = "wantedRates" in HQ.turnCache;
-		const wanted = HQ.turnCache.wantedRates;
+		// the turn's gather rates (world/gatherTally.ts) and the queues' wanted rates (execution/town.ts)
+		const tally = basesManager.tally;
+		const current = tally.rates;
+		const townCache = HQ.town.turnCache;
+		const hadWanted = "wantedRates" in townCache;
+		const wanted = townCache.wantedRates;
 		let estimate, wantedRates, order;
 		try
 		{
-			estimate = { ...HQ.GetCurrentGatherRates(gameState) };
-			wantedRates = { ...HQ.GetWantedGatherRates(gameState) };
-			order = HQ.pickMostNeededResources(gameState).map(need => need.type);
+			estimate = { ...basesManager.GetCurrentGatherRates(gameState) };
+			wantedRates = { ...HQ.town.GetWantedGatherRates(gameState) };
+			order = HQ.town.pickMostNeededResources(gameState).map(need => need.type);
 		}
 		finally
 		{
-			if (hadCurrent)
-				basesManager.turnCache.currentRates = current;
-			else
-				delete basesManager.turnCache.currentRates;
+			tally.rates = current;
 			if (hadWanted)
-				HQ.turnCache.wantedRates = wanted;
+				townCache.wantedRates = wanted;
 			else
-				delete HQ.turnCache.wantedRates;
+				delete townCache.wantedRates;
 		}
 		const round = (record) => Object.fromEntries(Object.entries(record).map(([k, v]) => [k, Math.round(v * 100) / 100]));
 
@@ -823,8 +825,8 @@ export class PetraBotState extends PetraBot
 		if (now < this.nextFightLook)
 			return undefined;
 		this.nextFightLook += FIGHT_EVERY;
-		for (const type in hq.attackManager.startedAttacks)
-			for (const plan of hq.attackManager.startedAttacks[type])
+		for (const type in hq.town.attacks.startedAttacks)
+			for (const plan of hq.town.attacks.startedAttacks[type])
 			{
 				// AttackPlan.STATE_ARRIVED and STATE_ATTACKING, the latter the empty string
 				if (plan.state != "arrived" && plan.state != "" || !plan.position)
@@ -1019,7 +1021,8 @@ export class PetraBotState extends PetraBot
 		if (!naval)
 			return { "ships": [] };
 		const plans = new Map();
-		for (const plan of naval.transportPlans)
+		// the transport plans are kept by the town's transports (execution/transportDesk.ts)
+		for (const plan of this.HQ.town.transports.plans)
 			plans.set(plan.ID, plan);
 		const round = v => Math.round(v * 10) / 10;
 		const ships = [];
@@ -1172,7 +1175,8 @@ export class PetraBotState extends PetraBot
 	/** Compares the attack plans with the last turn's and logs what changed. */
 	logAttacks()
 	{
-		const attackManager = this.HQ?.attackManager;
+		// the attack plans are kept by the town's attacks (execution/attackDesk.ts)
+		const attackManager = this.HQ?.town?.attacks;
 		if (!attackManager)
 			return undefined;
 		this.attackPlans ??= new Map();
@@ -1212,6 +1216,22 @@ export class PetraBotState extends PetraBot
 				this.attackPlans.delete(name);
 			}
 		}
+		// a plan started without preparing: a local fight beside enemies (AttackDesk.fightBesideEnemies), or a
+		// defense army turned to an attack
+		for (const [name, plan] of started)
+		{
+			if (this.attackPlans.has(name))
+				continue;
+			const target = plan.target;
+			// the land its soldiers stand on (a building's own position lies inside its obstruction, on no land)
+			const pos = [...plan.unitCollection.values()].map(ent => ent.position()).find(p => p);
+			this.attackPlans.set(name, { plan, "created": this.elapsedTime, "started": this.elapsedTime,
+				"atStart": plan.unitCollection.length });
+			this.attackLine("local", plan, { "units": plan.unitCollection.length,
+				"target": target ? (target.hasClass("Structure") ? "structure" : "unit") : undefined,
+				"targetOwner": target?.owner(),
+				"land": pos ? this.gameState.ai.accessibility.getAccessValue(pos) : undefined });
+		}
 		for (const [name, plan] of upcoming)
 		{
 			let known = this.attackPlans.get(name);
@@ -1233,7 +1253,7 @@ export class PetraBotState extends PetraBot
 
 	attackState()
 	{
-		const attackManager = this.HQ.attackManager;
+		const attackManager = this.HQ.town.attacks;
 		const attacks = {};
 		for (const [state, lists] of [["upcoming", attackManager.upcomingAttacks], ["started", attackManager.startedAttacks]])
 			for (const type in lists)
@@ -1446,11 +1466,11 @@ export class PetraBotState extends PetraBot
 			"markets": this.gameState.getOwnEntitiesByClass("Market", true).length,
 			"marketUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/market")),
 			// the field decision's inputs (decision/fields.ts): the HQ's limit, whether one can be built
-			"maxFields": HQ.maxFields,
+			"maxFields": HQ.economy.maxFields,
 			"canBuildField": HQ.canBuild(this.gameState, "structures/{civ}/field"),
 			"fieldUnbuildable": HQ.buildManager.isUnbuildable(this.gameState, this.gameState.applyCiv("structures/{civ}/field")),
 			"phase": HQ.currentPhase,
-			"saveResources": !!HQ.saveResources,
+			"saveResources": !!HQ.economy.saveResources,
 			"popLimit": this.gameState.getPopulationLimit(),
 			"accounts": this.accountsLine()
 		};
