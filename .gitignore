@@ -118,3 +118,6 @@ binaries/data/mods/public/simulation/ai/petra_fixed
 binaries/data/mods/public/simulation/ai/petra_hybrid*
 build/petra_ts/workers
 build/petra_ts/batches
+
+# Claude Code local settings and state
+.claude/
