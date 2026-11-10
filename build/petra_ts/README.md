@@ -84,9 +84,11 @@ Tested by `structure.test.ts` in `npm run test:petra:tools` (~1s):
   class the baseline does not know may have 4 (`NEW_CLASS_CORE_MAX`). The
   core LCOM4 groups a class's own methods: forwarders apart (a method whose
   whole body passes one call or read on to a member of a collaborator,
-  `return this.manager.getPlan(id)`), and only collaborators (fields with no
-  initializer, given to the class) set apart as hubs, never its own state
-  (`private plans = []` links every method using it). A facade (the town, a
+  `return this.manager.getPlan(id)`, or a getter and setter passing a field's
+  member on), and only collaborators (fields with no initializer that the
+  constructor does not set to fresh data) set apart as hubs, never its own
+  state (`private plans = []`, or `this.turnCache = {}` in the constructor,
+  links every method using it). The report lists each class's core groups. A facade (the town, a
   desk) is judged by what it does itself, a registry by its own lists. The
   report lists the figures worse and better than the baseline;
   `--update-baseline` writes both baselines (lower a figure when a class

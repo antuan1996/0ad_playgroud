@@ -299,6 +299,27 @@ test("in the core, the class's own state links its methods however many use it; 
 	assert.deepEqual([cls.methods, cls.lcom4, cls.coreLcom4], [13, 13, 2]);
 });
 
+test("a getter and setter passed on to a collaborator forward; a field set fresh in the constructor is own state", () =>
+{
+	const own = "abcdefghk".split("").map((m) => `${m}(): number { return this.cache.x + this.config.y; }`).join("\n");
+	const [cls] = analyseModule(
+		"decision/a.ts",
+		`class Office
+{
+	geography: Geography;
+	config: Config;
+	cache: Cache;
+	constructor(geography: Geography, config: Config) { this.geography = geography; this.config = config; this.cache = {}; }
+	get navalMap(): boolean { return this.geography.navalMap; }
+	set navalMap(naval: boolean) { this.geography.navalMap = naval; }
+	${own}
+}`,
+	).classes;
+	assert.deepEqual(cls.forwarders, ["navalMap"]);
+	// cache, set to {} in the constructor, is the office's own: it links the nine; config, given, is a hub
+	assert.deepEqual([cls.methods, cls.coreLcom4], [10, 1]);
+});
+
 test("a value typed as the whole Headquarters outside it is counted; a view of it is not", () =>
 {
 	assert.deepEqual(

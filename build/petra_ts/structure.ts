@@ -129,6 +129,8 @@ export interface ClassCohesion
 	forwarders: string[];
 	/** the groups of the methods but the forwarders: the cohesion of what the class does itself */
 	coreLcom4: number;
+	/** those groups' members, the largest first */
+	coreGroups: string[][];
 }
 
 export interface ModuleInfo
@@ -225,7 +227,10 @@ const HUB_SHARE = 8;
  */
 function isForwarder(member: ts.Node, collaborators: Set<string>): boolean
 {
-	if (!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member)) || !member.body)
+	if (
+		!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
+			ts.isSetAccessorDeclaration(member)) || !member.body
+	)
 	{
 		return false;
 	}
@@ -244,7 +249,13 @@ function isForwarder(member: ts.Node, collaborators: Set<string>): boolean
 	{
 		return false;
 	}
-	const target = ts.isCallExpression(expr) ? expr.expression : expr;
+	// a setter's `this.geography.navalMap = naval`, the value its parameter
+	const assigned =
+		ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+			ts.isIdentifier(expr.right) ?
+			expr.left :
+			undefined;
+	const target = assigned ?? (ts.isCallExpression(expr) ? expr.expression : expr);
 	if (
 		ts.isCallExpression(expr) && !expr.arguments.every((a) =>
 			ts.isIdentifier(a) || ts.isLiteralExpression(a) || a.kind === ts.SyntaxKind.TrueKeyword ||
@@ -267,6 +278,20 @@ function isForwarder(member: ts.Node, collaborators: Set<string>): boolean
 		++links;
 	}
 	return false;
+}
+
+/** Whether a value is fresh data, made where it is assigned: a literal, an object or array literal, a new Map/Set/Array */
+function isFreshData(value: ts.Expression): boolean
+{
+	if (
+		ts.isObjectLiteralExpression(value) || ts.isArrayLiteralExpression(value) || ts.isLiteralExpression(value) ||
+		value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword
+	)
+	{
+		return true;
+	}
+	return ts.isNewExpression(value) && ts.isIdentifier(value.expression) &&
+		["Map", "Set", "Array"].includes(value.expression.text);
 }
 
 /** The groups of the given methods, linked by the non-hub fields they share and the methods they call */
@@ -344,6 +369,10 @@ function classCohesion(
 	/** the fields with no initializer: given to the class, in its constructor or by its owner */
 	const collaborators = new Set<string>();
 	const methods = new Map<string, ts.Node>();
+	/** a getter and its setter: both forward, for the name to be a forwarder */
+	const accessors = new Map<string, ts.Node[]>();
+	/** the fields the constructor sets to fresh data: the class's own state, however declared */
+	const ownInConstructor = new Set<string>();
 	for (const member of cls.members)
 	{
 		const name = memberName(member.name);
@@ -363,6 +392,7 @@ function classCohesion(
 		)
 		{
 			methods.set(name, member);
+			accessors.set(name, [...accessors.get(name) ?? [], member]);
 		}
 		else if (ts.isConstructorDeclaration(member))
 		{
@@ -383,6 +413,11 @@ function classCohesion(
 				)
 				{
 					fields.add(node.left.name.text);
+					// a field the constructor sets to fresh data (a literal, a new Map, Set or array) is the class's own state
+					if (isFreshData(node.right))
+					{
+						ownInConstructor.add(node.left.name.text);
+					}
 				}
 				ts.forEachChild(node, visit);
 			};
@@ -391,6 +426,10 @@ function classCohesion(
 				visit(member.body);
 			}
 		}
+	}
+	for (const field of ownInConstructor)
+	{
+		collaborators.delete(field);
 	}
 	// a getter and setter of one name are one member
 	const names = [...methods.keys()];
@@ -440,10 +479,8 @@ function classCohesion(
 	const hubs = hubsAmong(names);
 	const groups = cohesionGroups(names, uses, hubs);
 	const forwarders = names.filter((name) =>
-	{
-		const node = methods.get(name);
-		return node !== undefined && isForwarder(node, collaborators);
-	});
+		(accessors.get(name) ?? []).every((node) => isForwarder(node, collaborators))
+	);
 	// the class's own methods, the collaborators they ask most apart as hubs (never the class's own state)
 	const own = names.filter((n) => !forwarders.includes(n));
 	const core = cohesionGroups(own, uses, hubsAmong(own).filter((h) => collaborators.has(h)));
@@ -459,6 +496,7 @@ function classCohesion(
 		thisless,
 		forwarders,
 		coreLcom4: core.length,
+		coreGroups: core,
 	};
 }
 
@@ -1386,6 +1424,14 @@ function main(args: string[]): void
 				`  ${c.name}, a group of ${group.length}: ${group.slice(0, 8).join(", ")}${
 					group.length > 8 ? ", ..." : ""
 				}`,
+			);
+		}
+		if (c.coreLcom4 > 1)
+		{
+			out.push(
+				`  ${c.name}, core groups: ` + c.coreGroups.slice(0, 6).map((g) =>
+					g.length > 3 ? `${g.length} (${g.slice(0, 3).join(", ")}, ...)` : g.join(" ")
+				).join("; ") + (c.coreGroups.length > 6 ? `; ... ${c.coreGroups.length - 6} more` : ""),
 			);
 		}
 		if (c.thisless.length)
