@@ -31,6 +31,7 @@ import { ResourcesManager } from "simulation/ai/common-api/resources.js";
 import { cellIndex, templateName, worldPos } from "../../adapter/brands.ts";
 import { requireValue } from "../../adapter/entityExtend.ts";
 import type { BaseManager } from "../../decision/baseManager.ts";
+import { DefenseManager } from "../../decision/defenseManager.ts";
 import { Headquarters } from "../../decision/headquarters.ts";
 import { AttackDesk, type AttackDecisions } from "../../execution/attackDesk.ts";
 import { Bombardment } from "../../execution/bombardment.ts";
@@ -749,8 +750,15 @@ export interface HqSeatOptions
  * function, whose truthiness or arity would silently flip a branch).
  * Keyed by manager name. */
 const doorFields: Record<string, Record<string, unknown>> = {
-	// a fresh DefenseManager has raised no armies yet
-	defenseManager: { armies: [] },
+	// a fresh DefenseManager has raised no armies yet; whether a spot is near one is answered by the real rule,
+	// from the armies a suite raises on the door
+	defenseManager: {
+		armies: [],
+		isNearInvadingArmy(this: unknown, pos: CommonPosition): boolean
+		{
+			return DefenseManager.prototype.isNearInvadingArmy.call(fake<DefenseManager>(this), pos);
+		},
+	},
 	// a fresh NavalManager has no transports (find*Location counts them)
 	navalManager: { transportShips: [] },
 	// a fresh TradeManager books its minimal gain from navalMap

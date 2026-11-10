@@ -7,10 +7,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { fake } from "./harness/fakes.ts";
+
 import { seat } from "./harness/hqSeat.ts";
 import { ENEMY, doorManagers, makeHqEntity, makeHqWorld, seatHQ, type HqWorld } from "./harness/hqWorld.ts";
 
 import { landRegion, worldPos } from "../adapter/brands.ts";
+import type { DefenseArmy } from "../execution/defenseArmy.ts";
 
 describe("headquarters and the queues: what the workers should gather", () =>
 {
@@ -209,7 +212,8 @@ describe("the danger lights: what keeps the plans from building under fire", () 
 
 	it("a dangerous ground either sees a column or stands inside a tower's fire", () =>
 	{
-		const { world, hq } = seat();
+		// the defense seated for real: its armies are what the town asks of it
+		const { world, hq } = seat({}, { stubs: doorManagers.filter((name) => name !== "defenseManager") });
 		firingTower(world, 2201, [100, 100]);
 
 		assert.equal(
@@ -222,9 +226,7 @@ describe("the danger lights: what keeps the plans from building under fire", () 
 			true,
 			"no column, but the tower's fire reaches it",
 		);
-		(hq.defenseManager as unknown as { armies: Array<Record<string, unknown>>; }).armies = [{
-			foePosition: [340, 150],
-		}];
+		hq.defenseManager.armies = [fake<DefenseArmy>({ foePosition: worldPos(340, 150) })];
 		assert.equal(
 			hq.town.isDangerousLocation(world.gameState, worldPos(250, 100), 0),
 			true,

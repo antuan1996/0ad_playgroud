@@ -2577,3 +2577,29 @@ describe("rarer turns of the defence", () =>
 		assert.equal(world.switchCalls.length, 0);
 	});
 });
+
+describe("an invading column: isNearInvadingArmy", () =>
+{
+	it("an invading column keeps a field of ground where nothing may rise", () =>
+	{
+		const manager = makeDefenseManager(makeWorld());
+		manager.armies = [
+			// the column at its field camp east of the river
+			fake<DefenseArmy>({ foePosition: worldPos(100, 100) }),
+			// an army of stragglers, no position to its name yet
+			fake<DefenseArmy>({ foePosition: undefined }),
+		];
+
+		assert.equal(
+			manager.isNearInvadingArmy(worldPos(160, 100)),
+			true,
+			"under 12 000 square units of the column, refuse the spot",
+		);
+		assert.equal(manager.isNearInvadingArmy(worldPos(400, 400)), false, "far enough from the camp to build");
+		assert.equal(
+			manager.isNearInvadingArmy(worldPos(100, 100)),
+			true,
+			"the army's own ground is of course invaded",
+		);
+	});
+});

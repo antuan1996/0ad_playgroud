@@ -384,8 +384,10 @@ export function makeWorld(options: WorldOptions = {}): World
 			hasActiveBase: () => true,
 		},
 		isDefendable: () => false,
-		trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>
-			emergencyCalls.push([gs, positions]),
+		emergencyTraining: {
+			trainEmergencyUnits: (gs: CommonGameState, positions: [number, number][]) =>
+				emergencyCalls.push([gs, positions]),
+		},
 	};
 	// the stub HQ is its own geography: a test that sets `HQ.navalMap` or
 	// `HQ.territoryMap` sets what the port reads through `HQ.geography`
