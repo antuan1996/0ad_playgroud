@@ -7,8 +7,9 @@
  *   npm run test:petra:smoke [-- options]
  *
  * The games are the reference's 12 map/AI seed pairs, each played from both
- * slots (mainland, athen, very hard, conquest, ended at 90 game minutes), as
- * one batch (batch.ts, J at a time, default 12) into
+ * slots on its own map (6 on random/mainland, 6 on random/dodecanese, the
+ * island map; athen, very hard, conquest, ended at 90 game minutes), as one
+ * batch (batch.ts, J at a time, default 12) into
  * build/petra_ts/batches/smoke-<time>/. Each game's fingerprint hashes the
  * game time of the decision and both players' end statistics
  * (match-report.ts), so it moves with any change to how a game is played:
@@ -28,7 +29,8 @@
  * playing one, e.g. a batch played with the reference's pairs by hand.
  * Exit status: 0 identical, 1 different or failed, 2 bad use.
  *
- * About 3-4 minutes with 12 jobs on 12+ cores; needs the engine built from this
+ * About 3 minutes with 12 jobs on 12+ cores (the island games are the long
+ * ones, played first); needs the engine built from this
  * repository (binaries/system/pyrogenesis). The win-rate of 24 games means
  * nothing; for strength, batch.ts with hundreds of games (PLAN.md §5.3).
  */
@@ -47,6 +49,7 @@ const referencePath = join(here, "smoke", "reference.tsv");
 interface ReferenceGame
 {
 	game: number;
+	map: string;
 	mapSeed: number;
 	aiSeed: number;
 	/** petra_parity played player 1 */
@@ -58,7 +61,7 @@ interface ReferenceGame
 	fingerprint: string;
 }
 
-const COLUMNS = ["game", "mapSeed", "aiSeed", "swapped", "outcome", "reason", "decided", "fingerprint"] as const;
+const COLUMNS = ["game", "map", "mapSeed", "aiSeed", "swapped", "outcome", "reason", "decided", "fingerprint"] as const;
 
 function fail(message: string): never
 {
@@ -114,24 +117,25 @@ function readReference(): ReferenceGame[]
 		const cells = line.split("\t");
 		return {
 			game: Number(cells[0]),
-			mapSeed: Number(cells[1]),
-			aiSeed: Number(cells[2]),
-			swapped: cells[3] === "true",
-			outcome: cells[4],
-			reason: cells[5],
-			decided: Number(cells[6]),
-			fingerprint: cells[7],
+			map: cells[1],
+			mapSeed: Number(cells[2]),
+			aiSeed: Number(cells[3]),
+			swapped: cells[4] === "true",
+			outcome: cells[5],
+			reason: cells[6],
+			decided: Number(cells[7]),
+			fingerprint: cells[8],
 		};
 	});
 }
 
-/** The reference's seed pairs, once each, in game order. */
+/** The reference's seed pairs with their maps (batch.ts --pairs MAP:M/A), once each, in game order. */
 function pairsOf(reference: ReferenceGame[]): string
 {
 	const pairs: string[] = [];
 	for (const game of reference)
 	{
-		const pair = `${game.mapSeed}/${game.aiSeed}`;
+		const pair = `${game.map}:${game.mapSeed}/${game.aiSeed}`;
 		if (!pairs.includes(pair))
 		{
 			pairs.push(pair);
@@ -214,7 +218,9 @@ function record(rows: BatchRow[], batch: string): void
 	const lines = [
 		"# The smoke test's reference (build/petra_ts/smoke.ts, npm run test:petra:smoke):",
 		"# 12 map/AI seed pairs, each from both slots (swapped: petra_parity is player 1),",
-		"# petra_out against petra_parity, random/mainland, athen, difficulty 5 (very hard),",
+		"# petra_out against petra_parity, 6 pairs on random/dodecanese (the island map,",
+		"# pairs decided in both slots within 60 game minutes against petra_parity with no",
+		"# script error) and 6 on random/mainland, athen, difficulty 5 (very hard),",
 		"# conquest, ended at 90 game minutes (match.sh -n -T -B); the fingerprint hashes the",
 		"# decision's game time and both players' end statistics (match-report.ts).",
 		`# Recorded from commit ${git("rev-parse", "HEAD")}${dirty ? " with uncommitted changes to the game" : ""},`,
@@ -227,6 +233,7 @@ function record(rows: BatchRow[], batch: string): void
 		...rows.map((row) =>
 			[
 				row.game,
+				row.map,
 				row.mapSeed,
 				row.aiSeed,
 				row.swapped,
@@ -249,13 +256,16 @@ function compare(reference: ReferenceGame[], rows: BatchRow[]): number
 	for (const expected of reference)
 	{
 		const row = byGame.get(expected.game);
-		const seeds = `${expected.mapSeed}/${expected.aiSeed}${expected.swapped ? " swapped" : ""}`;
+		const seeds = `${expected.map} ${expected.mapSeed}/${expected.aiSeed}${expected.swapped ? " swapped" : ""}`;
 		if (!row || row.outcome === "failed")
 		{
 			broken.push(`game ${expected.game} (${seeds}): not played${row?.problem ? `, ${row.problem}` : ""}`);
 			continue;
 		}
-		if (row.mapSeed !== expected.mapSeed || row.aiSeed !== expected.aiSeed || row.swapped !== expected.swapped)
+		if (
+			row.map !== expected.map || row.mapSeed !== expected.mapSeed || row.aiSeed !== expected.aiSeed ||
+			row.swapped !== expected.swapped
+		)
 		{
 			fail(`game ${expected.game} was played with other seeds than the reference's`);
 		}

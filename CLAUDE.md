@@ -72,7 +72,7 @@ npm run quality:petra -- [--file <module>] [--top 5] [--tests] [--renamed] [--js
 npm run structure:petra -- --check [--top 0] [--update-baseline] [--json F]
 # matches, smoke tests, baselines, and batches (see build/petra_ts/README.md for flags):
 npm run test:petra:match            # fixed headless mirror match checked for anomalies (~80s)
-npm run test:petra:smoke            # 24 fixed games vs petra_parity compared to reference (~3m)
+npm run test:petra:smoke            # 24 fixed games vs petra_parity, 12 on islands, vs reference (~3m)
 npm run build:petra:baselines       # build petra_parity and petra_fixed (gitignored)
 npm run match:petra -- [options]    # headless or visual match (build/petra_ts/match.sh -h)
 npm run batch:petra -- [options]    # parallel headless matches + SPRT/Wilson stats

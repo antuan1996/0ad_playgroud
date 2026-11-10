@@ -12,7 +12,9 @@
  *                     neither gets the better start (default: both for two
  *                     different bots, one for a mirror)
  *   --pairs M/A,...   play these map/AI seed pairs instead of a drawn pool
- *                     (--games and --seed are then ignored)
+ *                     (--games and --seed are then ignored); a pair may name
+ *                     its own map, MAP:M/A (random/dodecanese:650177154/852075615),
+ *                     else it is played on --map
  *   --seed S          the seed pairs are drawn from S, so a pool is
  *                     reproducible (default 1)
  *   --jobs J          matches at a time (default 8)
@@ -91,8 +93,8 @@ interface Options
 	/** wall-clock minutes a game may take before it counts as hung */
 	gameTimeout: number;
 	twice: number;
-	/** explicit [map seed, AI seed] pairs (--pairs) */
-	pairs?: [number, number][];
+	/** explicit seed pairs (--pairs), each on its own map or --map's */
+	pairs?: SeedPair[];
 	extra: string[];
 }
 
@@ -171,14 +173,16 @@ function parseOptions(args: string[]): Options
 	{
 		fail("--slots takes one or both");
 	}
-	const pairs = values.get("pairs")?.split(",").map((pair): [number, number] =>
+	const pairs = values.get("pairs")?.split(",").map((pair): SeedPair =>
 	{
-		const seeds = pair.split("/").map(Number);
-		if (seeds.length != 2 || !seeds.every(Number.isInteger))
+		const colon = pair.lastIndexOf(":");
+		const map = colon == -1 ? undefined : pair.slice(0, colon);
+		const seeds = pair.slice(colon + 1).split("/").map(Number);
+		if (seeds.length != 2 || !seeds.every(Number.isInteger) || map === "")
 		{
-			fail(`--pairs takes map/AI seed pairs like 314615891/911175050, not ${pair}`);
+			fail(`--pairs takes map/AI seed pairs like 314615891/911175050 or MAP:M/A, not ${pair}`);
 		}
-		return [seeds[0], seeds[1]];
+		return { map, mapSeed: seeds[0], aiSeed: seeds[1] };
 	});
 	const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
 	return {
@@ -217,9 +221,18 @@ function seedPairs(seed: number, count: number): [number, number][]
 	return Array.from({ length: count }, () => [next(), next()]);
 }
 
+/** A seed pair of --pairs: its map (undefined: --map's), map seed and AI seed */
+interface SeedPair
+{
+	map: string | undefined;
+	mapSeed: number;
+	aiSeed: number;
+}
+
 interface Game
 {
 	index: number;
+	map: string;
 	mapSeed: number;
 	aiSeed: number;
 	/** the red bot plays player 1 (match.sh -x) */
@@ -298,7 +311,7 @@ function play(options: Options, game: Game, job: number): Promise<BatchRow>
 		"-T",
 		"-B",
 		"-m",
-		options.map,
+		game.map,
 		"-s",
 		String(game.mapSeed),
 		"-a",
@@ -396,7 +409,7 @@ function row(
 	const redId = game.swapped ? 1 : 2;
 	const base: BatchRow = {
 		game: game.index,
-		map: options.map,
+		map: game.map,
 		mapSeed: game.mapSeed,
 		aiSeed: game.aiSeed,
 		blue: options.blue,
@@ -535,12 +548,20 @@ async function main(): Promise<void>
 	build(options);
 
 	const games: Game[] = [];
-	for (const [mapSeed, aiSeed] of options.pairs ?? seedPairs(options.seed, options.games))
+	const pairs = options.pairs ??
+		seedPairs(options.seed, options.games).map(([mapSeed, aiSeed]): SeedPair => ({
+			map: undefined,
+			mapSeed,
+			aiSeed,
+		}));
+	for (const pair of pairs)
 	{
+		const map = pair.map ?? options.map;
 		for (const swapped of options.slots == "both" ? [false, true] : [false])
 		{
 			const index = games.length + 1;
-			games.push({ index, mapSeed, aiSeed, swapped, dir: join(gamesDir, String(index).padStart(4, "0")) });
+			const dir = join(gamesDir, String(index).padStart(4, "0"));
+			games.push({ index, map, mapSeed: pair.mapSeed, aiSeed: pair.aiSeed, swapped, dir });
 		}
 	}
 	for (const game of games.slice(0, options.twice))
@@ -562,10 +583,14 @@ async function main(): Promise<void>
 			[]),
 		`games ${games.length} (${
 			options.pairs ?
-				`the seed pairs ${options.pairs.map((p) => p.join("/")).join(",")}` :
+				`the seed pairs ${
+					options.pairs.map((p) => `${p.map ? p.map + ":" : ""}${p.mapSeed}/${p.aiSeed}`).join(",")
+				}` :
 				`${options.games} seed pairs, pool seed ${options.seed}`
 		}, slots ${options.slots}` + `${options.twice ? `, the first ${options.twice} played twice` : ""})`,
-		`map ${options.map}, civ ${options.civ}, difficulty ${options.difficulty}, victory ${options.victory}`,
+		`map ${options.map}${
+			options.pairs?.some((p) => p.map) ? " (but the pairs naming their own)" : ""
+		}, civ ${options.civ}, difficulty ${options.difficulty}, victory ${options.victory}`,
 		`match.sh -n -T -B${options.extra.length ? " " + options.extra.join(" ") : ""}, ${options.jobs} at a time`,
 		`commit ${commit}`,
 	];

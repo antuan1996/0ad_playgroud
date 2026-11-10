@@ -197,7 +197,13 @@ same seeds and code produce the same game and fingerprint.
   refused orders.
 - `npm run test:petra:smoke` (`build/petra_ts/smoke.ts`; `-- --jobs J`, default
   12, ~3 min): plays 24 headless games (`petra_out` vs `petra_parity` across the
-  12 seed pairs of `build/petra_ts/smoke/reference.tsv` from both slots).
+  12 seed pairs of `build/petra_ts/smoke/reference.tsv` from both slots, each on
+  its own map: 6 pairs on `random/dodecanese`, the island map, and 6 on
+  `random/mainland`). The island pairs are ones decided in both slots within 60
+  game minutes against `petra_parity` with no script error: many island games
+  end in a draw at 90 minutes, `petra_parity` throws in some (its transports
+  lose units' `endPos`/`posGarrison`), and a few hang the engine.
+  `batch.ts --pairs` takes such pairs as `MAP:M/A`.
   - Pure refactors must leave all 24 fingerprints identical.
   - Gameplay changes update the reference via `-- --update` (or
     `-- --update --from <batch>`) in the same commit.

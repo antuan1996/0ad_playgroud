@@ -401,7 +401,8 @@ imports, a loop the original also left doing nothing, unused test names).
 - `npm run test:petra:match`: the fixed match and its anomaly checks; the
   fingerprint is printed, not asserted (any behaviour change moves it).
 - `npm run test:petra:smoke`: 24 fixed games (12 seed pairs from both slots,
-  `petra_out` against `petra_parity`, about 3 minutes) compared game for game
+  6 on `random/dodecanese` and 6 on `random/mainland`, `petra_out` against
+  `petra_parity`, about 3 minutes) compared game for game
   with the recorded `build/petra_ts/smoke/reference.tsv`. A refactor must
   leave all 24 identical; a change meant to alter play lists the games it
   moved, and is recorded with `--update` in the same commit. It is a check

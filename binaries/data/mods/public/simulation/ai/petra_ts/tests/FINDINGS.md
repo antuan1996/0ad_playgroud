@@ -2628,3 +2628,22 @@ gather tally and the town, and the economy plan at `HQ.economy`; a plan
 started without preparing is logged as `local`, with its units, its target's
 kind and owner and its soldiers' land. The same game played with and
 without `-b` gives the same fingerprint.
+
+## 62. The smoke games on the island map (2026-11-11)
+
+The smoke test (`build/petra_ts/smoke.ts`) plays half its games on
+`random/dodecanese` now: 6 of its 12 seed pairs, from both slots, beside 6
+mainland pairs. A pair may name its map in `batch.ts --pairs` (`MAP:M/A`).
+
+The island pairs were chosen against `petra_parity`, which the smoke games
+play, among those decided in all four games of the `dodec-1`/`dodec-2`
+batches (against `petra_prev`) and six drawn anew (pool seed 77): of 32
+games, 13 went to the 90-minute limit; 3 had script errors, all in
+`petra_parity` (`transportPlan.js` line 277, and `entityExtend.js` line 159:
+the metadata `endPos` or `posGarrison` of a unit in a transport missing, 18
+to 1854 errors a game); 3 hung the engine, killed by the watchdog at 38-40
+game minutes, `926482681/994999576` with `petra_parity` as player 1 twice.
+The six kept were decided in both slots within 58 game minutes with no error
+or warning (Petra TS won all twelve games); the six mainland pairs, of the
+earlier twelve, end within 22 minutes. The 24 games take about 3 minutes
+with 12 jobs, as the mainland ones did.
