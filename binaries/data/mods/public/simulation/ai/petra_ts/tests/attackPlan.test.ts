@@ -1171,9 +1171,11 @@ describe("assigning units", () =>
 
 	// only the port passes: Petra drafted them to be shipped to its rally point (FINDINGS §34)
 	// only the port passes: Petra kept them in the plan, counted them, and shipped them away (FINDINGS §34)
-	it("while it prepares, lets go a soldier enemies came beside on another island, and trains another in its place", () =>
+	it("while it prepares, sends a soldier enemies came beside on another island to fight them, and trains another", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
+		// the town's attacks split off the local fights for real
+		Reflect.deleteProperty(world.ai.town.attacks, "splitLocalFights");
 		registerSpearman(world);
 		world.knobs.bestTrainable = "units/athen_spearman";
 		world.accessAt.set("40,45", 3);
@@ -1193,18 +1195,25 @@ describe("assigning units", () =>
 		plan.unitCollection.updateEnt(islander);
 		assert.equal(plan.unitCollection.length, 1);
 
+		// an enemy house rises on its island
+		world.accessAt.set("42,45", 3);
+		const house = world.addEntity(
+			makeEntity({ id: 2101, owner: ENEMY, position: [42, 45], classes: ["Structure", "Village", "House"] }),
+		);
 		world.enemyLands.add(3);
 		assert.equal(plan.updatePreparation(world.gameState), AttackPlan.PREPARATION_KEEP_GOING);
 
-		assert.equal(islander.getMetadata(PLAYER, "plan"), -1, "it left the plan");
-		assert.equal(plan.unitCollection.length, 0, "and is no longer counted");
-		assert.deepEqual(world.leavingPlans, [[1, 2]], "those enough to fight were offered a local attack first");
+		const [local] = world.ai.town.attacks.startedAttacks["Attack"];
+		assert.equal(local?.target, house, "a local attack on the house, alone as it is");
+		assert.equal(islander.getMetadata(PLAYER, "plan"), local.name, "it fights there");
+		assert.equal(plan.unitCollection.length, 0, "and is no longer counted in the plan");
 		const queued = prepOf(plan).queue.plans[0];
 		assert.ok(queued, "the plan trains on");
 		assert.equal(queued.metadata?.index, 2, "on the rally point's land where it can");
 	});
 
-	it("drafts no soldier on another land than the rally point's while enemies stand there", () =>
+	// only the port passes: Petra drafted them to be shipped away from the enemies beside them (FINDINGS §34)
+	it("drafts no soldier on another land than the rally point's with enemies there: it fights them first", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
 		const plan = makePlan(world, { name: 1 });
@@ -1222,17 +1231,55 @@ describe("assigning units", () =>
 		// a hunter at a cliff's edge: an impassable cell (1), no island of its own, with an enemy on another such cell
 		world.accessAt.set("70,75", 1);
 		const hunter = soldier(1013, [70, 75]);
+		// an enemy soldier on the island
+		world.accessAt.set("44,45", 3);
+		const foe = world.addEntity(
+			makeEntity({ id: 2200, owner: ENEMY, position: [44, 45], classes: ["Unit", "Soldier", "Infantry"] }),
+		);
 		world.enemyLands.add(2).add(3).add(1);
 
 		assert.equal(plan.assignUnits(world.gameState), true);
 		assert.equal(home.getMetadata(PLAYER, "plan"), 1, "the rally point's land: drafted, enemies or not");
-		assert.equal(beside.getMetadata(PLAYER, "plan"), undefined, "an island with enemies: left there");
+		const [local] = world.ai.town.attacks.startedAttacks["Attack"];
+		assert.equal(local?.target, foe, "an attack on the island's enemy, no building there");
+		assert.equal(beside.getMetadata(PLAYER, "plan"), local.name, "an island with enemies: fights them");
+		assert.equal(beside.getMetadata(PLAYER, "role"), "attack");
 		assert.equal(quiet.getMetadata(PLAYER, "plan"), 1, "a quiet island: drafted");
 		assert.equal(hunter.getMetadata(PLAYER, "plan"), 1, "an impassable cell: no island, drafted");
 
-		world.enemyLands.delete(3);
+		// a second soldier lands there: it joins the fight under way rather than start another
+		const second = soldier(1014, [40, 45]);
 		plan.assignUnits(world.gameState);
-		assert.equal(beside.getMetadata(PLAYER, "plan"), 1, "drafted once its island is clear");
+		assert.equal(second.getMetadata(PLAYER, "plan"), local.name);
+		assert.equal(world.ai.town.attacks.startedAttacks["Attack"].length, 1);
+	});
+
+	it("leaves a hero the victory conditions protect, and a unit helping an ally, out of a fight beside enemies", () =>
+	{
+		const world = makeWorld({ enemyPlayer: ENEMY });
+		const plan = makePlan(world, { name: 1 });
+		world.accessAt.set("40,45", 3);
+		world.accessAt.set("44,45", 3);
+		world.addEntity(makeEntity({ id: 2200, owner: ENEMY, position: [44, 45], classes: ["Unit", "Soldier"] }));
+		const hero = world.addEntity(
+			makeEntity({ id: 1010, owner: PLAYER, position: [40, 45], classes: ["Unit", "Hero"] }, {
+				attackTypes: () => ["Melee"],
+			}),
+		);
+		const helper = world.addEntity(
+			makeEntity({ id: 1011, owner: PLAYER, position: [40, 45], classes: ["Unit", "Melee"] }, {
+				attackTypes: () => ["Melee"],
+			}, { allied: true }),
+		);
+		// the hero is the one the regicide protects
+		override(world.ai.town.victory, { isCritical: (id: EntityId) => id === 1010 });
+		world.enemyLands.add(3);
+
+		plan.assignUnits(world.gameState);
+
+		assert.equal(world.ai.town.attacks.startedAttacks["Attack"].length, 0, "no fight is started");
+		assert.equal(hero.getMetadata(PLAYER, "plan"), undefined);
+		assert.equal(helper.getMetadata(PLAYER, "plan"), undefined);
 	});
 
 	it("leaves enough defenders home and takes idle workers beyond them", () =>
@@ -3273,9 +3320,11 @@ describe("difficulties, dumps and init corners", () =>
 
 	// only the port passes: Petra shipped its soldiers to the rally point away
 	// from the enemies beside them (FINDINGS §34)
-	it("does not ship to the rally point an islander with enemies beside it: it leaves the plan", () =>
+	it("does not ship to the rally point an islander with enemies beside it: it stays to fight them", () =>
 	{
 		const world = makeWorld({ enemyPlayer: ENEMY });
+		// the town's attacks split off the local fights for real
+		Reflect.deleteProperty(world.ai.town.attacks, "splitLocalFights");
 		const target = makeTarget(world);
 		target.foundationProgress = () => 60;
 		for (let i = 0; i < 3; ++i)
@@ -3309,6 +3358,11 @@ describe("difficulties, dumps and init corners", () =>
 				{ plan: 1 },
 			),
 		);
+		// an enemy soldier beside the islander
+		world.accessAt.set("44,45", 3);
+		const foe = world.addEntity(
+			makeEntity({ id: 2200, owner: ENEMY, position: [44, 45], classes: ["Unit", "Soldier"] }),
+		);
 		world.enemyLands.add(3);
 		const plan = makePlan(world, { name: 1, type: "Raid", data: { target } });
 
@@ -3321,8 +3375,10 @@ describe("difficulties, dumps and init corners", () =>
 			[[quiet, 4, 2, plan.rallyPoint]],
 			"only the quiet island's soldier is shipped",
 		);
-		assert.equal(islander.getMetadata(PLAYER, "plan"), -1, "the islander beside enemies left the plan");
-		assert.equal(plan.unitCollection.hasEntId(entityId(1013)), false);
+		const [local] = world.ai.town.attacks.startedAttacks["Attack"];
+		assert.equal(local?.target, foe, "a local attack on the enemy beside it");
+		assert.equal(islander.getMetadata(PLAYER, "plan"), local.name, "the islander fights there");
+		assert.equal(plan.unitCollection.hasEntId(entityId(1013)), false, "out of the raid");
 	});
 });
 

@@ -569,16 +569,42 @@ describe("an attack that sets off leaves its soldiers beside enemies to fight th
 		}
 	});
 
-	it("three soldiers beside the enemy are too few to stay: they sail with the army", () =>
+	// only the port passes: Petra sailed away from the enemy beside it
+	it("however few, soldiers beside the enemy stay to fight it: three stay as an attack on the house", () =>
 	{
-		const { world, manager, sailing, ashore } = sailingTown(3);
+		const { world, manager, sailing, ashore, house } = sailingTown(3);
 
 		desk(manager).splitLocalFights(world.gameState, sailing, TARGET_LAND);
 
-		assert.equal(desk(manager).startedAttacks["Attack"].length, 0);
+		const [fight] = desk(manager).startedAttacks["Attack"];
+		assert.equal(fight?.target, house);
 		for (const ent of ashore)
 		{
-			assert.equal(ent.getMetadata(PLAYER, "plan"), 7);
+			assert.equal(ent.getMetadata(PLAYER, "plan"), fight.name);
+			assert.equal(sailing.unitCollection.hasEntId(ent.id()), false);
+		}
+	});
+
+	it("soldiers beside the enemy join the attack already fighting on their land rather than start another", () =>
+	{
+		const { world, manager, sailing, ashore } = sailingTown(2);
+		desk(manager).splitLocalFights(world.gameState, sailing, TARGET_LAND);
+		const [fight] = desk(manager).startedAttacks["Attack"];
+		assert.ok(fight);
+
+		// two more soldiers, out of any plan, on the same land
+		const more = [1300, 1301].map((id) =>
+			world.addEntity(
+				makeEntity({ id, owner: PLAYER, position: [13, 12], classes: ["Unit", "Infantry", "Melee"] }),
+			)
+		);
+		desk(manager).fightBesideEnemies(world.gameState, more, TARGET_LAND);
+
+		assert.equal(desk(manager).startedAttacks["Attack"].length, 1, "no second fight");
+		for (const ent of [...ashore, ...more])
+		{
+			assert.equal(ent.getMetadata(PLAYER, "plan"), fight.name);
+			assert.equal(ent.getMetadata(PLAYER, "role"), "attack");
 		}
 	});
 });
