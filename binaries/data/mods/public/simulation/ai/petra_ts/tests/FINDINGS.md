@@ -60,8 +60,8 @@ whether a game can reach it.
 | `headquarters.constructTrainingBuildings` (stage 5) | builds the barracks, ranges and stables by population thresholds, about three in all, while from minute 10 the barracks train 90% of the time and 2000-3000 resources lie in stock (§29) | one more barracks (or range) while those it has train 85% of the time, measured (`world/production.ts`), and the unbooked stock covers two of them, up to five | headquarters: "barracks always training and the stock unbooked: one more barracks" |
 | `transportPlan.onBoarding` (stage 5) | the distance from a ship to its boarding point read a point never set (`SquareVectorDistance(undefined, ...)`) and threw, ending the turn's boarding (§32) | a ship without a boarding point is not tested for drifting from it | transportPlan: "a unit heading for a ship without a boarding point keeps heading for it" |
 | `attackPlan.UpdateTransporting` (stage 5) | skipped every unit booked for a transport when the army was hit while waiting: a unit walking to its ship or waiting for it is never idle, so the army stood under fire at the shore (§34) | a unit still ashore and bound for a ship answers an attacker on its own land | attackPlan: "while shipping, a unit ashore bound for its ship strikes back at an attacker on its land" |
-| `attackManager` local attacks (stage 5) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay as one local attack per land, started at once | attackManager: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail" |
-| `attackPlan.assignUnits`, rally shipping (stage 5) | drafted soldiers on any island and shipped them to the rally point, away from enemy soldiers and buildings beside them; the split above ran only for a target overseas (§34) | a soldier on another land than the rally point's, with enemy soldiers, heroes, siege or buildings on it, is not drafted while they stand there; one already in the plan is kept back there at set-off (a local attack from four, else out of the plan), for any target | attackPlan: "drafts no soldier on another land than the rally point's while enemies stand there", "does not ship to the rally point an islander with enemies beside it: it leaves the plan" |
+| `attackManager` local attacks (stage 5, stage 7) | an attack whose target needed a ship took every available soldier, those beside enemy units and buildings on their own island included (§34) | `splitLocalFights`: those on a land with enemies stay to fight there, however few (four at least until §61), joining the attack fighting on that land or starting one at once | attackDesk: "five soldiers beside an enemy house stay as an attack on it; the two on a quiet island sail", "however few, soldiers beside the enemy stay to fight it: three stay as an attack on the house" |
+| `attackPlan.assignUnits`, rally shipping (stage 5) | drafted soldiers on any island and shipped them to the rally point, away from enemy soldiers and buildings beside them; the split above ran only for a target overseas (§34) | a soldier on another land than the rally point's, with enemy soldiers, heroes, siege or buildings on it, is not drafted while they stand there: before a plan drafts, it goes to fight them (§61); one already in the plan stays to fight there, while it prepares and at set-off, for any target | attackPlan: "drafts no soldier on another land than the rally point's with enemies there: it fights them first", "does not ship to the rally point an islander with enemies beside it: it stays to fight them" |
 | `attackPlan.getNearestTarget` (stage 5) | an Attack-type plan took on defended buildings only with siege engines: with none undefended left it found no target, was aborted with its army and remade every few seconds (§35) | it falls back to the full target list; rushes keep to undefended targets | attackPlan: "an attack without siege takes on a defended centre when nothing is left undefended; a rush does not" |
 | `transportPlan` sailing (stage 5) | sent a transport to its landing point with one move: the engine's shortest path hugs the coasts, under the enemy's towers (§36) | `TransportPlan.sailTo` sends a route round the enemy shooters (`world/seaRoute.ts`) | transportPlan: "sails by waypoints round a tower, ending at the landing point" |
 | `transportPlan.checkRoutes` (stage 5) | planned a ship's way once: threats come to the shore after it set out were sailed into (§36) | every 3 s the way ahead is checked; more threats in reach than when planned, and the ship is sent by a new route | transportPlan: "sends the ship again by a new route when archers come within reach of the way ahead" |
@@ -2589,3 +2589,42 @@ tail, which a player feels, is what §47-51 cut (the churn, the leaked
 collections, the arrival sort). The games differ, so this is no paired
 check of a refactor; the head-to-head times both bots on the same turns.
 
+## 61. Stage 7: soldiers on islands fight the enemies beside them first (2026-11-11)
+
+Until now a soldier on another land than an attack's rally point, with enemy
+soldiers, heroes, siege or buildings on it, was only left out of the draft
+(§34): it stood there, or went back to work, beside the enemy. A plan's own
+soldiers on such a land stayed as a local attack only from four on a land;
+fewer left the plan and went back to work.
+
+Now the soldiers beside enemies fight them before they can be drafted:
+
+- before a plan drafts (`AttackPlan.assignUnits`, `fightBeforeDraft` in
+  `execution/attackDraft.ts`), our soldiers on such a land go to fight
+  there: soldiers in no plan, those between plans, and citizen soldiers at
+  work, but not the units the victory conditions protect, nor those helping
+  an ally;
+- a plan's own soldiers there stay to fight, however few, while it prepares
+  and at set-off (`splitLocalFights`);
+- the soldiers of a land join the attack already fighting there (its target
+  on that land, arrived or attacking), else start one at once against the
+  nearest enemy building, else the nearest enemy unit
+  (`AttackDesk.fightBesideEnemies`).
+
+The smoke games (mainland) are unchanged: 24 of 24 identical. On
+`random/dodecanese`, 4 players (`-s 20261101 -a 4242 -N 4 -T -b`, one game
+each, so no measure of strength), the plans started without preparing went
+from 27 (defense armies turned to attacks, and the splits of four or more)
+to 88, by player 7, 28, 30 and 23; their median time in the field is the
+same, 11-12 s: such a fight ends when its target falls, and its soldiers
+take up the next one on the next headquarters turn while enemies stand on
+their land. The game was won by player 3 rather than player 4.
+
+The match logs of `-b` (`build/petra_ts/bot-state.js`) had kept the names
+of the bot's state from before the town and its desks: the attack log was
+empty, and the economy, ship and naval sections of the state dump threw. It
+now reads the plans at the town's attacks and transports, the rates at the
+gather tally and the town, and the economy plan at `HQ.economy`; a plan
+started without preparing is logged as `local`, with its units, its target's
+kind and owner and its soldiers' land. The same game played with and
+without `-b` gives the same fingerprint.

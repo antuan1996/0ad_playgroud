@@ -30,7 +30,15 @@ import {
 	WITHDRAW_RANGE,
 	type AttackType,
 } from "./attackConstants.ts";
-import { besideEnemies, draftWorkers, enlist, enlistAll, enlistRaiders, leaveDisputedLands } from "./attackDraft.ts";
+import {
+	besideEnemies,
+	draftWorkers,
+	enlist,
+	enlistAll,
+	enlistRaiders,
+	fightBeforeDraft,
+	leaveDisputedLands,
+} from "./attackDraft.ts";
 import {
 	onTargetLost,
 	onTargetRenamed,
@@ -1258,6 +1266,8 @@ export class AttackPlan
 	{
 		let added = false;
 		const rallyLand = gameState.ai.accessibility.getAccessValue(this.rallyPoint);
+		// soldiers beside enemies on another land fight them first
+		fightBeforeDraft(this, gameState, rallyLand);
 		const available = (ent: CommonEntity): boolean =>
 			this.isAvailableUnit(gameState, ent) && !besideEnemies(gameState, ent, rallyLand);
 		// If we can not build units, assign all available except those affected to allied defense to the current attack.

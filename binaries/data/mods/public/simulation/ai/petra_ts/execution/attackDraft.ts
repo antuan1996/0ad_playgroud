@@ -1,6 +1,6 @@
 /**
  * An attack plan's draft (moved out of execution/attackPlan.ts): which of our units join it, the raiders' own, the
- * workers drafted in a pinch, and the soldiers it lets go beside enemies on another land.
+ * workers drafted in a pinch, and the soldiers beside enemies on another land, who fight them first.
  */
 import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { dumpEntity, getLandAccess } from "../adapter/entityExtend.ts";
@@ -108,11 +108,10 @@ export function enlistRaiders(
 /**
  * Those of the plan's soldiers who stand beside enemies, on another land
  * than `keptLand` (the rally point's while the plan prepares, the target's
- * once it sets off), stay there to fight them, from LOCAL_FIGHT_MIN on a
- * land (AttackManager.splitLocalFights); the fewer, on another land than
- * the rally point's, leave the plan rather than be shipped to it, and go
- * back to work (FINDINGS §34). Run while it prepares, so that the plan
- * counts and trains without them.
+ * once it sets off), stay there to fight them, however few
+ * (AttackDesk.splitLocalFights), rather than be shipped away from them
+ * (FINDINGS §34). Run while it prepares, so that the plan counts and trains
+ * without them.
  */
 export function leaveDisputedLands(
 	plan: AttackPlan,
@@ -121,20 +120,39 @@ export function leaveDisputedLands(
 ): void
 {
 	gameState.ai.town.attacks.splitLocalFights(gameState, plan, keptLand);
-	const rallyLand = gameState.ai.accessibility.getAccessValue(plan.rallyPoint);
-	for (const ent of plan.unitCollection.values())
+}
+
+/**
+ * Before a plan drafts, our soldiers on another land than its rally point's
+ * with enemies on it (soldiers in no plan, those between plans, citizen
+ * soldiers at work; not the units the victory conditions protect) go to fight
+ * them, joining the attack fighting there or starting one: a soldier beside
+ * enemy buildings or units destroys them before it is drafted.
+ */
+export function fightBeforeDraft(plan: AttackPlan, gameState: CommonGameState, rallyLand: AccessIndex): void
+{
+	const fighters: CommonEntity[] = [];
+	for (const ent of gameState.getOwnUnits().values())
 	{
-		if (besideEnemies(gameState, ent, rallyLand))
+		if (
+			!ent.hasClasses(["!Unit", "Ship", "Support"]) && ent.attackTypes() !== undefined &&
+			!ent.getMetadata(PlayerID, "allied") && !gameState.ai.town.victory.isCritical(ent.id()) &&
+			plan.isAvailableUnit(gameState, ent) && besideEnemies(gameState, ent, rallyLand)
+		)
 		{
-			plan.removeUnit(ent, true);
+			fighters.push(ent);
 		}
+	}
+	if (fighters.length)
+	{
+		gameState.ai.town.attacks.fightBesideEnemies(gameState, fighters, rallyLand);
 	}
 }
 
 /**
  * Whether a unit stands on another land than the rally point's with enemies
- * on it: it is not drafted, nor shipped to the rally point, while they are
- * there (FINDINGS §34).
+ * on it: it fights them (fightBeforeDraft) rather than be drafted, or shipped
+ * to the rally point, while they are there (FINDINGS §34).
  */
 export function besideEnemies(gameState: CommonGameState, ent: CommonEntity, rallyLand: AccessIndex): boolean
 {

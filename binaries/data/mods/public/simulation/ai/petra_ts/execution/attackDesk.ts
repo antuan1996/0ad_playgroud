@@ -32,9 +32,6 @@ export type SerializedAttacks = {
 	startedAttacks: Record<AttackType, SerializedAttackPlan[]>;
 };
 
-/** The fewest of a leaving plan's soldiers on a land with enemies that stay there to fight (splitLocalFights). */
-const LOCAL_FIGHT_MIN = 4;
-
 /** Where a group stands: the mean of its positions. */
 function centreOf(units: readonly CommonPlacedEntity[]): CommonPosition
 {
@@ -442,27 +439,41 @@ export class AttackDesk
 	}
 
 	/**
-	 * When an attack sets off, its soldiers standing on a land where enemies
-	 * stand (enemiesByLand), other than the target's, stay there as one attack
-	 * per land, started at once against the nearest enemy building there, else
-	 * the nearest unit (FINDINGS §34: on shared islands the army sailed away
-	 * from enemies beside it). A land with fewer than LOCAL_FIGHT_MIN of the
-	 * plan's soldiers keeps them in the plan, which ships none of them to its
-	 * rally point (AttackPlan.updatePreparation).
+	 * A leaving plan's soldiers standing on a land where enemies stand
+	 * (world/enemyLands.ts), other than `keptLand` (the rally point's while
+	 * it prepares, the target's once it sets off), stay there to fight them,
+	 * however few (fightBesideEnemies): on shared islands the army sailed away
+	 * from enemies beside it (FINDINGS §34).
 	 */
 	splitLocalFights(gameState: CommonGameState, leaving: AttackPlan, targetLand: AccessIndex | undefined): void
 	{
+		this.fightBesideEnemies(gameState, [...leaving.unitCollection.values()], targetLand, leaving);
+	}
+
+	/**
+	 * Soldiers standing on a land where enemies stand, other than `keptLand`,
+	 * fight them before anything else: those of a land join the attack
+	 * already fighting there, else start one, at once, against the nearest
+	 * enemy building there, else the nearest enemy unit. They leave `leaving`
+	 * if they were in it. A soldier aboard a ship, on no land, stays as it is.
+	 */
+	fightBesideEnemies(
+		gameState: CommonGameState,
+		soldiers: readonly CommonEntity[],
+		keptLand: AccessIndex | undefined,
+		leaving?: AttackPlan,
+	): void
+	{
 		const enemiesByLand = gameState.ai.enemyLands.byLand(gameState);
 		const soldiersByLand = new Map<AccessIndex, CommonPlacedEntity[]>();
-		for (const ent of leaving.unitCollection.values())
+		for (const ent of soldiers)
 		{
-			// a soldier aboard a ship is on no land
 			if (!isPlaced(ent))
 			{
 				continue;
 			}
 			const land = getLandAccess(gameState, ent);
-			if (land === undefined || land === targetLand || !enemiesByLand.has(land))
+			if (land === undefined || land === keptLand || !enemiesByLand.has(land))
 			{
 				continue;
 			}
@@ -476,39 +487,68 @@ export class AttackDesk
 				soldiersByLand.set(land, [ent]);
 			}
 		}
-		for (const [land, soldiers] of soldiersByLand)
+		for (const [land, onLand] of soldiersByLand)
 		{
-			if (soldiers.length < LOCAL_FIGHT_MIN)
-			{
-				continue;
-			}
-			const target = nearestLocalTarget(requireValue(enemiesByLand.get(land)), centreOf(soldiers));
-			const local = AttackPlan.create(gameState, this.config, this.totalNumber, AttackPlan.TYPE_DEFAULT);
+			const local = this.localFight(gameState, land, leaving) ??
+				this.startLocalFight(gameState, requireValue(enemiesByLand.get(land)), onLand);
 			if (!local)
 			{
 				continue;
 			}
-			this.totalNumber++;
-			this.startedAttacks[AttackPlan.TYPE_DEFAULT].push(local);
-			for (const ent of soldiers)
+			for (const ent of onLand)
 			{
 				ent.setMetadata(PlayerID, "plan", local.name);
 				ent.setMetadata(PlayerID, "role", Worker.ROLE_ATTACK);
-				leaving.unitCollection.updateEnt(ent);
+				leaving?.unitCollection.updateEnt(ent);
 				local.unitCollection.updateEnt(ent);
 			}
-			local.targetPlayer = target.owner();
-			local.targetPos = target.position();
-			local.target = target;
-			local.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
 			debugWarn(
 				this.config,
 				1,
 				() =>
-					"Military Manager: local attack " + local.name + " on land " + land +
-					" with " + soldiers.length + " units left by " + leaving.name,
+					"Military Manager: local attack " + local.name + " on land " + land + " joined by " +
+					onLand.length + " units" + (leaving ? " left by " + leaving.name : ""),
 			);
 		}
+	}
+
+	/** The attack under way fighting on the land (its target there, arrived or attacking), but the one left */
+	private localFight(gameState: CommonGameState, land: AccessIndex, leaving?: AttackPlan): AttackPlan | undefined
+	{
+		for (const attack of plansIn(this.startedAttacks))
+		{
+			if (
+				attack !== leaving && attack.target && isPlaced(attack.target) &&
+				(attack.state === AttackPlan.STATE_ARRIVED || attack.state === AttackPlan.STATE_ATTACKING) &&
+				getLandAccess(gameState, attack.target) === land
+			)
+			{
+				return attack;
+			}
+		}
+		return undefined;
+	}
+
+	/** A new attack on the land, started at once against the enemy building nearest the soldiers, else the nearest unit */
+	private startLocalFight(
+		gameState: CommonGameState,
+		enemies: readonly CommonPlacedEntity[],
+		soldiers: readonly CommonPlacedEntity[],
+	): AttackPlan | undefined
+	{
+		const target = nearestLocalTarget(enemies, centreOf(soldiers));
+		const local = AttackPlan.create(gameState, this.config, this.totalNumber, AttackPlan.TYPE_DEFAULT);
+		if (!local)
+		{
+			return undefined;
+		}
+		this.totalNumber++;
+		this.startedAttacks[AttackPlan.TYPE_DEFAULT].push(local);
+		local.targetPlayer = target.owner();
+		local.targetPos = target.position();
+		local.target = target;
+		local.changeState(AttackPlan.STATE_UNEXECUTED, AttackPlan.STATE_ARRIVED);
+		return local;
 	}
 
 	/**
