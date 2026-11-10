@@ -156,7 +156,10 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     view of it built on `TownState` (`hqEvents.ts`, `phasing.ts`,
     `workforceTraining.ts`, `houseBuilding.ts`, `townBuildings.ts`,
     `militaryBuildings.ts`, `expansion.ts`),
-    `startingStrategy.ts`, managers (`attack`, `base`, `bases`, `build`,
+    `recruitChoice.ts` (`HQ.recruits`: which unit to train of those asked),
+    `emergencyTraining.ts` (`HQ.emergencyTraining`: defenders trained at once
+    when an army comes), `startingStrategy.ts`, managers (`attack`, `base`,
+    `bases`, `build`,
     `defense`, `diplomacy`, `emergency`, `naval`, `research`,
     `trade`, `victory`), `enemySelection.ts`, and pure/utility
     modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`, `fields.ts`,

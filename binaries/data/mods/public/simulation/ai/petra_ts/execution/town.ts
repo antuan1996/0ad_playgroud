@@ -42,14 +42,15 @@ interface TownHQ
 	readonly requireHouses: boolean | undefined;
 
 	canBuild(gameState: CommonGameState, structure: string): boolean;
-	findBestTrainableUnit(
-		gameState: CommonGameState,
-		classes: Array<string | string[]>,
-		requirements: TrainableWeight[],
-		gatherersOnly?: boolean,
-	): TemplateName | undefined;
+	readonly recruits: {
+		findBestTrainableUnit(
+			gameState: CommonGameState,
+			classes: Array<string | string[]>,
+			requirements: TrainableWeight[],
+			gatherersOnly?: boolean,
+		): TemplateName | undefined;
+	};
 	houseNeeded(gameState: CommonGameState): boolean;
-	isNearInvadingArmy(pos: CommonPosition): boolean;
 
 	noteNothingToGather(resource: string, time: GameSeconds): void;
 	phaseResearched(gameState: CommonGameState, phase: number): void;
@@ -165,13 +166,13 @@ export class Town
 
 	isDangerousLocation(gameState: CommonGameState, pos: CommonPosition, radius: number): boolean
 	{
-		return this.hq.isNearInvadingArmy(pos) || this.isUnderEnemyFire(gameState, pos, radius);
+		return this.defense.isNearInvadingArmy(pos) || this.isUnderEnemyFire(gameState, pos, radius);
 	}
 
 	/** Check that the chosen position is not too near from an invading army */
 	isNearInvadingArmy(pos: CommonPosition): boolean
 	{
-		return this.hq.isNearInvadingArmy(pos);
+		return this.defense.isNearInvadingArmy(pos);
 	}
 
 	isUnderEnemyFire(gameState: CommonGameState, pos: CommonPosition, radius: number = 0): boolean
@@ -213,7 +214,7 @@ export class Town
 		gatherersOnly?: boolean,
 	): TemplateName | undefined
 	{
-		return this.hq.findBestTrainableUnit(gameState, classes, requirements, gatherersOnly);
+		return this.hq.recruits.findBestTrainableUnit(gameState, classes, requirements, gatherersOnly);
 	}
 
 	/** Whether a planned house may be paid now (decision/housing.ts). */

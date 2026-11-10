@@ -11,16 +11,16 @@ import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Worker } from "../execution/worker.ts";
 import type { AttackManager } from "./attackManager.ts";
 import type { Headquarters, HeadquartersQueues, HeadquartersTrainableRequirement, TownState } from "./headquarters.ts";
+import type { RecruitChoice } from "./recruitChoice.ts";
 import { batchSize, soldierRequirements, supportAlpha, supportShare, trainingStopped } from "./workforce.ts";
 
 /** What the workforce training asks of the headquarters: its state, the workers wanted, the recruit choice, rushes */
-type WorkforceHQ =
-	& TownState
-	& Pick<Headquarters, "targetNumWorkers" | "supportRatio" | "landRunDry" | "findBestTrainableUnit">
-	& {
-		readonly attackManager: Pick<AttackManager, "rushNumber" | "maxRushes">;
-		readonly town: { readonly attacks: Pick<AttackPlanRegistry, "upcomingAttacks">; };
-	};
+type WorkforceHQ = TownState & Pick<Headquarters, "targetNumWorkers" | "supportRatio" | "landRunDry"> & {
+	readonly recruits: Pick<RecruitChoice, "findBestTrainableUnit">;
+} & {
+	readonly attackManager: Pick<AttackManager, "rushNumber" | "maxRushes">;
+	readonly town: { readonly attacks: Pick<AttackPlanRegistry, "upcomingAttacks">; };
+};
 
 /** This code trains citizen workers, trying to keep close to a ratio of worker/soldiers */
 export function trainMoreWorkers(hq: WorkforceHQ, gameState: CommonGameState, queues: HeadquartersQueues): void
@@ -28,7 +28,7 @@ export function trainMoreWorkers(hq: WorkforceHQ, gameState: CommonGameState, qu
 	// default template
 	const requirementsDef: HeadquartersTrainableRequirement[] = [["costsResource", 1, "food"]];
 	const classesDef = ["Support+Worker"];
-	const templateDef = hq.findBestTrainableUnit(gameState, classesDef, requirementsDef);
+	const templateDef = hq.recruits.findBestTrainableUnit(gameState, classesDef, requirementsDef);
 
 	const { numberOfWorkers, numberOfSupports, numberInTraining } = countWorkers(gameState);
 
@@ -105,7 +105,7 @@ function citizenSoldierTemplate(
 	{
 		classes[0].push(pickedClass);
 	}
-	return hq.findBestTrainableUnit(gameState, classes, requirements, true);
+	return hq.recruits.findBestTrainableUnit(gameState, classes, requirements, true);
 }
 
 /**

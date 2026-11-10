@@ -27,6 +27,7 @@ import type { Config } from "../world/config.ts";
 import type { Geography } from "../world/geography.ts";
 import type { BaseManager } from "./baseManager.ts";
 import type { BasesManager } from "./basesManager.ts";
+import type { EmergencyTraining } from "./emergencyTraining.ts";
 import type { Headquarters } from "./headquarters.ts";
 import type { VictoryManager } from "./victoryManager.ts";
 
@@ -89,7 +90,8 @@ type DefenseGarrison = Pick<GarrisonManager, "numberOfGarrisonedSlots" | "garris
  * managers: the victory's critical units, the bases, the attacks its units
  * belong to or switch to, and the garrisons.
  */
-export type DefenseHQ = Pick<Headquarters, "isDefendable" | "trainEmergencyUnits"> & {
+export type DefenseHQ = Pick<Headquarters, "isDefendable"> & {
+	readonly emergencyTraining: Pick<EmergencyTraining, "trainEmergencyUnits">;
 	readonly victoryManager: Pick<VictoryManager, "criticalEnts">;
 	readonly basesManager: Pick<BasesManager, "hasActiveBase" | "getBaseByID" | "baseManagers">;
 	readonly town: {
@@ -1093,7 +1095,7 @@ export class DefenseManager
 		{
 			armiesPos.push(armiesNeeding[a].army.foePosition);
 		}
-		this.hq.trainEmergencyUnits(gameState, armiesPos);
+		this.hq.emergencyTraining.trainEmergencyUnits(gameState, armiesPos);
 	}
 
 	/** The armies that need defenders, with their land and the strength they lack */
@@ -1577,6 +1579,19 @@ export class DefenseManager
 	 * If emergency is true, the unit will be garrisoned in the closest possible structure.
 	 * Otherwise, it will garrison in the closest healing structure.
 	 */
+	/** Whether a position is too near an invading army (an army's foes within about 110 m) to build or work at */
+	isNearInvadingArmy(pos: CommonPosition): boolean
+	{
+		for (const army of this.armies)
+		{
+			if (army.foePosition && SquareVectorDistance(army.foePosition, pos) < 12000)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	garrisonAttackedUnit(gameState: CommonGameState, unit: CommonPlacedEntity, emergency: boolean = false): boolean
 	{
 		const garrisonManager = this.garrisons;

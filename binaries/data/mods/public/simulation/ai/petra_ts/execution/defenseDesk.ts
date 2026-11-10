@@ -1,7 +1,7 @@
 /**
  * The town's defense (`gameState.ai.town.defense`, part of execution/town.ts): what the attack plans, transports
  * and defense armies ask of the defense — the enemy foundations to raid, the defense armies, a shelter for a hurt
- * unit. The defense manager (decision/defenseManager.ts) makes it, and it reaches the manager only through
+ * unit, whether an invading army is near a spot. The defense manager (decision/defenseManager.ts) makes it, and it reaches the manager only through
  * DefenseDecisions.
  */
 import type { DefenseArmy } from "./defenseArmy.ts";
@@ -12,6 +12,7 @@ export interface DefenseDecisions
 	readonly targetList: readonly EntityId[];
 	getArmy(partOfArmy: ArmyId): DefenseArmy | undefined;
 	garrisonAttackedUnit(gameState: CommonGameState, unit: CommonPlacedEntity, emergency?: boolean): boolean;
+	isNearInvadingArmy(pos: CommonPosition): boolean;
 }
 
 export class DefenseDesk
@@ -32,6 +33,12 @@ export class DefenseDesk
 	getArmy(partOfArmy: ArmyId): DefenseArmy | undefined
 	{
 		return this.manager.getArmy(partOfArmy);
+	}
+
+	/** Whether a position is too near an invading army to build or work at */
+	isNearInvadingArmy(pos: CommonPosition): boolean
+	{
+		return this.manager.isNearInvadingArmy(pos);
 	}
 
 	/** a hurt unit sent into the nearest holder that heals it (any, in an emergency) */

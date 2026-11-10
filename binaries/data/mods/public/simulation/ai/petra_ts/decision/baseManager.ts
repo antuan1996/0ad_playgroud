@@ -27,7 +27,9 @@ import * as difficulty from "../world/difficultyLevel.ts";
 import { createObstructionMap } from "../world/mapModule.ts";
 import { isNotWorthBuilding } from "../world/territory.ts";
 import type { BasesManager } from "./basesManager.ts";
+import type { DefenseManager } from "./defenseManager.ts";
 import { GOOD_DROPSITE, dropsiteVerdict, relaxedDropsiteQuality } from "./dropsites.ts";
+import type { EmergencyTraining } from "./emergencyTraining.ts";
 import { nextField } from "./fields.ts";
 import { fieldsBeatBerries } from "./foodSource.ts";
 import type { Headquarters } from "./headquarters.ts";
@@ -269,7 +271,6 @@ function spacedFromDropsites(total: number, pos: CommonPosition, dpEnts: CommonP
 export type BaseHQ =
 	& Pick<
 		Headquarters,
-		| "isNearInvadingArmy"
 		| "canBuild"
 		| "canBuildUnits"
 		| "canExpand"
@@ -279,8 +280,9 @@ export type BaseHQ =
 		| "navalMap"
 		| "lastFailedGather"
 		| "phasing"
-		| "trainEmergencyUnits"
 	>
+	& { readonly emergencyTraining: Pick<EmergencyTraining, "trainEmergencyUnits">; }
+	& { readonly defenseManager: Pick<DefenseManager, "isNearInvadingArmy">; }
 	& {
 		readonly buildManager: { readonly builders: Pick<Builders, "findStructuresByFilter">; };
 		readonly town: Pick<Town, "isDangerousLocation" | "pickMostNeededResources">;
@@ -1399,7 +1401,7 @@ export class BaseManager
 			return; // we do not build fields
 		}
 
-		if (this.hq.isNearInvadingArmy(target.position()))
+		if (this.hq.defenseManager.isNearInvadingArmy(target.position()))
 		{
 			if (
 				!target.hasClasses(["CivCentre", "Wall"]) &&
@@ -1498,7 +1500,7 @@ export class BaseManager
 	{
 		// Don't repair if we're still under attack, unless it's a vital (civcentre or wall) building
 		// that's being destroyed.
-		if (this.hq.isNearInvadingArmy(target.position()))
+		if (this.hq.defenseManager.isNearInvadingArmy(target.position()))
 		{
 			if (
 				target.healthLevel() > 0.5 ||
@@ -1569,7 +1571,9 @@ export class BaseManager
 		{
 			this.leaveIfTooNearEnemy(gameState, this.anchor);
 		}
-		else if (this.neededDefenders && this.hq.trainEmergencyUnits(gameState, [this.anchor.position()]))
+		else if (
+			this.neededDefenders && this.hq.emergencyTraining.trainEmergencyUnits(gameState, [this.anchor.position()])
+		)
 		{
 			--this.neededDefenders;
 		}

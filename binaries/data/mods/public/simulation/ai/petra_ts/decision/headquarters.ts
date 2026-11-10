@@ -1,16 +1,11 @@
 import * as filters from "simulation/ai/common-api/filters.js";
 import { InfoMap } from "simulation/ai/common-api/map-module.js";
-import { ResourcesManager } from "simulation/ai/common-api/resources.js";
-import { SquareVectorDistance, aiWarn } from "simulation/ai/common-api/utils.js";
+import { aiWarn } from "simulation/ai/common-api/utils.js";
 import { cellIndex } from "../adapter/brands.ts";
-import { getLandAccess, getMaxStrength, requireTemplate } from "../adapter/entityExtend.ts";
+import { requireTemplate } from "../adapter/entityExtend.ts";
 import { isPlaced } from "../adapter/placed.ts";
 import { updateCaptureStrength } from "../execution/captureOrders.ts";
-import { GarrisonManager } from "../execution/garrisonManager.ts";
-import { type PlanMetadata } from "../execution/queueplan.ts";
-import { TrainingPlan } from "../execution/queueplanTraining.ts";
 import { Town } from "../execution/town.ts";
-import { PLAN_RESERVE } from "../execution/unitPlan.ts";
 import { Worker } from "../execution/worker.ts";
 import { CaptureTally, type CaptureEntry } from "../world/captureTally.ts";
 import { censusOf } from "../world/census.ts";
@@ -30,6 +25,7 @@ import { BuildManager } from "./buildManager.ts";
 import { DefenseManager } from "./defenseManager.ts";
 import { DiplomacyManager } from "./diplomacyManager.ts";
 import { EmergencyManager } from "./emergencyManager.ts";
+import { EmergencyTraining } from "./emergencyTraining.ts";
 import { buildNewBase, checkBaseExpansion, provideForDryLand } from "./expansion.ts";
 import { buildMoreHouses } from "./houseBuilding.ts";
 import { houseNeeded } from "./housing.ts";
@@ -37,6 +33,7 @@ import { checkEvents, handleNewBase } from "./hqEvents.ts";
 import { DefenseSchedule, buildDefenses, constructTrainingBuildings } from "./militaryBuildings.ts";
 import { NavalManager } from "./navalManager.ts";
 import { checkPhaseRequirements, notePhase } from "./phasing.ts";
+import { RecruitChoice } from "./recruitChoice.ts";
 import { ResearchManager } from "./researchManager.ts";
 import {
 	buildEarlyMarket,
@@ -123,122 +120,12 @@ export type HeadquartersSerializedData = {
 /** Wood left within reach of our bases under which a saving town calls its land dry (buildEarlyMarket). */
 export const DRY_WOOD = 500;
 
-/** A unit template's value by the parameters (before its cost); an unknown parameter is warned about (once a comparison) */
-function unitValue(
-	template: CommonTemplate,
-	parameters: HeadquartersTrainableRequirement[],
-	config: Config,
-	warn: boolean,
-): number
-{
-	let value = 0.1;
-	for (const param of parameters)
-	{
-		if (param[0] === "strength")
-		{
-			value += getMaxStrength(template, config.debug, config.DamageTypeImportance) * param[1];
-		}
-		else if (param[0] === "siegeStrength")
-		{
-			value += getMaxStrength(template, config.debug, config.DamageTypeImportance, "Structure") * param[1];
-		}
-		else if (param[0] === "speed")
-		{
-			value += template.walkSpeed() * param[1];
-		}
-		else if (param[0] === "costsResource")
-		{
-			// requires a third parameter which is the resource
-			if (template.cost()[param[2] ?? ""])
-			{
-				value *= param[1];
-			}
-		}
-		else if (param[0] === "canGather")
-		{
-			// checking against wood, could be anything else really.
-			if (template.resourceGatherRates()?.["wood.tree"])
-			{
-				value *= param[1];
-			}
-		}
-		else if (warn)
-		{
-			aiWarn(" trainMoreUnits avec non prevu " + uneval(param));
-		}
-	}
-	return value;
-}
-
 /** A step of the turn in its own profile region */
 function profiled(name: string, step: () => void): void
 {
 	Engine.ProfileStart(name);
 	step();
 	Engine.ProfileStop();
-}
-
-/** Whether a building trains for over 5 s what has started or garrisons there */
-function busyTraining(anchor: CommonEntity): boolean
-{
-	const queue = anchor.trainingQueue();
-	if (!queue)
-	{
-		return false;
-	}
-	let time = 0;
-	for (const item of queue)
-	{
-		if (item.progress > 0 || item.metadata && item.metadata.garrisonType)
-		{
-			time += item.timeRemaining;
-		}
-	}
-	return time / 1000 > 5;
-}
-
-/**
- * The citizen infantry the anchor trains for an emergency, one that adds arrows when it garrisons and that we can
- * afford: ranged if wanted, else the last found
- */
-function emergencyTemplate(
-	gameState: CommonGameState,
-	nearestAnchor: CommonEntity,
-	civ: string,
-	autogarrison: boolean,
-	rangedWanted: boolean,
-): [string, CommonTemplate] | undefined
-{
-	const total = gameState.getResources();
-	let templateFound: [string, CommonTemplate] | undefined;
-	const trainables = nearestAnchor.trainableEntities(civ);
-	const garrisonArrowClasses = nearestAnchor.getGarrisonArrowClasses();
-	for (const trainable of (trainables ?? []))
-	{
-		if (gameState.isTemplateDisabled(trainable))
-		{
-			continue;
-		}
-		const template = gameState.getTemplate(trainable);
-		if (!template || !template.hasClasses(["Infantry+CitizenSoldier"]))
-		{
-			continue;
-		}
-		if (autogarrison && !template.hasClasses(garrisonArrowClasses))
-		{
-			continue;
-		}
-		if (!total.canAfford(new ResourcesManager(template.cost())))
-		{
-			continue;
-		}
-		templateFound = [trainable, template];
-		if (template.hasClass("Ranged") === rangedWanted)
-		{
-			break;
-		}
-	}
-	return templateFound;
 }
 
 export class Headquarters
@@ -280,6 +167,10 @@ export class Headquarters
 	turnCache: HeadquartersTurnCache;
 	/** the town as the execution layer sees it (`gameState.ai.town`), its one door to this headquarters */
 	readonly town: Town;
+	/** the recruit choice: which unit to train of those asked (decision/recruitChoice.ts) */
+	readonly recruits: RecruitChoice = new RecruitChoice(this);
+	/** the defenders trained at once when an army comes (decision/emergencyTraining.ts) */
+	readonly emergencyTraining: EmergencyTraining = new EmergencyTraining(this);
 	victoryManager: VictoryManager;
 
 	/** The map as we understand it (world/geography.ts); the accessors below keep its fields' old names. */
@@ -468,85 +359,6 @@ export class Headquarters
 	{
 	}
 
-	/** picks the best template based on parameters and classes */
-	findBestTrainableUnit(
-		gameState: CommonGameState,
-		classes: Array<string | string[]>,
-		requirements: HeadquartersTrainableRequirement[],
-		gatherersOnly = false,
-	): TemplateName | undefined
-	{
-		let units;
-		if (classes.indexOf("Hero") !== -1)
-		{
-			units = gameState.findTrainableUnits(classes, []);
-		}
-		// We do not want siege tower as AI does not know how to use it nor hero when not explicitely specified.
-		else
-		{
-			units = gameState.findTrainableUnits(classes, ["Hero", "SiegeTower"]);
-		}
-		if (gatherersOnly)
-		{
-			units = units.filter(([, template]) => template.resourceGatherRates() !== undefined);
-		}
-
-		if (!units.length)
-		{
-			return undefined;
-		}
-
-		const parameters = this.unitParameters(gameState, requirements);
-		const config = gameState.ai.Config;
-		units.sort((a: [string, CommonTemplate], b: [string, CommonTemplate]): number =>
-		{
-			const aCost = 1 + a[1].costSum();
-			const bCost = 1 + b[1].costSum();
-			return -unitValue(a[1], parameters, config, true) / aCost +
-				unitValue(b[1], parameters, config, false) / bCost;
-		});
-		return units[0][0];
-	}
-
-	/** The requirements, with a lower value for units costing a resource we hold and have left little of */
-	private unitParameters(
-		gameState: CommonGameState,
-		requirements: HeadquartersTrainableRequirement[],
-	): HeadquartersTrainableRequirement[]
-	{
-		const parameters = requirements.slice();
-		const remainingResources = this.basesManager.getTotalResourceLevel(gameState); // resources (estimation) still gatherable in our territory
-		const availableResources = gameState.ai.queueManager.getAvailableResources(gameState); // available (gathered) resources
-		for (const type in remainingResources)
-		{
-			if (availableResources[type] > 800)
-			{
-				continue;
-			}
-			if (remainingResources[type] > 800)
-			{
-				continue;
-			}
-			const costsResource = remainingResources[type] > 400 ? 0.6 : 0.2;
-			let toAdd = true;
-			for (const param of parameters)
-			{
-				if (param[0] !== "costsResource" || param[2] !== type)
-				{
-					continue;
-				}
-				param[1] = Math.min(param[1], costsResource);
-				toAdd = false;
-				break;
-			}
-			if (toAdd)
-			{
-				parameters.push(["costsResource", costsResource, type]);
-			}
-		}
-		return parameters;
-	}
-
 	/**
 	 * Returns the best position to build a new market: if the allies already have a market, build it as far as possible
 	 * from it, although not in our border to be able to defend it easily. If no allied market, our second market will
@@ -581,126 +393,6 @@ export class Headquarters
 	houseNeeded(gameState: CommonGameState): boolean
 	{
 		return houseNeeded(censusOf(gameState), !!this.economy.saveResources);
-	}
-
-	/**
-	 * train with highest priority ranged infantry in the nearest civil center from a given set of positions
-	 * and garrison them there for defense
-	 */
-	trainEmergencyUnits(gameState: CommonGameState, positions: CommonPosition[]): boolean
-	{
-		if (gameState.ai.queues.emergency.hasQueuedUnits())
-		{
-			return false;
-		}
-
-		const civ = gameState.getPlayerCiv();
-		// find nearest base anchor
-		const distcut = 20000;
-		const { nearestAnchor, distmin } = this.nearestFreeAnchor(gameState, positions, civ);
-		if (!nearestAnchor || distmin > distcut)
-		{
-			return false;
-		}
-
-		// We will choose randomly ranged and melee units, except when garrisonHolder is full
-		// in which case we prefer melee units
-		const autogarrison = this.makeRoomToGarrison(nearestAnchor);
-		const rangedWanted = randBool() && autogarrison;
-
-		const templateFound = emergencyTemplate(gameState, nearestAnchor, civ, autogarrison, rangedWanted);
-		if (!templateFound)
-		{
-			return false;
-		}
-
-		// Check first if we can afford it without touching the other accounts
-		// and if not, take some of other accounted resources
-		// TODO sort the queues to be substracted
-		gameState.ai.queueManager.fund(gameState, new ResourcesManager(templateFound[1].cost()), "emergency");
-		const metadata: PlanMetadata = {
-			role: Worker.ROLE_WORKER,
-			base: nearestAnchor.getMetadata(PlayerID, "base"),
-			plan: PLAN_RESERVE,
-			trainer: nearestAnchor.id(),
-		};
-		if (autogarrison)
-		{
-			metadata.garrisonType = GarrisonManager.TYPE_PROTECTION;
-		}
-		gameState.ai.queues.emergency.addPlan(new TrainingPlan(gameState, templateFound[0], metadata, 1, 1));
-		return true;
-	}
-
-	/** The base anchor nearest one of the positions on its land that trains and is not busy for long, and its square distance */
-	private nearestFreeAnchor(
-		gameState: CommonGameState,
-		positions: CommonPosition[],
-		civ: string,
-	): { nearestAnchor: CommonEntity | undefined; distmin: number; }
-	{
-		let nearestAnchor: CommonEntity | undefined;
-		let distmin = Infinity;
-		for (const pos of positions)
-		{
-			const access = gameState.ai.accessibility.getAccessValue(pos);
-			// check nearest base anchor
-			for (const base of this.basesManager.baseManagers)
-			{
-				if (!base.anchor)
-				{
-					continue;
-				}
-				if (getLandAccess(gameState, base.anchor) !== access)
-				{
-					continue;
-				}
-				if (!base.anchor.trainableEntities(civ))
-				{ // base still in construction
-					continue;
-				}
-				if (busyTraining(base.anchor))
-				{
-					continue;
-				}
-				const dist = SquareVectorDistance(base.anchor.position(), pos);
-				if (nearestAnchor && dist > distmin)
-				{
-					continue;
-				}
-				distmin = dist;
-				nearestAnchor = base.anchor;
-			}
-		}
-		return { nearestAnchor, distmin };
-	}
-
-	/**
-	 * The anchor's training queue keeps only what garrisons there and what has started; whether its garrison
-	 * still has room (and it is sound enough) for the emergency unit to garrison
-	 */
-	private makeRoomToGarrison(nearestAnchor: CommonEntity): boolean
-	{
-		let numGarrisoned = this.town.garrisons.numberOfGarrisonedSlots(nearestAnchor);
-		const anchorQueue = nearestAnchor.trainingQueue();
-		if (anchorQueue)
-		{
-			for (const item of anchorQueue)
-			{
-				// only unit batches are trained with a garrisonType metadata (Petra never
-				// attaches it to research), so the unit-only `count` field is present.
-				if (item.metadata && item.metadata.garrisonType)
-				{
-					numGarrisoned += item.count;
-				}
-				else if (!item.progress && (!item.metadata || !item.metadata.trainer))
-				{
-					nearestAnchor.stopProduction(item.id);
-				}
-			}
-		}
-		return numGarrisoned < nearestAnchor.garrisonMax() &&
-			nearestAnchor.hitpoints() > nearestAnchor.garrisonEjectHealth() * nearestAnchor.maxHitpoints();
 	}
 
 	canBuild(gameState: CommonGameState, structure: string): boolean
@@ -825,19 +517,6 @@ export class Headquarters
 		{
 			this.tradeManager.routeProspection = true;
 		}
-	}
-
-	/** Check that the chosen position is not too near from an invading army */
-	isNearInvadingArmy(pos: CommonPosition): boolean
-	{
-		for (const army of this.defenseManager.armies)
-		{
-			if (army.foePosition && SquareVectorDistance(army.foePosition, pos) < 12000)
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/** The capture tally's targets and time, as the save keeps them (HeadquartersSerializedData) */
