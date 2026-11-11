@@ -1,27 +1,27 @@
 # The smoke test's reference (build/petra_ts/smoke.ts, npm run test:petra:smoke):
 # 12 map/AI seed pairs, each from both slots (swapped: petra_parity is player 1),
 # petra_out against petra_parity, 6 pairs on random/dodecanese (the island map,
-# pairs decided in both slots within 58 game minutes against petra_parity with no
+# pairs decided in both slots within 53 game minutes against petra_parity with no
 # script error) and 6 on random/mainland, athen, difficulty 5 (very hard),
 # conquest, ended at 60 game minutes (match.sh -n -T -B -L 60); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit 4d37d3d774877546f69936b66a9daf3a49c4c100 with uncommitted changes to the game,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261111-122552.
+# Recorded from commit 845f17dc81045ae193c83fa91109d677e7a88043,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261111-130356.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	map	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint
-1	random/dodecanese	43522323	640299501	false	blue	last player alive	1751400	151b5531fd7701ed
-2	random/dodecanese	43522323	640299501	true	blue	last player alive	2850800	07019334bc004728
-3	random/dodecanese	1064129180	323670738	false	blue	last player alive	1485800	f6c036b4ca304a31
-4	random/dodecanese	1064129180	323670738	true	blue	last player alive	3226800	ffdff5f92a926682
-5	random/dodecanese	886063722	810336788	false	draw	time limit	3600000	7b4fd2abfd9c958c
-6	random/dodecanese	886063722	810336788	true	blue	last player alive	3065400	60b6a0812069f2b4
-7	random/dodecanese	174490511	877998619	false	draw	time limit	3600000	196a74a6f4974b56
-8	random/dodecanese	174490511	877998619	true	draw	time limit	3600000	ffb523806d4fe7cf
-9	random/dodecanese	571868442	146008061	false	draw	time limit	3600000	69dc980c0a07be4b
-10	random/dodecanese	571868442	146008061	true	draw	time limit	3600000	182205747eca621b
-11	random/dodecanese	497196720	326882168	false	blue	last player alive	2981800	7e64040c9999ecee
-12	random/dodecanese	497196720	326882168	true	draw	time limit	3600000	bbe44a611a424cd2
+1	random/dodecanese	582948182	189294518	false	blue	last player alive	1551400	5ab7f752641f7706
+2	random/dodecanese	582948182	189294518	true	blue	last player alive	1459800	d9a9aea7fd549539
+3	random/dodecanese	974406320	679730714	false	blue	last player alive	2277800	b2dacbdfea44bab0
+4	random/dodecanese	974406320	679730714	true	blue	last player alive	2086000	4eda89b9a2ca1319
+5	random/dodecanese	1057543787	732403571	false	blue	last player alive	2068000	a03c75f173a3480c
+6	random/dodecanese	1057543787	732403571	true	blue	last player alive	2287600	1f57278ce172f8c2
+7	random/dodecanese	893249006	782888193	false	blue	last player alive	2402600	1f59b85adf91ed95
+8	random/dodecanese	893249006	782888193	true	blue	last player alive	1855400	8d8aa13ad8fcba09
+9	random/dodecanese	43522323	640299501	false	blue	last player alive	1751400	151b5531fd7701ed
+10	random/dodecanese	43522323	640299501	true	blue	last player alive	2850800	07019334bc004728
+11	random/dodecanese	399979714	1070537350	false	blue	last player alive	3160200	295cc9482087b6d2
+12	random/dodecanese	399979714	1070537350	true	blue	last player alive	2190000	f2048c29503cf0cc
 13	random/mainland	988024885	401668228	false	red	last player alive	1826800	c11d85b7e9973064
 14	random/mainland	988024885	401668228	true	blue	last player alive	1094000	77ac64bf57758496
 15	random/mainland	49765995	128618844	false	blue	last player alive	1101600	1b6f2da496c15afa

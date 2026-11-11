@@ -196,15 +196,17 @@ same seeds and code produce the same game and fingerprint.
   no infinite `WALKING` march, no command silence/repeats/floods/churn, and no
   refused orders.
 - `npm run test:petra:smoke` (`build/petra_ts/smoke.ts`; `-- --jobs J`, default
-  12, ~3 min): plays 24 headless games (`petra_out` vs `petra_parity` across the
+  12, ~2.5 min): plays 24 headless games (`petra_out` vs `petra_parity` across the
   12 seed pairs of `build/petra_ts/smoke/reference.tsv` from both slots, each on
   its own map: 6 pairs on `random/dodecanese`, the island map, and 6 on
   `random/mainland`), each ended at 60 game minutes if undecided (`match.sh -L
-  60`). The island pairs are ones decided in both slots within 58
-  game minutes against `petra_parity` with no script error: many island games
-  end in a draw at 90 minutes, `petra_parity` throws in some (its transports
-  lose units' `endPos`/`posGarrison`), and a few hang the engine.
-  `batch.ts --pairs` takes such pairs as `MAP:M/A`.
+  60`). The island pairs are ones decided in both slots within 53
+  game minutes against `petra_parity` with no script error or warning: many
+  island games end in a draw, `petra_parity` throws in some (its transports
+  lose units' `endPos`/`posGarrison`), and a few hang the engine. When the bot's
+  play turns island games into draws, choose anew: a pool against
+  `petra_parity` with `-- -L 60`, the pairs decided soonest in both slots
+  (FINDINGS §66). `batch.ts --pairs` takes such pairs as `MAP:M/A`.
   - Pure refactors must leave all 24 fingerprints identical.
   - Gameplay changes update the reference via `-- --update` (or
     `-- --update --from <batch>`) in the same commit.

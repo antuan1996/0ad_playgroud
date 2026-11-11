@@ -2758,3 +2758,25 @@ Against `petra_prev` at 4d37d3d774 (§64), 60 seed pairs from both slots:
 too small for end-of-game totals, whose spread per game is about 16k. The
 smoke reference moves in 6 games (against `petra_parity` still 16 won, 6
 drawn, 2 lost).
+
+## 66. The smoke test's island pairs chosen anew (2026-11-11)
+
+The island pairs of §62 had drifted: after §63-§65, 6 of their 12 games
+went to the 60-minute limit (886063722/810336788, 174490511/877998619 and
+571868442/146008061 drawn in one slot or both, 497196720/326882168 in one),
+the longest part of the smoke run. A pool of 40 pairs (seed 101) played
+against `petra_parity` from both slots with `-L 60`
+(`batches/smoke-island-candidates4`): Petra TS won 34, lost none, 44 drawn;
+2 games hung the engine; 9 had script errors or warnings (`petra_parity`'s
+transports again, and a warning in one Petra TS game, 473034076/795481022).
+Six pairs were decided in both slots with no error or warning; with the
+pairs of the old six still decided in both (43522323/640299501 by 47.5
+minutes, 1064129180/323670738 by 53.8), the six whose longer game ends
+soonest are kept: 582948182/189294518 (25.9), 974406320/679730714 (38.0),
+1057543787/732403571 (38.1), 893249006/782888193 (40.0), 43522323/640299501
+(47.5) and 399979714/1070537350 (52.7). The mainland pairs are unchanged.
+
+All 24 games are now decided (22 won, 2 lost against `petra_parity`, the
+island games summing 433 game minutes where they summed about 616), and
+the run takes 2.5 minutes with 12 jobs where it took 3.4; a second run gave
+the same 24 games.

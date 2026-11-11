@@ -30,7 +30,7 @@
  * playing one, e.g. a batch played with the reference's pairs by hand.
  * Exit status: 0 identical, 1 different or failed, 2 bad use.
  *
- * About 3 minutes with 12 jobs on 12+ cores (the island games are the long
+ * About 2.5 minutes with 12 jobs on 12+ cores (the island games are the long
  * ones, played first); needs the engine built from this
  * repository (binaries/system/pyrogenesis). The win-rate of 24 games means
  * nothing; for strength, batch.ts with hundreds of games (PLAN.md §5.3).
@@ -227,7 +227,7 @@ function record(rows: BatchRow[], batch: string): void
 		"# The smoke test's reference (build/petra_ts/smoke.ts, npm run test:petra:smoke):",
 		"# 12 map/AI seed pairs, each from both slots (swapped: petra_parity is player 1),",
 		"# petra_out against petra_parity, 6 pairs on random/dodecanese (the island map,",
-		"# pairs decided in both slots within 58 game minutes against petra_parity with no",
+		"# pairs decided in both slots within 53 game minutes against petra_parity with no",
 		"# script error) and 6 on random/mainland, athen, difficulty 5 (very hard),",
 		`# conquest, ended at ${SMOKE_LIMIT_MINUTES} game minutes (match.sh -n -T -B -L ${SMOKE_LIMIT_MINUTES}); the fingerprint hashes the`,
 		"# decision's game time and both players' end statistics (match-report.ts).",
