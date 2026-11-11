@@ -164,6 +164,14 @@ describe("its guards first", () =>
 		assert.ok(fight.seconds > unguarded.seconds, "and some time");
 	});
 
+	it("ten spearmen who capture a lone sentry tower do not storm one a fortress's arrows cover", () =>
+	{
+		assert.equal(assessTower(spearmen(10), tower(2), NO_GUARDS, capture(10)).verdict, "storm");
+		// a fortress beside it, ten arrows of the same kind (its own and its garrison's)
+		const covered: FightSide = { units: [], shooters: [{ stats: sentryTower, count: 10, hpFraction: 1 }] };
+		assert.equal(assessTower(spearmen(10), tower(2), covered, capture(10)).verdict, "flee");
+	});
+
 	it("nobody to storm it: flee", () =>
 	{
 		assert.equal(assessTower(NO_GUARDS, tower(2), NO_GUARDS).verdict, "flee");
