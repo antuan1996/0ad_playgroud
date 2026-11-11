@@ -2694,3 +2694,41 @@ won, 25 lost, 71 drawn at 90 minutes (49.0%, 95% CI 35.6-62.5%);
 either way: towers decide few of these games. The smoke reference moves
 (21 of 24 games; against `petra_parity` 20 won, 2 drawn at 60 minutes, 2
 lost, where it had 23 won and 1 lost).
+
+## 64. Stage 7: soldiers rounded up from farther away to storm a tower (2026-11-11)
+
+§63 weighed only the units already under a tower's arrows: a sentry tower
+harassing three gatherers was fled even when twenty soldiers stood a little
+farther off. `decision/towerResponse.ts` now also calls a reserve:
+
+- when the units at hand cannot take it, free soldiers able to storm it
+  within `ROUND_UP_REACH` (150 m) beyond its range are added nearest first,
+  at most `ROUND_UP_MOST` (25), and only the smallest party that makes the
+  storm pay is sent (`partyFor`); the capture tally is booked before the
+  orders;
+- the other enemy shooting structures whose range covers the tower's foot
+  (a fortress, a civic centre, another tower) are its guards' shooters and
+  keep firing while we take the tower (`coverOf`, `towerFight.ts`);
+- a tower in its owner's territory is weighed as if its free garrison slots
+  were filled (`reinforcementOf`: an arrow each, and capture regeneration of
+  `garrisonRegenRate` x 2.5), and nobody is rounded up into its owner's land;
+- when the verdict is to flee, units already striking the tower are called
+  back with the idle and the hurt.
+
+The first version (no garrison anticipation, no limit on the owner's land,
+strikers left at it) lost on `random/mainland` against §63 (`petra_prev` at
+ad6f5293e4, 60 seed pairs from both slots): 55 won, 65 lost (45.8%, 95% CI
+37.2-54.7%), 89.8k resources gathered against 99.9k. In two of its games
+the round-ups were of 9 to 25 citizen soldiers pulled off their work from
+up to 208 m against sentry towers in the enemy's land; the enemy garrisoned
+them (2 to 5 arrows), the verdict flip-flopped, and those already hacking
+at the tower were never recalled. `random/dodecanese`: 32 won, 28 lost, 60
+drawn (53.3%).
+
+With the fixes, same opponent and seeds: `random/mainland` 62 won, 56 lost,
+2 drawn (52.5%, 43.6-61.3%), 102.6k gathered against 100.0k, peak map
+control 55% against 53%; `random/dodecanese` 30 won, 28 lost, 60 drawn
+(51.7%, 39.2-64.1%). Neutral to slightly positive; kept. The smoke
+reference moves (20 of 24 games; against `petra_parity` 16 won, 6 drawn at
+60 minutes, 2 lost, where it had 20 won, 2 drawn, 2 lost: four island
+games now reach the time limit).

@@ -6,9 +6,12 @@
  *
  * Who may answer: our units within reach of it, not in a started attack (their plan fights), a defense army, a
  * transport, nor protected by the victory conditions. Those that storm are the soldiers, citizen soldiers and
- * warships among them that can attack it and reach it: on the land beside it, or the sea beside it for a ship. The
- * others, and all of them when the storm does not pay, step out of its reach if idle or hurt (below FLEE_HEALTH): a
- * gatherer whole keeps on, a weak tower shooting across a strait would else chase the workers off at every arrow.
+ * warships among them that can attack it and reach it: on the land beside it, or the sea beside it for a ship. In
+ * its owner's territory it is weighed with its garrison full (reinforcementOf). When they are too few, out of its
+ * owner's territory, the nearest of our free soldiers farther off (up to ROUND_UP_REACH beyond its reach,
+ * ROUND_UP_MOST in all) are called, as few as make the storm pay. The others, and all of them when no storm pays, step
+ * out of its reach if idle, hurt (below FLEE_HEALTH) or striking it: a gatherer whole keeps on, a weak tower shooting
+ * across a strait would else chase the workers off at every arrow.
  */
 import { SquareVectorDistance } from "simulation/ai/common-api/utils.js";
 import { worldPos } from "../adapter/brands.ts";
@@ -22,6 +25,15 @@ import { assessTower, type TowerCapture, type TowerFight, type TowerGroup } from
 
 /** Metres beyond its reach within which our units count for a storm of the structure */
 const STORM_REACH = 40;
+
+/** Metres beyond its reach within which our soldiers may be called to storm it when those beside it are too few */
+const ROUND_UP_REACH = 150;
+
+/** The most soldiers a storm takes, those beside the structure and those called */
+const ROUND_UP_MOST = 25;
+
+/** A man's capture strength, as the garrison a structure may yet take is counted (a citizen soldier's) */
+const GARRISON_CAPTURE = 2.5;
 
 /** Below this health a busy unit that does not storm leaves its task to get out of reach; above it, only an idle one */
 const FLEE_HEALTH = 0.5;
@@ -49,6 +61,19 @@ export function shootsArrows(structure: CommonPlacedEntity): boolean
 function arrowsOf(structure: CommonPlacedEntity): number
 {
 	return +(structure.getDefaultArrow() || 0) + (structure.isGarrisonHolder() ? structure.garrisoned().length : 0);
+}
+
+/**
+ * The men a structure in its owner's territory may yet take in: its free garrison slots, which the owner's units
+ * near by fill as soon as it is stormed (a sentry tower's two arrows became five in a few seconds); none elsewhere
+ */
+function reinforcementOf(gameState: CommonGameState, structure: CommonPlacedEntity): number
+{
+	if (!structure.isGarrisonHolder() || !isOwnersLand(gameState, structure))
+	{
+		return 0;
+	}
+	return Math.max(0, structure.garrisonMax() - structure.garrisoned().length);
 }
 
 /** The spot `margin` metres beyond the structure's footprint, on the side of `from` (`from` itself if nearer) */
@@ -96,6 +121,7 @@ function captureOf(
 	gameState: CommonGameState,
 	stormers: readonly CommonPlacedEntity[],
 	structure: CommonPlacedEntity,
+	reinforcement: number,
 ): TowerCapture | undefined
 {
 	const points = structure.capturePoints()?.[structure.owner()];
@@ -114,7 +140,9 @@ function captureOf(
 	}
 	// as the engine's capture effect: less by its resistance, more the more it is damaged
 	rate *= Math.pow(0.9, structure.resistanceStrengths()?.Capture ?? 0) / (0.1 + 0.9 * structure.healthLevel());
-	return rate > 0 ? { rate, regen: antiCaptureOf(gameState, structure), points } : undefined;
+	const regen = antiCaptureOf(gameState, structure) +
+		reinforcement * structure.garrisonRegenRate() * GARRISON_CAPTURE;
+	return rate > 0 ? { rate, regen, points } : undefined;
 }
 
 /** Whether the unit is already striking the structure */
@@ -149,9 +177,103 @@ function placedWithin(
 	return found;
 }
 
+/** The enemy structures (the tower apart) whose arrows reach the tower's foot, with the arrows each shoots */
+function coverOf(
+	gameState: CommonGameState,
+	structure: CommonPlacedEntity,
+): Array<{ structure: CommonPlacedEntity; arrows: number; }>
+{
+	const pos = structure.position();
+	const cover: Array<{ structure: CommonPlacedEntity; arrows: number; }> = [];
+	for (const other of gameState.getEnemyStructures().values())
+	{
+		if (other.id() === structure.id() || !isPlaced(other) || !shootsArrows(other))
+		{
+			continue;
+		}
+		const range = (other.attackRange("Ranged")?.max ?? 0) +
+			(isStructure(structure) ? structure.footprintRadius() : 0);
+		if (SquareVectorDistance(other.position(), pos) < range * range)
+		{
+			cover.push({ structure: other, arrows: arrowsOf(other) });
+		}
+	}
+	return cover;
+}
+
+/** Whether the structure stands in its owner's territory */
+function isOwnersLand(gameState: CommonGameState, structure: CommonPlacedEntity): boolean
+{
+	return gameState.ai.geography.territoryMap.getOwner(structure.position()) === structure.owner();
+}
+
+/** Our soldiers farther from the structure who could join a storm of it, the nearest first */
+function reserveFor(
+	gameState: CommonGameState,
+	structure: CommonPlacedEntity,
+	near: ReadonlySet<CommonPlacedEntity>,
+	free: (ent: CommonPlacedEntity) => boolean,
+): CommonPlacedEntity[]
+{
+	const pos = structure.position();
+	const reach = (structure.attackRange("Ranged")?.max ?? 0) + ROUND_UP_REACH;
+	const reserve = placedWithin(
+		gameState.getOwnUnits(),
+		pos,
+		reach,
+		(ent) => !near.has(ent) && free(ent) && canStorm(gameState, ent, structure),
+	);
+	const distance = (ent: CommonPlacedEntity): number => SquareVectorDistance(ent.position(), pos);
+	return reserve.sort((a, b) => distance(a) - distance(b));
+}
+
+/**
+ * The party that storms the structure: the stormers beside it, and as few of the reserve as make the storm pay
+ * (ROUND_UP_MOST at most in all), with what was weighed for it. When none pays, the stormers beside it alone.
+ */
+function partyFor(
+	stormers: readonly CommonPlacedEntity[],
+	reserve: readonly CommonPlacedEntity[],
+	weigh: (party: readonly CommonPlacedEntity[]) => TowerFight,
+): { party: readonly CommonPlacedEntity[]; fight: TowerFight; }
+{
+	const fight = weigh(stormers);
+	if (fight.verdict === "storm")
+	{
+		return { party: stormers, fight };
+	}
+	for (let joined = 1; joined <= reserve.length && stormers.length + joined <= ROUND_UP_MOST; ++joined)
+	{
+		const party = [...stormers, ...reserve.slice(0, joined)];
+		const roundUp = weigh(party);
+		if (roundUp.verdict === "storm")
+		{
+			return { party, fight: roundUp };
+		}
+	}
+	return { party: stormers, fight };
+}
+
+/** The party strikes the structure: each booked on the capture of it first, so that each order weighs their joint strength */
+function storm(gameState: CommonGameState, party: readonly CommonPlacedEntity[], structure: CommonPlacedEntity): void
+{
+	for (const ent of party)
+	{
+		allowCapture(gameState, ent, structure);
+	}
+	for (const ent of party)
+	{
+		if (!striking(ent, structure))
+		{
+			ent.attack(structure.id(), allowCapture(gameState, ent, structure));
+		}
+	}
+}
+
 /**
  * Our units answer a shooting enemy structure that hit some of them: `free` tells those that may (see the module's
- * head). They storm it or flee it; what was weighed is returned.
+ * head). They storm it, called from farther when those beside it are too few, or flee it; what was weighed is
+ * returned.
  */
 export function answerTower(
 	gameState: CommonGameState,
@@ -163,31 +285,33 @@ export function answerTower(
 	const reach = (structure.attackRange("Ranged")?.max ?? 0) + STORM_REACH;
 	const near = placedWithin(gameState.getOwnUnits(), pos, reach, free);
 	const stormers = near.filter((ent) => canStorm(gameState, ent, structure));
-	const guards = placedWithin(gameState.getEnemyUnits(), pos, reach, (ent) => isArmed(ent));
+	const guards = fightSide(
+		placedWithin(gameState.getEnemyUnits(), pos, reach, (ent) => isArmed(ent)),
+		coverOf(gameState, structure),
+	);
 	const tower: TowerGroup = {
 		stats: combatStats(structure),
 		count: arrowsOf(structure),
 		hpFraction: structure.healthLevel(),
 	};
-	const fight = assessTower(fightSide(stormers), tower, fightSide(guards), captureOf(gameState, stormers, structure));
+	const reinforcement = reinforcementOf(gameState, structure);
+	tower.count += reinforcement;
+	// nobody is called into its owner's territory, where more of its men come as soon as ours do
+	const { party, fight } = partyFor(
+		stormers,
+		isOwnersLand(gameState, structure) ? [] : reserveFor(gameState, structure, new Set(near), free),
+		(side) => assessTower(fightSide(side), tower, guards, captureOf(gameState, side, structure, reinforcement)),
+	);
 	if (fight.verdict === "storm")
 	{
-		// each is booked on the capture of it first, so that each order weighs their joint strength
-		for (const ent of stormers)
-		{
-			allowCapture(gameState, ent, structure);
-		}
-		for (const ent of stormers)
-		{
-			if (!striking(ent, structure))
-			{
-				ent.attack(structure.id(), allowCapture(gameState, ent, structure));
-			}
-		}
+		storm(gameState, party, structure);
 	}
 	for (const ent of near)
 	{
-		if ((fight.verdict === "flee" || !stormers.includes(ent)) && (ent.isIdle() || ent.healthLevel() < FLEE_HEALTH))
+		if (
+			(fight.verdict === "flee" || !party.includes(ent)) &&
+			(ent.isIdle() || ent.healthLevel() < FLEE_HEALTH || striking(ent, structure))
+		)
 		{
 			fleeFrom(ent, structure);
 		}

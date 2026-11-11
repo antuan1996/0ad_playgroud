@@ -4,12 +4,13 @@ import { damagePerSecond, estimateFight, type FightGroup, type FightSide } from 
  * Whether our units near an enemy tower (or fortress, or any structure that shoots) should storm it or get out of
  * its reach: a narrow model over the units' stats, as fightEstimate.ts.
  *
- * - First, the enemy units guarding it: our units must win that fight, the tower's arrows on their side
- *   (estimateFight); what is left of us goes on.
+ * - First, the enemy units guarding it: our units must win that fight, the tower's arrows on their side, and those
+ *   of the enemy structures that cover it (the guards' shooters, estimateFight); what is left of us goes on.
  * - Then the tower itself: our damage per second against it falls as its arrows kill us, our hit points going down
  *   at its damage per second D, our damage with them: by t we have done `dps (t - D t² / 2H)` to it, H our hit
  *   points, which reaches its hit points before we are gone, or never (most is `dps H / 2D`). Those of ours that
- *   capture take its capture points the same way, less its regeneration: whichever comes first takes it.
+ *   capture take its capture points the same way, less its regeneration: whichever comes first takes it. The
+ *   structures covering it shoot all along.
  * - We storm when we take it and keep at least STORM_MIN_LEFT of our strength; else we flee.
  *
  * Capture and damage are counted apart (soldiers that capture do not damage it meanwhile), whichever is quicker, and
@@ -96,9 +97,13 @@ export function assessTower(ours: FightSide, tower: TowerGroup, guards: FightSid
 	for (const group of ours.units)
 	{
 		dps += group.count * left * damagePerSecond(group.stats, tower.stats);
-		// the tower's arrows are spread over our units by their share of our hit points
+		// the arrows (the tower's, and those of the structures covering it) are spread over our units by their share
+		// of our hit points
 		const share = group.count * group.stats.hp * group.hpFraction / total;
-		incoming += tower.count * share * damagePerSecond(tower.stats, group.stats);
+		for (const shooter of [tower, ...guards.shooters])
+		{
+			incoming += shooter.count * share * damagePerSecond(shooter.stats, group.stats);
+		}
 	}
 	const stormTime = Math.min(
 		stormSeconds(dps, hp, incoming, tower.stats.hp * tower.hpFraction),
