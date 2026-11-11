@@ -2732,3 +2732,29 @@ control 55% against 53%; `random/dodecanese` 30 won, 28 lost, 60 drawn
 reference moves (20 of 24 games; against `petra_parity` 16 won, 6 drawn at
 60 minutes, 2 lost, where it had 20 won, 2 drawn, 2 lost: four island
 games now reach the time limit).
+
+## 65. Stage 7: a tower is stormed by as few as take it, the idle before the workers (2026-11-11)
+
+§64 sent every unit beside the tower that could strike it, and called the
+reserve by distance alone. Now `partyFor` takes the smallest party that
+makes the storm pay from the stormers beside it and then the reserve, each
+ordered cheapest first (`cheapestFirst`): those already striking it (always
+in), then those not at work, then the workers (gathering, carrying a load
+home or building), each the nearest first; `ROUND_UP_MOST` caps it unless
+more stand beside it. The rest keep on (the idle ones step out of reach).
+
+Counted with a temporary log in the 24 smoke games, at each game's first
+storm (both versions in the same state): 228 units ordered at it, 60 of
+them workers, before; 74, 33 of them workers, after. Armies of 51 to 102
+passing by a tower no longer all turn on it (games 1, 4, 20). Over whole
+games (which part after the first storm): 605 ordered and 97 workers,
+against 324 and 81.
+
+Against `petra_prev` at 4d37d3d774 (§64), 60 seed pairs from both slots:
+`random/mainland` 60 won, 60 lost (50.0%, 95% CI 41.2-58.8%), gathered
+95.0k against 98.2k, a paired ratio of 1.01 (0.87-1.17);
+`random/dodecanese` 28 won, 32 lost, 57 drawn (46.7%, 34.6-59.1%), ratio
+0.99 (0.85-1.15), three games hung. Neutral: the gathering time saved is
+too small for end-of-game totals, whose spread per game is about 16k. The
+smoke reference moves in 6 games (against `petra_parity` still 16 won, 6
+drawn, 2 lost).

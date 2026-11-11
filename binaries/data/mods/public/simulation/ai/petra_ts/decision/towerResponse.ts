@@ -19,6 +19,7 @@ import { getAttackBonus, getLandAccess, getSeaAccess } from "../adapter/entityEx
 import { ordersOf } from "../adapter/orders.ts";
 import { isPlaced, isStructure } from "../adapter/placed.ts";
 import { combatStats } from "../adapter/templateData.ts";
+import { hasActivity } from "../adapter/unitState.ts";
 import { allowCapture, antiCaptureOf } from "../world/capture.ts";
 import { fightSide } from "./fightEstimate.ts";
 import { assessTower, type TowerCapture, type TowerFight, type TowerGroup } from "./towerFight.ts";
@@ -223,35 +224,52 @@ function reserveFor(
 		reach,
 		(ent) => !near.has(ent) && free(ent) && canStorm(gameState, ent, structure),
 	);
-	const distance = (ent: CommonPlacedEntity): number => SquareVectorDistance(ent.position(), pos);
-	return reserve.sort((a, b) => distance(a) - distance(b));
+	return cheapestFirst(reserve, structure);
+}
+
+/** Whether the unit is at work for the economy: gathering, carrying its load home or building */
+function atWork(ent: CommonEntity): boolean
+{
+	return hasActivity(ent, "GATHER") || hasActivity(ent, "RETURNRESOURCE") || hasActivity(ent, "REPAIR");
 }
 
 /**
- * The party that storms the structure: the stormers beside it, and as few of the reserve as make the storm pay
- * (ROUND_UP_MOST at most in all), with what was weighed for it. When none pays, the stormers beside it alone.
+ * The units in the order a storm of the structure takes them, the cheapest to the economy first: those already
+ * striking it, then those not at work, then the workers, each the nearest first.
+ */
+function cheapestFirst(units: CommonPlacedEntity[], structure: CommonPlacedEntity): CommonPlacedEntity[]
+{
+	const pos = structure.position();
+	const cost = (ent: CommonPlacedEntity): number => striking(ent, structure) ? 0 : atWork(ent) ? 2 : 1;
+	const distance = (ent: CommonPlacedEntity): number => SquareVectorDistance(ent.position(), pos);
+	return units.sort((a, b) => cost(a) - cost(b) || distance(a) - distance(b));
+}
+
+/**
+ * The party that storms the structure: as few as make the storm pay, taken in order from the stormers beside it
+ * (cheapest first, the first `striking` of them already at it, who are in it whatever is decided) and then the
+ * reserve, ROUND_UP_MOST at most unless more are beside it; with what was weighed for it. When none pays, all the
+ * stormers beside it and what they weigh.
  */
 function partyFor(
 	stormers: readonly CommonPlacedEntity[],
+	striking: number,
 	reserve: readonly CommonPlacedEntity[],
 	weigh: (party: readonly CommonPlacedEntity[]) => TowerFight,
 ): { party: readonly CommonPlacedEntity[]; fight: TowerFight; }
 {
-	const fight = weigh(stormers);
-	if (fight.verdict === "storm")
+	const candidates = [...stormers, ...reserve];
+	const most = Math.min(candidates.length, Math.max(ROUND_UP_MOST, stormers.length));
+	for (let size = Math.max(1, striking); size <= most; ++size)
 	{
-		return { party: stormers, fight };
-	}
-	for (let joined = 1; joined <= reserve.length && stormers.length + joined <= ROUND_UP_MOST; ++joined)
-	{
-		const party = [...stormers, ...reserve.slice(0, joined)];
-		const roundUp = weigh(party);
-		if (roundUp.verdict === "storm")
+		const party = candidates.slice(0, size);
+		const fight = weigh(party);
+		if (fight.verdict === "storm")
 		{
-			return { party, fight: roundUp };
+			return { party, fight };
 		}
 	}
-	return { party: stormers, fight };
+	return { party: stormers, fight: weigh(stormers) };
 }
 
 /** The party strikes the structure: each booked on the capture of it first, so that each order weighs their joint strength */
@@ -284,7 +302,7 @@ export function answerTower(
 	const pos = structure.position();
 	const reach = (structure.attackRange("Ranged")?.max ?? 0) + STORM_REACH;
 	const near = placedWithin(gameState.getOwnUnits(), pos, reach, free);
-	const stormers = near.filter((ent) => canStorm(gameState, ent, structure));
+	const stormers = cheapestFirst(near.filter((ent) => canStorm(gameState, ent, structure)), structure);
 	const guards = fightSide(
 		placedWithin(gameState.getEnemyUnits(), pos, reach, (ent) => isArmed(ent)),
 		coverOf(gameState, structure),
@@ -299,6 +317,7 @@ export function answerTower(
 	// nobody is called into its owner's territory, where more of its men come as soon as ours do
 	const { party, fight } = partyFor(
 		stormers,
+		stormers.filter((ent) => striking(ent, structure)).length,
 		isOwnersLand(gameState, structure) ? [] : reserveFor(gameState, structure, new Set(near), free),
 		(side) => assessTower(fightSide(side), tower, guards, captureOf(gameState, side, structure, reinforcement)),
 	);
