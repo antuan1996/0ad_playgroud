@@ -33,7 +33,7 @@ export function allowCapture(gameState: CommonGameState, ent: CommonEntity, targ
 }
 
 /** How fast target regains its capture points: its regeneration, its garrison's, less its decay. */
-function antiCaptureOf(gameState: CommonGameState, target: CommonEntity): number
+export function antiCaptureOf(gameState: CommonGameState, target: CommonEntity): number
 {
 	let antiCapture = target.defaultRegenRate();
 	if (target.isGarrisonHolder())

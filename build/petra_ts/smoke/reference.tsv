@@ -5,32 +5,32 @@
 # script error) and 6 on random/mainland, athen, difficulty 5 (very hard),
 # conquest, ended at 60 game minutes (match.sh -n -T -B -L 60); the fingerprint hashes the
 # decision's game time and both players' end statistics (match-report.ts).
-# Recorded from commit abde67f0ddc4b72a6433fd6d200a110be3bf2e95,
-# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261110-221854.
+# Recorded from commit 55c855b8a8d6839b19800984c2e89ccd2e29a23e with uncommitted changes to the game,
+# petra_parity from tag petra-ts-parity (bfa183db2c); batch build/petra_ts/batches/smoke-20261110-230402.
 # A change to the bot's play, the game data or the engine moves fingerprints:
 # record anew with --update when it is meant, and commit this file with it.
 game	map	mapSeed	aiSeed	swapped	outcome	reason	decided	fingerprint
 1	random/dodecanese	43522323	640299501	false	blue	last player alive	1741800	02b42fec2fc6da77
-2	random/dodecanese	43522323	640299501	true	blue	last player alive	2630000	ba59e1bcd1de091d
+2	random/dodecanese	43522323	640299501	true	blue	last player alive	2253000	b7be820a69a9c28a
 3	random/dodecanese	1064129180	323670738	false	blue	last player alive	1485800	f6c036b4ca304a31
-4	random/dodecanese	1064129180	323670738	true	blue	last player alive	3052400	a1e61bf535b4940a
-5	random/dodecanese	886063722	810336788	false	blue	last player alive	3503400	03a7df289846c10e
-6	random/dodecanese	886063722	810336788	true	blue	last player alive	2434000	bea8a01db3121ac0
-7	random/dodecanese	174490511	877998619	false	blue	last player alive	3505000	363a24048efe8618
-8	random/dodecanese	174490511	877998619	true	blue	last player alive	2398400	0d643ddb400e2ff5
-9	random/dodecanese	571868442	146008061	false	blue	last player alive	2489000	61b1d06241c44a49
-10	random/dodecanese	571868442	146008061	true	blue	last player alive	2588400	b0ba24f5dec5e831
-11	random/dodecanese	497196720	326882168	false	blue	last player alive	3046200	ea41d84454d8ac52
-12	random/dodecanese	497196720	326882168	true	blue	last player alive	3327600	a8353236a7e380db
-13	random/mainland	988024885	401668228	false	red	last player alive	1193200	ea9d603413335614
-14	random/mainland	988024885	401668228	true	blue	last player alive	1286200	b4eaef5cd365f56e
-15	random/mainland	49765995	128618844	false	blue	last player alive	1220000	ba5edd51e3e1ffc6
-16	random/mainland	49765995	128618844	true	blue	last player alive	987800	33361e3777fffd1b
-17	random/mainland	779659345	690691362	false	blue	last player alive	1284200	485cdb41eafc2850
-18	random/mainland	779659345	690691362	true	blue	last player alive	1226800	eaaa3f8e6335bfb7
+4	random/dodecanese	1064129180	323670738	true	blue	last player alive	3226800	ffdff5f92a926682
+5	random/dodecanese	886063722	810336788	false	blue	last player alive	3405800	ff116af0ab23fa39
+6	random/dodecanese	886063722	810336788	true	blue	last player alive	2953200	0c52a55a7154d4af
+7	random/dodecanese	174490511	877998619	false	blue	last player alive	2967400	b013d0ecb424c76d
+8	random/dodecanese	174490511	877998619	true	draw	time limit	3600000	8439fd4133c9e76f
+9	random/dodecanese	571868442	146008061	false	blue	last player alive	2441000	643b405062e722ee
+10	random/dodecanese	571868442	146008061	true	draw	time limit	3600000	5672eafaa07b9aca
+11	random/dodecanese	497196720	326882168	false	blue	last player alive	2783400	c8e591145d936d46
+12	random/dodecanese	497196720	326882168	true	blue	last player alive	2733600	618f51e0f7076ed7
+13	random/mainland	988024885	401668228	false	red	last player alive	1982000	dd6bcf04a467e2d6
+14	random/mainland	988024885	401668228	true	blue	last player alive	1127200	4aa93046ebdcf11e
+15	random/mainland	49765995	128618844	false	blue	last player alive	1159200	79575dacfdd952ba
+16	random/mainland	49765995	128618844	true	blue	last player alive	1009200	a60f3c8e45fd8276
+17	random/mainland	779659345	690691362	false	red	last player alive	1783600	508520b4089f65ba
+18	random/mainland	779659345	690691362	true	blue	last player alive	1559600	96edb1ca43f75a91
 19	random/mainland	766714254	112125970	false	blue	last player alive	1213800	21cb87a52456350a
-20	random/mainland	766714254	112125970	true	blue	last player alive	1322200	32bd6943bfa55325
-21	random/mainland	730040291	731036029	false	blue	last player alive	1284200	24bc8b4dc79c2918
-22	random/mainland	730040291	731036029	true	blue	last player alive	1299800	dd3432f1421cc53b
-23	random/mainland	354373809	547528647	false	blue	last player alive	1336600	7f6936baf85741dd
-24	random/mainland	354373809	547528647	true	blue	last player alive	1178800	d6aaf0100f77db39
+20	random/mainland	766714254	112125970	true	blue	last player alive	1375200	2166a6654c28f58e
+21	random/mainland	730040291	731036029	false	blue	last player alive	1366000	64d08cab1e0acbd3
+22	random/mainland	730040291	731036029	true	blue	last player alive	1414000	d9ca227f27b16f85
+23	random/mainland	354373809	547528647	false	blue	last player alive	1314600	dfd5237827474185
+24	random/mainland	354373809	547528647	true	blue	last player alive	1252000	a295987e5cfd8907

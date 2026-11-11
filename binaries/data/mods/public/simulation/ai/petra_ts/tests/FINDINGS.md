@@ -2647,3 +2647,50 @@ The six kept were decided in both slots within 58 game minutes with no error
 or warning (Petra TS won all twelve games); the six mainland pairs, of the
 earlier twelve, end within 22 minutes. The 24 games take about 3 minutes
 with 12 jobs, as the mainland ones did.
+
+## 63. Stage 7: our units under an enemy tower storm it or get out of its reach (2026-11-11)
+
+Petra answered a shot from an enemy structure only by sheltering a hurt
+support unit: idle soldiers, workers and every ship but a fishing boat
+("TODO integrate other ships") stood under a tower's arrows. Now the defense
+manager gathers, once a turn's attacked events are read, each shooting enemy
+structure (a ranged attack and arrows, its own or its garrison's) that hit
+one of our units free to answer it: not in a started attack, a defense army,
+a transport, not a merchant, nor protected by the victory conditions (units
+that are not free are answered as before, `onOwnAttacked`). For each,
+`decision/towerResponse.ts` takes our free units within its reach and 40 m;
+those that can strike it (armed, no support, able to attack it, and for a
+land unit on the land at its foot, for a ship in its sea within the ship's
+reach of its footprint) are weighed by `decision/towerFight.ts`:
+
+- the enemy soldiers by it first, the tower's arrows on their side
+  (`estimateFight`), our side having to win;
+- then the tower, our damage and our hit points falling together under its
+  arrows (closed form: `rate (t - D t² / 2H) - regen t = points`), by damage
+  against its hit points or by capture against its capture points less its
+  regeneration (its own and its garrison's; the capture scaled as
+  `helpers/Attack.js` does, by its capture resistance and its damage),
+  whichever is quicker;
+- they storm when they take it keeping at least half their strength
+  (`STORM_MIN_LEFT`), each booked on its capture before the orders so that
+  each weighs their joint strength; otherwise, and for those that cannot
+  strike it, units step out of its reach (`fleeFrom`, the fishing boats'
+  flight moved here), but only if idle or below half health: a weak tower
+  shooting across a strait chased 38 workers off their fields at each arrow
+  in the first version.
+
+On the game's numbers a ram ship breaks a sentry tower in about 23 s keeping
+nine-tenths of its hull; three spearmen cannot capture it against its 10
+regained a second, ten take it in about 35 s, and three men inside it (an
+arrow and 2.5 regained each) turn the ten away. In the smoke games (one run
+with a log, 24 games) the response was asked 967 times, 124 of them storms
+(ships ram sentry towers by the shore); most flights were from civic
+centres, or from towers on another island.
+
+Strength, against `petra_prev` at 55c855b8a8 (the tag `petra-ts-prev` moved
+there), 60 seed pairs from both slots on each map: `random/dodecanese` 24
+won, 25 lost, 71 drawn at 90 minutes (49.0%, 95% CI 35.6-62.5%);
+`random/mainland` 58 won, 62 lost (48.3%, 39.6-57.2%). No measurable change
+either way: towers decide few of these games. The smoke reference moves
+(21 of 24 games; against `petra_parity` 20 won, 2 drawn at 60 minutes, 2
+lost, where it had 23 won and 1 lost).

@@ -29,6 +29,7 @@ import type { BaseManager } from "./baseManager.ts";
 import type { BasesManager } from "./basesManager.ts";
 import type { EmergencyTraining } from "./emergencyTraining.ts";
 import type { Headquarters } from "./headquarters.ts";
+import { answerTower, fleeFrom, shootsArrows } from "./towerResponse.ts";
 import type { VictoryManager } from "./victoryManager.ts";
 
 /** Which armies a new attack takes: those whose foes stand within range of its target, or the one named */
@@ -243,16 +244,11 @@ function destroyBeforeCapture(target: CommonEntity): void
 	}
 }
 
-/** A fishing boat moves out of its attacker's range */
-function fleeFrom(target: CommonPlacedEntity, attacker: CommonPlacedEntity): void
+/** Whether our unit (no fishing boat, which flees its attacker as it is) was hit by a shooting enemy structure */
+function underTowerFire(gameState: CommonGameState, target: CommonEntity, attacker: CommonPlacedEntity): boolean
 {
-	const pos = attacker.position();
-	const attackerRange = attacker.attackRange("Ranged");
-	const range = attackerRange ? attackerRange.max + 15 : 25;
-	if (range * range > SquareVectorDistance(pos, target.position()))
-	{
-		target.moveToRange(pos[0], pos[1], range, range + 5);
-	}
+	return gameState.isEntityEnemy(attacker) && target.hasClass("Unit") === true &&
+		!target.hasClass("FishingBoat") && shootsArrows(attacker);
 }
 
 /**
@@ -1211,6 +1207,7 @@ export class DefenseManager
 	/** checkEvents: our units and buildings attacked. */
 	onAttacked(gameState: CommonGameState, events: DefenseManagerEvents, allAttacked: Record<number, number>): void
 	{
+		const towers = new Map<EntityId, CommonPlacedEntity>();
 		for (const evt of events.Attacked)
 		{
 			const target = gameState.getEntityById(evt.target);
@@ -1236,8 +1233,55 @@ export class DefenseManager
 				continue;
 			}
 
+			// the units free to answer a tower answer it together, once the events are read; the others (a defense
+			// army's, a started attack's) are answered as for any attacker
+			if (
+				attacker && isPlaced(attacker) && underTowerFire(gameState, target, attacker) &&
+				this.isFreeUnderFire(gameState, target)
+			)
+			{
+				towers.set(attacker.id(), attacker);
+				continue;
+			}
+
 			this.onOwnAttacked(gameState, target, attacker, allAttacked);
 		}
+		for (const tower of towers.values())
+		{
+			const fight = answerTower(gameState, tower, (ent) => this.isFreeUnderFire(gameState, ent));
+			debugWarn(
+				this.Config,
+				2,
+				() =>
+					"tower " + tower.id() + " (" + tower.templateName() + "): " + fight.verdict + ", " +
+					Math.round(fight.ourFractionLeft * 100) + "% left in " + Math.round(fight.seconds) + " s",
+			);
+		}
+	}
+
+	/**
+	 * Whether one of our units under a tower's fire is ours to move (decision/towerResponse.ts): not in a started
+	 * attack (its plan fights), a defense army, a transport, the allies' or protected by the victory conditions,
+	 * nor a merchant.
+	 */
+	private isFreeUnderFire(gameState: CommonGameState, ent: CommonPlacedEntity): boolean
+	{
+		if (
+			ent.hasClass("Trader") || ent.getMetadata(PlayerID, "PartOfArmy") !== undefined ||
+			ent.getMetadata(PlayerID, "transport") !== undefined ||
+			ent.getMetadata(PlayerID, "transporter") !== undefined || ent.getMetadata(PlayerID, "allied") ||
+			this.hq.victoryManager.criticalEnts.has(ent.id())
+		)
+		{
+			return false;
+		}
+		const plan = ent.getMetadata(PlayerID, "plan");
+		if (plan === undefined || plan < 0)
+		{
+			return true;
+		}
+		const attack = this.hq.town.attacks.getPlan(plan);
+		return !attack || attack.state === STATE_UNEXECUTED;
 	}
 
 	/**

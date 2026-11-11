@@ -163,7 +163,9 @@ npm run test:petra:tools            # unit tests for batch-stats, quality, and s
     `defense`, `diplomacy`, `emergency`, `naval`, `research`,
     `trade`, `victory`), `enemySelection.ts`, and pure/utility
     modules (`foodSource.ts`, `economyScore.ts`, `housing.ts`, `fields.ts`,
-    `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`).
+    `dropsites.ts`, `workforce.ts`, `gatherSplit.ts`, `fightEstimate.ts`,
+    `towerFight.ts` storm or flee an enemy tower, `towerResponse.ts` our units
+    under its arrows storming or leaving, asked by the defense).
   - `execution/`: `attackPlan.ts` (the `AttackPlan` class: its state, saves,
     and the members others call) and its parts as functions taking the plan
     (`attackPreparation.ts` training and setting off, `attackDraft.ts`
