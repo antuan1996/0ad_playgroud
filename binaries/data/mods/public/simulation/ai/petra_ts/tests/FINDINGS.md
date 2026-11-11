@@ -2780,3 +2780,49 @@ All 24 games are now decided (22 won, 2 lost against `petra_parity`, the
 island games summing 433 game minutes where they summed about 616), and
 the run takes 2.5 minutes with 12 jobs where it took 3.4; a second run gave
 the same 24 games.
+
+## 67. Stage 7: the tower response after a review, and a crash on our goats (2026-11-11)
+
+A review of §63-§65 found, and these are now fixed in
+`decision/towerResponse.ts` and `decision/towerFight.ts`:
+
+- a Gaia structure counted as in its owner's land (unowned land is 0, as
+  Gaia is), so it was weighed with its garrison slots filled and nobody was
+  called to it: Gaia owns no territory now;
+- units striking the tower that cannot storm it (an archer on another
+  land) were called back even when the others stormed: those striking it
+  are called back only when no storm pays;
+- soldiers called before and still on their way kept walking in when the
+  storm no longer paid: they stop;
+- soldiers called from up to 150 m off were weighed as at the tower's foot:
+  `assessTower` takes them as `arriving`, those beside it under the arrows
+  alone until the last comes, and the capture of those who fell meanwhile
+  is no longer counted;
+- the smallest party that paid kept just over half of itself: the party is
+  sized to keep `STORM_SAFE_LEFT` (0.65) when it can (six spearmen against
+  a tower regaining 5 a second keep 61%, seven 77%: seven go), and the idle
+  beside it join, at no cost to the economy, rather than step back;
+- a structure in its owner's land was weighed with all its free slots
+  filled, even with its owner's men away: as many as its owner has units
+  within 60 m that it takes;
+- the reserve was gathered even when those beside it sufficed, every size
+  of party weighed in turn, and every enemy structure on the map asked
+  whether it covers the tower: the reserve is asked only when needed, the
+  size found by halving, the cover sought within 120 m.
+
+The first batch of these changes showed script errors in 69 of 120 island
+games, in `towerResponse.ts`: `Entity.unitAIOrderData` throws
+(`SimEngine.QueryInterface(...) is null`) on our trained goats and sheep,
+units with no UnitAI, which the response took for soldiers to move when a
+tower shot them. The error was already in §64 and §65 (17 of 120 island
+games in the §64 batch, 44 in §65's, counted only as errors then, not
+traced), and the new call-back of those on their way made it more frequent.
+The response now takes only units with a UnitAI state.
+
+Against `petra_prev` at 845f17dc81 (§65, which has the error), 60 seed
+pairs from both slots: `random/mainland` 60 won, 60 lost (50.0%, 95% CI
+41.2-58.8%), gathered a paired ratio of 0.97 (0.85-1.12);
+`random/dodecanese` 31 won, 33 lost, 56 drawn (48.4%, 36.6-60.4%), ratio
+0.98 (0.85-1.14). No Petra TS error in any of the 240 games; the 25 games
+with errors are all `petra_prev`'s. Neutral in strength. The smoke
+reference moves in 12 games (against `petra_parity` 21 won, 3 lost).
