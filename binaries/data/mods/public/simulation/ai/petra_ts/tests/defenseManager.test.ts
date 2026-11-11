@@ -2632,7 +2632,9 @@ function spearman(
 		canAttackTarget: () => true,
 		canCapture: () => true,
 		captureStrength: () => 2.5,
+		walkSpeed: () => 9,
 		isIdle: () => true,
+		unitAIState: () => "INDIVIDUAL.IDLE",
 		attack: (target: number, allowCapture: boolean) =>
 		{
 			spec.record?.attacks.push([id, target, allowCapture ? 1 : 0]);
@@ -2670,6 +2672,17 @@ function enemyTower(arrows = 2, methods: Methods = {}): CommonEntity
 	});
 }
 
+/** A tower's three free garrison slots for infantry, each an arrow and 2.5 regained a second when filled */
+function garrisonSlots(slots: number): Methods
+{
+	return {
+		isGarrisonHolder: () => true,
+		garrisonMax: () => slots,
+		garrisonRegenRate: () => 1,
+		garrisonableClasses: () => ["Infantry"],
+	};
+}
+
 /** The tower's arrow hit one of ours */
 function towerShot(target: number): ReturnType<typeof eventsWith>
 {
@@ -2678,7 +2691,7 @@ function towerShot(target: number): ReturnType<typeof eventsWith>
 
 describe("under an enemy tower's arrows", () =>
 {
-	it("of ten idle spearmen beside an unguarded sentry tower the eight it takes capture it, the other two step back", () =>
+	it("ten idle spearmen beside an unguarded sentry tower capture it together: eight would do, the rest cost nothing", () =>
 	{
 		const { world, manager } = assembledWorld();
 		const record = { attacks: [] as number[][], flights: [] as number[] };
@@ -2690,10 +2703,9 @@ describe("under an enemy tower's arrows", () =>
 
 		manager.checkEvents(world.gameState, towerShot(3000));
 
-		// eight capture its 500 points at 20 a second against 10 regained, keeping more than half of themselves
-		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 8 }, (_, i) => 3000 + i));
+		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 10 }, (_, i) => 3000 + i));
 		assert.ok(record.attacks.every(([, target, capture]) => target === 5000 && capture === 1), "all capture");
-		assert.deepEqual(record.flights, [3008, 3009]);
+		assert.deepEqual(record.flights, []);
 	});
 
 	it("a spearman already at the tower is not ordered again", () =>
@@ -2709,7 +2721,7 @@ describe("under an enemy tower's arrows", () =>
 
 		manager.checkEvents(world.gameState, towerShot(3001));
 
-		assert.equal(record.attacks.length, 7, "seven join it to make the eight");
+		assert.equal(record.attacks.length, 9, "the nine idle join it");
 		assert.ok(!record.attacks.some(([unit]) => unit === 3000));
 	});
 
@@ -2805,6 +2817,7 @@ describe("under an enemy tower's arrows", () =>
 		{
 			world.addEntity(
 				makeEntity({ id, owner: PLAYER, position: [80, 50], classes: ["Unit", "Support", "FemaleCitizen"] }, {
+					unitAIState: () => "INDIVIDUAL.GATHER.GATHERING",
 					healthLevel: () => health,
 					moveToRange: () =>
 					{
@@ -2902,8 +2915,8 @@ describe("under an enemy tower's arrows", () =>
 
 		manager.checkEvents(world.gameState, towerShot(3000));
 
-		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 8 }, (_, i) => 3100 + i));
-		assert.deepEqual(record.flights, [3108, 3109], "the idle left over step back, the gatherers keep on");
+		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 10 }, (_, i) => 3100 + i));
+		assert.deepEqual(record.flights, [], "the gatherers keep on");
 	});
 
 	it("the round-up calls idle soldiers before nearer gatherers", () =>
@@ -2926,7 +2939,8 @@ describe("under an enemy tower's arrows", () =>
 		manager.checkEvents(world.gameState, towerShot(3000));
 
 		const joined = record.attacks.map(([unit]) => unit).slice(3);
-		assert.deepEqual(joined, Array.from({ length: 5 }, (_, i) => 3200 + i), "five idle make the eight");
+		assert.ok(joined.length > 0, "some are called");
+		assert.deepEqual(joined, Array.from({ length: joined.length }, (_, i) => 3200 + i), "the idle, nearest first");
 	});
 
 	it("calls nobody when even twenty-five would not take it, and the busy ones in the fields keep on", () =>
@@ -2988,9 +3002,12 @@ describe("under an enemy tower's arrows", () =>
 			const { world, manager } = assembledWorld();
 			const record = { attacks: [] as number[][], flights: [] as number[] };
 			world.territory.set("50,50", owner);
-			world.addEntity(
-				enemyTower(2, { isGarrisonHolder: () => true, garrisonMax: () => 3, garrisonRegenRate: () => 1 }),
-			);
+			world.addEntity(enemyTower(2, garrisonSlots(3)));
+			// three of its men at work by it, who run in as ours come
+			for (let i = 0; i < 3; ++i)
+			{
+				world.addEntity(spearman(2100 + i, [40, 45 + i], { owner: ENEMY }));
+			}
 			for (let i = 0; i < 10; ++i)
 			{
 				world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
@@ -2998,9 +3015,214 @@ describe("under an enemy tower's arrows", () =>
 
 			manager.checkEvents(world.gameState, towerShot(3000));
 
-			assert.equal(record.attacks.length, stormed ? 8 : 0, `in the land of ${owner}`);
-			assert.equal(record.flights.length, stormed ? 2 : 10, `in the land of ${owner}`);
+			assert.equal(record.attacks.length, stormed ? 10 : 0, `in the land of ${owner}`);
+			assert.equal(record.flights.length, stormed ? 0 : 10, `in the land of ${owner}`);
 		}
+	});
+
+	it("an empty tower in its owner's land with none of its men by it to fill it is stormed", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.territory.set("50,50", ENEMY);
+		world.addEntity(enemyTower(2, garrisonSlots(3)));
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 10);
+	});
+
+	it("a Gaia tower in unowned land is not weighed as full: ten spearmen storm it", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		// unowned land is 0, as Gaia is
+		world.territory.set("50,50", 0);
+		world.addEntity(
+			enemyTower(2, {
+				...garrisonSlots(3),
+				owner: () => 0,
+				capturePoints: () => [500, 0, 0],
+				garrisonableClasses: () => ["Support"],
+			}),
+		);
+		// three Gaia villagers by it, unarmed, whom no one sends in
+		for (let i = 0; i < 3; ++i)
+		{
+			world.addEntity(
+				makeEntity({ id: 2100 + i, owner: 0, position: [40, 45 + i], classes: ["Unit", "Support"] }),
+			);
+		}
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 10);
+	});
+
+	it("an archer shooting it from the islet across the channel keeps on while the spearmen storm it", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		// on another land, 50 m off: it cannot walk to the tower's foot
+		world.accessAt.set("50,100", 7);
+		world.addEntity(
+			makeEntity({
+				id: 3100,
+				owner: PLAYER,
+				position: [50, 100],
+				classes: ["Unit", "Infantry", "Ranged", "Archer"],
+			}, {
+				attackTypes: () => ["Ranged"],
+				canAttackTarget: () => true,
+				isIdle: () => false,
+				unitAIState: () => "INDIVIDUAL.COMBAT.ATTACKING",
+				healthLevel: () => 1,
+				unitAIOrderData: () => orders({ target: entityId(5000) }),
+				moveToRange: () =>
+				{
+					record.flights.push(3100);
+				},
+			}),
+		);
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 10);
+		assert.deepEqual(record.flights, [], "the archer is not called back");
+	});
+
+	it("soldiers called to it before and still on their way are stopped when it no longer pays", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		const stopped: number[] = [];
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 3; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		// one called last turn, 150 m off and walking in; the others who came with him fell
+		world.addEntity(
+			spearman(3100, [200, 50], {
+				record,
+				methods: {
+					isIdle: () => false,
+					unitAIOrderData: () => orders({ target: entityId(5000) }),
+					stopMoving: () =>
+					{
+						stopped.push(3100);
+					},
+				},
+			}),
+		);
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks, []);
+		assert.deepEqual(record.flights, [3000, 3001, 3002]);
+		assert.deepEqual(stopped, [3100]);
+	});
+
+	it("ten gatherers beside it: as many go as keep two-thirds of themselves, not the fewest that would take it", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		// a tower regaining 5 a second: six would take it keeping 61% of themselves, seven 77%
+		world.addEntity(enemyTower(2, { defaultRegenRate: () => 5 }));
+		const gathering: Methods = { isIdle: () => false, unitAIState: () => "INDIVIDUAL.GATHER.GATHERING" };
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record, methods: gathering }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 7);
+	});
+
+	it("six gatherers by a tower regaining 5 a second all go: they take it keeping 61%, short of the margin", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower(2, { defaultRegenRate: () => 5 }));
+		const gathering: Methods = { isIdle: () => false, unitAIState: () => "INDIVIDUAL.GATHER.GATHERING" };
+		for (let i = 0; i < 6; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record, methods: gathering }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 6);
+	});
+
+	it("a hurt gatherer beside the storm steps out of reach", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		world.addEntity(
+			spearman(3100, [65, 55], {
+				record,
+				methods: {
+					isIdle: () => false,
+					unitAIState: () => "INDIVIDUAL.GATHER.GATHERING",
+					healthLevel: () => 0.3,
+				},
+			}),
+		);
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.equal(record.attacks.length, 10);
+		assert.deepEqual(record.flights, [3100]);
+	});
+
+	it("our trained goat under it is no soldier to call or move: it has no UnitAI, nor orders to read", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 3; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		// a corral's goat: a unit to the AI, its state and orders the engine has none of
+		world.addEntity(
+			makeEntity({
+				id: 3100,
+				owner: PLAYER,
+				position: [65, 50],
+				classes: ["Unit", "Organic", "Animal", "Domestic"],
+			}, {
+				unitAIState: () => undefined,
+				unitAIOrderData: () =>
+				{
+					throw new TypeError("SimEngine.QueryInterface(...) is null");
+				},
+			}),
+		);
+
+		manager.checkEvents(world.gameState, towerShot(3100));
+
+		assert.deepEqual(record.flights, [3000, 3001, 3002]);
 	});
 
 	it("calls nobody to a tower in its owner's land", () =>
@@ -3074,6 +3296,7 @@ describe("under an enemy tower's arrows", () =>
 				resistanceStrengths: () => ({ Damage: { Hack: 5, Pierce: 5, Crush: 3 } }),
 				maxHitpoints: () => 800,
 				canAttackTarget: () => true,
+				unitAIState: () => "INDIVIDUAL.IDLE",
 				attack: (target: number) =>
 				{
 					rams.push(target);

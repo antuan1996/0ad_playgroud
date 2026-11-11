@@ -144,6 +144,32 @@ describe("storming an enemy tower", () =>
 	});
 });
 
+describe("soldiers called from farther off", () =>
+{
+	it("three beside it hold the arrows alone until seven called come: the later they come, the less is left", () =>
+	{
+		const together = assessTower(spearmen(10), tower(2), NO_GUARDS, capture(10));
+		const soon = assessTower(spearmen(3), tower(2), NO_GUARDS, capture(10), { side: spearmen(7), seconds: 15 });
+		const late = assessTower(spearmen(3), tower(2), NO_GUARDS, capture(10), { side: spearmen(7), seconds: 60 });
+
+		assert.equal(soon.verdict, "storm");
+		assert.ok(soon.ourFractionLeft < together.ourFractionLeft, `${soon.ourFractionLeft}`);
+		assert.ok(soon.seconds > together.seconds + 15 - 1, `${soon.seconds}`);
+		// two arrows for a minute kill two of the three: the seven come to it with one left beside them
+		assert.ok(late.ourFractionLeft < soon.ourFractionLeft, `${late.ourFractionLeft}`);
+	});
+
+	it("those beside it all fall before the others come: the others weigh it alone, their capture with them", () =>
+	{
+		const alone = assessTower(spearmen(7), tower(2), NO_GUARDS, capture(7));
+		// the one beside it lasts 30 s under two arrows
+		const fallen = assessTower(spearmen(1), tower(2), NO_GUARDS, capture(8), { side: spearmen(7), seconds: 60 });
+
+		assert.equal(alone.verdict, "flee", "seven cannot take it");
+		assert.equal(fallen.verdict, "flee");
+	});
+});
+
 describe("its guards first", () =>
 {
 	it("ten spearmen do not storm a tower that twenty spearmen guard", () =>
