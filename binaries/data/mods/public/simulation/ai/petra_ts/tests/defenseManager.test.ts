@@ -2678,7 +2678,7 @@ function towerShot(target: number): ReturnType<typeof eventsWith>
 
 describe("under an enemy tower's arrows", () =>
 {
-	it("ten idle spearmen beside an unguarded sentry tower capture it together", () =>
+	it("of ten idle spearmen beside an unguarded sentry tower the eight it takes capture it, the other two step back", () =>
 	{
 		const { world, manager } = assembledWorld();
 		const record = { attacks: [] as number[][], flights: [] as number[] };
@@ -2690,9 +2690,10 @@ describe("under an enemy tower's arrows", () =>
 
 		manager.checkEvents(world.gameState, towerShot(3000));
 
-		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 10 }, (_, i) => 3000 + i));
+		// eight capture its 500 points at 20 a second against 10 regained, keeping more than half of themselves
+		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 8 }, (_, i) => 3000 + i));
 		assert.ok(record.attacks.every(([, target, capture]) => target === 5000 && capture === 1), "all capture");
-		assert.deepEqual(record.flights, []);
+		assert.deepEqual(record.flights, [3008, 3009]);
 	});
 
 	it("a spearman already at the tower is not ordered again", () =>
@@ -2708,7 +2709,7 @@ describe("under an enemy tower's arrows", () =>
 
 		manager.checkEvents(world.gameState, towerShot(3001));
 
-		assert.equal(record.attacks.length, 9);
+		assert.equal(record.attacks.length, 7, "seven join it to make the eight");
 		assert.ok(!record.attacks.some(([unit]) => unit === 3000));
 	});
 
@@ -2883,6 +2884,51 @@ describe("under an enemy tower's arrows", () =>
 		assert.deepEqual(record.flights, []);
 	});
 
+	it("idle spearmen beside it storm it and the gatherers beside them keep on gathering", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		const gathering: Methods = { isIdle: () => false, unitAIState: () => "INDIVIDUAL.GATHER.GATHERING" };
+		// five gatherers nearest to it, ten idle behind them
+		for (let i = 0; i < 5; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [65 + i, 50], { record, methods: gathering }));
+		}
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3100 + i, [75 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 8 }, (_, i) => 3100 + i));
+		assert.deepEqual(record.flights, [3108, 3109], "the idle left over step back, the gatherers keep on");
+	});
+
+	it("the round-up calls idle soldiers before nearer gatherers", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 3; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		// gatherers 120-140 m off, idle soldiers at the rally point 160-180 m off
+		const gathering: Methods = { isIdle: () => false, unitAIState: () => "INDIVIDUAL.GATHER.GATHERING" };
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3100 + i, [170 + 2 * i, 50], { record, methods: gathering }));
+			world.addEntity(spearman(3200 + i, [210 + 2 * i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		const joined = record.attacks.map(([unit]) => unit).slice(3);
+		assert.deepEqual(joined, Array.from({ length: 5 }, (_, i) => 3200 + i), "five idle make the eight");
+	});
+
 	it("calls nobody when even twenty-five would not take it, and the busy ones in the fields keep on", () =>
 	{
 		const { world, manager } = assembledWorld();
@@ -2952,8 +2998,8 @@ describe("under an enemy tower's arrows", () =>
 
 			manager.checkEvents(world.gameState, towerShot(3000));
 
-			assert.equal(record.attacks.length, stormed ? 10 : 0, `in the land of ${owner}`);
-			assert.equal(record.flights.length, stormed ? 0 : 10, `in the land of ${owner}`);
+			assert.equal(record.attacks.length, stormed ? 8 : 0, `in the land of ${owner}`);
+			assert.equal(record.flights.length, stormed ? 2 : 10, `in the land of ${owner}`);
 		}
 	});
 
