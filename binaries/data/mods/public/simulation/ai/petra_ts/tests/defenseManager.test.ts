@@ -2603,3 +2603,288 @@ describe("an invading column: isNearInvadingArmy", () =>
 		);
 	});
 });
+
+/**
+ * A citizen spearman of ours (or the enemy's) on the game's numbers (tests/towerFight.test.ts): 100 hp, a spear of
+ * hack 4.5 pierce 4 each second, a capture of 2.5 a second; its orders recorded.
+ */
+function spearman(
+	id: number,
+	position: [number, number],
+	spec: { owner?: number; record?: { attacks: number[][]; flights: number[]; }; methods?: Methods; } = {},
+	metadata: Record<string, unknown> = {},
+): CommonEntity
+{
+	return makeEntity({
+		id,
+		owner: spec.owner ?? PLAYER,
+		position,
+		classes: ["Unit", "Infantry", "Melee", "Spearman", "CitizenSoldier"],
+		templateName: "units/athen/infantry_spearman_b",
+	}, {
+		classes: () => ["Unit", "Infantry", "Melee", "Spearman", "CitizenSoldier"],
+		civ: () => "athen",
+		attackTypes: () => ["Melee", "Capture"],
+		attackStrengths: (type: string) => type === "Melee" ? { Hack: 4.5, Pierce: 4 } : undefined,
+		attackTimes: () => ({ repeat: 1000 }),
+		attackRange: (type: string) => type === "Melee" ? { max: 4 } : undefined,
+		resistanceStrengths: () => ({ Damage: { Hack: 3, Pierce: 3, Crush: 15 } }),
+		canAttackTarget: () => true,
+		canCapture: () => true,
+		captureStrength: () => 2.5,
+		isIdle: () => true,
+		attack: (target: number, allowCapture: boolean) =>
+		{
+			spec.record?.attacks.push([id, target, allowCapture ? 1 : 0]);
+		},
+		moveToRange: () =>
+		{
+			spec.record?.flights.push(id);
+		},
+		...spec.methods,
+	}, metadata);
+}
+
+/**
+ * An enemy sentry tower at [50, 50] (template_structure_defensive_tower_sentry.xml): 400 hp, hack 29 pierce 35
+ * crush 3, `arrows` of pierce 8 every 3.5 s to 60 m, 500 capture points regained at 10 a second.
+ */
+function enemyTower(arrows = 2, methods: Methods = {}): CommonEntity
+{
+	return makeStructure(5000, [50, 50], ENEMY, ["Structure", "Tower", "Defensive"], {
+		classes: () => ["Structure", "Tower", "Defensive"],
+		civ: () => "athen",
+		attackTypes: () => ["Ranged"],
+		attackStrengths: () => ({ Pierce: 8 }),
+		attackTimes: () => ({ repeat: 3500 }),
+		attackRange: (type: string) => type === "Ranged" ? { max: 60 } : undefined,
+		resistanceStrengths: () => ({ Damage: { Hack: 29, Pierce: 35, Crush: 3 } }),
+		maxHitpoints: () => 400,
+		hitpoints: () => 400,
+		getDefaultArrow: () => arrows,
+		footprintRadius: () => 6,
+		isCapturable: () => true,
+		capturePoints: () => [0, 0, 500],
+		defaultRegenRate: () => 10,
+		...methods,
+	});
+}
+
+/** The tower's arrow hit one of ours */
+function towerShot(target: number): ReturnType<typeof eventsWith>
+{
+	return eventsWith({ Attacked: [{ target: entityId(target), attacker: entityId(5000) }] });
+}
+
+describe("under an enemy tower's arrows", () =>
+{
+	it("ten idle spearmen beside an unguarded sentry tower capture it together", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks.map(([unit]) => unit), Array.from({ length: 10 }, (_, i) => 3000 + i));
+		assert.ok(record.attacks.every(([, target, capture]) => target === 5000 && capture === 1), "all capture");
+		assert.deepEqual(record.flights, []);
+	});
+
+	it("a spearman already at the tower is not ordered again", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			const methods: Methods = i === 0 ? { unitAIOrderData: () => orders({ target: entityId(5000) }) } : {};
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record, methods }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3001));
+
+		assert.equal(record.attacks.length, 9);
+		assert.ok(!record.attacks.some(([unit]) => unit === 3000));
+	});
+
+	it("three idle spearmen step out of the reach of a tower they cannot take", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 3; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks, []);
+		assert.deepEqual(record.flights, [3000, 3001, 3002], "each walks beyond 75 m of it");
+	});
+
+	it("ten spearmen step back from the tower three men hold: their arrows and their capture strength added", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		// the garrison regains 2.5 a man (GarrisonRegenRate 1) besides the tower's 10, and shoots an arrow each
+		const garrison = [2100, 2101, 2102].map((id) => spearman(id, [50, 50], { owner: ENEMY }));
+		for (const ent of garrison)
+		{
+			world.addEntity(ent);
+		}
+		world.addEntity(
+			enemyTower(2, {
+				isGarrisonHolder: () => true,
+				garrisoned: () => [2100, 2101, 2102],
+				garrisonRegenRate: () => 1,
+			}),
+		);
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks, []);
+		assert.equal(record.flights.length, 10);
+	});
+
+	it("ten spearmen do not storm the tower its twenty guards stand by", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }));
+		}
+		for (let i = 0; i < 20; ++i)
+		{
+			world.addEntity(spearman(2000 + i, [45, 40 + i], { owner: ENEMY }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks, []);
+		assert.equal(record.flights.length, 10);
+	});
+
+	it("soldiers across a strait from the tower do not storm it, the idle ones step back", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		// the tower's foot, 10 m from its centre on our side, is on another island (3) than ours (the fallback 2)
+		world.accessAt.set("60,50", 3);
+		for (let i = 0; i < 10; ++i)
+		{
+			const busy: Methods = i >= 5 ? { isIdle: () => false } : {};
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record, methods: busy }));
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record.attacks, []);
+		assert.deepEqual(record.flights, [3000, 3001, 3002, 3003, 3004], "the busy ones keep on");
+	});
+
+	it("a woman gathering whole keeps on under its arrows; a hurt one leaves", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const flights: number[] = [];
+		world.addEntity(enemyTower());
+		for (const [id, health] of [[3000, 1], [3001, 0.4]])
+		{
+			world.addEntity(
+				makeEntity({ id, owner: PLAYER, position: [80, 50], classes: ["Unit", "Support", "FemaleCitizen"] }, {
+					healthLevel: () => health,
+					moveToRange: () =>
+					{
+						flights.push(id);
+					},
+				}),
+			);
+		}
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(flights, [3001]);
+	});
+
+	it("leaves the soldiers of a started attack to their plan", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const record = { attacks: [] as number[][], flights: [] as number[] };
+		world.addEntity(enemyTower());
+		for (let i = 0; i < 10; ++i)
+		{
+			world.addEntity(spearman(3000 + i, [70 + i, 50], { record }, { plan: 5 }));
+		}
+		world.ai.town.attacks.getPlan = (plan: UnitPlan | undefined) =>
+			plan == 5 ? { state: "started", removeUnit: () => undefined } as never : undefined;
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(record, { attacks: [], flights: [] });
+	});
+
+	it("a recapture army's soldier hit by the tower stands his army down, as for any attacker", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const fort = makeStructure(4000, [60, 60], PLAYER, ["Structure"], { capturePoints: () => [5, 20, 5, 0] });
+		world.addEntity(fort);
+		manager.makeIntoArmy(world.gameState, entityId(4000), "capturing");
+		const capturingID = fort.getMetadata(PLAYER, "PartOfArmy");
+		world.addEntity(enemyTower());
+		const soldier = spearman(3001, [59, 60], {
+			methods: {
+				attack: () => assert.fail("his army answers for him"),
+				moveToRange: () => assert.fail("his army answers for him"),
+			},
+		}, { PartOfArmy: capturingID });
+		world.addEntity(soldier);
+		userArmy(manager, capturingID).ownEntities.push(3001);
+
+		manager.checkEvents(world.gameState, towerShot(3001));
+
+		assert.equal(manager.armies.length, 0, "the recovery army stands down");
+		assert.equal(soldier.getMetadata(PLAYER, "PartOfArmy"), undefined, "the soldier was released from the book");
+	});
+
+	it("a ram ship off the shore rams the sentry tower", () =>
+	{
+		const { world, manager } = assembledWorld();
+		const rams: number[] = [];
+		world.addEntity(enemyTower());
+		// the water 12 m off its footprint, on the ram's side, is the ram's sea
+		world.accessAt.set("68,50", 4);
+		world.addEntity(
+			makeEntity({ id: 3000, owner: PLAYER, position: [85, 50], classes: ["Unit", "Ship", "Warship", "Melee"] }, {
+				classes: () => ["Unit", "Ship", "Warship", "Melee"],
+				civ: () => "athen",
+				attackTypes: () => ["Melee"],
+				attackStrengths: () => ({ Hack: 320, Crush: 50 }),
+				attackTimes: () => ({ repeat: 3000 }),
+				attackRange: (type: string) => type === "Melee" ? { max: 12 } : undefined,
+				resistanceStrengths: () => ({ Damage: { Hack: 5, Pierce: 5, Crush: 3 } }),
+				maxHitpoints: () => 800,
+				canAttackTarget: () => true,
+				attack: (target: number) =>
+				{
+					rams.push(target);
+				},
+			}, { sea: 4 }),
+		);
+
+		manager.checkEvents(world.gameState, towerShot(3000));
+
+		assert.deepEqual(rams, [5000]);
+	});
+});
